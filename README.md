@@ -45,5 +45,5 @@ The maven `compile` and `install` phases will not install all necessary dependen
 
 #### Contributing
 
-Please send any comments or suggestions or suggested code changes to [software@swirlds.com](mailto:software@swirlds.com).<br /><br />
+Please send any comments or suggestions or suggested code changes to [software@swirlds.com](mailto:software@swirlds.com).<br />
 By doing so, you agree to grant Swirlds the right and license to use any such feedback  as set out in the Hashgraph Open Review License.
