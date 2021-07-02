@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -19,6 +19,7 @@ import com.swirlds.common.AddressBook;
 import com.swirlds.common.CommonUtils;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.Platform;
+import com.swirlds.common.StartupTime;
 import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.constructable.ConstructableRegistryException;
 import com.swirlds.common.crypto.CryptoFactory;
@@ -30,7 +31,10 @@ import com.swirlds.common.merkle.synchronization.ReconnectSettingsFactory;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskCompleteListener;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskNotification;
-import com.swirlds.common.threading.StandardThreadFactory;
+import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.fchashmap.FCHashMapSettingsFactory;
+import com.swirlds.logging.payloads.NodeStartPayload;
+import com.swirlds.logging.payloads.SystemExitPayload;
 import com.swirlds.p2p.portforwarding.PortForwarder;
 import com.swirlds.p2p.portforwarding.PortMapping;
 import com.swirlds.platform.StateHierarchy.InfoApp;
@@ -85,8 +89,10 @@ import java.util.jar.Manifest;
 import static com.swirlds.common.CommonUtils.canonicalFile;
 import static com.swirlds.common.CommonUtils.nameToAlias;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
+import static com.swirlds.logging.LogMarker.JVM_PAUSE_WARN;
 import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.platform.Settings.JVMPauseDetectorSleepMs;
+import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
 
 /**
  * The Browser that launches the Platforms that run the apps. The Browser has only one public method, which
@@ -125,7 +131,7 @@ public abstract class Browser {
 	/* the number of pixels between the edges of a window and interior region that can be used */
 	static Insets insets;
 	/** the thread for each Platform.run */
-	private static Thread platformRunThreads[];
+	private static Thread[] platformRunThreads;
 	/** metadata about all known apps, swirlds, members, signed states */
 	static StateHierarchy stateHierarchy = null;
 
@@ -144,6 +150,13 @@ public abstract class Browser {
 	private static boolean loadedSavedState = false;
 
 	/**
+	 * freezeTime in seconds;
+	 * when the node is started from genesis, and this value is positive,
+	 * set this node's freezeTime to be an Instant with this many epoch seconds
+	 */
+	private static long genesisFreezeTime = -1;
+
+	/**
 	 * Prevent this class from being instantiated.
 	 */
 	protected Browser() {
@@ -156,6 +169,13 @@ public abstract class Browser {
 	 */
 	public static boolean isShuttingDown() {
 		return shuttingDown;
+	}
+
+	/**
+	 * Check whether a saved state file has been loaded
+	 */
+	public static boolean isLoadedSavedState() {
+		return loadedSavedState;
 	}
 
 	/**
@@ -176,8 +196,8 @@ public abstract class Browser {
 	static void exitSystem(SystemExitReason reason, boolean haltRuntime) {
 		shuttingDown = true;
 		if (reason.isError()) {
-			String exitMsg = "Exiting system, reason: " + reason.toString();
-			log.error(EXCEPTION.getMarker(), exitMsg);
+			log.error(EXCEPTION.getMarker(), new SystemExitPayload(reason.name(), reason.getExitCode()));
+			final String exitMsg = "Exiting system, reason: " + reason.toString();
 			System.out.println(exitMsg);
 		}
 		System.exit(reason.getExitCode());
@@ -251,8 +271,8 @@ public abstract class Browser {
 				context.setConfigLocation(Settings.logPath.toURI());
 			}
 		} catch (Exception e) {
-			// should log this, but the log can't exist at this point.
-			// e.printStackTrace();
+			LogManager.getLogger(Browser.class).fatal("Unable to load log context", e);
+			System.err.println("FATAL Unable to load log context: " + e);
 		}
 	}
 
@@ -276,22 +296,21 @@ public abstract class Browser {
 		// Register a shutdown hook that sets the shuttingDown variable to true
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> shuttingDown = true));
 
+		StartupTime.markStartupTime();
+
 		// This set contains the nodes set by the command line to start, if none are passed, then IP
 		// addresses will be compared to determine which node to start
 		final Set<Integer> localNodesToStart = parseCommandLine(args);
 
 		// Initialize the log4j2 configuration and logging subsystem
 		startLoggingFramework();
-		log.debug(STARTUP.getMarker(), "main() started");
+		log.debug(STARTUP.getMarker(), () -> new NodeStartPayload().toString());
 
 		try {
 			if (launched) {
 				return;
 			}
 			launched = true;
-
-
-			macOsSpecific();
 
 			// discover the inset size and set the look and feel
 			if (!GraphicsEnvironment.isHeadless()) {
@@ -441,14 +460,16 @@ public abstract class Browser {
 	 */
 	private static void startJVMPauseDetectorThread() {
 		if (JVMPauseDetectorSleepMs > 0) {
-			JVMPauseDetectorThread JVMPauseDetectorThread = new JVMPauseDetectorThread((pauseTimeMs) -> {
-				if (pauseTimeMs > Settings.JVMPauseReportMs) {
-					log.info(EXCEPTION.getMarker(), "JVMPauseDetectorThread detected JVM paused for {} ms",
-							pauseTimeMs);
-				}
-			}, JVMPauseDetectorSleepMs);
-			JVMPauseDetectorThread.start();
-			log.debug(STARTUP.getMarker(), "JVMPauseDetectorThread started");
+			final JVMPauseDetectorThread jvmPauseDetectorThread = new JVMPauseDetectorThread(
+					(pauseTimeMs, allocTimeMs) -> {
+						if (pauseTimeMs > Settings.JVMPauseReportMs) {
+							log.warn(JVM_PAUSE_WARN.getMarker(),
+									"jvmPauseDetectorThread detected JVM paused for {} ms, allocation pause {} ms",
+									pauseTimeMs, allocTimeMs);
+						}
+					}, JVMPauseDetectorSleepMs);
+			jvmPauseDetectorThread.start();
+			log.debug(STARTUP.getMarker(), "jvmPauseDetectorThread started");
 		}
 	}
 
@@ -533,13 +554,11 @@ public abstract class Browser {
 							appJarPath = canonicalFile(
 									Settings.appsDirPath, appJarFilename);
 							mainClassname = "";
-							try {
-								JarFile jarFile = new JarFile(appJarPath);
+							try (final JarFile jarFile = new JarFile(appJarPath)) {
 								Manifest manifest = jarFile.getManifest();
 								Attributes attributes = manifest
 										.getMainAttributes();
 								mainClassname = attributes.getValue("Main-Class");
-								jarFile.close();
 							} catch (Exception e) {
 								CommonUtils.tellUserConsolePopup("ERROR",
 										"ERROR: Couldn't load app " + appJarPath);
@@ -627,6 +646,9 @@ public abstract class Browser {
 								CommonUtils.tellUserConsolePopup("Error", "waitAtStartup needs a parameter");
 							}
 							break;
+						case "genesisfreezetime":
+							genesisFreezeTime = Long.parseLong(pars[1]);
+							break;
 						default:
 							CommonUtils.tellUserConsolePopup("Error", "\"" + pars[0]
 									+ "\" in config.txt isn't a recognized first parameter for a line");
@@ -663,7 +685,6 @@ public abstract class Browser {
 		final AddressBook addressBook = appDefinition.getAddressBook();
 
 		final int fontSize = 12; // 14 is good for 4 windows
-		final int numLines = 600 / fontSize;
 
 		int ownHostIndex = 0;
 
@@ -686,8 +707,6 @@ public abstract class Browser {
 						addressBook.copy(),
 						// suggested font size for windows created
 						fontSize,
-						// suggested number of lines of text in a window
-						numLines,
 						// name of the app's SwirldMain class
 						appDefinition.getMainClassName(),
 						// the name of this swirld
@@ -707,13 +726,22 @@ public abstract class Browser {
 					}
 				}
 
+				// if genesisFreezeTime is positive, and the nodes start from genesis
+				if (!loadedSavedState && genesisFreezeTime > 0) {
+					platform.setGenesisFreezeTime(genesisFreezeTime);
+				}
+
 				// give infoMember and platform a reference to each other
 				InfoMember infoMember = new InfoMember(infoSwirld, i, platform);
 				platform.setInfoMember(infoMember);
 
-				platformRunThreads[ownHostIndex] = StandardThreadFactory.newThread(
-						"platformRun", platform::run, platform.getSelfId(), Settings.threadPriorityNonSync
-				);
+				platformRunThreads[ownHostIndex] = new ThreadConfiguration()
+						.setPriority(Settings.threadPriorityNonSync)
+						.setNodeId(ownHostIndex)
+						.setComponent(PLATFORM_THREAD_POOL_NAME)
+						.setThreadName("platformRun")
+						.setRunnable(platform::run)
+						.build();
 
 				ownHostIndex++;
 				synchronized (Browser.platforms) {
@@ -833,8 +861,10 @@ public abstract class Browser {
 					// in case we have loaded the keys, we will not have all the Crypto objects
 					crypto[i] = f.get();
 				}
-			} catch (InterruptedException | ExecutionException e) {
-				log.error(EXCEPTION.getMarker(), "", e);
+			} catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+			} catch (ExecutionException ex) {
+				log.error(EXCEPTION.getMarker(), "", ex);
 			}
 		}
 		// After the keys have been generated or loaded, they are then copied to the address book
@@ -945,7 +975,13 @@ public abstract class Browser {
 
 		// Partially initialize the platforms before we dispatch the StateLoadedFromDiskNotification
 		for (SwirldsPlatform platform : platforms) {
-			platform.initializeFirstStep();
+			try {
+				platform.initializeFirstStep();
+			} catch (SignedStateLoadingException e) {
+				log.error(EXCEPTION.getMarker(), "Issue with initializing saved state:", e);
+				// there is not much we can do at this point
+				exitSystem(SystemExitReason.SAVED_STATE_NOT_LOADED);
+			}
 		}
 
 		// Notify listeners that loading state from disk has been completed successfully
@@ -1016,29 +1052,6 @@ public abstract class Browser {
 	}
 
 	/**
-	 * Do work specific to MacOS, so choosing QUIT from the OS's menu won't cause the program to freeze
-	 * forever.
-	 *
-	 * In order for this to work, you have to do the following in Eclipse:
-	 * <ul>
-	 * <li>in the package explorer, right click on PLATFORM and choose PROPERTIES</li>
-	 * <li>click JAVA BUILD PATH then the LIBRARIES tab</li>
-	 * <li>open the JRE SYSTEM LIBRARY item and click ACCESS RULES</li>
-	 * <li>click EDIT then ADD</li>
-	 * <li>set RESOLUTION to ACCESSIBLE, and RULE PATTERN to com/apple/eawt/**</li>
-	 * <li>click OK</li>
-	 * </ul>
-	 * Now you can use classes like com.apple.eawt.AppEvent, for MacOS-specific code.
-	 */
-	static void macOsSpecific() {
-		// if (System.getProperty("os.name").equals("Mac OS X")) {
-		// if (SystemUtils.IS_OS_MAC) {
-		// Application.getApplication()
-		// .setQuitStrategy(QuitStrategy.CLOSE_ALL_WINDOWS);
-		// }
-	}
-
-	/**
 	 * Called prior to loading save state and before the {@link Platform} objects are instantiated to allow
 	 * subsystems to
 	 * prepare for recovery from the saved state.
@@ -1062,6 +1075,7 @@ public abstract class Browser {
 	protected static void populateSettingsCommon() {
 		SettingsCommon.maxTransactionCountPerEvent = Settings.maxTransactionCountPerEvent;
 		SettingsCommon.maxTransactionBytesPerEvent = Settings.maxTransactionBytesPerEvent;
+		SettingsCommon.maxAddressSizeAllowed = Settings.maxAddressSizeAllowed;
 		SettingsCommon.transactionMaxBytes = Settings.transactionMaxBytes;
 		SettingsCommon.halfLife = Settings.halfLife;
 		SettingsCommon.logStack = Settings.logStack;
@@ -1071,5 +1085,6 @@ public abstract class Browser {
 
 		CryptoFactory.configure(Settings.crypto);
 		ReconnectSettingsFactory.configure(Settings.reconnect);
+		FCHashMapSettingsFactory.configure(Settings.fcHashMap);
 	}
 }

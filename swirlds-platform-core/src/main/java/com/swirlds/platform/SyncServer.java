@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -31,6 +31,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.SOCKET_EXCEPTIONS;
@@ -53,13 +54,13 @@ class SyncServer implements Runnable {
 	/** overrides ip if not null */
 	private static final byte[] listenIP = new byte[] { 0, 0, 0, 0 };
 	/** the Platform running this SyncServer server */
-	private AbstractPlatform platform;
+	private final AbstractPlatform platform;
 	/** the number of members in the address book. Many arrays etc are this size */
 	private int numMembers;
 	/** the IP address that this server listens on for establishing new connections */
-	private byte[] ip;
+	private final byte[] ip;
 	/** the port that this server listens on for establishing new connections */
-	private int port;
+	private final int port;
 	/** listenerConn.get(i) is the connection used by listener thread i for syncs initiated by member i */
 	private final AtomicReferenceArray<SyncConnection> listenerConn;
 	/** number of listener threads currently in a sync */
@@ -68,9 +69,9 @@ class SyncServer implements Runnable {
 	AtomicInteger numSyncs = new AtomicInteger(0);
 
 	/** lock per each other member, each one is used by all caller threads and the heartbeat thread */
-	AtomicReferenceArray<LoggingReentrantLock> lockCallHeartbeat;
+	AtomicReferenceArray<ReentrantLock> lockCallHeartbeat;
 	/** lock per each other member, each one is used by all caller threads and the listener thread */
-	AtomicReferenceArray<LoggingReentrantLock> lockCallListen;
+	AtomicReferenceArray<ReentrantLock> lockCallListen;
 
 
 	/**
@@ -80,7 +81,7 @@ class SyncServer implements Runnable {
 	 */
 	AtomicReferenceArray<AtomicReferenceArray<Socket>> pendingMultisocketConnections;
 	/** a thread pool used to handle incoming connections */
-	private ExecutorService incomingConnPool;
+	private final ExecutorService incomingConnPool;
 
 	AbstractPlatform getPlatform() {
 		return platform;
@@ -101,21 +102,15 @@ class SyncServer implements Runnable {
 	 */
 	SyncServer(AbstractPlatform platform, byte[] ip, int port) {
 		this.platform = platform;
-		this.ip = listenIP == null ? ip : listenIP;
+		this.ip = (ip != null) ? ip : listenIP;
 		this.port = port;
 		this.numMembers = platform.getNumMembers();
 		this.listenerConn = new AtomicReferenceArray<>(numMembers);
 		this.lockCallHeartbeat = new AtomicReferenceArray<>(numMembers);
 		this.lockCallListen = new AtomicReferenceArray<>(numMembers);
 		for (int i = 0; i < numMembers; i++) {
-			lockCallHeartbeat.set(i,
-					LoggingReentrantLock.newLock(platform.getSelfId(),
-							false/* fair locks have not shown good results */,
-							"SyncServer.lockCallHeartbeat-" + i,
-							Settings.lockLogTimeout));
-			lockCallListen.set(i, LoggingReentrantLock.newLock(
-					platform.getSelfId(), false/* fair locks have not shown good results */,
-					"SyncServer.lockCallListen-" + i, Settings.lockLogTimeout));
+			lockCallHeartbeat.set(i, new ReentrantLock(false /* fair locks have not shown good results */));
+			lockCallListen.set(i, new ReentrantLock(false));
 		}
 		this.incomingConnPool = Executors.newCachedThreadPool(
 				new PlatformThreadFactory("sync_server_"));
@@ -213,15 +208,20 @@ class SyncServer implements Runnable {
 				} catch (Exception e) {
 					log.error(EXCEPTION.getMarker(), "SyncServer serverSocket.accept() error", e);
 					try {
-						clientSocket.close();
-					} catch (Exception e1) {
+						if (clientSocket != null) {
+							clientSocket.close();
+						}
+					} catch (Exception ignored) {
+						// Suppress any exceptions during cleanup
 					}
 				}
 			}
 		} finally {
 			try {
-				serverSocket.close();
-			} catch (Exception e) {
+				if (serverSocket != null) {
+					serverSocket.close();
+				}
+			} catch (Exception ignored) {
 				// Suppress any exceptions during cleanup
 			}
 		}
@@ -267,16 +267,24 @@ class SyncServer implements Runnable {
 	private void close(DataInputStream dis, DataOutputStream dos,
 			Socket clientSocket) {
 		try {
-			dis.close();
-		} catch (Exception e) {
+			if (dis != null) {
+				dis.close();
+			}
+		} catch (Exception ignored) {
 		}
+
 		try {
-			dos.close();
-		} catch (Exception e) {
+			if (dos != null) {
+				dos.close();
+			}
+		} catch (Exception ignored) {
 		}
+
 		try {
-			clientSocket.close();
-		} catch (Exception e) {
+			if (clientSocket != null) {
+				clientSocket.close();
+			}
+		} catch (Exception ignored) {
 		}
 	}
 
@@ -321,27 +329,27 @@ class SyncServer implements Runnable {
 
 				otherKey = dis.readUTF();
 
-				otherId = platform.getHashgraph().getAddressBook().getId(otherKey);
+				otherId = platform.getAddressBook().getId(otherKey);
 
-				dos.writeInt(SyncConstants.commConnect);// send an ACK for creating connection
+				dos.writeInt(SyncConstants.COMM_CONNECT);// send an ACK for creating connection
 				dos.flush();
 
 				// ignore invalid IDs, but store the streams for valid ones
 				if (otherId >= 0
-						&& otherId < platform.getHashgraph().getAddressBook()
+						&& otherId < platform.getAddressBook()
 						.getSize()
 						&& platform.getConnectionGraph().isAdjacent(
 						platform.getSelfId().getIdAsInt(), (int) otherId)) {
-					long other = otherId;
 					log.debug(SYNC_START.getMarker(),
 							"listener {} just established connection initiated by {}",
-							platform.getSelfId(), other);
+							platform.getSelfId(), otherId);
 
 					syncServer.tcpConnectionEstablished(clientSocket, NodeId.createMain(otherId));
 				} else {
 					close(dis, dos, clientSocket);
 				}
 			} catch (SocketTimeoutException expectedWithNonZeroSOTimeout) {
+				// Suppressed intentionally
 			} catch (SSLException e) {
 				// log the SSL connection exception which is caused by socket exceptions as warning.
 				log.warn(SOCKET_EXCEPTIONS.getMarker(),
@@ -349,14 +357,13 @@ class SyncServer implements Runnable {
 						otherId, e);
 				close(dis, dos, clientSocket);
 			} catch (Exception e) {
-				long x = otherId;
 				log.error(EXCEPTION.getMarker(),
 						"SyncConnection.acceptConnection() error, remote IP: {}\nTime from accept to exception: {} " +
 								"ms",
 						clientSocket.getInetAddress().toString(),
 						acceptTime == 0 ? "N/A" : (System.currentTimeMillis() - acceptTime), e);
 				log.error(SYNC.getMarker(),
-						"Listener {} hearing {} had general Exception:", platform.getSelfId(), x, e);
+						"Listener {} hearing {} had general Exception:", platform.getSelfId(), otherId, e);
 				close(dis, dos, clientSocket);
 			}
 		}

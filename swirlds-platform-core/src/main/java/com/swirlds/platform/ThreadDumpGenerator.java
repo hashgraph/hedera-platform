@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -32,18 +32,25 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
+/**
+ * This class generates augmented thread dumps which include lock information.
+ */
 class ThreadDumpGenerator {
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
+
 	private static final Logger log = LogManager.getLogger();
-	// date time format used for file names
-	private static SimpleDateFormat dt = new SimpleDateFormat(
-			"yyyy-MM-dd HH-mm-ss-SSS");
-	// random used to append to file names in case the timestamp is the same
-	private static Random random = new Random();
-	// generator thread that generates a thread dump at intervals
+
+	/**
+	 * random used to append to file names in case the timestamp is the same
+	 */
+	private static final Random random = new Random();
+
+	/**
+	 * generator thread that generates a thread dump at intervals
+	 */
 	private static volatile Runnable generator = null;
 
 	/**
@@ -57,18 +64,14 @@ class ThreadDumpGenerator {
 		if (generator != null) {
 			return;
 		}
-		generator = new Runnable() {
-
-			@Override
-			public void run() {
-				while (true) {
-					generateThreadDumpFile(null);
-					try {
-						Thread.sleep(milliseconds);
-					} catch (InterruptedException e) {
-						Thread.currentThread().interrupt();
-						return;
-					}
+		generator = () -> {
+			while (true) {
+				generateThreadDumpFile(null);
+				try {
+					Thread.sleep(milliseconds);
+				} catch (final InterruptedException ex) {
+					Thread.currentThread().interrupt();
+					return;
 				}
 			}
 		};
@@ -90,10 +93,8 @@ class ThreadDumpGenerator {
 	 * 		a certain file by some additional criteria other than time
 	 */
 	public static void generateThreadDumpFile(String heading) {
-		BufferedWriter writer = null;
 
-		try {
-			writer = new BufferedWriter(new FileWriter(makeFileName()));
+		try (BufferedWriter writer = new BufferedWriter(new FileWriter(makeFileName()))) {
 
 			// write the heading
 			if (heading != null) {
@@ -149,15 +150,7 @@ class ThreadDumpGenerator {
 				writer.append("\n\n");
 			}
 		} catch (Exception e) {
-			log.error(EXCEPTION.getMarker(),
-					"exception in generating thread file\n{}", e);
-		} finally {
-			if (writer != null) {
-				try {
-					writer.close();
-				} catch (IOException e) {
-				}
-			}
+			log.error(EXCEPTION.getMarker(), "exception in generating thread file\n", e);
 		}
 	}
 
@@ -358,13 +351,13 @@ class ThreadDumpGenerator {
 			for (Integer lock : locks) {
 				result += firstIndent + levelIndent + "lock "
 						+ idToLockInfo.get(lock).getIdentityHashCode() + ": "
-						+ LoggingReentrantLock.getName(idToLockInfo.get(lock))
+						+ idToLockInfo.get(lock).getClassName()
 						+ "\n";
 				Set<Long> threads = lockToBlockedThreads.get(lock);
-				// result += "-#-";
+
 				if (threads != null) {
 					for (long thread : threads) {
-						// result += "-?-";
+
 						result += lockGraph(
 								firstIndent + levelIndent + levelIndent,
 								levelIndent, thread, stop, idToThreadInfo,
@@ -406,7 +399,8 @@ class ThreadDumpGenerator {
 	 * Used to generate a unique file name for a thread dump
 	 */
 	private static String makeFileName() {
-		return Settings.threadDumpLogDir + "/" + "threadDump " + dt.format(new Date()) + "  " + random.nextInt()
+		final SimpleDateFormat dt = new SimpleDateFormat("yyyy-MM-dd HH-mm-ss-SSS");
+		return "threadDump " + dt.format(new Date()) + "  " + random.nextInt()
 				+ ".txt";
 	}
 
@@ -419,25 +413,23 @@ class ThreadDumpGenerator {
 	 * mechanisms are working properly.
 	 */
 	static void createDeadlock() {
-		LoggingReentrantLock x = LoggingReentrantLock.newLock(null, false,
-				"ThreadDumpGenerator.createDeadlock.x", 500);
-		LoggingReentrantLock y = LoggingReentrantLock.newLock(null, false,
-				"ThreadDumpGenerator.createDeadlock.y", 500);
-		Thread threadXY = new Thread(() -> {
+		final ReentrantLock x = new ReentrantLock(false);
+		final ReentrantLock y = new ReentrantLock(false);
+		final Thread threadXY = new Thread(() -> {
 			while (true) {
-				x.lock("ThreadDumpGenerator.createDeadlock 1");
-				y.lock("ThreadDumpGenerator.createDeadlock 3");
-				y.unlock("ThreadDumpGenerator.createDeadlock 4");
-				x.unlock("ThreadDumpGenerator.createDeadlock 2");
+				x.lock();
+				y.lock();
+				y.unlock();
+				x.unlock();
 			}
 		});
 
-		Thread threadYX = new Thread(() -> {
+		final Thread threadYX = new Thread(() -> {
 			while (true) {
-				y.lock("ThreadDumpGenerator.createDeadlock 1");
-				x.lock("ThreadDumpGenerator.createDeadlock 3");
-				x.unlock("ThreadDumpGenerator.createDeadlock 4");
-				y.unlock("ThreadDumpGenerator.createDeadlock 2");
+				y.lock();
+				x.lock();
+				x.unlock();
+				y.unlock();
 			}
 		});
 		threadXY.setName("<test for deadlock 1  (XY)>");

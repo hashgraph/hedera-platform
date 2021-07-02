@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -18,25 +18,43 @@ package com.swirlds.common;
  * The status of the Platform, indicating whether all is normal, or if it has some problem, such as being disconnected,
  * or not having the latest state.
  */
-public enum PlatformStatus {
+public enum PlatformStatus implements UniqueId {
 	/**
 	 * The Platform is still starting up. This is the default state before ACTIVE
 	 */
-	STARTING_UP,
+	STARTING_UP(1),
 	/**
 	 * All is normal: the Platform is running, connected, and syncing properly
 	 */
-	ACTIVE,
+	ACTIVE(2),
 	/**
 	 * The Platform is not currently connected to any other computers on the network
 	 */
-	DISCONNECTED,
+	DISCONNECTED(3),
 	/**
 	 * The Platform does not have the latest state, and needs to reconnect
 	 */
-	BEHIND,
+	BEHIND(4),
 	/**
 	 * The Platform is undergoing maintenance
 	 */
-	MAINTENANCE
+	MAINTENANCE(5);
+
+	/** unique ID */
+	private final int id;
+
+	/**
+	 * Constructs an enum instance
+	 *
+	 * @param id
+	 * 		unique ID of the instance
+	 */
+	PlatformStatus(final int id) {
+		this.id = id;
+	}
+
+	@Override
+	public int getId() {
+		return id;
+	}
 }

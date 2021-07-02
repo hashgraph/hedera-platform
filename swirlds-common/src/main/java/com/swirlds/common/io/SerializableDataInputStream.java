@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -81,6 +81,8 @@ public class SerializableDataInputStream extends ExtendedDataInputStream {
 	 * with {@code writeClassId} set to true, otherwise we
 	 * cannot know what the class written is.
 	 *
+	 * @param <T>
+	 * 		the implementation of {@link SelfSerializable} used
 	 * @return An instance of the class previously written
 	 * @throws IOException
 	 * 		thrown if any IO problems occur
@@ -157,6 +159,10 @@ public class SerializableDataInputStream extends ExtendedDataInputStream {
 			boolean readClassId,
 			Function<Long, T> serializableConstructor,
 			Consumer<T> callback) throws IOException {
+
+		if (serializableConstructor == null) {
+			throw new IllegalArgumentException("serializableConstructor is null");
+		}
 		// return if size is zero while deserializing similar to serializing
 		if (size == 0) {
 			return;
@@ -203,6 +209,30 @@ public class SerializableDataInputStream extends ExtendedDataInputStream {
 		return readSerializableList(maxListSize, readClassId, (id) -> serializableConstructor.get());
 	}
 
+	/**
+	 * Read an array of self-serialized objects from the stream
+	 *
+	 * @param readClassId
+	 * 		set to true if the class ID was written to the stream
+	 * @param maxListSize
+	 * 		maximal number of object should read
+	 * @param <T>
+	 * 		the implementation of {@link SelfSerializable} used
+	 * @return An array of the instances of the class previously written
+	 * @throws IOException
+	 * 		thrown if any IO problems occur
+	 */
+	public <T extends SelfSerializable> T[] readSerializableArray(
+			final Function<Integer, T[]> arrayConstructor,
+			final int maxListSize,
+			final boolean readClassId) throws IOException {
+		final List<T> list = readSerializableList(maxListSize, readClassId, SerializableDataInputStream::registryConstructor);
+		if (list == null) {
+			return null;
+		}
+		return list.toArray(arrayConstructor.apply(list.size()));
+	}
+
 	public <T extends SelfSerializable> T[] readSerializableArray(
 			Function<Integer, T[]> arrayConstructor,
 			int maxListSize,
@@ -213,6 +243,25 @@ public class SerializableDataInputStream extends ExtendedDataInputStream {
 			return null;
 		}
 		return list.toArray(arrayConstructor.apply(list.size()));
+	}
+
+	/**
+	 * Read a list of self-serialized objects from the stream
+	 *
+	 * @param maxListSize
+	 * 		maximal number of object should read
+	 * @param readClassId
+	 * 		set to true if the class ID was written to the stream
+	 * @param <T>
+	 * 		the implementation of {@link SelfSerializable} used
+	 * @return An list of the instances of the class previously written
+	 * @throws IOException
+	 * 		thrown if any IO problems occur
+	 */
+	public <T extends SelfSerializable> List<T> readSerializableList(
+			final int maxListSize,
+			final boolean readClassId) throws IOException {
+		return readSerializableList(maxListSize, readClassId, SerializableDataInputStream::registryConstructor);
 	}
 
 	private <T extends SelfSerializable> List<T> readSerializableList(

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -70,7 +70,14 @@ public class ExtendedDataInputStream extends DataInputStream {
 	}
 
 	/**
+	 * Reads a byte array from the stream.
 	 * Same as {@link #readByteArray(int, boolean)} with {@code readChecksum} set to false
+	 *
+	 * @param maxLength
+	 * 		the maximum expected length of the array
+	 * @return the byte[] read or null if null was written
+	 * @throws IOException
+	 * 		thrown if any problems occur
 	 */
 	public byte[] readByteArray(int maxLength) throws IOException {
 		return readByteArray(maxLength, ExtendedDataOutputStream.debug);

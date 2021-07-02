@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -20,8 +20,8 @@ import com.swirlds.common.merkle.io.MerkleDataInputStream;
 import com.swirlds.common.merkle.io.MerkleDataOutputStream;
 import com.swirlds.common.threading.StandardWorkGroup;
 import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Marker;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -44,20 +44,20 @@ import static com.swirlds.common.merkle.synchronization.MerkleSynchronizationUti
  */
 public class SendingSynchronizer {
 
-	private Logger log;
-	private Marker marker;
+	private final Logger log;
+	private final Marker marker;
 
 	/**
 	 * Used to get data from the listener.
 	 */
-	private MerkleDataInputStream in;
+	private final MerkleDataInputStream in;
 
 	/**
 	 * Used to transmit data to the listener.
 	 */
-	private MerkleDataOutputStream out;
+	private final MerkleDataOutputStream out;
 
-	private MerkleNode root;
+	private final MerkleNode root;
 
 	/**
 	 * Nodes that will be sent to the receiver. If we learn that the receiver already has the node before we send then
@@ -87,8 +87,12 @@ public class SendingSynchronizer {
 	 * @param marker
 	 * 		the marker to use while writing to the log
 	 */
-	public SendingSynchronizer(MerkleDataInputStream in, MerkleDataOutputStream out, MerkleNode root,
-			Logger log, Marker marker) {
+	public SendingSynchronizer(
+			final MerkleDataInputStream in,
+			final MerkleDataOutputStream out,
+			final MerkleNode root,
+			final Logger log,
+			final Marker marker) {
 		this.in = in;
 		this.out = out;
 		this.root = root;
@@ -101,9 +105,9 @@ public class SendingSynchronizer {
 		this.finished = false;
 	}
 
-	private NodeToSend prepareToSend(AsyncInputStream asyncIn, MerkleNode node) {
+	private NodeToSend prepareToSend(final AsyncInputStream asyncIn, final MerkleNode node) {
 		asyncIn.addAnticipatedMessage(new AckMessage());
-		NodeToSend nodeToSend = new NodeToSend(node);
+		final NodeToSend nodeToSend = new NodeToSend(node);
 		this.nodesToSend.add(nodeToSend);
 		this.nodesAwaitingResponse.add(nodeToSend);
 		return nodeToSend;
@@ -113,7 +117,9 @@ public class SendingSynchronizer {
 	 * Utility method to aid in benchmarking. Allows for the output stream to be replaced
 	 * with a stream that simulates lag.
 	 */
-	protected AsyncOutputStream getAsyncOutputStream(MerkleDataOutputStream out, StandardWorkGroup workGroup) {
+	protected AsyncOutputStream getAsyncOutputStream(
+			final MerkleDataOutputStream out,
+			final StandardWorkGroup workGroup) {
 		return new AsyncOutputStream(out, workGroup);
 	}
 
@@ -121,10 +127,10 @@ public class SendingSynchronizer {
 	 * Synchronize with the receiver. Blocks until finished.
 	 */
 	public void synchronize() throws InterruptedException {
-		StandardWorkGroup workGroup = new StandardWorkGroup("sending-synchronizer");
+		final StandardWorkGroup workGroup = new StandardWorkGroup("sending-synchronizer");
 
-		AsyncInputStream asyncIn = new AsyncInputStream(in, workGroup);
-		AsyncOutputStream asyncOut = getAsyncOutputStream(out, workGroup);
+		final AsyncInputStream asyncIn = new AsyncInputStream(in, workGroup);
+		final AsyncOutputStream asyncOut = getAsyncOutputStream(out, workGroup);
 
 		prepareToSend(asyncIn, root);
 
@@ -142,16 +148,19 @@ public class SendingSynchronizer {
 	/**
 	 * Send a node's full data, including the hashes of the children (if any).
 	 */
-	private void sendFullNode(AsyncInputStream asyncIn, AsyncOutputStream asyncOut, NodeToSend nodeToSend)
+	private void sendFullNode(
+			final AsyncInputStream asyncIn,
+			final AsyncOutputStream asyncOut,
+			final NodeToSend nodeToSend)
 			throws InterruptedException {
 
 		asyncOut.sendAsync(new NodeDataMessage(nodeToSend.getNode()));
 		if (nodeToSend.getNode() != null && !nodeToSend.getNode().isLeaf()) {
-			MerkleInternal internal = (MerkleInternal) nodeToSend.getNode();
-			List<NodeToSend> children = new LinkedList<>();
+			final MerkleInternal internal = nodeToSend.getNode().cast();
+			final List<NodeToSend> children = new LinkedList<>();
 			for (int childIndex = 0; childIndex < internal.getNumberOfChildren(); childIndex++) {
-				MerkleNode child = internal.getChild(childIndex);
-				NodeToSend childToSend = prepareToSend(asyncIn, child);
+				final MerkleNode child = internal.getChild(childIndex);
+				final NodeToSend childToSend = prepareToSend(asyncIn, child);
 				children.add(childToSend);
 			}
 			nodeToSend.addChildren(children);
@@ -161,14 +170,14 @@ public class SendingSynchronizer {
 	/**
 	 * This thread sends nodes to the receiver.
 	 */
-	private void sendingThread(AsyncInputStream asyncIn, AsyncOutputStream asyncOut) {
+	private void sendingThread(final AsyncInputStream asyncIn, final AsyncOutputStream asyncOut) {
 		try {
 
 			// The receiver expects the root hash to be the first thing sent
 			asyncOut.sendAsync(getHash(root));
 
 			while (!nodesToSend.isEmpty()) {
-				NodeToSend nodeToSend = nodesToSend.remove();
+				final NodeToSend nodeToSend = nodesToSend.remove();
 
 				nodeToSend.waitForAck();
 
@@ -193,8 +202,8 @@ public class SendingSynchronizer {
 	/**
 	 * Read the ACK/NACK response from the stream.
 	 */
-	protected boolean getAck(AsyncInputStream asyncIn) throws InterruptedException {
-		AckMessage ack = asyncIn.readAnticipatedMessage();
+	protected boolean getAck(final AsyncInputStream asyncIn) throws InterruptedException {
+		final AckMessage ack = asyncIn.readAnticipatedMessage();
 		return ack.isAffirmative();
 	}
 
@@ -202,12 +211,12 @@ public class SendingSynchronizer {
 	 * This thread receives responses form the receiver, restricting the nodes sent as it obtains a "theory" of the
 	 * status of the receiver's tree.
 	 */
-	private void receivingThread(AsyncInputStream asyncIn) {
+	private void receivingThread(final AsyncInputStream asyncIn) {
 		try {
 			long lastSuccessfulPollMilliseconds = System.currentTimeMillis();
 			while ((!finished || nodesAwaitingResponse.size() > 0) && !Thread.currentThread().isInterrupted()) {
-				NodeToSend nodeAwaitingResponse = nodesAwaitingResponse.poll(10, TimeUnit.MILLISECONDS);
-				long now = System.currentTimeMillis();
+				final NodeToSend nodeAwaitingResponse = nodesAwaitingResponse.poll(10, TimeUnit.MILLISECONDS);
+				final long now = System.currentTimeMillis();
 				if (nodeAwaitingResponse == null) {
 					if (now - lastSuccessfulPollMilliseconds > 10_000) {
 						// Sanity check -- if it somehow takes more than 10 seconds to receive an ACK message then
@@ -218,7 +227,7 @@ public class SendingSynchronizer {
 				} else {
 					lastSuccessfulPollMilliseconds = now;
 				}
-				boolean ackStatus = getAck(asyncIn);
+				final boolean ackStatus = getAck(asyncIn);
 				nodeAwaitingResponse.registerAck(ackStatus);
 			}
 		} catch (InterruptedException e) {

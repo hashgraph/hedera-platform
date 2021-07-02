@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,6 +14,8 @@
 
 package com.swirlds.fcqueue;
 
+import com.swirlds.fcqueue.internal.FCQueueNode;
+
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -24,12 +26,12 @@ import java.util.NoSuchElementException;
  * @param <E>
  * 		the type of elements in the FCQueue
  */
-public class FCQueueIterator<E extends FCQueueElement<E>> implements Iterator<E> {
+public class FCQueueIterator<E extends FCQueueElement> implements Iterator<E> {
 	/** the node whose element should be returned the next time this.next() is called */
 	private FCQueueNode<E> current;
 
 	/** the tail of this queue, and so the last node that this iterator will return */
-	private FCQueueNode<E> tail;
+	private final FCQueueNode<E> tail;
 
 	/** the queue that this is iterating over.  This is used to fail-fast when it changes during iteration. */
 	private final FCQueue<E> queue;
@@ -81,7 +83,7 @@ public class FCQueueIterator<E extends FCQueueElement<E>> implements Iterator<E>
 	 * 		bugs, but shouldn't be relied on.
 	 */
 	@Override
-	public E next() throws ConcurrentModificationException {
+	public E next() {
 		final FCQueueNode<E> old = current;
 
 		if (current == null) {
@@ -95,14 +97,12 @@ public class FCQueueIterator<E extends FCQueueElement<E>> implements Iterator<E>
 		if (current == tail) {
 			current = null;
 		} else {
-			current = current.towardTail;
+			current = current.getTowardTail();
 		}
 
-		return old.element;
+		return old.getElement();
 	}
-
-//ConcurrentModificationException
-
+	
 	/**
 	 * This always throws an UnsupportedOperationException, because an FCQueue is not designed to allow removal of any
 	 * elements other than the head. That is necessary to make fast copies to be fast.

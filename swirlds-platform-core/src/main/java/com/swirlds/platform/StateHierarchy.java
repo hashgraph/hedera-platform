@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -32,7 +32,7 @@ import java.util.jar.Manifest;
  */
 class StateHierarchy {
 	/** list of the known apps, each of which may have some members, swirlds, and states */
-	List<InfoApp> apps = new ArrayList<InfoApp>();
+	List<InfoApp> apps = new ArrayList<>();
 
 	/**
 	 * Create the state hierarchy, by finding all .jar files in data/apps/ and also adding in a virtual one
@@ -43,25 +43,29 @@ class StateHierarchy {
 	 * @param fromAppMain
 	 * 		the class of the virtual SwirldMain, or null if none.
 	 */
-	public StateHierarchy(String fromAppName, Class<?> fromAppMain) {
-		File appsDirPath = CommonUtils.canonicalFile("data", "apps");
-		File[] appFiles = appsDirPath
+	public StateHierarchy(final String fromAppName, final Class<?> fromAppMain) {
+		final File appsDirPath = CommonUtils.canonicalFile("data", "apps");
+		final File[] appFiles = appsDirPath
 				.listFiles((dir, name) -> name.endsWith(".jar"));
-		List<String> names = new ArrayList<String>();
+		final List<String> names = new ArrayList<>();
+
 		if (fromAppName != null) { // if there's a virtual jar, list it first
 			names.add(fromAppName);
-			File[] toDelete = appsDirPath
+			final File[] toDelete = appsDirPath
 					.listFiles((dir, name) -> name.equals(fromAppName));
-			for (File file : toDelete) {
-				file.delete(); // deletes if the virtual file also really exists. Else does nothing.
+			if (toDelete != null) {
+				for (File file : toDelete) {
+					file.delete(); // deletes if the virtual file also really exists. Else does nothing.
+				}
 			}
 		}
-		if (appFiles == null) {
-			return;
+
+		if (appFiles != null) {
+			for (File app : appFiles) {
+				names.add(getMainClass(app.getAbsolutePath()));
+			}
 		}
-		for (File app : appFiles) {
-			names.add(getMainClass(app.getAbsolutePath()));
-		}
+
 		names.sort(null);
 		for (String name : names) {
 			name = name.substring(0, name.length() - 4);
@@ -69,15 +73,13 @@ class StateHierarchy {
 		}
 	}
 
-	private String getMainClass(String appJarPath) {
+	private static String getMainClass(final String appJarPath) {
 		String mainClassname;
-		try {
-			JarFile jarFile = new JarFile(appJarPath);
-			Manifest manifest = jarFile.getManifest();
-			Attributes attributes = manifest
+		try (final JarFile jarFile = new JarFile(appJarPath)) {
+			final Manifest manifest = jarFile.getManifest();
+			final Attributes attributes = manifest
 					.getMainAttributes();
 			mainClassname = attributes.getValue("Main-Class");
-			jarFile.close();
 			return mainClassname;
 		} catch (Exception ex) {
 			CommonUtils.tellUserConsolePopup("ERROR",

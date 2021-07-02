@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -13,32 +13,38 @@
  */
 package com.swirlds.platform;
 
+import com.swirlds.common.AddressBook;
+import com.swirlds.common.EventCreationRuleResponse;
 import com.swirlds.common.NodeId;
+import com.swirlds.platform.components.CriticalQuorum;
+import com.swirlds.platform.components.EventCreationRules;
+import com.swirlds.platform.components.TransThrottleSyncAndCreateRules;
+import com.swirlds.platform.components.TransThrottleSyncRule;
+import com.swirlds.platform.components.TransactionTracker;
+import com.swirlds.platform.event.EventIntakeTask;
 import org.apache.logging.log4j.LogManager;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static com.swirlds.logging.LogMarker.SYNC;
+import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.SYNC_AND_CREATE;
 
 /**
  * A class that manages information about who we need to sync with, and whether we need to reconnect
  */
 class SyncManager {
 
-	/** The hashgraph used by the platform to perform consensus operations. */
-	private final AbstractHashgraph hashgraph;
-
-	/** The platform uses this object to manage swirlds state and various queues of events. */
-	private final AbstractEventFlow eventFlow;
+	/** the event intake queue */
+	private final BlockingQueue<EventIntakeTask> intakeQueue;
 
 	/** This object holds data on how nodes are connected to each other. */
 	private final RandomGraph connectionGraph;
@@ -46,8 +52,14 @@ class SyncManager {
 	/** The id of this node */
 	private final NodeId selfId;
 
-	/** Checks to see if event creation is frozen for something such as re-connection. */
-	private final Supplier<Boolean> isEventCreationFrozen;
+	/** This object is used for checking whether this node should create an event or not */
+	private final EventCreationRules eventCreationRules;
+
+	/** This object is used for checking whether should initiate a sync and create an event for that sync or not */
+	private final TransThrottleSyncAndCreateRules transThrottleSyncAndCreateRules;
+
+	/** A list of rules for checking if this not should sync with other nodes */
+	private final List<TransThrottleSyncRule> transThrottleSyncRules;
 
 	/** Returns the number of threads currently in a sync. */
 	private final Supplier<Integer> numListenerSyncs;
@@ -60,6 +72,15 @@ class SyncManager {
 
 	/** Notifies the platform that its status may have changed. */
 	private final Runnable notifyPlatform;
+
+	/** Tracks user transactions in the hashgraph */
+	private final TransactionTracker transactionTracker;
+
+	/** Tracks recent events */
+	private final CriticalQuorum criticalQuorum;
+
+	/** The initial address book */
+	private final AddressBook addressBook;
 
 	/** a set of all neighbors of this node */
 	private final HashSet<Long> allNeighbors;
@@ -78,8 +99,13 @@ class SyncManager {
 	 */
 	private final Set<Long> notYetReportFallenBehind;
 
+	/**
+	 * initial value of transThrottleInitialCalls
+	 */
+	private static final int TRANS_THROTTLE_INITIAL_CALLS_NUM = 10;
+
 	/** a counter that turns off transThrottle initially until it reaches 0 */
-	private final AtomicInteger transThrottleInitalCalls = new AtomicInteger(10);
+	private final AtomicInteger transThrottleInitialCalls = new AtomicInteger(TRANS_THROTTLE_INITIAL_CALLS_NUM);
 	/**
 	 * a counter that keeps track of the number of consecutive syncs that happened without any events being
 	 * transferred
@@ -87,46 +113,67 @@ class SyncManager {
 	private final AtomicInteger transThrottleSyncsWithNoEvents = new AtomicInteger(0);
 
 	/**
+	 * When looking for a neighbor to call, this is the maximum number of neighbors we query before just selecting
+	 * one if a suitable neighbor is not found yet.
+	 */
+	private static final int MAXIMUM_NEIGHBORS_TO_QUERY = 10;
+
+	/**
 	 * Creates a new SyncManager
 	 *
-	 * @param hashgraph
-	 * 		The Hashgraph used by the platform.
-	 * @param eventFlow
-	 * 		The EventFlow used by the platform.
+	 * @param intakeQueue
+	 * 		the event intake queue
 	 * @param connectionGraph
 	 * 		The platforms connection graph.
 	 * @param selfId
 	 * 		The ID of the platform.
-	 * @param isEventCreationFrozen
-	 * 		A binding of freezeManager.isEventCreationFrozen().
+	 * @param eventCreationRules
+	 * 		Contains a list of rules for checking whether this node should create an event or not
+	 * @param transThrottleSyncRules
+	 * 		A list of rules for checking if this not should sync with other nodes
+	 * @param transThrottleSyncAndCreateRules
+	 * 		Contains a list of rules for checking whether should initiate a sync and create an event for that sync or
+	 * 		not
 	 * @param numListenerSyncs
 	 * 		A binding of syncServer.numListenerSyncs.get().
 	 * @param lastRoundSavedToDisk
 	 * 		A binding of signedStateMgr.getLastRoundSavedToDisk().
 	 * @param lastCompletedRound
 	 * 		A binding of signedStateMgr.getLastCompleteRound()).
+	 * @param transactionTracker
+	 * 		tracks user transactions within events
 	 */
 	SyncManager(
-			AbstractHashgraph hashgraph,
-			AbstractEventFlow eventFlow,
-			RandomGraph connectionGraph,
-			NodeId selfId,
-			Supplier<Boolean> isEventCreationFrozen,
-			Supplier<Integer> numListenerSyncs,
-			Supplier<Long> lastRoundSavedToDisk,
-			Supplier<Long> lastCompletedRound,
-			Runnable notifyPlatform) {
+			final BlockingQueue<EventIntakeTask> intakeQueue,
+			final RandomGraph connectionGraph,
+			final NodeId selfId,
+			final EventCreationRules eventCreationRules,
+			final List<TransThrottleSyncRule> transThrottleSyncRules,
+			final TransThrottleSyncAndCreateRules transThrottleSyncAndCreateRules,
+			final Supplier<Integer> numListenerSyncs,
+			final Supplier<Long> lastRoundSavedToDisk,
+			final Supplier<Long> lastCompletedRound,
+			final Runnable notifyPlatform,
+			final TransactionTracker transactionTracker,
+			final CriticalQuorum criticalQuorum,
+			final AddressBook addressBook) {
 		super();
 
-		this.hashgraph = hashgraph;
-		this.eventFlow = eventFlow;
+		this.intakeQueue = intakeQueue;
 		this.connectionGraph = connectionGraph;
 		this.selfId = selfId;
-		this.isEventCreationFrozen = isEventCreationFrozen;
+
+		this.eventCreationRules = eventCreationRules;
+		this.transThrottleSyncRules = transThrottleSyncRules;
+		this.transThrottleSyncAndCreateRules = transThrottleSyncAndCreateRules;
+
 		this.numListenerSyncs = numListenerSyncs;
 		this.lastRoundSavedToDisk = lastRoundSavedToDisk;
 		this.lastCompletedRound = lastCompletedRound;
 		this.notifyPlatform = notifyPlatform;
+		this.transactionTracker = transactionTracker;
+		this.criticalQuorum = criticalQuorum;
+		this.addressBook = addressBook;
 
 		notYetReportFallenBehind = ConcurrentHashMap.newKeySet();
 		reportFallenBehind = new HashSet<>();
@@ -145,7 +192,7 @@ class SyncManager {
 	 */
 	boolean shouldAcceptSync() {
 		// we shouldn't sync if the event intake queue is too big
-		final int intakeQueueSize = hashgraph.getEventIntakeQueueSize();
+		final int intakeQueueSize = intakeQueue.size();
 		if (intakeQueueSize > Settings.eventIntakeQueueThrottleSize) {
 			LogManager.getLogger().debug(SYNC.getMarker(),
 					"don't accept sync because event intake queue is too big, size: {}",
@@ -170,10 +217,7 @@ class SyncManager {
 	 */
 	boolean shouldInitiateSync() {
 		//we shouldn't sync if the event intake queue is too big
-		if (hashgraph.getEventIntakeQueueSize() > Settings.eventIntakeQueueThrottleSize) {
-			return false;
-		}
-		return true;
+		return intakeQueue.size() <= Settings.eventIntakeQueueThrottleSize;
 	}
 
 	/**
@@ -193,13 +237,18 @@ class SyncManager {
 			case RANDOM:
 			case PRIORITY:
 				list = new LinkedList<>();
-				for (int i = 0; i < 10; i++) {
+				for (int i = 0; i < MAXIMUM_NEIGHBORS_TO_QUERY; i++) {
 					long neighbor = connectionGraph.randomNeighbor(selfId.getIdAsInt());
+
+					// don't add duplicated nodes here
+					if (list.contains(neighbor)) {
+						continue;
+					}
+
 					// we try to call a neighbor in the bottom 1/3 by number of events created in the latest round, if
 					// we fail to find one after 10 tries, we just call the last neighbor we find
-					if (hashgraph.isStrongMinorityInMaxRound(neighbor) || i == 9) {
+					if (criticalQuorum.isInCriticalQuorum(neighbor) || i == MAXIMUM_NEIGHBORS_TO_QUERY - 1) {
 						list.add(neighbor);
-						return list;
 					}
 				}
 
@@ -219,9 +268,12 @@ class SyncManager {
 			return true;
 		}
 		// check 2: should be off while event creation is frozen, this includes the startup freeze
-		if (isEventCreationFrozen.get()) {
-			return true;
+		for (final TransThrottleSyncRule syncRule : transThrottleSyncRules) {
+			if (syncRule.shouldSync()) {
+				return true;
+			}
 		}
+
 		// check 3: did we have enough syncs with not events transferred, if not, we should sync
 		if (transThrottleSyncsWithNoEvents.get() < 10) {
 			return true;
@@ -240,45 +292,37 @@ class SyncManager {
 		if (!Settings.transThrottle) {
 			return true;
 		}
-		// check 2: when a node starts up or does a reconnect, don't stop calling until transThrottleInitalCalls reaches
-		// zero
-		if (transThrottleInitalCalls.get() > 0) {
+		// check 2: when a node starts up or does a reconnect,
+		// don't stop calling until transThrottleInitialCalls reaches zero
+		if (transThrottleInitialCalls.get() > 0) {
 			return true;
 		}
 		// check 3: if we have non consensus user transaction in the hashgraph, initiate a sync. This is the most common
 		// scenario. We will only check the saved states if there are no non consensus transactions in the hashgraph.
-		if (hashgraph.getNumUserTransEvents() > 0) {
+		if (transactionTracker.getNumUserTransEvents() > 0) {
 			return true;
 		}
-		// check 4: if we have transactions waiting to be put into an event, initiate a sync
-		if (eventFlow.numUserTransForEvent() > 0) {
-			return true;
-		}
-		long roundReceivedAllCons = hashgraph.getLastRoundReceivedAllTransCons();
+
+		long roundReceivedAllCons = transactionTracker.getLastRoundReceivedAllTransCons();
 		if (Settings.state.getSaveStatePeriod() > 0) {
-			// check 5: if we are saving states to disk, then we need to sync until we have saved a state that has
+			// check 4: if we are saving states to disk, then we need to sync until we have saved a state that has
 			// processed all transactions
 			if (roundReceivedAllCons > lastRoundSavedToDisk.get()) {
 				return true;
 			}
 		} else {
-			// check 6: if we are not saving states to disk, then we only need to collect enough signatures for the
+			// check 5: if we are not saving states to disk, then we only need to collect enough signatures for the
 			// state that has all the transactions handled
 			if (roundReceivedAllCons > lastCompletedRound.get()) {
 				return true;
 			}
 		}
-		// check 7: tranThrottle should be off 1 minute before and during the freeze period
-		if (FreezeManager.isInFreezePeriod(Instant.now().plusMillis(60 * 1000)) ||
-				FreezeManager.isInFreezePeriod(Instant.now())) {
-			return true;
-		}
+
+		// check 6: if we have transactions waiting to be put into an event, initiate a sync
+		// check 7: transThrottle should be off 1 minute before and during the freeze period
 		// check 8: waitAtStartup, don't throttle until all nodes have started
-		if (Settings.waitAtStartup && hashgraph.getNumNotStarted() > 0) {
-			return true;
-		}
 		// if all checks have passed, then we don't need to call anyone until one of the conditions changes
-		return false;
+		return transThrottleSyncAndCreateRules.shouldSyncAndCreate() == SYNC_AND_CREATE;
 	}
 
 	/**
@@ -295,44 +339,26 @@ class SyncManager {
 	 * @return true if an event should be created, false otherwise
 	 */
 	boolean shouldCreateEvent(NodeId otherId, boolean oneNodeFallenBehind, int eventsRead, int eventsWritten) {
-
-		// Only main nodes should create events
-		if (!selfId.isMain()) {
-			return false;
-		}
-
-		if (eventFlow.numFreezeTransEvent() > 0) {
+		// check EventCreationRules:
+		// (1) if the node is not main node, it should not create events.
+		// (2) if the number of freeze transactions is greater than 0, should create an event.
+		// (3) during startup freeze, should not create an event.
+		// (4) in freeze period, should not create an event.
+		EventCreationRuleResponse response = eventCreationRules.shouldCreateEvent();
+		if (response == EventCreationRuleResponse.CREATE) {
 			return true;
-		}
-
-		// check 1: if event creation is frozen, dont create an event
-		if (isEventCreationFrozen.get()) {
+		} else if (response == EventCreationRuleResponse.DONT_CREATE) {
 			return false;
 		}
+
 		// check 2: if one node had fallen behind, don't create an event
 		if (oneNodeFallenBehind) {
 			return false;
 		}
 		// check 3: if neither node is part of the superMinority in the latest round, don't create an event
-		if (!hashgraph.isStrongMinorityInMaxRound(otherId.getId()) &&
-				!hashgraph.isStrongMinorityInMaxRound(selfId.getId())) {
+		if (!criticalQuorum.isInCriticalQuorum(otherId.getId()) &&
+				!criticalQuorum.isInCriticalQuorum(selfId.getId())) {
 			return false;
-		}
-		// check 4: waitAtStartup
-		// If waitAtStartup is active, then there are some cases when it
-		// shouldn't create the event. This member should only create a single event
-		// prior to receiving at least one event from every member. And that event
-		// should only be created after receiving an event from member 0 (except that
-		// member 0 can create the event before receiving from self).
-		if (Settings.waitAtStartup && hashgraph.getNumNotStarted() > 0) {
-			// check 3.1: if I have created an event, but someone else hasn't, don't create anymore events yet
-			if (hashgraph.hasNodeStarted(selfId.getIdAsInt())) {
-				return false;
-			}
-			// check 3.2: if I am not node 0, I should wait for node 0 to create an event first
-			if (selfId.getId() != 0 && !hashgraph.hasNodeStarted(0)) {
-				return false;
-			}
 		}
 		if (eventsRead + eventsWritten > 0) {
 			// if we have transferred events, reset the counter
@@ -351,7 +377,7 @@ class SyncManager {
 
 		// check 5: staleEventPrevention
 		if (Settings.staleEventPreventionThreshold > 0 &&
-				eventsRead > Settings.staleEventPreventionThreshold * hashgraph.getAddressBook().getSize()) {
+				eventsRead > Settings.staleEventPreventionThreshold * addressBook.getSize()) {
 			// if we read too many events during this sync, we skip creating an event to reduce the probability of
 			// having a stale event
 			return false;
@@ -366,10 +392,10 @@ class SyncManager {
 	 * Notifies the sync manager that there was a successful sync
 	 */
 	void successfulSync() {
-		if (transThrottleInitalCalls.get() > 0) {
-			// since this is not synchronized, it might make the transThrottleInitalCalls go below 0, but that isn't an
+		if (transThrottleInitialCalls.get() > 0) {
+			// since this is not synchronized, it might make the transThrottleInitialCalls go below 0, but that isn't an
 			// issue and will only result in a few extra initial syncs
-			transThrottleInitalCalls.decrementAndGet();
+			transThrottleInitialCalls.decrementAndGet();
 		}
 	}
 
@@ -404,7 +430,7 @@ class SyncManager {
 		numReportFallenBehind = 0;
 		reportFallenBehind.clear();
 		notYetReportFallenBehind.clear();
-		transThrottleInitalCalls.set(10);
+		transThrottleInitialCalls.set(TRANS_THROTTLE_INITIAL_CALLS_NUM);
 		notifyPlatform.run();
 	}
 

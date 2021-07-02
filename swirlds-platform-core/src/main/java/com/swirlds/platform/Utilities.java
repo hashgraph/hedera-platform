@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,7 +14,6 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.FastCopyable;
 import com.swirlds.common.io.DataStreamUtils;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
@@ -23,24 +22,20 @@ import com.swirlds.platform.internal.Serializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.awt.Color;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
-import java.lang.reflect.Array;
-import java.lang.reflect.Constructor;
 import java.net.SocketException;
-import java.time.Instant;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.Supplier;
+import java.util.function.ToLongFunction;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
@@ -142,12 +137,16 @@ public class Utilities extends DataStreamUtils {
 			log.error(EXCEPTION.getMarker(), "", e);
 		} finally {
 			try {
-				dos.close();
-			} catch (Exception e) {
+				if (dos != null) {
+					dos.close();
+				}
+			} catch (Exception ignored) {
 			}
 			try {
-				dis.close();
-			} catch (Exception e) {
+				if (dis != null) {
+					dis.close();
+				}
+			} catch (Exception ignored) {
 			}
 		}
 		return null;
@@ -205,7 +204,8 @@ public class Utilities extends DataStreamUtils {
 	 * @return 1 if first is bigger, -1 if second, 0 otherwise
 	 */
 	static int arrayCompare(byte[] sig1, byte[] sig2, byte[] whitening) {
-		int maxLen, minLen;
+		int maxLen;
+		int minLen;
 		if (sig1 == null && sig2 == null) {
 			return 0;
 		}
@@ -242,338 +242,6 @@ public class Utilities extends DataStreamUtils {
 	/////////////////////////////////////////////////////////////
 	// read from DataInputStream and
 	// write to DataOutputStream
-
-	/**
-	 * write an Instant to the given stream
-	 *
-	 * @param stream
-	 * 		the stream to write to
-	 * @param instant
-	 * 		the instant to write
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static void writeInstant(SerializableDataOutputStream stream, Instant instant)
-			throws IOException {
-		stream.writeLong(instant.getEpochSecond());
-		stream.writeLong(instant.getNano());
-	}
-
-	/**
-	 * read an Instant from the given stream
-	 *
-	 * @param stream
-	 * 		the stream to read from
-	 * @return the Instant that was read
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static Instant readInstant(SerializableDataInputStream stream)
-			throws IOException {
-		Instant time = Instant.ofEpochSecond(//
-				stream.readLong(), // from getEpochSecond()
-				stream.readLong()); // from getNano()
-		return time;
-	}
-
-	/**
-	 * write an int array to the given stream
-	 *
-	 * @param stream
-	 * 		the stream to write to
-	 * @param data
-	 * 		the array to write
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static void writeIntArray(DataOutputStream stream, int[] data)
-			throws IOException {
-		int len = (data == null ? 0 : data.length);
-		stream.writeInt(len);
-		for (int i = 0; i < len; i++) {
-			stream.writeInt(data[i]);
-		}
-	}
-
-	/**
-	 * read an int array from the given stream
-	 *
-	 * @param stream
-	 * 		the stream to read from
-	 * @return the array that was read
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static int[] readIntArray(DataInputStream stream)
-			throws IOException {
-		int len = stream.readInt();
-		int[] data = new int[len];
-		for (int i = 0; i < len; i++) {
-			data[i] = stream.readInt();
-		}
-		return data;
-	}
-
-	/**
-	 * write a long array to the given stream
-	 *
-	 * @param stream
-	 * 		the stream to write to
-	 * @param data
-	 * 		the array to write
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static void writeLongArray(DataOutputStream stream, long[] data)
-			throws IOException {
-		int len = (data == null ? 0 : data.length);
-		stream.writeInt(len);
-		for (int i = 0; i < len; i++) {
-			stream.writeLong(data[i]);
-		}
-	}
-
-	/**
-	 * read a long array from the given stream
-	 *
-	 * @param stream
-	 * 		the stream to read from
-	 * @return the array that was read
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static long[] readLongArray(DataInputStream stream)
-			throws IOException {
-		int len = stream.readInt();
-		long[] data = new long[len];
-		for (int i = 0; i < len; i++) {
-			data[i] = stream.readLong();
-		}
-		return data;
-	}
-
-	/**
-	 * write a 2D long array to the given stream
-	 *
-	 * @param stream
-	 * 		the stream to write to
-	 * @param data
-	 * 		the array to write
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static void writeLongArray2D(SerializableDataOutputStream stream,
-			long[][] data) throws IOException {
-		int len = (data == null ? 0 : data.length);
-		stream.writeInt(len);
-		for (int i = 0; i < len; i++) {
-			writeLongArray(stream, data[i]);
-		}
-	}
-
-	/**
-	 * read a 2D long array from the given stream
-	 *
-	 * @param stream
-	 * 		the stream to read from
-	 * @return the array that was read
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static long[][] readLongArray2D(SerializableDataInputStream stream)
-			throws IOException {
-		int len = stream.readInt();
-		long[][] data = new long[len][];
-		for (int i = 0; i < len; i++) {
-			data[i] = readLongArray(stream);
-		}
-		return data;
-	}
-
-	/**
-	 * write a String array to the given stream
-	 *
-	 * @param stream
-	 * 		the stream to write to
-	 * @param data
-	 * 		the array to write
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static void writeStringArray(SerializableDataOutputStream stream,
-			String[] data) throws IOException {
-		int len = (data == null ? 0 : data.length);
-		stream.writeInt(len);
-		for (int i = 0; i < len; i++) {
-			// we write a boolean before every array element to indicate if it's null or not
-			if (data[i] != null) {
-				stream.writeBoolean(true);
-				stream.writeUTF(data[i]);
-			} else {
-				stream.writeBoolean(false);
-			}
-
-		}
-	}
-
-	/**
-	 * read a String array from the given stream
-	 *
-	 * @param stream
-	 * 		the stream to read from
-	 * @return the array that was read
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static String[] readStringArray(SerializableDataInputStream stream)
-			throws IOException {
-		int len = stream.readInt();
-		String[] data = new String[len];
-		for (int i = 0; i < len; i++) {
-			boolean notNull = stream.readBoolean();
-			if (notNull) {
-				data[i] = stream.readUTF();
-			}
-		}
-		return data;
-	}
-
-	/**
-	 * write a Color to the given stream
-	 *
-	 * @param stream
-	 * 		the stream to write to
-	 * @param data
-	 * 		the array to write
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static void writeColor(SerializableDataOutputStream stream, Color data)
-			throws IOException {
-		float[] comps = data.getRGBComponents(null);
-		stream.writeFloat(comps[0]); // r
-		stream.writeFloat(comps[1]); // g
-		stream.writeFloat(comps[2]); // b
-		stream.writeFloat(comps[3]); // a
-	}
-
-	/**
-	 * read a Color from the given stream
-	 *
-	 * @param stream
-	 * 		the stream to read from
-	 * @return the array that was read
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static Color readColor(SerializableDataInputStream stream) throws IOException {
-		float r = stream.readFloat();
-		float g = stream.readFloat();
-		float b = stream.readFloat();
-		float a = stream.readFloat();
-		return new Color(r, g, b, a);
-	}
-
-	/**
-	 * write a Color array to the given stream
-	 *
-	 * @param stream
-	 * 		the stream to write to
-	 * @param data
-	 * 		the array to write
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static void writeColorArray(SerializableDataOutputStream stream, Color[] data)
-			throws IOException {
-		int len = (data == null ? 0 : data.length);
-		stream.writeInt(len);
-		for (int i = 0; i < len; i++) {
-			writeColor(stream, data[i]);
-		}
-	}
-
-	/**
-	 * read a FastCopyable array from the given stream
-	 *
-	 * @param <T>
-	 * 		the FastCopyable class that the array will consist of
-	 * @param stream
-	 * 		the stream to read from
-	 * @param fastCopyableClass
-	 * 		The class that of objects that is contained in the array, the class must implement
-	 * 		FastCopyable and must have a default constructor
-	 * @return the array that was read
-	 * @throws Exception
-	 * 		thrown if there are any problems during the operation
-	 */
-	@SuppressWarnings("unchecked")
-	@Deprecated
-	public static <T extends FastCopyable<T>> T[] readFastCopyableArray(
-			SerializableDataInputStream stream, Class<T> fastCopyableClass)
-			throws Exception {
-		Constructor<?>[] constructors = fastCopyableClass
-				.getDeclaredConstructors();
-		Constructor<?> constructor = null;
-		for (int i = 0; i < constructors.length; i++) {
-			if (constructors[i].getGenericParameterTypes().length == 0) {
-				constructor = constructors[i];
-				break;
-			}
-		}
-		if (constructor == null) {
-			throw new RuntimeException(
-					"The class must have a default constructor");
-		}
-		int len = stream.readInt();
-		T[] data = (T[]) Array.newInstance(fastCopyableClass, len);
-		for (int i = 0; i < len; i++) {
-			// some of the array elements could be null, so the first byte that indicates whether it is
-			// null or not
-			byte isNull = stream.readByte();
-			if (isNull != 0) {
-				data[i] = (T) constructor.newInstance();
-				data[i].copyFrom(stream);
-			} else {
-				data[i] = null;
-			}
-
-		}
-		return data;
-	}
-
-	/**
-	 * read a Color array from the given stream
-	 *
-	 * @param stream
-	 * 		the stream to read from
-	 * @return the array that was read
-	 * @throws IOException
-	 * 		thrown if there are any problems during the operation
-	 */
-	@Deprecated
-	public static Color[] readColorArray(SerializableDataInputStream stream)
-			throws IOException {
-		int len = stream.readInt();
-		Color[] data = new Color[len];
-		for (int i = 0; i < len; i++) {
-			data[i] = readColor(stream);
-		}
-		return data;
-	}
 
 	/**
 	 * Writes a list to the stream serializing the objects with the supplied method
@@ -691,71 +359,6 @@ public class Utilities extends DataStreamUtils {
 	}
 
 	/**
-	 * Concatenate a long followed by multiple byte arrays (some of which could be null).
-	 *
-	 * @param n
-	 * 		the long to concatenate
-	 * @param arrays
-	 * 		the byte arrays
-	 * @return the resulting array
-	 */
-	static byte[] concat(long n, byte[]... arrays) {
-		return concat(toBytes(n), concat(arrays));
-	}
-
-	/**
-	 * Concatenate a single byte followed by multiple byte arrays (some of which could be null).
-	 *
-	 * @param b
-	 * 		the byte to concatenate first
-	 * @param arrays
-	 * 		the byte arrays
-	 * @return the resulting array
-	 */
-	static byte[] concat(byte b, byte[]... arrays) {
-		return concat(new byte[] { b }, concat(arrays));
-	}
-
-	/**
-	 * Concatenate a single byte followed by a long followed by multiple byte arrays (some of which could be
-	 * null).
-	 *
-	 * @param b
-	 * 		the byte to concatenate first
-	 * @param n
-	 * 		the long to concatenate second
-	 * @param arrays
-	 * 		the byte arrays
-	 * @return the resulting array of bytes
-	 */
-	public static byte[] concat(byte b, long n, byte[]... arrays) {
-		return concat(b, concat(n, arrays));
-	}
-
-	/**
-	 * Concatenate multiple byte arrays (some of which could be null).
-	 *
-	 * @param arrays
-	 * 		the byte arrays
-	 * @return the resulting array
-	 */
-	static byte[] concat(byte[]... arrays) {
-		int len = 0;
-		int pos = 0;
-		for (int i = 0; i < arrays.length; i++) {
-			len += arrays[i] == null ? 0 : arrays[i].length;
-		}
-		byte[] result = new byte[len];
-		for (int i = 0; i < arrays.length; i++) {
-			if (arrays[i] != null && arrays[i].length > 0) {
-				System.arraycopy(arrays[i], 0, result, pos, arrays[i].length);
-				pos += arrays[i].length;
-			}
-		}
-		return result;
-	}
-
-	/**
 	 * Convert an int to a byte array, little endian.
 	 *
 	 * @param i
@@ -779,7 +382,7 @@ public class Utilities extends DataStreamUtils {
 	 */
 	static String deadlocks() {
 		ThreadMXBean threadMB = ManagementFactory.getThreadMXBean();
-		long threadIds[] = threadMB.findDeadlockedThreads();
+		long[] threadIds = threadMB.findDeadlockedThreads();
 		if (threadIds == null) { // if it's null, then there are no deadlocked threads
 			return null;
 		}
@@ -789,7 +392,7 @@ public class Utilities extends DataStreamUtils {
 			err += "    thread " + t.getThreadName() + " blocked waiting on "
 					+ threadMB.getThreadInfo(t.getLockOwnerId()).getThreadName()
 					+ " to get the lock on "
-					+ LoggingReentrantLock.getName(t.getLockInfo()) + " "
+					+ t.getLockInfo().getClassName() + " "
 					+ t.getLockInfo().getIdentityHashCode() + "\n";
 			for (StackTraceElement s : t.getStackTrace()) {
 				err += "        " + s + "\n";
@@ -891,6 +494,31 @@ public class Utilities extends DataStreamUtils {
 
 		return ex instanceof SocketException ||
 				isOrCausedBySocketException(ex.getCause());
+	}
+
+	/**
+	 * Search an array to find a last gap where adjacent values differ by more than 1
+	 *
+	 * @param array
+	 * 		the array of objects to search
+	 * @param getLong
+	 * 		provides a long value representing the object
+	 * @param <T>
+	 * 		the type provided
+	 * @return the lowest value of the sequence with no gaps
+	 */
+	public static <T> long getLowestFromHighestSequence(T[] array, ToLongFunction<T> getLong) {
+		T[] sorted = array.clone();
+		Arrays.sort(sorted, Comparator.comparingLong(getLong));
+		long lowest = getLong.applyAsLong(sorted[sorted.length - 1]);
+		for (int i = sorted.length - 2; i >= 0; i--) {
+			long curr = getLong.applyAsLong(sorted[i]);
+			if (lowest - curr > 1) {
+				break;
+			}
+			lowest = curr;
+		}
+		return lowest;
 	}
 }
 

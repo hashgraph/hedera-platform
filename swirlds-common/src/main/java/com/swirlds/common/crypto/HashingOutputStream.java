@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -66,7 +66,7 @@ public class HashingOutputStream extends OutputStream {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void write(byte b[], int off, int len) throws IOException {
+	public void write(byte[] b, int off, int len) throws IOException {
 		if (b == null) {
 			throw new NullPointerException();
 		} else if ((off < 0) || (off > b.length) || (len < 0)

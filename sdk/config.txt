@@ -4,10 +4,11 @@
 swirld, 123
 
 # app,		HashgraphDemo.jar,	   1,0,0,0,0,0,0,0,0,0, all
-# app,		GameDemo.jar,		   9000, 9000
+ app,		GameDemo.jar,		   9000, 9000
 # app,		HelloSwirldDemo.jar
 # app,		CryptocurrencyDemo.jar
 # app,		StatsDemo.jar,		   1, 3000, 0, 100, -1, 200
+
 
 
 
@@ -61,6 +62,7 @@ swirld, 123
 # transactionMaxBytes, 1024
 # ipTos, 123
  waitAtStartup, off
+# genesisFreezeTime, -1
 
 ###############################################################################################
 # The first line can be “swirld, “ and then a name for this swirld (shared world / ledger),

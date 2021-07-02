@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -96,27 +96,6 @@ public abstract class ArgumentTokenizer {
 							currArg.append(c);
 						}
 						break;
-//          case NORMAL_TOKEN_STATE:
-//            if (Character.isWhitespace(c)) {
-//              // Whitespace ends the token; start a new one
-//              argList.add(currArg.toString());
-//              currArg = new StringBuffer();
-//              state = NO_TOKEN_STATE;
-//            }
-//            else if (c == '\\') {
-//              // Backslash in a normal token: escape the next character
-//              escaped = true;
-//            }
-//            else if (c == '\'') {
-//              state = SINGLE_QUOTE_STATE;
-//            }
-//            else if (c == '"') {
-//              state = DOUBLE_QUOTE_STATE;
-//            }
-//            else {
-//              currArg.append(c);
-//            }
-//            break;
 					case NO_TOKEN_STATE:
 					case NORMAL_TOKEN_STATE:
 						switch (c) {

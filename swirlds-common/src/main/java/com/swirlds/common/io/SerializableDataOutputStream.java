@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -16,13 +16,17 @@ package com.swirlds.common.io;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.function.Consumer;
 
-import static com.swirlds.common.io.SerializableStreamConstants.*;
+import static com.swirlds.common.io.SerializableStreamConstants.NULL_CLASS_ID;
+import static com.swirlds.common.io.SerializableStreamConstants.NULL_LIST_ARRAY_LENGTH;
+import static com.swirlds.common.io.SerializableStreamConstants.NULL_VERSION;
+import static com.swirlds.common.io.SerializableStreamConstants.SERIALIZATION_PROTOCOL_VERSION;
+import static com.swirlds.common.io.SerializableStreamConstants.BOOLEAN_BYTES;
+import static com.swirlds.common.io.SerializableStreamConstants.CLASS_ID_BYTES;
+import static com.swirlds.common.io.SerializableStreamConstants.VERSION_BYTES;
 
 /**
  * A drop-in replacement for {@link DataOutputStream}, which handles SerializableDet classes specially.
@@ -214,6 +218,83 @@ public class SerializableDataOutputStream extends ExtendedDataOutputStream {
 		} else {
 			writeSerializableList(Arrays.asList(array), writeClassId, allSameClass);
 		}
+	}
+
+	/**
+	 * Get the serialized byte length an array of {@link SerializableWithKnownLength} objects
+	 *
+	 * @param array
+	 * 		the array to write, can be null
+	 * @param writeClassId
+	 * 		set to true if the classID should be written. This can be false if the class is known when
+	 * 		de-serializing
+	 * @param allSameClass
+	 * 		should be set to true if all the objects in the array are the same class
+	 * @param <T>
+	 * 		the class stored in the array
+	 */
+	public static <T extends SerializableWithKnownLength> int getSerializedLength(
+			final T[] array,
+			final boolean writeClassId,
+			final boolean allSameClass) {
+		int totalByteLength = Integer.BYTES; // length of array size
+		if (array == null || array.length == 0) {
+			return totalByteLength;
+		}
+
+		totalByteLength += BOOLEAN_BYTES;
+		boolean classIdVersionWritten = false;
+		for (final T t : array) {
+			if (!allSameClass) {
+				totalByteLength += getInstanceSerializedLength(t, true, writeClassId);
+				continue;
+			}
+			if (t == null) {
+				totalByteLength += BOOLEAN_BYTES;
+				continue;
+			}
+			totalByteLength += BOOLEAN_BYTES;
+			if (!classIdVersionWritten) {
+				// this is the first non-null member, so we write the ID and version
+				totalByteLength += VERSION_BYTES;
+				if (writeClassId) {
+					totalByteLength += CLASS_ID_BYTES;
+				}
+				classIdVersionWritten = true;
+			}
+			// version and class info already written
+			totalByteLength += getInstanceSerializedLength(t, false, false);
+
+		}
+
+		return totalByteLength;
+	}
+
+	/**
+	 * Get the serialized byte length of {@link SerializableWithKnownLength} object
+	 *
+	 * @param data
+	 * 		array to write, should not be null
+	 * @param writeClassId
+	 * 		set to true if the classID should be written. This can be false if the class is known when
+	 * 		de-serializing
+	 */
+	public static <T extends SerializableWithKnownLength> int getInstanceSerializedLength(
+			final T data,
+			final boolean writeVersion,
+			final boolean writeClassId) {
+		int totalByteLength = 0;
+		if (writeClassId) {
+			totalByteLength += CLASS_ID_BYTES;
+		}
+		if (data == null) {
+			return totalByteLength;
+		}
+		if (writeVersion) {
+			totalByteLength += VERSION_BYTES;                //version integer
+		}
+		totalByteLength += data.getSerializedLength();        //data its own content serialized length
+		return totalByteLength;
 	}
 
 	//

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -16,18 +16,21 @@ package com.swirlds.common.events;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swirlds.common.CommonUtils;
-import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.AbstractSerializableHashable;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.OptionalSelfSerializable;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.Transaction;
+import com.swirlds.common.transaction.internal.LegacyTransaction;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.io.IOException;
 import java.time.Instant;
+
+import static com.swirlds.common.io.SerializableDataOutputStream.getSerializedLength;
 
 /**
  * A class used to store base event data that is used to create the hash of that event.
@@ -41,8 +44,19 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 		implements OptionalSelfSerializable<EventSerializationOptions> {
 	public static final int TO_STRING_BYTE_ARRAY_LENGTH = 5;
 	private static final long CLASS_ID = 0x21c2620e9b6a2243L;
-	private static final int CLASS_VERSION = 1;
 
+	private static class ClassVersion {
+		/**
+		 * In this version, the transactions contained by this event are encoded using
+		 * {@link com.swirlds.common.transaction.internal.LegacyTransaction} class.
+		 */
+		public static final int ORIGINAL = 1;
+		/**
+		 * In this version, the transactions contained by this event are encoded using a newer version Transaction
+		 * class with different subclasses to support internal system transactions and application transactions
+		 */
+		public static final int TRANSACTION_SUBCLASSES = 2;
+	}
 	///////////////////////////////////////
 	// immutable, sent during normal syncs, affects the hash that is signed:
 	///////////////////////////////////////
@@ -70,6 +84,24 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 	public BaseEventHashedData() {
 	}
 
+	/**
+	 * Create a BaseEventHashedData object
+	 *
+	 * @param creatorId
+	 * 		ID of this event's creator
+	 * @param selfParentGen
+	 * 		the generation for the self parent
+	 * @param otherParentGen
+	 * 		the generation for the other parent
+	 * @param selfParentHash
+	 * 		self parent hash value
+	 * @param otherParentHash
+	 * 		other parent hash value
+	 * @param timeCreated
+	 * 		creation time, as claimed by its creator
+	 * @param transactions
+	 * 		the payload: an array of transactions included in this event instance
+	 */
 	public BaseEventHashedData(long creatorId, long selfParentGen, long otherParentGen,
 			Hash selfParentHash, Hash otherParentHash, Instant timeCreated, Transaction[] transactions) {
 		this.creatorId = creatorId;
@@ -82,6 +114,24 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 		checkUserTransactions();
 	}
 
+	/**
+	 * Create a BaseEventHashedData object
+	 *
+	 * @param creatorId
+	 * 		ID of this event's creator
+	 * @param selfParentGen
+	 * 		the generation for the self parent
+	 * @param otherParentGen
+	 * 		the generation for the other parent
+	 * @param selfParentHash
+	 * 		self parent hash value in byte array format
+	 * @param otherParentHash
+	 * 		other parent hash value in byte array format
+	 * @param timeCreated
+	 * 		creation time, as claimed by its creator
+	 * @param transactions
+	 * 		the payload: an array of transactions included in this event instance
+	 */
 	public BaseEventHashedData(long creatorId, long selfParentGen, long otherParentGen,
 			byte[] selfParentHash, byte[] otherParentHash, Instant timeCreated, Transaction[] transactions) {
 		this(
@@ -103,10 +153,17 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 		out.writeSerializable(selfParentHash, false);
 		out.writeSerializable(otherParentHash, false);
 		out.writeInstant(timeCreated);
+
+		// write serialized length of transaction array first, so during the deserialization proces
+		// it is possible to skip transaction array and move on to the next object
 		if (option == EventSerializationOptions.OMIT_TRANSACTIONS) {
-			out.writeSerializableArray(null, false, true);
+			out.writeInt(getSerializedLength(null, true, false));
+			out.writeSerializableArray(null, true, false);
 		} else {
-			out.writeSerializableArray(transactions, false, true);
+			out.writeInt(getSerializedLength(transactions, true, false));
+			// transactions may include both system transactions and application transactions
+			// so writeClassId set to true and allSameClass set to false
+			out.writeSerializableArray(transactions, true, false);
 		}
 	}
 
@@ -127,15 +184,29 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 		selfParentHash = in.readSerializable(false, Hash::new);
 		otherParentHash = in.readSerializable(false, Hash::new);
 		timeCreated = in.readInstant();
-		transactions =
-				in.readSerializableArray(
-						Transaction[]::new,
-						maxTransactionCount,
-						false,
-						Transaction::new);
+		if (version == ClassVersion.TRANSACTION_SUBCLASSES) {
+			in.readInt(); //read serialized length
+			transactions = in.readSerializableArray(
+					Transaction[]::new,
+					maxTransactionCount,
+					true);
+		} else if (version == ClassVersion.ORIGINAL) {
+			// read legacy version of transaction then convert to swirldTransaction
+			transactions = in.readSerializableArray(
+					LegacyTransaction[]::new,
+					maxTransactionCount,
+					false,
+					LegacyTransaction::new);
+		} else {
+			throw new UnsupportedOperationException("Unsupported version " + version);
+		}
 		checkUserTransactions();
 	}
 
+
+	/**
+	 * Check if array of transactions has any user created transaction inside
+	 */
 	private void checkUserTransactions() {
 		if (transactions != null) {
 			for (Transaction t : getTransactions()) {
@@ -153,9 +224,13 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 
 	@Override
 	public boolean equals(final Object o) {
-		if (this == o) return true;
+		if (this == o) {
+			return true;
+		}
 
-		if (o == null || getClass() != o.getClass()) return false;
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
 
 		final BaseEventHashedData that = (BaseEventHashedData) o;
 
@@ -208,7 +283,7 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 
 	@Override
 	public int getVersion() {
-		return CLASS_VERSION;
+		return ClassVersion.TRANSACTION_SUBCLASSES;
 	}
 
 	public long getCreatorId() {
@@ -243,7 +318,29 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 		return timeCreated;
 	}
 
+	/**
+	 * @return array of transactions inside this event instance
+	 */
 	public Transaction[] getTransactions() {
 		return transactions;
+	}
+
+	public long getGeneration() {
+		return calculateGeneration(selfParentGen, otherParentGen);
+	}
+
+	/**
+	 * Calculates the generation of an event based on its parents generations
+	 *
+	 * @param selfParentGeneration
+	 * 		the generation of the self parent
+	 * @param otherParentGeneration
+	 * 		the generation of the other parent
+	 * @return the generation of the event
+	 */
+	public static long calculateGeneration(
+			final long selfParentGeneration,
+			final long otherParentGeneration) {
+		return 1 + Math.max(selfParentGeneration, otherParentGeneration);
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -95,9 +95,9 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 	// number of columns (more than number of members if preventCrossings)
 	private int numColumns;
 	// mems2col[a][b] = which member-b column is adjacent to some member-a column
-	private int mems2col[][];
+	private int[][] mems2col;
 	// col2mems[c][0] = the member for column c, col2mems[c][1] = second member or -1 if none
-	private int col2mems[][];
+	private int[][] col2mems;
 
 	// if checked, freeze the display (don't update it)
 	private Checkbox freezeCheckbox;
@@ -133,7 +133,6 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 	 * Instantiate and initialize content of this tab.
 	 */
 	public WinTab2Hashgraph() {
-		// initIfNeeded();
 	}
 
 	private void initIfNeeded() {
@@ -297,9 +296,6 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 		add(pairPanel, c4);
 		picturePanel.setVisible(true);
 
-		// Dimension ps = WinBrowser.tabbed.getPreferredSize();
-		// ps.width -= 150;
-		// ps.height -= 500;
 		Dimension ps = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
 		ps.width -= 150;
 		ps.height -= 200;
@@ -355,11 +351,16 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 	 */
 	private class Picture extends JPanel {
 		private static final long serialVersionUID = 1L;
-		int ymin, ymax, width, n;
-		double r;
-		long minGen, maxGen;
+		private int ymin;
+		private int ymax;
+		private int width;
+		private int n;
+		private double r;
+		private long minGen;
+		private long maxGen;
 		// where to draw next in the window, and the font height
-		int row, textLineHeight;
+		private int row;
+		private int textLineHeight;
 
 		/** find x position on the screen for event e2 which has an other-parent of e1 (or null if none) */
 		private int xpos(Event e1, Event e2) {
@@ -525,7 +526,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 					if (labelSeqCheckbox.getState()) {
 						s += " " + event.getSeq(); // sequence number for the creator (starts at 0)
 					}
-					if (s != "") {
+					if (s.isEmpty()) {
 						Rectangle2D rect = fm.getStringBounds(s, g);
 						int x = (int) (xpos(e2, event) - rect.getWidth() / 2.
 								- fa / 4.);
@@ -541,8 +542,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 					}
 				}
 			} catch (Exception e) {
-				log.error(EXCEPTION.getMarker(), "error while painting: {}",
-						e);
+				log.error(EXCEPTION.getMarker(), "error while painting", e);
 			}
 		}
 	}
@@ -553,7 +553,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 	 * names, if they haven't already been filled in, or if the number of members has changed.
 	 */
 	private void calcMemsColNames() {
-		final AddressBook addressBook = platform.getHashgraph().getAddressBook();
+		final AddressBook addressBook = platform.getAddressBook();
 		final int m = addressBook.getSize();
 		if (m != numMembers) {
 			numMembers = m;
@@ -640,10 +640,14 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 		final int i = (x / m) % (m / 2); // the ith Eulerian path on the complete graph of m-1 vertices
 		final int j = x % m;       // position along that ith path
 
-		if (j == m - 1)
+		if (j == m - 1) {
 			return m - 1; // add the mth vertex after each Eulerian path to get a Eulerian cycle
-		if ((j % 2) == 0)
+		}
+
+		if ((j % 2) == 0) {
 			return i + j / 2; // in a given path, every other vertex counts up
+		}
+
 		return (m - 2 + i - (j - 1) / 2) % (m - 1); // and every other vertex counts down
 	}
 }

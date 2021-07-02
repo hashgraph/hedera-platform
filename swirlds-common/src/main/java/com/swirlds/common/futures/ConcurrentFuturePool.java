@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -47,6 +47,9 @@ public class ConcurrentFuturePool<V> extends ConcurrentLinkedQueue<Future<V>> {
 
 	/**
 	 * Constructs an empty list.
+	 *
+	 * @param exceptionHandler
+	 * 		an handler which handles exceptions thrown during the computation
 	 */
 	public ConcurrentFuturePool(final Consumer<Exception> exceptionHandler) {
 		this.exceptionHandler = exceptionHandler;
@@ -72,6 +75,8 @@ public class ConcurrentFuturePool<V> extends ConcurrentLinkedQueue<Future<V>> {
 	 *
 	 * @param c
 	 * 		the collection whose elements are to be placed into this list
+	 * @param exceptionHandler
+	 * 		an handler which handles exceptions thrown during the computation
 	 * @throws NullPointerException
 	 * 		if the specified collection is null
 	 */
@@ -100,6 +105,8 @@ public class ConcurrentFuturePool<V> extends ConcurrentLinkedQueue<Future<V>> {
 	 *
 	 * @param s
 	 * 		the {@link SortedSet} whose elements are to be placed into this list
+	 * @param exceptionHandler
+	 * 		an handler which handles exceptions thrown during the computation
 	 * @throws NullPointerException
 	 * 		if the specified collection is null
 	 */

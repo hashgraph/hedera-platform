@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -32,10 +32,25 @@ import java.util.Objects;
  * read-only for apps.
  * When enableEventStreaming is set to be true, the memo field is required and should be unique.
  */
-public class AddressBook extends AbstractMerkleLeaf implements FastCopyable<AddressBook> {
+public class AddressBook extends AbstractMerkleLeaf {
 	public static final long CLASS_ID = 0x4ee5498ef623fbe0L;
-	/** This version number should be used to handle compatibility issues that may arise from any future changes */
-	private static final int CLASS_VERSION = 3;
+
+	private static class ClassVersion {
+		/**
+		 * In this version, the version was written as a long.
+		 */
+		public static final int ORIGINAL = 0;
+		public static final int UNDOCUMENTED = 1;
+		/**
+		 * In this version, ad-hoc code was used to read and write the list of addresses.
+		 */
+		public static final int AD_HOC_SERIALIZATION = 2;
+		/**
+		 * In this version, AddressBook uses the serialization utilities to read & write the list of addresses.
+		 */
+		public static final int UTILITY_SERIALIZATION = 3;
+	}
+
 	private static final int MAX_ADDRESSES = 1000;
 
 
@@ -72,7 +87,18 @@ public class AddressBook extends AbstractMerkleLeaf implements FastCopyable<Addr
 	 * Create an empty address book. Only classes in the com.swirlds.platform package can add to it.
 	 */
 	public AddressBook() {
-		this(new ArrayList<Address>());
+		this(new ArrayList<>());
+	}
+
+	/**
+	 * Copy constructor.
+	 */
+	private AddressBook(final AddressBook that) {
+		super(that);
+		// shallow clone ok, because Address is immutable
+		this.addresses = Collections
+				.synchronizedList(new ArrayList<>(that.addresses));
+		addressesToHashMap();
 	}
 
 	/**
@@ -86,13 +112,13 @@ public class AddressBook extends AbstractMerkleLeaf implements FastCopyable<Addr
 	public AddressBook(List<Address> addresses) {
 		// shallow clone ok, because Address is immutable
 		this.addresses = Collections
-				.synchronizedList(new ArrayList<Address>(addresses));
+				.synchronizedList(new ArrayList<>(addresses));
 		addressesToHashMap();
 	}
 
 	@Override
 	public int getVersion() {
-		return CLASS_VERSION;
+		return ClassVersion.UTILITY_SERIALIZATION;
 	}
 
 	@Override
@@ -103,7 +129,7 @@ public class AddressBook extends AbstractMerkleLeaf implements FastCopyable<Addr
 	// create the hashMap and add all the current addresses
 	private void addressesToHashMap() {
 		publicKeyToId = Collections
-				.synchronizedMap(new HashMap<String, Long>());
+				.synchronizedMap(new HashMap<>());
 		for (int i = 0; i < addresses.size(); i++) {
 			publicKeyToId.put(addresses.get(i).getNickname(), (long) i);
 		}
@@ -227,6 +253,25 @@ public class AddressBook extends AbstractMerkleLeaf implements FastCopyable<Addr
 	}
 
 	/**
+	 * Indicates whether or not the stake configured in this {@link AddressBook} for this node is set to zero.
+	 *
+	 * @param nodeId
+	 * 		the node identifier
+	 * @return true if this node has zero stake assigned; otherwise, false if stake is greater than zero
+	 * @throws InvalidNodeIdException
+	 * 		if the specified {@code nodeId} is invalid
+	 */
+	public boolean isZeroStakeNode(final long nodeId) {
+		final Address nodeAddress = getAddress(nodeId);
+
+		if (nodeAddress == null) {
+			throw new InvalidNodeIdException("NodeId may not be null");
+		}
+
+		return nodeAddress.getStake() == 0;
+	}
+
+	/**
 	 * Set the address for the member with the given ID
 	 *
 	 * @param id
@@ -243,21 +288,9 @@ public class AddressBook extends AbstractMerkleLeaf implements FastCopyable<Addr
 
 	@Override
 	public AddressBook copy() {
-		AddressBook ab = new AddressBook(this.addresses);
+		AddressBook ab = new AddressBook(this);
 		ab.setImmutable(false); // copy isn't immutable, even if the original was immutable
-		ab.setHash(this.getHash());
 		return ab;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	@Deprecated
-	public void copyFrom(SerializableDataInputStream inStream) throws IOException {
-		long version = inStream.readLong();
-
-		deserialize(inStream, (int) version);
 	}
 
 	@Override
@@ -269,12 +302,12 @@ public class AddressBook extends AbstractMerkleLeaf implements FastCopyable<Addr
 	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
 		// AddressBook version used to be written as a long, so if the int read is 0,
 		// then we read another int to get the version number
-		if (version == 0) {
+		if (version == ClassVersion.ORIGINAL) {
 			version = in.readInt();
 		}
 		switch (version) {
-			case 1:
-			case 2:
+			case ClassVersion.UNDOCUMENTED:
+			case ClassVersion.AD_HOC_SERIALIZATION:
 				this.addresses = Collections.synchronizedList(new ArrayList<>());
 				int size = in.readInt();
 				for (int i = 0; i < size; i++) {
@@ -296,19 +329,20 @@ public class AddressBook extends AbstractMerkleLeaf implements FastCopyable<Addr
 	}
 
 	@Override
-	@Deprecated
-	public void copyFromExtra(SerializableDataInputStream inStream) throws IOException {
-	}
-
-	@Override
 	public int getMinimumSupportedVersion() {
-		return 0;
+		return ClassVersion.AD_HOC_SERIALIZATION;
 	}
 
 	@Override
 	public boolean equals(Object o) {
-		if (this == o) return true;
-		if (o == null || getClass() != o.getClass()) return false;
+		if (this == o) {
+			return true;
+		}
+
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
+
 		AddressBook that = (AddressBook) o;
 		return Objects.equals(addresses, that.addresses);
 	}

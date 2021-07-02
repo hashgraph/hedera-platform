@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -30,39 +30,45 @@ import java.util.concurrent.TimeUnit;
  *
  * This object is not thread safe. Only one thread should attempt to read data from stream at any point in time.
  */
-public class AsyncInputStream {
+public class AsyncInputStream implements AutoCloseable {
 
-	private SerializableDataInputStream in;
+	private final SerializableDataInputStream inputStream;
 
-	private BlockingQueue<SelfSerializable> anticipatedMessages;
-	private BlockingQueue<SelfSerializable> receivedMessages;
-
-	private long totalAnticipatedMessages;
-	private long totalMessagesRead;
-	private volatile boolean alive;
+	private final BlockingQueue<SelfSerializable> anticipatedMessages;
+	private final BlockingQueue<SelfSerializable> receivedMessages;
 
 	/**
 	 * The maximum amount of time to wait when reading a message.
 	 */
-	private final int pollTimeoutMilliseconds;
+	private final int pollTimeoutMs;
 
 	/**
 	 * Becomes 0 when the input thread is finished.
 	 */
-	private CountDownLatch finishedLatch;
+	private final CountDownLatch finishedLatch;
+
+	private volatile boolean alive;
+
+	private long totalAnticipatedMessages;
+	private long totalMessagesRead;
+
+	public AsyncInputStream(final SerializableDataInputStream inputStream, final StandardWorkGroup workGroup) {
+		this(inputStream, workGroup, ReconnectSettingsFactory.get().getAsyncInputStreamTimeoutMilliseconds());
+	}
 
 	/**
 	 * Create a new AsyncInputStream.
 	 *
-	 * @param in
+	 * @param inputStream
 	 * 		An input stream to wrap.
-	 * @param pollTimeoutMilliseconds
+	 * @param pollTimeoutMs
 	 * 		The maximum amount of time to wait when reading a message.
 	 */
-	public AsyncInputStream(SerializableDataInputStream in, StandardWorkGroup workGroup, int pollTimeoutMilliseconds) {
+	public AsyncInputStream(final SerializableDataInputStream inputStream, final StandardWorkGroup workGroup,
+			final int pollTimeoutMs) {
 
-		this.in = in;
-		this.pollTimeoutMilliseconds = pollTimeoutMilliseconds;
+		this.inputStream = inputStream;
+		this.pollTimeoutMs = pollTimeoutMs;
 		this.anticipatedMessages = new LinkedBlockingQueue<>();
 		this.receivedMessages = new LinkedBlockingQueue<>();
 		this.totalAnticipatedMessages = 0;
@@ -73,39 +79,56 @@ public class AsyncInputStream {
 
 	}
 
-	public AsyncInputStream(SerializableDataInputStream in, StandardWorkGroup workGroup) {
-		this(in, workGroup, ReconnectSettingsFactory.get().getAsyncInputStreamTimeoutMilliseconds());
+	/**
+	 * Returns true if the message pump is still running or false if the message pump has terminated or will terminate.
+	 *
+	 * @return true if the message pump is still running; false if the message pump has terminated or will terminate
+	 */
+	public boolean isAlive() {
+		return alive;
 	}
 
-	protected void start(StandardWorkGroup workGroup) {
-		if (!ReconnectSettingsFactory.get().isAsyncStreams()) {
-			return;
-		}
-		workGroup.execute("async-input-stream", this::run);
+	public long getTotalAnticipatedMessages() {
+		return totalAnticipatedMessages;
+	}
+
+	public long getTotalMessagesRead() {
+		return totalMessagesRead;
+	}
+
+	public int getPollTimeoutMs() {
+		return pollTimeoutMs;
+	}
+
+	protected SerializableDataInputStream getInputStream() {
+		return inputStream;
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	public void run() {
-		while (alive && !Thread.currentThread().isInterrupted()) {
-			SelfSerializable message = null;
-			try {
-				message = anticipatedMessages.poll(10, TimeUnit.MILLISECONDS);
-				if (message == null) {
-					continue;
+		try {
+			while (isAlive() && !Thread.currentThread().isInterrupted()) {
+				SelfSerializable message = null;
+				try {
+					message = anticipatedMessages.poll(10, TimeUnit.MILLISECONDS);
+					if (message != null) {
+						message.deserialize(inputStream, message.getVersion());
+						receivedMessages.put(message);
+					}
+				} catch (final InterruptedException e) {
+					Thread.currentThread().interrupt();
+					return;
+				} catch (final IOException e) {
+					throw new MerkleSynchronizationException(String.format(
+							"Failed to deserialize object with class ID %d(0x%08X) (%s)",
+							message.getClassId(), message.getClassId(), message.getClass().toString()), e);
 				}
-				message.deserialize(in, message.getVersion());
-				receivedMessages.put(message);
-			} catch (InterruptedException e) {
-				break;
-			} catch (IOException e) {
-				throw new MerkleSynchronizationException(String.format(
-						"Failed to deserialize object with class ID %d(0x%08X) (%s)",
-						message.getClassId(), message.getClassId(), message.getClass().toString()), e);
 			}
+		} finally {
+			finishedLatch.countDown();
 		}
-		finishedLatch.countDown();
 	}
 
 	/**
@@ -125,47 +148,10 @@ public class AsyncInputStream {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
-	private <T> T syncRead() {
-		try {
-			return (T) in.readSerializable();
-		} catch (IOException e) {
-			throw new MerkleSynchronizationException(e);
-		}
-	}
-
-	/**
-	 * Read a message. Will throw an exception if time equal to {@link #pollTimeoutMilliseconds} passes without a
-	 * message becoming available.
-	 */
-	@SuppressWarnings("unchecked")
-	private <T> T asyncRead() throws InterruptedException {
-		if (totalMessagesRead >= totalAnticipatedMessages) {
-			throw new MerkleSynchronizationException("No messages are anticipated");
-		}
-		totalMessagesRead++;
-
-		T data = (T) receivedMessages.poll(pollTimeoutMilliseconds, TimeUnit.MILLISECONDS);
-		if (data == null) {
-			try {
-				// An interrupt may not stop the thread if the thread is blocked on a stream read operation.
-				// The only way to ensure that the stream is closed is to close the stream.
-				in.close();
-			} catch (IOException e) {
-				throw new MerkleSynchronizationException("Unable to close stream");
-			}
-			System.out.println("timed out waiting for data");
-			throw new MerkleSynchronizationException("Timed out waiting for data");
-		}
-
-		return data;
-	}
-
 	/**
 	 * Get an anticipated message. Blocks until the message is ready. Object returned will be
 	 * the same object passed into addAnticipatedMessage, but deserialized from the stream.
 	 */
-	@SuppressWarnings("unchecked")
 	public <T> T readAnticipatedMessage() throws InterruptedException {
 		if (ReconnectSettingsFactory.get().isAsyncStreams()) {
 			return asyncRead();
@@ -180,11 +166,13 @@ public class AsyncInputStream {
 	 */
 	public void abort() {
 		close();
+
 		try {
 			finishedLatch.await();
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
+
 		while (receivedMessages.size() > 0) {
 			SelfSerializable message = receivedMessages.remove();
 			if (message instanceof Releasable) {
@@ -196,7 +184,51 @@ public class AsyncInputStream {
 	/**
 	 * Close this buffer and release resources.
 	 */
+	@Override
 	public void close() {
 		alive = false;
+	}
+
+	protected void start(StandardWorkGroup workGroup) {
+		if (!ReconnectSettingsFactory.get().isAsyncStreams()) {
+			return;
+		}
+		workGroup.execute("async-input-stream", this::run);
+	}
+
+	@SuppressWarnings("unchecked")
+	private <T> T syncRead() {
+		try {
+			return inputStream.readSerializable();
+		} catch (IOException e) {
+			throw new MerkleSynchronizationException(e);
+		}
+	}
+
+	/**
+	 * Read a message. Will throw an exception if time equal to {@link #pollTimeoutMs} passes without a
+	 * message becoming available.
+	 */
+	@SuppressWarnings("unchecked")
+	private <T> T asyncRead() throws InterruptedException {
+		if (totalMessagesRead >= totalAnticipatedMessages) {
+			throw new MerkleSynchronizationException("No messages are anticipated");
+		}
+		totalMessagesRead++;
+
+		T data = (T) receivedMessages.poll(pollTimeoutMs, TimeUnit.MILLISECONDS);
+		if (data == null) {
+			try {
+				// An interrupt may not stop the thread if the thread is blocked on a stream read operation.
+				// The only way to ensure that the stream is closed is to close the stream.
+				inputStream.close();
+			} catch (IOException e) {
+				throw new MerkleSynchronizationException("Unable to close stream", e);
+			}
+
+			throw new MerkleSynchronizationException("Timed out waiting for data");
+		}
+
+		return data;
 	}
 }

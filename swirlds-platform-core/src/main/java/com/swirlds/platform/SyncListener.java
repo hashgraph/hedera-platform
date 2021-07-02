@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -13,13 +13,11 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.AddressBook;
 import com.swirlds.common.AutoCloseableWrapper;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.io.BadIOException;
-import com.swirlds.logging.payloads.ReconnectFinishPayload;
-import com.swirlds.logging.payloads.ReconnectStartPayload;
 import com.swirlds.platform.reconnect.ReconnectSender;
+import com.swirlds.platform.reconnect.ReconnectThrottle;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.StateDumpSource;
 import org.apache.logging.log4j.LogManager;
@@ -31,13 +29,14 @@ import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.HEARTBEAT;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.logging.LogMarker.SOCKET_EXCEPTIONS;
 import static com.swirlds.logging.LogMarker.SYNC_ERROR;
-import static com.swirlds.logging.LogMarker.SYNC_SGM;
+import static com.swirlds.logging.LogMarker.SYNC_LISTENER;
 import static com.swirlds.logging.LogMarker.SYNC_START;
 
 /**
@@ -46,25 +45,47 @@ import static com.swirlds.logging.LogMarker.SYNC_START;
  * separate SyncListener per each member that might call.
  */
 class SyncListener implements Runnable {
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
+
+	/**
+	 * use this for all logging, as controlled by the optional data/log4j2.xml file
+	 */
 	private static final Logger log = LogManager.getLogger();
-	/** the Platform object that is using this to call other members */
+
+	/**
+	 * the Platform object that is using this to call other members
+	 */
 	private final AbstractPlatform platform;
-	/** the member ID for self */
+
+	/**
+	 * the member ID for self
+	 */
 	private final NodeId selfId;
-	/** ID number for other member (the one self is listening for) */
+
+	/**
+	 * ID number for other member (the one self is listening for)
+	 */
 	private final NodeId otherId;
+
+	/**
+	 * This object is responsible for limiting the frequency of reconnect attempts (in the role of the sender)
+	 */
+	private final ReconnectThrottle reconnectThrottle;
 
 	/**
 	 * the platform instantiates the SyncListener, and gives it a reference to itself, plus other info that
 	 * will be useful to it. The SyncListener will forever listen for incoming sync calls from a single,
 	 * specific member. So there is a separate SyncLister per member that might call.
 	 */
-	public SyncListener(AbstractPlatform platform, AddressBook addressBook, NodeId id,
-			NodeId otherId) {
+	public SyncListener(
+			final AbstractPlatform platform,
+			final NodeId id,
+			final NodeId otherId,
+			final ReconnectThrottle reconnectThrottle) {
+
 		this.platform = platform;
 		this.selfId = id;
 		this.otherId = otherId;
+		this.reconnectThrottle = reconnectThrottle;
 	}
 
 	/**
@@ -203,14 +224,13 @@ class SyncListener implements Runnable {
 	 * @throws Exception
 	 * 		if there is any exception during sync, or it times out
 	 */
-	boolean handleOneMsgOrException(NodeId otherId, SyncServer syncServer)
-			throws Exception {
-		SyncConnection conn;
-		NodeId selfId;
-		LoggingReentrantLock lockCallListen = platform.getSyncServer().lockCallListen
-				.get(otherId.getIdAsInt());// otherId assumed to be main
+	boolean handleOneMsgOrException(NodeId otherId, final SyncServer syncServer) throws Exception {
+		final SyncConnection conn;
+		final NodeId selfId;
+		// otherId assumed to be main
+		final ReentrantLock lockCallListen = platform.getSyncServer().lockCallListen.get(otherId.getIdAsInt());
 		Socket socket = null;
-		DataInputStream dis;
+		final DataInputStream dis;
 
 		log.debug(SYNC_START.getMarker(),
 				"about to read sync request or heartbeat (willing to wait for it)");
@@ -242,35 +262,44 @@ class SyncListener implements Runnable {
 		if (dos == null) {
 			return false; // there is no connection to otherId, so return immediately
 		}
-		if (b == SyncConstants.heartbeat) {
-			log.debug(HEARTBEAT.getMarker(), "received heartbeat");
-			dos.writeByte(SyncConstants.heartbeatAck);
+		if (b == SyncConstants.HEARTBEAT) {
+			log.debug(HEARTBEAT.getMarker(), "received HEARTBEAT");
+			dos.writeByte(SyncConstants.HEARTBEAT_ACK);
 			dos.flush();
-			log.debug(HEARTBEAT.getMarker(), "sent heartbeatACK");
+			log.debug(HEARTBEAT.getMarker(), "sent HEARTBEAT_ACK");
 			return true;
-		} else if (b == SyncConstants.commSyncRequest) {
-			log.debug(HEARTBEAT.getMarker(), "received commSyncRequest");
+		} else if (b == SyncConstants.COMM_SYNC_REQUEST) {
+			log.debug(HEARTBEAT.getMarker(), "received COMM_SYNC_REQUEST");
 			syncServer.numListenerSyncs.incrementAndGet(); // matching decr in finally
 			syncServer.numSyncs.incrementAndGet(); // matching decr in finally
 			try {
 				if (platform.getSyncManager().hasFallenBehind()) {
+					log.debug(SYNC_LISTENER.getMarker(),
+							"node {} has fallen behind. Incoming sync requests will not be accepted.", selfId);
+
 					// if we have fallen behind, dont accept any syncs
-					SyncUtils.sync(conn, false, false);
-				} else if (!lockCallListen
-						.tryLock("SyncListener.handleOneMsgOrException 1")) {
+					NodeSynchronizerImpl.synchronize(conn, false, false, true);
+
+				} else if (!lockCallListen.tryLock()) {
 					// caller is already syncing with otherId, so reply NACK
-					SyncUtils.sync(conn, false, false);
+					NodeSynchronizerImpl.synchronize(conn, false, false, false);
+
 				} else {
 					log.debug(HEARTBEAT.getMarker(),
 							"SyncListener locked platform[{}].syncServer.lockCallListen[{}]",
 							platform.getSelfId(), otherId);
 					try {
-						boolean acceptIncoming = (platform.getSyncManager().shouldAcceptSync());
-						log.debug(SYNC_SGM.getMarker(), " `SyncListener.handleOneMsgOrException`: entering `SyncUtils.sync`");
-						SyncUtils.sync(conn, false, acceptIncoming);
+						final boolean acceptIncoming = platform.getSyncManager().shouldAcceptSync();
+						if (!acceptIncoming) {
+							log.debug(SYNC_LISTENER.getMarker(),
+									"platform.getSyncManager().shouldAcceptSync() returned false. Incoming sync " +
+											"requests will not be accepted.");
+						}
+
+						NodeSynchronizerImpl.synchronize(conn, false, acceptIncoming, false);
+
 					} finally {
-						lockCallListen.unlock(
-								"SyncListener.handleOneMsgOrException 2");
+						lockCallListen.unlock();
 						log.debug(HEARTBEAT.getMarker(),
 								"SyncListener unlocked platform[{}].syncServer.lockCallListen[{}]",
 								platform.getSelfId(), otherId);
@@ -281,8 +310,8 @@ class SyncListener implements Runnable {
 				syncServer.numSyncs.decrementAndGet();
 			}
 			return true;
-		} else if (b == SyncConstants.commStateRequest) {
-			log.debug(RECONNECT.getMarker(), "{} got commStateRequest from {}", platform.getSelfId(), otherId);
+		} else if (b == SyncConstants.COMM_STATE_REQUEST) {
+			log.info(RECONNECT.getMarker(), "{} got COMM_STATE_REQUEST from {}", platform.getSelfId(), otherId);
 
 			try (AutoCloseableWrapper<SignedState> stateWrapper =
 						 platform.getSignedStateManager().getLastCompleteSignedState()) {
@@ -291,30 +320,21 @@ class SyncListener implements Runnable {
 				// This is enabled/disabled via settings and is disabled by default
 				platform.getSignedStateManager().jsonifySignedState(stateWrapper.get(), StateDumpSource.RECONNECT);
 
-				final int oid = otherId.getIdAsInt();
-				log.debug(RECONNECT.getMarker(), () -> new ReconnectStartPayload(
-						"Starting reconnect in the role of the sender",
-						false,
-						platform.getSelfId().getIdAsInt(),
-						oid,
-						stateWrapper.get().getLastRoundReceived()).toString());
-
-				ReconnectSender sender = new ReconnectSender(conn, stateWrapper.get());
-				sender.execute();
-
-				log.debug(RECONNECT.getMarker(), () -> new ReconnectFinishPayload(
-						"Finished reconnect in the role of the sender.",
-						false,
-						platform.getSelfId().getIdAsInt(),
-						oid,
-						stateWrapper.get().getLastRoundReceived()));
+				new ReconnectSender(
+						conn,
+						stateWrapper.get(),
+						Settings.reconnect.getAsyncInputStreamTimeoutMilliseconds(),
+						reconnectThrottle,
+						platform.getSelfId().getId(),
+						otherId.getId(),
+						stateWrapper.get().getLastRoundReceived()).execute();
 			}
 
 			return true;
-		} else { // b is neither a heartbeat, a commStateRequest nor a commSyncRequest, so it's an error
-			log.debug(SYNC_START.getMarker(),
+		} else { // b is neither a heartbeat, a COMM_STATE_REQUEST nor a COMM_SYNC_REQUEST, so it's an error
+			log.debug(RECONNECT.getMarker(),
 					"listener {} received sync byte {} (should be {} or {}) from {}",
-					selfId, b, SyncConstants.commSyncRequest, SyncConstants.heartbeat, otherId);
+					selfId, b, SyncConstants.COMM_SYNC_REQUEST, SyncConstants.HEARTBEAT, otherId);
 			conn.disconnect(false, 8);
 			return false;
 		}

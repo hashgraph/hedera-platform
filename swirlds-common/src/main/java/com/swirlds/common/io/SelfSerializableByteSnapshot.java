@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -42,7 +42,7 @@ public class SelfSerializableByteSnapshot<T extends SelfSerializable> {
 						MessageDigest.getInstance(DIGEST_TYPE.algorithmName()),
 						byteOut
 				);
-				SerializableDataOutputStream out = new SerializableDataOutputStream(hashOut);
+				SerializableDataOutputStream out = new SerializableDataOutputStream(hashOut)
 		) {
 			out.writeSerializable(ss, true);
 			return new SelfSerializableByteSnapshot<>(
@@ -55,7 +55,7 @@ public class SelfSerializableByteSnapshot<T extends SelfSerializable> {
 	}
 
 	public T deserialize() {
-		try (SerializableDataInputStream in = new SerializableDataInputStream(new ByteArrayInputStream(bytes));) {
+		try (SerializableDataInputStream in = new SerializableDataInputStream(new ByteArrayInputStream(bytes))) {
 			return in.readSerializable();
 		} catch (IOException e) {
 			throw new RuntimeException(e);

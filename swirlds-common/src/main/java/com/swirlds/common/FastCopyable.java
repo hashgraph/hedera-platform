@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -13,11 +13,6 @@
  */
 package com.swirlds.common;
 
-import com.swirlds.common.crypto.SerializableHashable;
-import com.swirlds.common.io.SerializableDataInputStream;
-
-import java.io.IOException;
-
 /**
  * An interface for classes that can be copied and serialized in a way specific to the Swirlds platform. If
  * a class implements the FastCopyable interface, then it should use a copy-on-write strategy so that calls
@@ -25,7 +20,7 @@ import java.io.IOException;
  * the details on what they should do, and how they differ from the usual Java <code>copy</code> and
  * <code>serialize</code> methods.
  */
-public interface FastCopyable<T extends FastCopyable<T>> extends Releasable {
+public interface FastCopyable extends Releasable {
 
 	/**
 	 * If a class ExampleClass implements the FastCopyable interface, and an object x is of class
@@ -38,46 +33,22 @@ public interface FastCopyable<T extends FastCopyable<T>> extends Releasable {
 	 * <strong>This method causes the object to become immutable and returns a mutable copy.</strong>
 	 * If the object is already immutable:
 	 * <ol>
-	 *     <li>it can throw an IllegalStateException</li>
+	 *     <li>it can throw an MutabilityException</li>
 	 *     <li>or it can implement a slow, deep copy that returns a mutable object </li>
 	 * </ol>
 	 *
 	 * Either behavior is fine, but each implementation should document which behavior it has chosen.
 	 * By the default, the first implementation is assumed.
 	 *
+	 * If a FastCopyable object extends {@link com.swirlds.common.crypto.Hashable} then under no circumstances should
+	 * the hash be copied by this method.
+	 *
+	 * It is strongly suggested that each implementing class override the return type of this method to its self
+	 * type. So if class Foo extends FastCopyable then Foo's copy signature should look like "public Foo copy()".
+	 *
 	 * @return the new copy that was made
 	 */
-	 T copy();
-
-	/**
-	 * Make this object be an exact copy of the object that was serialized to the given stream. It should
-	 * overwrite all the existing state within this object, and replace it.
-	 * <p>
-	 * It can be assumed that the stream was originally written by the copyTo method. There may be bytes in
-	 * the stream after the ones to read here, so it is important to know when this has finished reading its
-	 * state (e.g., by making copyTo write the length of an array before writing all its elements).
-	 *
-	 * @param inStream
-	 * 		the stream to read from
-	 * @throws IOException
-	 * 		can be thrown by the DataInputStream while reading from it
-	 * @deprecated Implement {@link SerializableHashable} instead
-	 */
-	@Deprecated
-	default void copyFrom(SerializableDataInputStream inStream) throws IOException {
-	}
-
-	/**
-	 * Reads all the data written in the (removed) copyToExtra method.
-	 *
-	 * @param inStream
-	 * 		the stream to read from
-	 * @throws IOException
-	 * 		can be thrown by the DataInputStream while reading from it
-	 */
-	@Deprecated
-	default void copyFromExtra(SerializableDataInputStream inStream) throws IOException {
-	}
+	FastCopyable copy();
 
 	/**
 	 * Determines if an object/copy is immutable or not.
@@ -90,11 +61,22 @@ public interface FastCopyable<T extends FastCopyable<T>> extends Releasable {
 	}
 
 	/**
-	 * Throws an exception if {@link #isImmutable()}} returns {@code true}
+	 * @throws MutabilityException
+	 * 		if {@link #isImmutable()}} returns {@code true}
 	 */
 	default void throwIfImmutable() {
+		throwIfImmutable("This operation is not permitted on an immutable object.");
+	}
+
+	/**
+	 * @param errorMessage
+	 * 		an error message for the exception
+	 * @throws MutabilityException
+	 * 		if {@link #isImmutable()}} returns {@code true}
+	 */
+	default void throwIfImmutable(final String errorMessage) {
 		if (this.isImmutable()) {
-			throw new IllegalStateException("This operation is not permitted on an immutable object.");
+			throw new MutabilityException(errorMessage);
 		}
 	}
 }

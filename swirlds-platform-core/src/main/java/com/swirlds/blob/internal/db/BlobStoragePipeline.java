@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -30,6 +30,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class BlobStoragePipeline extends Pipeline {
 
@@ -38,6 +39,10 @@ public class BlobStoragePipeline extends Pipeline {
 	}
 
 	public boolean exists(final Hash hash) throws SQLException {
+		return exists(hash, null);
+	}
+
+	public boolean exists(final Hash hash, final AtomicLong idReturn) throws SQLException {
 		if (hash == null) {
 			throw new IllegalArgumentException("hash");
 		}
@@ -49,6 +54,10 @@ public class BlobStoragePipeline extends Pipeline {
 			stmt.execute();
 
 			final long id = stmt.getLong(1);
+
+			if (idReturn != null) {
+				idReturn.set(id);
+			}
 
 			return !stmt.wasNull() && id > 0;
 		}
@@ -63,11 +72,16 @@ public class BlobStoragePipeline extends Pipeline {
 			throw new IllegalArgumentException("content");
 		}
 
-		Long fileOid = null;
+		final AtomicLong idExisting = new AtomicLong();
 
-		if (!exists(hash)) {
-			fileOid = createFile(content);
+		if (exists(hash, idExisting)) {
+			increaseReferenceCount(idExisting.get());
+			return new BinaryObject(idExisting.get(), hash);
 		}
+
+		//blob did not exist, add to large object table
+		Long fileOid = null;
+		fileOid = createFile(content);
 
 		try (final CallableStatement stmt = prepareCall(buildCall("bs_blob_store", 6, false))) {
 			setValueOrNull(stmt, 1, hash);
@@ -154,7 +168,11 @@ public class BlobStoragePipeline extends Pipeline {
 		}
 	}
 
+
 	public void delete(final long id) throws SQLException {
+		final boolean deleted;
+		final long fileOid;
+
 		try (final CallableStatement stmt = prepareCall(buildCall("bs_blob_delete", 6, false))) {
 			setValueOrNull(stmt, 1, id);
 
@@ -166,14 +184,14 @@ public class BlobStoragePipeline extends Pipeline {
 
 			stmt.execute();
 
-			final boolean deleted = stmt.getBoolean(2);
-			final long fileOid = stmt.getLong(3);
+			deleted = stmt.getBoolean(2);
+			fileOid = stmt.getLong(3);
 
 			handleErrors(stmt, 4, id);
+		}
 
-			if (deleted) {
-				deleteFile(fileOid);
-			}
+		if (deleted) {
+			deleteFile(fileOid);
 		}
 	}
 
@@ -247,6 +265,19 @@ public class BlobStoragePipeline extends Pipeline {
 
 			while (resultSet.next()) {
 				list.add(resultSet.getLong(1));
+			}
+
+			return list;
+		}
+	}
+
+	public List<Hash> retrieveHashes() throws SQLException {
+		try (final PreparedStatement stmt = prepareStatement("SELECT hash FROM binary_objects");
+			 final ResultSet resultSet = stmt.executeQuery()) {
+			final List<Hash> list = new ArrayList<>();
+
+			while (resultSet.next()) {
+				list.add(new Hash(resultSet.getBytes(1)));
 			}
 
 			return list;

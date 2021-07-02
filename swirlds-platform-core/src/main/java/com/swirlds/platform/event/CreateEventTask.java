@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,48 +14,28 @@
 
 package com.swirlds.platform.event;
 
+/**
+ * An intake task requesting the creation of a new event.
+ */
+public class CreateEventTask implements EventIntakeTask {
 
-import com.swirlds.platform.internal.CreatorSeqPair;
-
-public class CreateEventTask extends EventIntakeTask {
-	/** member whose event should be the other-parent (or -1 if none) */
-	private long otherId;
-	private boolean compensatingEvent;
+	/**
+	 * member whose event should be the other-parent (or -1 if none)
+	 */
+	private final long otherId;
 
 	public CreateEventTask(final long otherId) {
 		super();
 		this.otherId = otherId;
 	}
 
-	public CreateEventTask(final long otherId, final boolean compensatingEvent) {
-		this(otherId);
-		this.compensatingEvent = compensatingEvent;
-	}
-
+	/**
+	 * Get the ID of the other-parent node of the event which this task represents
+	 *
+	 * @return the other-parent event/task ID
+	 */
 	public long getOtherId() {
 		return otherId;
-	}
-
-	public boolean isCompensatingEvent() {
-		return compensatingEvent;
-	}
-
-	@Override
-	public boolean isValidWait(final EventIntakeTask requester) {
-		// wait for the event to be created
-		getEventWait(requester);
-		// an event that we create is always valid
-		return true;
-	}
-
-	@Override
-	public boolean isSelfEvent() {
-		return true;
-	}
-
-	@Override
-	public CreatorSeqPair getCreatorSeqPair() {
-		throw new RuntimeException("Method not supported in CreateEventTask");
 	}
 
 	@Override

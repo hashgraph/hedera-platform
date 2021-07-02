@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -19,7 +19,22 @@ package com.swirlds.logging.payloads;
  */
 public class ReconnectFailurePayload extends AbstractLogPayload {
 
-	boolean socket;
+	public enum CauseOfFailure {
+		/**
+		 * Reconnect failed due to a socket exception.
+		 */
+		SOCKET,
+		/**
+		 * Reconnect failed due to the requested teacher being unwilling.
+		 */
+		REJECTION,
+		/**
+		 * Reconnect failed due to an error.
+		 */
+		ERROR
+	}
+
+	private CauseOfFailure causeOfFailure;
 
 	public ReconnectFailurePayload() {
 
@@ -28,19 +43,19 @@ public class ReconnectFailurePayload extends AbstractLogPayload {
 	/**
 	 * @param message
 	 * 		a human readable message
-	 * @param socket
-	 * 		if true then this failure was caused by a socket issue
+	 * @param causeOfFailure
+	 * 		the reason why the reconnect failed
 	 */
-	public ReconnectFailurePayload(final String message, final boolean socket) {
+	public ReconnectFailurePayload(final String message, final CauseOfFailure causeOfFailure) {
 		super(message);
-		this.socket = socket;
+		this.causeOfFailure = causeOfFailure;
 	}
 
-	public boolean isSocket() {
-		return socket;
+	public CauseOfFailure getCauseOfFailure() {
+		return causeOfFailure;
 	}
 
-	public void setSocket(boolean socket) {
-		this.socket = socket;
+	public void setCauseOfFailure(final CauseOfFailure causeOfFailure) {
+		this.causeOfFailure = causeOfFailure;
 	}
 }

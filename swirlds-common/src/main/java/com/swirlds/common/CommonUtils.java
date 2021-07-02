@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -40,16 +40,19 @@ import java.util.Locale;
  * Utility class for other operations
  */
 public class CommonUtils {
+
 	/** the default charset used by swirlds */
-	private static Charset defaultCharset = StandardCharsets.UTF_8;
+	private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
 	/** used by beep() */
 	private static Synthesizer synthesizer;
 
 	/** used by click(). It is opened and never closed. */
 	private static Clip clip = null;
+
 	/** used by click() */
 	private static byte[] data = null;
+
 	/** used by click() */
 	private static AudioFormat format = null;
 
@@ -67,7 +70,7 @@ public class CommonUtils {
 		if (s == null) {
 			return null;
 		}
-		return Normalizer.normalize(s, Normalizer.Form.NFD).getBytes(defaultCharset);
+		return Normalizer.normalize(s, Normalizer.Form.NFD).getBytes(DEFAULT_CHARSET);
 	}
 
 	/**
@@ -78,7 +81,7 @@ public class CommonUtils {
 	 * @return a String created from the input bytes
 	 */
 	public static String getNormalisedStringFromBytes(byte[] bytes) {
-		return new String(bytes, defaultCharset);
+		return new String(bytes, DEFAULT_CHARSET);
 	}
 
 	/**
@@ -200,6 +203,7 @@ public class CommonUtils {
 		return String.format("%02x", b);
 	}
 
+
 	/**
 	 * Converts an array of bytes to a lowercase hexadecimal string.
 	 *
@@ -216,9 +220,6 @@ public class CommonUtils {
 			throwRangeInvalid("length", length, 0, bytes.length);
 			for (int i = 0; i < length; i++) {
 				sb.append(String.format("%02x", bytes[i]));
-			}
-			if (length < bytes.length) {
-				sb.append("...");
 			}
 		} else {
 			sb.append("null");

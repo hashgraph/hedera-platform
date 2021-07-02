@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,13 +14,18 @@
 package com.swirlds.platform;
 
 import com.sun.management.OperatingSystemMXBean;
-import com.swirlds.common.AddressBook;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.PlatformStatNames;
 import com.swirlds.common.StatEntry;
+import com.swirlds.common.Transaction;
 import com.swirlds.common.internal.AbstractStatistics;
 import com.swirlds.platform.event.EventCounter;
+import com.swirlds.platform.observers.EventAddedObserver;
+import com.swirlds.platform.state.StateInfo;
 import com.swirlds.platform.stats.ConsensusStats;
+import com.swirlds.platform.stats.HashgraphStats;
+import com.swirlds.platform.stats.PlatformStatistics;
+import com.swirlds.platform.stats.SignedStateStats;
 
 import java.io.File;
 import java.lang.management.ManagementFactory;
@@ -31,9 +36,13 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.swirlds.common.PlatformStatNames.SIGNED_STATE_HASHING_TIME;
+import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
 
 /**
  * This class collects and reports various statistics about network operation. A statistic such as
@@ -42,7 +51,7 @@ import static com.swirlds.common.PlatformStatNames.SIGNED_STATE_HASHING_TIME;
  *
  * <ul>
  * <li><b>badEv/sec</b> - number of corrupted events received per second *
- * <li><b>bytes/sec_sync</b> - average number of bytes per second transfered during a sync *
+ * <li><b>bytes/sec_sync</b> - average number of bytes per second transferred during a sync *
  * <li><b>bytes/sec_trans</b> - number of bytes in the transactions received per second (from unique events created
  * by self and others) *
  * <li><b>bytes/trans</b> - number of bytes in each transactions *
@@ -96,12 +105,16 @@ import static com.swirlds.common.PlatformStatNames.SIGNED_STATE_HASHING_TIME;
  * <li><b>write</b> - the app claimed to log statistics every this many milliseconds *
  * </ul>
  */
-public class Statistics extends AbstractStatistics implements ConsensusStats {
+public class Statistics extends AbstractStatistics implements ConsensusStats, SignedStateStats, HashgraphStats,
+		EventAddedObserver,
+		PlatformStatistics {
 
 	/** which Platform to watch */
 	protected AbstractPlatform platform;
 	/** an object used to get OS stats */
-	private OperatingSystemMXBean osBean;
+	private final OperatingSystemMXBean osBean;
+
+	private final SavedFileStatistics savedFileStatistics;
 
 	/** an object to get thread stats */
 	ThreadMXBean thbean;
@@ -154,9 +167,9 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 	/** average wall clock time for step 4 of a successful sync */
 	StatsRunningAverage avgSyncDuration4;
 	/** average time (in seconds) to send a byte and get a reply, for each member (holds 0 for self) */
-	StatsRunningAverage[] avgPingMilliseconds;
+	public StatsRunningAverage[] avgPingMilliseconds;
 	/** average bytes per second received during a sync with each member (holds 0 for self) */
-	StatsSpeedometer[] avgBytePerSecSent;
+	public StatsSpeedometer[] avgBytePerSecSent;
 	/** time for event, from being created to being received by another member */
 	StatsRunningAverage avgCreatedReceivedTime;
 	/** time for event, from being created by one, to knowing consensus by another */
@@ -209,8 +222,8 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 	StatsSpeedometer transHandledPerSecond;
 	/** avg time to handle a consensus transaction in SwirldState.handleTransaction (in seconds) */
 	StatsRunningAverage avgSecTransHandled;
-	/** average time it takes the copy() method in SwirldState to finish (in seconds) */
-	StatsRunningAverage avgSecStateCopy;
+	/** average time it takes the copy() method in SwirldState to finish (in microseconds) */
+	StatsRunningAverage avgStateCopyMicros;
 	/** average time it takes to create a new SignedState (in seconds) */
 	StatsRunningAverage avgSecNewSignedState;
 
@@ -224,7 +237,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 	//////////////////// these are updated in Statistics.updateOthers() ///////////////
 
 	/** number of app transactions received so far */
-	StatsRunningAverage numTrans;
+	AtomicLong numTrans = new AtomicLong(0);
 	/** average time for a round trip message between 2 computers (in milliseconds) */
 	StatsRunningAverage avgPing;
 	/** number of connections created (both calling and listening) */
@@ -265,8 +278,12 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 	StatsRunningAverage avgQ3forSigs;
 	/** number of events received waiting to be processed, or events waiting to be created [forSigs.size()] */
 	StatsRunningAverage avgQ4forHash;
+	/** number of SignedStates waiting to be hashed and signed in the queue [stateToHashSign.size()] */
+	StatsRunningAverage avgStateToHashSignDepth;
 	/** size of the queue from which we take events and write to EventStream file */
-	StatsRunningAverage eventStreamQueueSize;
+	private StatsRunningAverage eventStreamQueueSize;
+	/** size of the queue from which we take events, calculate Hash and RunningHash */
+	private StatsRunningAverage hashQueueSize;
 	/** latest round with signed state by a supermajority */
 	StatsRunningAverage avgRoundSupermajority;
 	/** number of events sent per successful sync */
@@ -280,19 +297,89 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 
 	/** number of stale events per second */
 	StatsSpeedometer staleEventsPerSecond;
+	/** number of stale events ever */
+	AtomicLong staleEventsTotal = new AtomicLong(0);
 	/** number of events generated per second to rescue childless events so they don't become stale */
 	StatsSpeedometer rescuedEventsPerSecond;
+
+	/**
+	 * average time spent in
+	 * {@link EventFlow#takeHandlePut(boolean, BlockingQueue, StateInfo, BlockingQueue)} by the {@code
+	 * EventFlow#doCurr()} method (in microseconds)
+	 */
+	StatsRunningAverage avgCurrShuffleMicros;
+
+	/**
+	 * average time spent in
+	 * {@link EventFlow#takeHandlePut(boolean, BlockingQueue, StateInfo, BlockingQueue)} by the {@code
+	 * EventFlow#doCons()} method (in microseconds)
+	 */
+	StatsRunningAverage avgConsShuffleMicros;
+
+	/**
+	 * average time spent in the {@code EventFlow#doCons()} method building the {@link
+	 * com.swirlds.platform.state.SignedState} (in microseconds)
+	 */
+	StatsRunningAverage avgConsBuildStateMicros;
+
+	/**
+	 * average time spent by the {@code EventFlow#doCons()} method cleaning up the forSigs queue (in microseconds)
+	 */
+	StatsRunningAverage avgConsForSigCleanMicros;
+
+	/**
+	 * average time spent by the {@code EventFlow#doCons()} method waiting on the running hash future (in microseconds)
+	 */
+	StatsRunningAverage avgConsRunningHashMicros;
+
+	/**
+	 * average time spent by the {@code EventFlow#doCons()} method hashing the event returned from {@code
+	 * EventFlow.takeHandlePut()} (in microseconds)
+	 */
+	StatsRunningAverage avgConsEventHashMicros;
+
+	/**
+	 * average time spent by the {@code EventFlow#doCons()} method placing the SignedState into the signing queue (in
+	 * microseconds)
+	 */
+	StatsRunningAverage avgConsStateSignAdmitMicros;
+
+	/**
+	 * avg length of the state archival queue
+	 */
+	StatsRunningAverage stateArchivalQueueAvg;
+
+	/**
+	 * avg time taken to archive a signed state (in microseconds)
+	 */
+	StatsRunningAverage stateArchivalTimeAvg;
+
+	/**
+	 * avg length of the state deletion queue
+	 */
+	StatsRunningAverage stateDeletionQueueAvg;
+
+	/**
+	 * avg time taken to delete a signed state (in microseconds)
+	 */
+	StatsRunningAverage stateDeletionTimeAvg;
+
 
 	File rootDirectory = new File("/");
 	long freeDiskspace = rootDirectory.getFreeSpace();
 	long totalDiskspace = rootDirectory.getTotalSpace();
+
+	private static final String FLOAT_FORMAT_10_3 = "%,10.3f";
+	private static final String FLOAT_FORMAT_13_0 = "%,13.0f";
+	private static final String FLOAT_FORMAT_15_3 = "%,15.3f";
+	private static final String FLOAT_FORMAT_16_2 = "%,16.2f";
 
 	/** once a second, update all the statistics that aren't updated by any other class */
 	@Override
 	public void updateOthers() {
 		try {
 			// don't update anything until the platform creates the hashgraph
-			if (platform.getHashgraph() != null) {
+			if (platform.getEventTaskCreator() != null) {
 
 				// calculate the value for otherStatPing (the average of all, not including self)
 				double sum = 0;
@@ -310,7 +397,6 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 				platform.getStats().sleep1perSecond.update(0);
 				platform.getStats().sleep2perSecond.update(0);
 				platform.getStats().sleep3perSecond.update(0);
-				numTrans.recordValue(platform.getHashgraph().getNumTrans());
 				memFree.recordValue(Runtime.getRuntime().freeMemory());
 				memTot.recordValue(Runtime.getRuntime().totalMemory());
 				memMax.recordValue(Runtime.getRuntime().maxMemory());
@@ -320,9 +406,9 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 				threads.recordValue(thbean.getThreadCount());
 				avgSelfId.recordValue(platform.getSelfId().getId());
 				avgNumMembers.recordValue(
-						platform.getHashgraph().getAddressBook().getSize());
+						platform.getAddressBook().getSize());
 				avgNumLocal.recordValue(
-						platform.getHashgraph().getAddressBook().getOwnHostCount());
+						platform.getAddressBook().getOwnHostCount());
 				avgWrite.recordValue(statsWritePeriod);
 				avgSimCallSyncsMax.recordValue(Settings.maxOutgoingSyncs);
 				avgSimSyncs.recordValue(platform.getSyncServer().numSyncs.get());
@@ -330,9 +416,12 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 				avgQ1forCurr.recordValue(platform.getEventFlow().getForCurrSize());
 				avgQ2forCons.recordValue(platform.getEventFlow().getForConsSize());
 				avgQ3forSigs.recordValue(platform.getEventFlow().getForSigsSize());
-				eventStreamQueueSize.recordValue(platform.getRunningHashCalculator().getForStreamSize());
-
-				avgQ4forHash.recordValue(platform.getHashgraph().getEventIntakeQueueSize());
+				eventStreamQueueSize.recordValue(platform.getEventStreamManager() != null ?
+						platform.getEventStreamManager().getEventStreamingQueueSize() : 0);
+				hashQueueSize.recordValue(platform.getEventStreamManager() != null ?
+						platform.getEventStreamManager().getHashQueueSize() : 0);
+				avgQ4forHash.recordValue(platform.getIntakeQueue().size());
+				avgStateToHashSignDepth.recordValue(platform.getEventFlow().getStateToHashSignSize());
 				avgRoundSupermajority.recordValue(
 						platform.getSignedStateManager().getLastCompleteRound());
 				avgEventsInMem.recordValue(EventCounter.getNumEventsInMemory());
@@ -365,17 +454,27 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 	}
 
 	/**
+	 * Same as {@link #Statistics(AbstractPlatform, List)} with additionalEntries set to be empty
+	 */
+	public Statistics(AbstractPlatform platform) {
+		this(platform, Collections.emptyList());
+	}
+
+	/**
 	 * Constructor for a Statistics object that will monitor the statistics for the network for the given
 	 * Platform.
 	 *
 	 * @param platform
 	 * 		the Platform whose statistics should be monitored
+	 * @param additionalEntries
+	 * 		additional stat entries to be added
 	 */
-	public Statistics(AbstractPlatform platform) {
+	public Statistics(final AbstractPlatform platform, final List<StatEntry> additionalEntries) {
 		super();
 		this.platform = platform;
 		this.osBean = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
 		this.thbean = ManagementFactory.getThreadMXBean();
+		this.savedFileStatistics = new SavedFileStatistics();
 		int abSize = platform.getAddressBook() == null ? 0 : platform.getAddressBook().getSize(); //0 during unit tests
 
 		avgPingMilliseconds = new StatsRunningAverage[abSize];
@@ -386,7 +485,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 		for (int i = 0; i < avgBytePerSecSent.length; i++) {
 			avgBytePerSecSent[i] = new StatsSpeedometer(Settings.halfLife);
 		}
-		createStatEntriesArray(platform);
+		createStatEntriesArray(platform, additionalEntries);
 		setUpStatEntries();
 	}
 
@@ -447,8 +546,13 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 
 	/**
 	 * Create all the data for the statEntry array. This must be called before getStatEntriesArray
+	 *
+	 * @param platform
+	 * 		link to the platform instance
+	 * @param additionalEntries
+	 * 		additional stat entries to be added
 	 */
-	private void createStatEntriesArray(AbstractPlatform platform) {
+	private void createStatEntriesArray(final AbstractPlatform platform, final List<StatEntry> additionalEntries) {
 		statEntries = new StatEntry[] {//
 				new StatEntry(//
 						INFO_CATEGORY,//
@@ -466,16 +570,16 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"trans",//
 						"number of transactions received so far",//
-						"%,13.0f",//
-						numTrans,//
-						(h) -> numTrans = new StatsRunningAverage(h),//
+						"%d",//
 						null,//
-						() -> numTrans.getWeightedMean()),//
+						null,//
+						null,//
+						() -> numTrans.get()),//
 				new StatEntry(//
 						CATEGORY,//
 						"secR2C",//
 						"time from receiving an event to knowing its consensus (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgReceivedConsensusTime,//
 						(h) -> {
 							avgReceivedConsensusTime = new StatsRunningAverage(h);
@@ -487,7 +591,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						CATEGORY,//
 						"secC2C",//
 						"time from creating an event to knowing its consensus (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgCreatedConsensusTime,//
 						(h) -> {
 							avgCreatedConsensusTime = new StatsRunningAverage(h);
@@ -499,7 +603,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						CATEGORY,//
 						"SecC2H",//
 						"time from knowing consensus for a transaction to handling it (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgConsHandleTime,//
 						(h) -> {
 							avgConsHandleTime = new StatsRunningAverage(h);
@@ -511,7 +615,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						CATEGORY,//
 						"sec/sync",//
 						"duration of average successful sync (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgSyncDuration,//
 						(h) -> {
 							avgSyncDuration = new StatsRunningAverage(h);
@@ -523,7 +627,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"sec/sync1",//
 						"duration of step 1 of average successful sync (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgSyncDuration1,//
 						(h) -> {
 							avgSyncDuration1 = new StatsRunningAverage(h);
@@ -535,7 +639,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"sec/sync2",//
 						"duration of step 2 of average successful sync (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgSyncDuration2,//
 						(h) -> {
 							avgSyncDuration2 = new StatsRunningAverage(h);
@@ -547,7 +651,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"sec/sync3",//
 						"duration of step 3 of average successful sync (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgSyncDuration3,//
 						(h) -> {
 							avgSyncDuration3 = new StatsRunningAverage(h);
@@ -559,7 +663,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"sec/sync4",//
 						"duration of step 4 of average successful sync (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgSyncDuration4,//
 						(h) -> {
 							avgSyncDuration4 = new StatsRunningAverage(h);
@@ -596,7 +700,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						"bytes/sec_trans",//
 						"number of bytes in the transactions received per second (from unique events created " + //
 								"by self and others)", //
-						"%,16.2f",//
+						FLOAT_FORMAT_16_2,//
 						bytesPerSecondTrans,//
 						(h) -> {
 							bytesPerSecondTrans = new StatsSpeedometer(h);
@@ -608,7 +712,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"bytes/sec_sent",//
 						"number of bytes sent per second over the network (total for this member)",//
-						"%,16.2f",//
+						FLOAT_FORMAT_16_2,//
 						bytesPerSecondSent,//
 						(h) -> {
 							bytesPerSecondSent = new StatsSpeedometer(6 * h);
@@ -620,7 +724,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"bytes/sec_catchup",//
 						"number of bytes sent per second to help others catch up",//
-						"%,16.2f",//
+						FLOAT_FORMAT_16_2,//
 						bytesPerSecondCatchupSent,//
 						(h) -> {
 							bytesPerSecondCatchupSent = new StatsSpeedometer(h);
@@ -634,7 +738,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						"number of bytes in the system transactions received per second (from unique events " +
 								"created by self and others)",
 //
-						"%,16.2f",//
+						FLOAT_FORMAT_16_2,//
 						bytesPerSecondSys,//
 						(h) -> {
 							bytesPerSecondSys = new StatsSpeedometer(h);
@@ -660,7 +764,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						CATEGORY,//
 						"events/sec",//
 						"number of unique events received per second (created by self and others)",//
-						"%,16.2f",//
+						FLOAT_FORMAT_16_2,//
 						eventsPerSecond,//
 						(h) -> {
 							eventsPerSecond = new StatsSpeedometer(h);
@@ -838,7 +942,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 							if (platform.isMirrorNode()) {
 								return "Mirror-" + platform.getSelfId().getId();
 							}
-							return platform.getHashgraph().getAddressBook()
+							return platform.getAddressBook()
 									.getAddress(platform.getSelfId().getId())
 									.getSelfName();
 						}),//
@@ -954,7 +1058,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						CATEGORY,//
 						"cEvents/sec",//
 						"number of events per second created by this node",//
-						"%,16.2f",//
+						FLOAT_FORMAT_16_2,//
 						eventsCreatedPerSecond,//
 						(h) -> {
 							eventsCreatedPerSecond = new StatsSpeedometer(h);
@@ -967,7 +1071,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						"secC2R",//
 						"time from another member creating an event to receiving it and veryfing the " + //
 								"signature (in seconds)", //
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgCreatedReceivedTime,//
 						(h) -> {
 							avgCreatedReceivedTime = new StatsRunningAverage(h);
@@ -980,7 +1084,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						"secC2RC",//
 						"time from another member creating an event to it being received and and knowing  " + //
 								"consensus for it (in seconds)", //
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgCreatedReceivedConsensusTime,//
 						(h) -> {
 							avgCreatedReceivedConsensusTime = new StatsRunningAverage(h);
@@ -994,7 +1098,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						"secR2nR",//
 						"time from first event received in one round, to first event received in the " + //
 								"next round (in seconds)", //
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgFirstEventInRoundReceivedTime,//
 						(h) -> {
 							avgFirstEventInRoundReceivedTime = new StatsRunningAverage(h);
@@ -1007,7 +1111,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						CATEGORY,//
 						"secR2F",//
 						"time from a round's first received event to all the famous witnesses being known (in seconds)",
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgReceivedFamousTime,//
 						(h) -> {
 							avgReceivedFamousTime = new StatsRunningAverage(h);
@@ -1019,7 +1123,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"q1",//
 						"number of non-consensus events in queue waiting to be handled",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgQ1forCurr,//
 						(h) -> {
 							avgQ1forCurr = new StatsRunningAverage(h);
@@ -1031,7 +1135,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"q2",//
 						"number of consensus events in queue waiting to be handled",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgQ2forCons,//
 						(h) -> {
 							avgQ2forCons = new StatsRunningAverage(h);
@@ -1103,7 +1207,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"secSC2T",//
 						"self event consensus timestamp minus time created (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgSelfCreatedTimestamp,//
 						(h) -> {
 							avgSelfCreatedTimestamp = new StatsRunningAverage(h);
@@ -1115,7 +1219,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"secOR2T",//
 						"other event consensus timestamp minus time received (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgOtherReceivedTimestamp,//
 						(h) -> {
 							avgOtherReceivedTimestamp = new StatsRunningAverage(h);
@@ -1127,7 +1231,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"eventsInMem",//
 						"total number of events in memory, for all members on the local machine together",//
-						"%,16.2f",//
+						FLOAT_FORMAT_16_2,//
 						avgEventsInMem,//
 						(h) -> {
 							avgEventsInMem = new StatsRunningAverage(h);
@@ -1304,21 +1408,22 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						() -> avgSecTransHandled.getWeightedMean()),//
 				new StatEntry(//
 						INTERNAL_CATEGORY,//
-						"secStateCopy",//
-						"average time it takes the SwirldState.copy() method in SwirldState to finish (in seconds)",//
-						"%,10.3f",//
-						avgSecStateCopy,//
+						"stateCopyMicros",//
+						"average time it takes the SwirldState.copy() method in SwirldState to finish (in " +
+								"microseconds)",//
+						FLOAT_FORMAT_16_2,//
+						avgStateCopyMicros,//
 						(h) -> {
-							avgSecStateCopy = new StatsRunningAverage(h);
-							return avgSecStateCopy;
+							avgStateCopyMicros = new StatsRunningAverage(h);
+							return avgStateCopyMicros;
 						},//
 						null,//
-						() -> avgSecStateCopy.getWeightedMean()),//
+						() -> avgStateCopyMicros.getWeightedMean()),//
 				new StatEntry(//
 						INTERNAL_CATEGORY,//
 						SIGNED_STATE_HASHING_TIME,//
 						"average time it takes to create a new SignedState (in seconds)",//
-						"%,10.3f",//
+						FLOAT_FORMAT_10_3,//
 						avgSecNewSignedState,//
 						(h) -> {
 							avgSecNewSignedState = new StatsRunningAverage(h);
@@ -1330,7 +1435,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						CATEGORY,//
 						"bytes/sec_sync",//
 						"average number of bytes per second transfered during a sync",//
-						"%,16.2f",//
+						FLOAT_FORMAT_16_2,//
 						avgBytesPerSecSync,//
 						(h) -> {
 							avgBytesPerSecSync = new StatsRunningAverage(h);
@@ -1375,7 +1480,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 							if (platform.isMirrorNode()) {
 								return -1;
 							}
-							return platform.getHashgraph().getLastSeq(platform.getSelfId().getId());
+							return platform.getLastSeq(platform.getSelfId().getId());
 						}),//
 
 
@@ -1411,7 +1516,8 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						null,//
 						null,//
 						null,//
-						() -> platform.getFreezeManager().isEventCreationFrozen()),//
+						() -> platform.getFreezeManager().isEventCreationFrozen()
+								|| platform.getStartUpEventFrozenManager().isEventCreationPausedAfterStartUp()),//
 
 				new StatEntry(//
 						INTERNAL_CATEGORY,//
@@ -1425,7 +1531,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 							if (platform.isMirrorNode()) {
 								return false;
 							}
-							return platform.getHashgraph().isStrongMinorityInMaxRound(platform.getSelfId().getId());
+							return platform.getCriticalQuorum().isInCriticalQuorum(platform.getSelfId().getId());
 						}),//
 
 				new StatEntry(//
@@ -1467,8 +1573,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						null,//
 						null,//
 						null,//
-						() -> platform.getHashgraph().getNumUserTransEvents()),//
-
+						() -> platform.getTransactionTracker().getNumUserTransEvents()),//
 
 				new StatEntry(//
 						INTERNAL_CATEGORY,//
@@ -1507,7 +1612,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						INTERNAL_CATEGORY,//
 						"staleEv/sec",//
 						"number of stale events per second",//
-						"%,16.2f",//
+						FLOAT_FORMAT_16_2,//
 						staleEventsPerSecond,//
 						(h) -> {
 							staleEventsPerSecond = new StatsSpeedometer(h);
@@ -1524,13 +1629,13 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						null,//
 						null,//
 						null,//
-						() -> platform.getHashgraph().getStaleEventsTotal()),//
+						() -> staleEventsTotal.get()),//
 
 				new StatEntry(//
 						INTERNAL_CATEGORY,//
 						"rescuedEv/sec",//
 						"number of events per second generated to prevent stale events",//
-						"%,16.2f",//
+						FLOAT_FORMAT_16_2,//
 						rescuedEventsPerSecond,//
 						(h) -> {
 							rescuedEventsPerSecond = new StatsSpeedometer(h);
@@ -1566,18 +1671,189 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 						null,
 						null,
 						() -> totalDiskspace - freeDiskspace),
-				new StatEntry(//
-						INFO_CATEGORY,//
-						"eventStreamQueueSize",//
-						"size of the queue from which we take events and write to EventStream file",//
-						"%,13.0f",//
-						eventStreamQueueSize,//
-						(h) -> eventStreamQueueSize = new StatsRunningAverage(h),//
-						null,//
+				new StatEntry(
+						INFO_CATEGORY,
+						"eventStreamQueueSize",
+						"size of the queue from which we take events and write to EventStream file",
+						FLOAT_FORMAT_13_0,
+						eventStreamQueueSize,
+						h -> eventStreamQueueSize = new StatsRunningAverage(h),
+						null,
 						() -> eventStreamQueueSize.getWeightedMean()),
+				new StatEntry(
+						INFO_CATEGORY,
+						"hashQueueSize",
+						"size of the queue from which we take events, calculate Hash and RunningHash",
+						FLOAT_FORMAT_13_0,
+						hashQueueSize,
+						h -> hashQueueSize = new StatsRunningAverage(h),
+						null,
+						() -> hashQueueSize.getWeightedMean()),
+
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						"currShuffleMicros",//
+						"average time spent in EventFlow.takeHandlePut() by the EventFlow.doCurr() method (in " +
+								"microseconds)",
+						FLOAT_FORMAT_16_2,//
+						avgCurrShuffleMicros,//
+						(h) -> {
+							avgCurrShuffleMicros = new StatsRunningAverage(h);
+							return avgCurrShuffleMicros;
+						},//
+						null,//
+						() -> avgCurrShuffleMicros.getWeightedMean()),//
+
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						"consShuffleMicros",//
+						"average time spent in EventFlow.takeHandlePut() by the EventFlow.doCons() method (in " +
+								"microseconds)",
+						FLOAT_FORMAT_16_2,//
+						avgConsShuffleMicros,//
+						(h) -> {
+							avgConsShuffleMicros = new StatsRunningAverage(h);
+							return avgConsShuffleMicros;
+						},//
+						null,//
+						() -> avgConsShuffleMicros.getWeightedMean()),//
+
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						"consBuildStateMicros",//
+						"average time spent in the EventFlow.doCons() method building the SignedState (in " +
+								"microseconds)",
+						FLOAT_FORMAT_16_2,//
+						avgConsBuildStateMicros,//
+						(h) -> {
+							avgConsBuildStateMicros = new StatsRunningAverage(h);
+							return avgConsBuildStateMicros;
+						},//
+						null,//
+						() -> avgConsBuildStateMicros.getWeightedMean()),//
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						"consForSigCleanMicros",//
+						"average time spent by the EventFlow.doCons() method cleaning up the forSigs queue (in " +
+								"microseconds)",
+						FLOAT_FORMAT_16_2,//
+						avgConsForSigCleanMicros,//
+						(h) -> {
+							avgConsForSigCleanMicros = new StatsRunningAverage(h);
+							return avgConsForSigCleanMicros;
+						},//
+						null,//
+						() -> avgConsForSigCleanMicros.getWeightedMean()),//
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						"consRunningHashMicros",//
+						"average time spent by the EventFlow.doCons() method waiting on the running hash future (in " +
+								"microseconds)",
+						FLOAT_FORMAT_16_2,//
+						avgConsRunningHashMicros,//
+						(h) -> {
+							avgConsRunningHashMicros = new StatsRunningAverage(h);
+							return avgConsRunningHashMicros;
+						},//
+						null,//
+						() -> avgConsRunningHashMicros.getWeightedMean()),//
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						"consEventHashMicros",//
+						"average time spent by the EventFlow.doCons() method hashing the event returned from {@code " +
+								"EventFlow.takeHandlePut()} (in microseconds)",
+						FLOAT_FORMAT_16_2,//
+						avgConsEventHashMicros,//
+						(h) -> {
+							avgConsEventHashMicros = new StatsRunningAverage(h);
+							return avgConsEventHashMicros;
+						},//
+						null,//
+						() -> avgConsEventHashMicros.getWeightedMean()),//
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						"consStateSignAdmitMicros",//
+						"average time spent by the EventFlow.doCons() method placing the SignedState into the signing" +
+								" " +
+								"queue (in microseconds)",
+						FLOAT_FORMAT_16_2,//
+						avgConsStateSignAdmitMicros,//
+						(h) -> {
+							avgConsStateSignAdmitMicros = new StatsRunningAverage(h);
+							return avgConsStateSignAdmitMicros;
+						},//
+						null,//
+						() -> avgConsStateSignAdmitMicros.getWeightedMean()),
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						"stateToHashSignDepth",//
+						"average depth of the stateToHashSign queue (number of SignedStates)",
+						FLOAT_FORMAT_16_2,//
+						avgStateToHashSignDepth,//
+						(h) -> {
+							avgStateToHashSignDepth = new StatsRunningAverage(h);
+							return avgStateToHashSignDepth;
+						},//
+						null,//
+						() -> avgStateToHashSignDepth.getWeightedMean()),//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"stateArchivalQueueAvg",
+						"avg length of the state archival queue",
+						FLOAT_FORMAT_15_3,//
+						stateArchivalQueueAvg,
+						(h) -> {
+							stateArchivalQueueAvg = new StatsRunningAverage(h);
+							return stateArchivalQueueAvg;
+						},
+						null,
+						() -> stateArchivalQueueAvg.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"stateArchivalTimeAvg",
+						"avg time to archive a signed state (in microseconds)",
+						FLOAT_FORMAT_15_3,//
+						stateArchivalTimeAvg,
+						(h) -> {
+							stateArchivalTimeAvg = new StatsRunningAverage(h);
+							return stateArchivalTimeAvg;
+						},
+						null,
+						() -> stateArchivalTimeAvg.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"stateDeletionQueueAvg",
+						"avg length of the state deletion queue",
+						FLOAT_FORMAT_15_3,//
+						stateDeletionQueueAvg,
+						(h) -> {
+							stateDeletionQueueAvg = new StatsRunningAverage(h);
+							return stateDeletionQueueAvg;
+						},
+						null,
+						() -> stateDeletionQueueAvg.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"stateDeletionTimeAvg",
+						"avg time it takes to delete a signed state (in microseconds)",
+						FLOAT_FORMAT_15_3,//
+						stateDeletionTimeAvg,
+						(h) -> {
+							stateDeletionTimeAvg = new StatsRunningAverage(h);
+							return stateDeletionTimeAvg;
+						},
+						null,
+						() -> stateDeletionTimeAvg.getWeightedMean())
 		};
-		List<StatEntry> entryList = new ArrayList<>();
-		entryList.addAll(Arrays.asList(statEntries));
+		List<StatEntry> entryList = new ArrayList<>(Arrays.asList(statEntries));
+
+		entryList.addAll(additionalEntries);
+
+		entryList.add(this.savedFileStatistics.createStatForTrackingFileSize("SignedState.swh",
+				"Size of SignedState.swh, bytes"));
+		entryList.add(this.savedFileStatistics.createStatForTrackingFileSize("PostgresBackup.tar.gz",
+				"Size of PostgresDB, bytes"));
+
 		for (int i = 0; i < avgPingMilliseconds.length; i++) {
 			final int ii = i; //make the current value of i into a constant inside each lambda generated here
 			entryList.add(new StatEntry(
@@ -1597,12 +1873,13 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 					BPSS_CATEGORY,//
 					String.format("bytes/sec_sent_%02d", i),//
 					String.format("bytes per second sent to node %02d", ii),//
-					"%,16.2f",//
+					FLOAT_FORMAT_16_2,//
 					avgBytePerSecSent[i] = new StatsSpeedometer(Settings.halfLife),//
 					(h) -> (avgBytePerSecSent[ii] = new StatsSpeedometer(h)),//
 					null,//
 					() -> avgBytePerSecSent[ii].getCyclesPerSecond()));
 		}
+
 		statEntries = entryList.toArray(statEntries);
 	}
 
@@ -1628,7 +1905,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 			if (firstEventInLastRoundTime != null) {
 				avgFirstEventInRoundReceivedTime.recordValue(
 						firstEventInLastRoundTime.until(now,
-								ChronoUnit.NANOS) / 1_000_000_000.0);
+								ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 			}
 			firstEventInLastRoundTime = now;
 			lastRoundNumber = event.getRoundCreated();
@@ -1645,7 +1922,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 		if (!platform.getSelfId().equalsMain(event.getCreatorId())) {// record this for events received
 			avgReceivedFamousTime.recordValue(
 					event.getTimeReceived().until(Instant.now(),
-							ChronoUnit.NANOS) / 1_000_000_000.0);
+							ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 		}
 	}
 
@@ -1660,14 +1937,14 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 			if (platform.getSelfId().equalsMain(event.getCreatorId())) { // set either created or received time to now
 				avgCreatedConsensusTime
 						.recordValue(event.getTimeReceived().until(Instant.now(),
-								ChronoUnit.NANOS) / 1_000_000_000.0);
+								ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 			} else {
 				avgReceivedConsensusTime
 						.recordValue(event.getTimeReceived().until(Instant.now(),
-								ChronoUnit.NANOS) / 1_000_000_000.0);
+								ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 				avgCreatedReceivedConsensusTime
 						.recordValue(event.getTimeCreated().until(Instant.now(),
-								ChronoUnit.NANOS) / 1_000_000_000.0);
+								ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 			}
 		}
 
@@ -1677,11 +1954,11 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 			if (platform.getSelfId().equalsMain(event.getCreatorId())) {
 				avgSelfCreatedTimestamp.recordValue(
 						event.getTimeCreated().until(event.getConsensusTimestamp(),
-								ChronoUnit.NANOS) / 1_000_000_000.0);
+								ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 			} else {
 				avgOtherReceivedTimestamp.recordValue(
 						event.getTimeReceived().until(event.getConsensusTimestamp(),
-								ChronoUnit.NANOS) / 1_000_000_000.0);
+								ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 			}
 		}
 	}
@@ -1693,6 +1970,115 @@ public class Statistics extends AbstractStatistics implements ConsensusStats {
 
 	@Override
 	public void dotProductTime(long nanoTime) {
-		timeFracDot.update(((double) nanoTime) / 1_000_000_000);
+		timeFracDot.update(((double) nanoTime) * NANOSECONDS_TO_SECONDS);
+	}
+
+	//
+	// HashgraphStats below
+	//
+
+	@Override
+	public void staleEvent(EventImpl event) {
+		staleEventsTotal.incrementAndGet();
+		staleEventsPerSecond.cycle();
+	}
+
+	@Override
+	public void rescuedEvent() {
+		rescuedEventsPerSecond.cycle();
+	}
+
+	@Override
+	public void duplicateEvent() {
+		duplicateEventsPerSecond.cycle();
+		avgDuplicatePercent.recordValue(100); // move toward 100%
+	}
+
+	@Override
+	public void nonDuplicateEvent() {
+		avgDuplicatePercent.recordValue(0); // move toward 0%
+	}
+
+	@Override
+	public void receivedEvent(EventImpl event) {
+		avgCreatedReceivedTime.recordValue(
+				event.getTimeCreated().until(event.getTimeReceived(),
+						ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
+	}
+
+	@Override
+	public void invalidEventSignature() {
+		badEventsPerSecond.cycle();
+	}
+
+	@Override
+	public void processedEventTask(long startTime) {
+		// nanoseconds spent adding to hashgraph
+		timeFracAdd.update(((double) time() - startTime) * NANOSECONDS_TO_SECONDS);
+	}
+
+	@Override
+	public void eventAdded(EventImpl event) {
+		if (event.isCreatedBy(platform.getSelfId())) {
+			eventsCreatedPerSecond.cycle();
+		}
+
+		// count the unique events in the hashgraph
+		eventsPerSecond.cycle();
+
+		// record stats for all transactions in this event
+		Transaction[] trans = event.getTransactions();
+		int numTransactions = (trans == null ? 0 : trans.length);
+
+		// we have already ensured this isn't a duplicate event, so record all the stats on it:
+
+		// count the bytes in the transactions, and bytes per second, and transactions per event
+		// for both app transactions and system transactions.
+		// Handle system transactions
+		int appSize = 0;
+		int sysSize = 0;
+		int numAppTrans = 0;
+		int numSysTrans = 0;
+		for (int i = 0; i < numTransactions; i++) {
+			if (trans[i].isSystem()) {
+				numSysTrans++;
+				sysSize += trans[i].getSerializedLength();
+				avgBytesPerTransactionSys.recordValue(trans[i].getSerializedLength());
+			} else {
+				numAppTrans++;
+				appSize += trans[i].getSerializedLength();
+				avgBytesPerTransaction.recordValue(trans[i].getSerializedLength());
+			}
+		}
+		avgTransactionsPerEvent.recordValue(numAppTrans);
+		avgTransactionsPerEventSys.recordValue(numSysTrans);
+		bytesPerSecondTrans.update(appSize);
+		bytesPerSecondSys.update(sysSize);
+		// count each transaction within that event (this is like calling cycle() numTrans times)
+		transactionsPerSecond.update(numAppTrans);
+		transactionsPerSecondSys.update(numSysTrans);
+
+		// count all transactions ever in the hashgraph
+		this.numTrans.addAndGet(event.getTransactions().length);
+	}
+
+	@Override
+	public void updateArchivalQueue(int len) {
+		stateArchivalQueueAvg.recordValue(len);
+	}
+
+	@Override
+	public void updateArchivalTime(double time) {
+		stateArchivalTimeAvg.recordValue(time);
+	}
+
+	@Override
+	public void updateDeletionQueue(int len) {
+		stateDeletionQueueAvg.recordValue(len);
+	}
+
+	@Override
+	public void updateDeletionTime(double time) {
+		stateDeletionTimeAvg.recordValue(time);
 	}
 }

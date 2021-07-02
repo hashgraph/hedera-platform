@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,41 +14,108 @@
 
 package com.swirlds.platform;
 
+import com.swirlds.common.NodeId;
 import com.swirlds.common.internal.AbstractStatistics;
+import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.Marker;
-import org.apache.logging.log4j.MarkerManager;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
+import static com.swirlds.logging.LogMarker.STARTUP;
 
+/**
+ * The background thread responsible for logging all platform statistic values to the CSV file format.
+ */
 class CsvWriter implements Runnable {
-	/** the app is run by this */
-	private AbstractPlatform platform;
-	/** path and filename of the .csv file to write to */
-	private String path;
-	/** number of milliseconds between writes to the log file */
-	private int writePeriod = 3000;
-
-	SimpleDateFormat format = new SimpleDateFormat("HH.mm.ss.SSS");
 	/**
 	 * use this for all logging
 	 */
 	private static final Logger log = LogManager.getLogger(CsvWriter.class);
 
-	private static final Marker ERROR = MarkerManager.getMarker(EXCEPTION.name());
+	/**
+	 * the default frequency at which values should be written if the configured write period is out of range
+	 */
+	public static final int DEFAULT_WRITE_PERIOD = 3000;
 
-	CsvWriter(final AbstractPlatform platform, final String selfId, final String name) {
-		super();
+	/** the {@link com.swirlds.common.Platform} instance that owns this {@link CsvWriter} */
+	private final AbstractPlatform platform;
+
+	/** path and filename of the .csv file to write to */
+	private final File csvFilePath;
+
+	/** number of milliseconds between writes to the log file */
+	private final int writePeriod;
+
+	/** if true all statistics, including those with category "internal", are written to the CSV file */
+	private final boolean showInternalStats;
+
+	/**
+	 * if true, then statistics with the category "database" are written to the CSV file
+	 */
+	private final boolean showDbStats;
+
+	/**
+	 * if true, then the file will be appended to continuing from the last record written; otherwise the file will be
+	 * truncated and headers written
+	 */
+	private final boolean append;
+
+	/**
+	 * Constructs a new CsvWriter instance with the provided settings.
+	 *
+	 * @param platform
+	 * 		the {@link SwirldsPlatform} instance with which this CsvWriter is associated
+	 * @param selfId
+	 * 		the identifier of the network node to which this CsvWriter instance is associated
+	 * @param folderName
+	 * 		the optional folder path to which the CSV files should be written, may be {@code null} or an empty-string
+	 * @param fileNamePrefix
+	 * 		the filename prefix to use when naming the CSV file
+	 * @param writePeriod
+	 * 		the frequency, in milliseconds, at which values are written to the statistics CSV file
+	 * @param append
+	 * 		if true then any existing file will be opened in append mode; otherwise any existing file will be
+	 * 		overwritten
+	 * @param showInternalStats
+	 * 		if true all statistics with the "internal" category will be included in the CSV file output
+	 * @param showDbStats
+	 * 		if true then statistics with the "database" category will be included in the CSV file output
+	 */
+	public CsvWriter(final AbstractPlatform platform, final NodeId selfId, final String folderName,
+			final String fileNamePrefix, final int writePeriod, final boolean append, final boolean showInternalStats,
+			final boolean showDbStats) {
+
+		if (fileNamePrefix == null || fileNamePrefix.isBlank()) {
+			throw new IllegalArgumentException("fileNamePrefix");
+		}
+
+		if (selfId == null) {
+			throw new IllegalArgumentException("selfId");
+		}
+
+
+		final File folderPath = new File(
+				(folderName == null || folderName.isBlank()) ? System.getProperty("user.dir") : folderName);
+
 		this.platform = platform;
-		path = System.getProperty("user.dir") + File.separator + name
-				+ selfId + ".csv";
+		this.csvFilePath = new File(folderPath, String.format("%s%s.csv", fileNamePrefix, selfId)).getAbsoluteFile();
+		this.writePeriod = (writePeriod > 0) ? writePeriod : DEFAULT_WRITE_PERIOD;
+		this.showInternalStats = showInternalStats;
+		this.showDbStats = showDbStats;
+		this.append = append;
+	}
+
+	public File getCsvFilePath() {
+		return csvFilePath;
+	}
+
+	public int getWritePeriod() {
+		return writePeriod;
 	}
 
 	/**
@@ -64,40 +131,54 @@ class CsvWriter implements Runnable {
 	 */
 	private boolean shouldWrite(AbstractStatistics statsObj, int pos) {
 		boolean result = true;
-		//comment out the next two lines to get all the statistics
-//		result = result && !statsObj.getCategoryStrings()[pos].equals(Statistics.PING_CATEGORY);
-//		result = result && !statsObj.getCategoryStrings()[pos].equals(Statistics.BPSS_CATEGORY);
+
+		// Only write internal stats if the Settings.showInternalStats are enabled
+		if (!showInternalStats) {
+			result = !statsObj.getCategoryStrings()[pos].equals(AbstractStatistics.INTERNAL_CATEGORY);
+		}
+
 		return result;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public void run() {
-		boolean displayDBStats = platform.displayDBStats();
-		int arraysize = (displayDBStats) ? 4 : 3;
-		AbstractStatistics[] statisticsObjs = new AbstractStatistics[arraysize];
+		AbstractStatistics[] statisticsObjs = new AbstractStatistics[(showDbStats) ? 4 : 3];
 		statisticsObjs[0] = platform.getStats();
 		statisticsObjs[1] = CryptoStatistics.getInstance();
 		statisticsObjs[2] = platform.getAppStats();
-		if (displayDBStats) {
+
+		if (showDbStats) {
 			statisticsObjs[3] = platform.getDBStatistics();
 		}
 
-		if (!Settings.csvAppend) {
+		log.info(STARTUP.getMarker(),
+				"CsvWriter: Initializing statistics output in CSV format [ writePeriod = '{}', csvOutputFolder = " +
+						"'{}', csvFileName = '{}' ]",
+				writePeriod, csvFilePath.getParentFile(), csvFilePath.getName());
+
+		ensureFolderExists();
+
+		if (!append) {
 			// if we're not appending to the CSV, erase the old file, if any
 			eraseFile();
 		}
 
 		// if csvAppend is off, or it's on but the file doesn't exist, write the definitions and the headings.
 		// otherwise, they will already be there so we can skip it
-		if (!Settings.csvAppend || !fileExists()) {
+		if (!append || !fileExists()) {
 			// write the definitions at the top (name is stats[i][0], description is stats[i][1])
 			write(String.format("%14s: ", "filename"));
-			write(String.format("%s", path));
+			write(String.format("%s", csvFilePath));
 			newline();
 
 			// write descriptions
 			for (final AbstractStatistics abstractStatistics : statisticsObjs) {
-				writeDescriptions(abstractStatistics);
+				if (abstractStatistics != null) {
+					writeDescriptions(abstractStatistics);
+				}
 			}
 			newline();
 
@@ -105,7 +186,9 @@ class CsvWriter implements Runnable {
 			write("");// indent by two columns
 			write("");
 			for (final AbstractStatistics obj : statisticsObjs) {
-				writeCategories(obj);
+				if (obj != null) {
+					writeCategories(obj);
+				}
 			}
 			newline();
 
@@ -114,7 +197,9 @@ class CsvWriter implements Runnable {
 			write("");// indent by two columns
 			write("");
 			for (final AbstractStatistics statisticsObj : statisticsObjs) {
-				writeStatNames(statisticsObj);
+				if (statisticsObj != null) {
+					writeStatNames(statisticsObj);
+				}
 			}
 			newline();
 		} else { // make sure last line of previous test was ended, and a blank line is inserted between tests.
@@ -122,20 +207,19 @@ class CsvWriter implements Runnable {
 			newline();
 		}
 
-		while (true) { // keep logging forever
-			try {
+		try {
+			while (true) { // keep logging forever
 				// write a row of numbers
 				write("");
 				write("");
-				for (int i = 0; i < statisticsObjs.length; i++) {
-					writeStatValues(statisticsObjs[i]);
+				for (final AbstractStatistics statisticsObj : statisticsObjs) {
+					writeStatValues(statisticsObj);
 				}
 				newline();
 				Thread.sleep(writePeriod); // add new rows infrequently
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				return;
 			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
 		}
 
 	}
@@ -144,16 +228,37 @@ class CsvWriter implements Runnable {
 	private void eraseFile() {
 		// erase file in current directory
 		try (BufferedWriter file = new BufferedWriter(
-				new FileWriter(path, false))) {
+				new FileWriter(csvFilePath, false))) {
 			file.write("");
-		} catch (IOException e) {
-			log.error(ERROR, "CSVWriter:", e);
+		} catch (IOException ex) {
+			log.error(EXCEPTION.getMarker(),
+					"CsvWriter: Failed to erase the CSV file, no stats will be logged [ file = '{}' ] ",
+					csvFilePath, ex);
 		}
 	}
 
 	private boolean fileExists() {
-		File file = new File(path);
-		return file.exists();
+		return csvFilePath.exists();
+	}
+
+	/**
+	 * Ensure that the parent folder specified by {@link #csvFilePath} exists and if not create it recursively.
+	 */
+	private void ensureFolderExists() {
+		final File parentFolder = csvFilePath.getParentFile();
+
+		if (!parentFolder.exists()) {
+			log.debug(LogMarker.STARTUP.getMarker(), "CsvWriter: Creating the stats folder [ folder = '{}' ]",
+					parentFolder);
+			if (!parentFolder.mkdirs()) {
+				log.warn(EXCEPTION.getMarker(),
+						"CsvWriter: Unable to create the stats folder, no stats will be logged [ folder = '{}' ]",
+						parentFolder);
+			}
+		} else {
+			log.debug(LogMarker.STARTUP.getMarker(), "CsvWriter: Using the existing stats folder [ folder = '{}' ]",
+					parentFolder);
+		}
 	}
 
 	/**
@@ -176,14 +281,16 @@ class CsvWriter implements Runnable {
 	private void write(String message, boolean newline) {
 		// create or append to file in current directory
 		try (BufferedWriter file = new BufferedWriter(
-				new FileWriter(path, true))) {
+				new FileWriter(csvFilePath, true))) {
 			if (newline) {
 				file.write("\n");
 			} else {
 				file.write(message.trim().replaceAll(",", "") + ",");
 			}
-		} catch (IOException e) {
-			log.error(ERROR, "CSVWriter:", e);
+		} catch (IOException ex) {
+			log.error(EXCEPTION.getMarker(),
+					"CsvWriter: Unable to write to the CSV file, no stats will be logged [ file = '{}' ]",
+					csvFilePath, ex);
 		}
 	}
 
@@ -259,6 +366,10 @@ class CsvWriter implements Runnable {
 	 * 		statistics instance hold an array of statistic entry
 	 */
 	private void writeStatValues(AbstractStatistics statsObj) {
+		if (statsObj == null) {
+			return;
+		}
+
 		String[] values = statsObj.getValueStrings();
 		for (int i = 0; i < values.length; i++) {
 			if (shouldWrite(statsObj, i)) {

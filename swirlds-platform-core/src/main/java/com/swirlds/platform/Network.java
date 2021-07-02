@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -160,12 +160,14 @@ public class Network {
 	 * @return an array of all local addresses, sorted by IP version (4 or 6), then alphabetically.
 	 */
 	static String[] getOwnAddresses2() {
-		if (ownAddresses == null)
+		if (ownAddresses == null) {
 			try {
 				ownAddresses = computeOwnAddresses();
 			} catch (SocketException e) {
 				log.error(EXCEPTION.getMarker(), "", e);
 			}
+		}
+
 		return addresses;
 	}
 

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -26,42 +26,115 @@ import java.util.List;
  * double-linked grid, and each row of it is linked to from a RoundInfo object.
  */
 public class RoundInfo {
-	/** the round this is about (0 is first) */
-	long round = 0;
-	// are all the famous witnesses known for this round?
-	boolean fameDecided = false;
-	// number of known witnesses in this round
-	int numWitnesses = 0;
-	// number of known witnesses in this round with unknown fame
-	int numUnknownFame = 0;
-	// these witnesses are the first event in this round by each member
-	List<EventImpl> witnesses = Collections
-			.synchronizedList(new ArrayList<EventImpl>());
-	// The judges (unique famous witnesses) in this round. Element i is the one created by member i, or null if none
-	EventImpl[] judges;
-	// all the known events that were created in this round (i.e., have this round number)
-	List<EventImpl> allEvents = Collections
-			.synchronizedList(new ArrayList<EventImpl>()); // synchronized so getAllEvents works well
-	// these events were all created in this round, and aren't yet consensus
-	List<EventImpl> nonConsensusEvents = Collections
-			.synchronizedList(new ArrayList<EventImpl>());
-	// XOR of sigs of all famous events
-	byte[] whitening = new byte[Crypto.SIG_SIZE_BYTES];
-
-	// each witness has one election per future round, to decide whether it is famous. This should
-	// only be accessed by Hashgraph from within a synchronized method, because it is not thread-safe.
-	// this is a quadruply linked list, with 4 links in each ElectionRound object, to prev/next election in that
-	// round, and to the corresponding election in prev/next round.
-	ElectionRound elections = null;
-
-	/** the minimum generation of all the famous witnesses in this round */
-	long minGeneration = -1;
 
 	/**
-	 * @return the round this is about (0 is first)
+	 * A value which represents that the minimum witness generation number of a round is unassigned, so
+	 * is undefined.
+	 *
+	 * An event's computed generation number is always non-negative, so after the min witness generation
+	 * for a round has been assigned to a value that was computed from parent events, it is never again undefined.
+	 *
+	 * This is the initial value of the minimum witness generation for a round.
 	 */
-	public long getRound() {
+	protected static final long MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED = -1;
+
+	/**
+	 * The first round number at genesis is zero.
+	 */
+	protected static final long GENESIS_FIRST_ROUND_NUMBER = 0;
+
+	/**
+	 * the round this is about ({@link RoundInfo#GENESIS_FIRST_ROUND_NUMBER} is first)
+	 */
+	private long round = GENESIS_FIRST_ROUND_NUMBER;
+
+	/**
+	 * are all the famous witnesses known for this round?
+	 */
+	protected boolean fameDecided = false;
+
+	/**
+	 * number of known witnesses in this round
+	 */
+	protected int numWitnesses = 0;
+
+	/**
+	 * number of known witnesses in this round with unknown fame
+	 */
+	protected int numUnknownFame = 0;
+
+	/**
+	 * these witnesses are the first event in this round by each member
+	 */
+	protected final List<EventImpl> witnesses = Collections.synchronizedList(new ArrayList<>());
+
+	/**
+	 * The judges (unique famous witnesses) in this round. Element i is the one created by member i, or null if none
+	 */
+	protected final EventImpl[] judges;
+
+	/**
+	 * all the known events that were created in this round (i.e., have this round number)
+	 *
+	 * synchronized so getAllEvents works well
+	 */
+	protected final List<EventImpl> allEvents = Collections.synchronizedList(new ArrayList<>());
+
+	/**
+	 * these events were all created in this round, and aren't yet consensus
+	 */
+	protected final List<EventImpl> nonConsensusEvents = Collections.synchronizedList(new ArrayList<>());
+
+	/**
+	 * XOR of sigs of all famous events
+	 */
+	protected final byte[] whitening = new byte[Crypto.SIG_SIZE_BYTES];
+
+	/**
+	 * each witness has one election per future round, to decide whether it is famous. This should
+	 * only be accessed by Hashgraph from within a synchronized method, because it is not thread-safe.
+	 * this is a quadruply linked list, with 4 links in each ElectionRound object.
+	 */
+	protected ElectionRound elections = null;
+
+	/**
+	 * the minimum generation of all the famous witnesses in this round. Initialized to
+	 * {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}.
+	 */
+	private volatile long minGeneration = MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
+
+	/**
+	 * @return the round this is about ({@link RoundInfo#GENESIS_FIRST_ROUND_NUMBER} is first)
+	 */
+	protected long getRound() {
 		return round;
+	}
+
+	/**
+	 * Get the minimum generation number of all the famous witnesses in this round. If there are no witnesses
+	 * (which may happen when loading from signed state), the value
+	 * {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED} is returned.
+	 *
+	 * @return the generation number
+	 */
+	protected long getMinGeneration() {
+		return minGeneration;
+	}
+
+	/**
+	 * Set the minimum gen number for this round. If the min gen at entry is
+	 * {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}, the given generation is used,
+	 * else the min gen is updated to min{min gen, new min gen}.
+	 *
+	 * This assumes that {@code generation} &gt;= {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}
+	 *
+	 * @param generation
+	 * 		the generation value to use
+	 */
+	protected void updateMinGeneration(long generation) {
+		minGeneration = (minGeneration == -1) ?
+				generation :
+				Math.min(minGeneration, generation);
 	}
 
 	/**
@@ -69,7 +142,7 @@ public class RoundInfo {
 	 * doubly-linked list per RoundInfo.
 	 */
 	public static class ElectionRound {
-		final ArrayList<Boolean> vote;// vote by each witness in this round for event being famous
+		final boolean[] vote;         // vote by each member in this round for event being famous
 		final EventImpl event;        // the event whose fame is being voted on
 		final long age;               // = round(this ElectionRound) - round(event)
 		final RoundInfo roundInfo;    // the RoundInfo for the round holding this election
@@ -83,7 +156,7 @@ public class RoundInfo {
 
 		ElectionRound(RoundInfo roundInfo, int numMembers, EventImpl event,
 				long age) {
-			this.vote = new ArrayList<>();
+			this.vote = new boolean[numMembers];
 			this.event = event;
 			this.age = age;
 			this.roundInfo = roundInfo;
@@ -91,6 +164,20 @@ public class RoundInfo {
 			this.prevRound = null;
 			this.nextElection = null;
 			this.prevElection = null;
+		}
+
+		/**
+		 * @return vote by each member in this round for event being famous
+		 */
+		public boolean[] getVote() {
+			return vote.clone();
+		}
+
+		/**
+		 * @return round(this ElectionRound) - round(event)
+		 */
+		public long getAge() {
+			return age;
 		}
 	}
 
@@ -102,7 +189,7 @@ public class RoundInfo {
 	 * @param numMembers
 	 * 		the number of members currently in the address book
 	 */
-	public RoundInfo(long round, int numMembers) {
+	protected RoundInfo(long round, int numMembers) {
 		this.round = round;
 		this.judges = new EventImpl[numMembers];
 	}
@@ -113,7 +200,7 @@ public class RoundInfo {
 	 * @param w
 	 * 		the witness to add
 	 */
-	void addFamousWitness(EventImpl w) {
+	protected void addFamousWitness(EventImpl w) {
 		int creator = (int) w.getCreatorId();
 		if (judges[creator] == null) {
 			judges[creator] = w;
@@ -125,13 +212,6 @@ public class RoundInfo {
 			}
 		}
 
-		minGeneration = (minGeneration == -1) ? w.getGeneration() : Math.min(minGeneration, w.getGeneration());
-	}
-
-	/**
-	 * The judges (unique famous witnesses) in this round. Element i is the one created by member i, or null if none.
-	 */
-	public EventImpl[] getJudges() {
-		return judges;
+		updateMinGeneration(w.getGeneration());
 	}
 }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ (c) 2016-2020 Swirlds, Inc.
+  ~ (c) 2016-2021 Swirlds, Inc.
   ~
   ~ This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
   ~ intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -17,7 +17,7 @@
 <Configuration status="WARN" monitorInterval="600">
 	<Filters>
 		<!-- Filter out levels above INFO (ex: DEBUG & TRACE) -->
-		<!-- Intentially left disabled by default -->
+		<!-- Intentionally left disabled by default -->
 		<!-- <ThresholdFilter level="INFO"                 onMatch="NEUTRAL" onMismatch="DENY" />-->
 
 		<!-- In the following, enable a marker with onMatch="ACCEPT" and disable with onMatch="DENY". -->
@@ -31,18 +31,33 @@
 
 		<!-- Errors -->
 		<MarkerFilter marker="INVALID_EVENT_ERROR"    onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="JVM_PAUSE_ERROR"        onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
 
 		<!-- Synchronization/Gossip (Debug) -->
 		<MarkerFilter marker="SYNC_START"             onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="SYNC_DONE"              onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="SYNC_ERROR"             onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="SYNC"                   onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_SGM"               onMatch="ACCEPT"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_SGM"               onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_STEP_1"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_STEP_2"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_STEP_3"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_STEP_4"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_STEP_5"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_GENERATIONS"       onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_FALLEN_BEHIND"     onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_THROTTLE"          onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_LISTENER"          onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_CALLER"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_CLIENT"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_CONNECTION"        onMatch="DENY"    onMismatch="NEUTRAL"/>
+
 		<MarkerFilter marker="HEARTBEAT"              onMatch="DENY"    onMismatch="NEUTRAL"/>
 
 		<!-- Platform Events (Debug) -->
 		<MarkerFilter marker="CREATE_EVENT"           onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="INTAKE_EVENT"           onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="EXPIRE_EVENT"           onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="WATCH_EVENTS_SEND_REC"  onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="EVENT_SIG"              onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="EVENT_STREAM"           onMatch="DENY"    onMismatch="NEUTRAL"/>
@@ -70,6 +85,7 @@
 		<MarkerFilter marker="PLATFORM_STATUS" 		  onMatch="ACCEPT" 	onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="RECONNECT"              onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="FREEZE"                 onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="RECONNECT_SGM"          onMatch="DENY"    onMismatch="NEUTRAL"/>
 
 		<!-- Saved States -->
 		<MarkerFilter marker="SNAPSHOT_MANAGER"       onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
@@ -104,6 +120,9 @@
 		<MarkerFilter marker="DEMO_MAP"               onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="EXPIRATION"             onMatch="DENY"    onMismatch="NEUTRAL"/>
 
+		<!-- Stream File Signing Tool -->
+		<MarkerFilter marker="FILE_SIGN"              onMatch="DENY"  onMismatch="NEUTRAL"/>
+
 		<!-- Reconnect Specific -->
 		<MarkerFilter marker="TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT"      onMatch="ACCEPT"   onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT_NODE" onMatch="ACCEPT"   onMismatch="DENY"/>
@@ -127,7 +146,7 @@
 			<DefaultRolloverStrategy max="1"/>
 			<Filters>
 				<!-- Filter out levels above INFO (ex: DEBUG & TRACE) -->
-				<!-- Intentially left disabled by default -->
+				<!-- Intentionally left disabled by default -->
 				<!-- <ThresholdFilter level="INFO"                 onMatch="NEUTRAL" onMismatch="DENY" />-->
 
 				<!-- In the following, enable a marker with onMatch="ACCEPT" and disable with onMatch="DENY". -->
@@ -141,19 +160,33 @@
 
 				<!-- Errors -->
 				<MarkerFilter marker="INVALID_EVENT_ERROR"    onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="JVM_PAUSE_ERROR"        onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
 
 				<!-- Synchronization/Gossip (Debug) -->
 				<MarkerFilter marker="SYNC_START"             onMatch="DENY"    onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="SYNC_DONE"              onMatch="DENY"    onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="SYNC_ERROR"             onMatch="DENY"    onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="SYNC"                   onMatch="DENY"    onMismatch="NEUTRAL"/>
-				<MarkerFilter marker="SYNC_SGM"               onMatch="ACCEPT"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_SGM"               onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_STEP_1"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_STEP_2"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_STEP_3"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_STEP_4"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_STEP_5"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_GENERATIONS"       onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_FALLEN_BEHIND"     onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_THROTTLE"          onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_LISTENER"          onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_CALLER"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_CLIENT"            onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="SYNC_CONNECTION"        onMatch="DENY"    onMismatch="NEUTRAL"/>
 
 				<MarkerFilter marker="HEARTBEAT"              onMatch="DENY"    onMismatch="NEUTRAL"/>
 
 				<!-- Platform Events (Debug) -->
 				<MarkerFilter marker="CREATE_EVENT"           onMatch="DENY"    onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="INTAKE_EVENT"           onMatch="DENY"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="EXPIRE_EVENT"           onMatch="DENY"    onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="WATCH_EVENTS_SEND_REC"  onMatch="DENY"    onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="EVENT_SIG"              onMatch="DENY"    onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="EVENT_STREAM"           onMatch="DENY"    onMismatch="NEUTRAL"/>
@@ -181,6 +214,7 @@
 				<MarkerFilter marker="PLATFORM_STATUS" 		  onMatch="ACCEPT" 	onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="RECONNECT"              onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="FREEZE"                 onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="RECONNECT_SGM"          onMatch="DENY"    onMismatch="NEUTRAL"/>
 
 				<!-- Saved States -->
 				<MarkerFilter marker="SNAPSHOT_MANAGER"       onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
@@ -223,7 +257,7 @@
 
 		<!-- Platform SYNC Debug Logs -->
 		<RollingRandomAccessFile name="SwirldsSyncLog" fileName="debug/swirlds-sync.log"
-								 filePattern="debug/swirlds-sync.%i.log">
+								 filePattern="debug/swirlds-sync.%i.log" append="false">
 			<PatternLayout>
 				<pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-8sn %-5p %-16marker &lt;%t&gt; %c{1}: %msg%n</pattern>
 			</PatternLayout>
@@ -241,7 +275,7 @@
 
 		<!-- Platform HEARTBEAT Debug Logs -->
 		<RollingRandomAccessFile name="SwirldsHeartbeatLog" fileName="debug/swirlds-heartbeat.log"
-								 filePattern="debug/swirlds-heartbeat.%i.log">
+								 filePattern="debug/swirlds-heartbeat.%i.log" append="false">
 			<PatternLayout>
 				<pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-8sn %-5p %-16marker &lt;%t&gt; %c{1}: %msg%n</pattern>
 			</PatternLayout>
@@ -256,24 +290,25 @@
 
 		<!-- Platform EVENT Debug Logs -->
 		<RollingRandomAccessFile name="SwirldsEventLog" fileName="debug/swirlds-event.log"
-								 filePattern="debug/swirlds-event.%i.log">
+								 filePattern="debug/swirlds-event.%i.log" append="false">
 			<PatternLayout>
 				<pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-8sn %-5p %-16marker &lt;%t&gt; %c{1}: %msg%n</pattern>
 			</PatternLayout>
 			<Policies>
-				<SizeBasedTriggeringPolicy size="25 MB"/>
+				<SizeBasedTriggeringPolicy size="10 GB"/>
 			</Policies>
-			<DefaultRolloverStrategy max="50"/>
+			<DefaultRolloverStrategy max="5"/>
 			<Filters>
 				<MarkerFilter marker="CREATE_EVENT"           onMatch="ACCEPT"    onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="ADD_EVENT"              onMatch="ACCEPT"    onMismatch="NEUTRAL"/>
-				<MarkerFilter marker="INTAKE_EVENT"           onMatch="ACCEPT"    onMismatch="DENY"/>
+				<MarkerFilter marker="INTAKE_EVENT"           onMatch="ACCEPT"    onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="EXPIRE_EVENT"           onMatch="ACCEPT"    onMismatch="DENY"/>
 			</Filters>
 		</RollingRandomAccessFile>
 
 		<!-- Platform SIGNED STATE Debug Logs -->
 		<RollingRandomAccessFile name="SwirldsSignedStateLog" fileName="debug/swirlds-state.log"
-								 filePattern="debug/swirlds-state.%i.log">
+								 filePattern="debug/swirlds-state.%i.log" append="false">
 			<PatternLayout>
 				<pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-8sn %-5p %-16marker &lt;%t&gt; %c{1}: %msg%n</pattern>
 			</PatternLayout>

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -18,7 +18,6 @@ import com.swirlds.common.AddressBook;
 import com.swirlds.common.FastCopyable;
 import com.swirlds.common.constructable.ConstructableIgnored;
 import com.swirlds.common.internal.SettingsCommon;
-import com.swirlds.common.io.DataStreamUtils;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
@@ -29,19 +28,18 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 /** all the known signatures for a particular signed state */
-@ConstructableIgnored /* has to be ignored, doesnt work with a no-args constructor at the moment */
-public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
+@ConstructableIgnored /* has to be ignored, doesn't work with a no-args constructor at the moment */
+public class SigSet implements FastCopyable, SelfSerializable {
 	private static final long CLASS_ID = 0x756d0ee945226a92L;
-	private static final int VERSION_ORIGINAL = 1;
-	private static final int VERSION_MIGRATE_TO_SERIALIZABLE = 2;
-	private static final int CLASS_VERSION = VERSION_MIGRATE_TO_SERIALIZABLE;
+
+	private static class ClassVersion {
+		public static final int ORIGINAL = 1;
+		public static final int MIGRATE_TO_SERIALIZABLE = 2;
+	}
 
 	/** the number of signatures collected */
 	private volatile int count;
@@ -54,7 +52,7 @@ public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
 	/** array element i is the signature for the member with ID i */
 	private AtomicReferenceArray<SigInfo> sigInfos;
 	/** the address book in force at the time of this state */
-	private AddressBook addressBook;
+	private final AddressBook addressBook;
 
 	/**
 	 * False until complete and has been processed as a newly completed SigSet
@@ -65,7 +63,7 @@ public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
 
 	/** get array where element i is the signature for the member with ID i */
 	SigInfo[] getSigInfosCopy() {
-		SigInfo a[] = new SigInfo[numMembers];
+		SigInfo[] a = new SigInfo[numMembers];
 		for (int i = 0; i < a.length; i++) {
 			a[i] = sigInfos.get(i);
 		}
@@ -81,7 +79,12 @@ public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
 		this.addressBook = sourceSigSet.getAddressBook().copy();
 	}
 
-	/** create the signature set, taking the address book at this moment as the population */
+	/**
+	 * create the signature set, taking the address book at this moment as the population
+	 *
+	 * @param addressBook
+	 * 		the address book at this moment
+	 */
 	public SigSet(AddressBook addressBook) {
 		this.addressBook = addressBook;
 		this.numMembers = addressBook.getSize();
@@ -93,6 +96,9 @@ public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
 	/**
 	 * Register a new signature for one member. If this member already has a signed state here, then the new
 	 * one that was passed in is ignored.
+	 *
+	 * @param sigInfo
+	 * 		a sigInfo to be added
 	 */
 	public synchronized void addSigInfo(SigInfo sigInfo) {
 		int id = (int) sigInfo.getMemberId();
@@ -120,7 +126,9 @@ public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
 		return sigInfos.get(memberId);
 	}
 
-	/** does this contain signatures from members with at least 1/3 of the total stake? */
+	/**
+	 * @return does this contain signatures from members with at least 1/3 of the total stake?
+	 */
 	public boolean isComplete() {
 		return complete;
 	}
@@ -128,6 +136,9 @@ public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
 	/**
 	 * Once this SigSet is complete, this function will return true the first time it is called
 	 * and false afterwards. Used to handle SigSets that have just become complete.
+	 *
+	 * @return true if this SigSet is complete and this function is called for the first time after it is complete,
+	 * 		false otherwise
 	 */
 	public boolean isNewlyComplete() {
 		if (complete && !markedAsNewlyComplete) {
@@ -183,30 +194,7 @@ public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
 		processDeserializedSigInfoArray(sigInfoArr);
 	}
 
-	/**
-	 * Read this SigSEt from a stream. The addressBook must already be loaded before calling this.
-	 *
-	 * @param inStream
-	 * 		the stream to read from
-	 * @throws IOException
-	 */
-	@Override
-	public void copyFrom(SerializableDataInputStream inStream) throws IOException {
-		DataStreamUtils.readValidLong(inStream, "version", VERSION_ORIGINAL);
-		numMembers = inStream.readInt();
-		SigInfo sigInfoArr[] = new SigInfo[numMembers];
-		try {
-			sigInfoArr = Utilities.readFastCopyableArray(inStream,
-					SigInfo.class);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-
-		processDeserializedSigInfoArray(sigInfoArr);
-		calculateComplete();
-	}
-
-	private void processDeserializedSigInfoArray(SigInfo[] sigInfoArr) {
+	private synchronized void processDeserializedSigInfoArray(SigInfo[] sigInfoArr) {
 		count = 0;
 		stakeCollected = 0;
 		sigInfos = new AtomicReferenceArray<>(numMembers);
@@ -254,13 +242,6 @@ public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
 		return numMembers;
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void copyFromExtra(SerializableDataInputStream inStream) throws IOException {
-	}
-
 	public AddressBook getAddressBook() {
 		return addressBook;
 	}
@@ -270,15 +251,20 @@ public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
 	 */
 	@Override
 	public boolean equals(Object o) {
-		if (this == o) return true;
+		if (this == o) {
+			return true;
+		}
 
-		if (o == null || getClass() != o.getClass()) return false;
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
 
 		SigSet sigSet = (SigSet) o;
 
 		if (sigInfos.length() != sigSet.sigInfos.length()) {
 			return false;
 		}
+
 		for (int i = 0; i < sigInfos.length(); i++) {
 			if (!Objects.equals(sigInfos.get(i), sigSet.sigInfos.get(i))) {
 				return false;
@@ -338,7 +324,15 @@ public class SigSet implements FastCopyable<SigSet>, SelfSerializable {
 	 */
 	@Override
 	public int getVersion() {
-		return CLASS_VERSION;
+		return ClassVersion.MIGRATE_TO_SERIALIZABLE;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getMinimumSupportedVersion() {
+		return ClassVersion.MIGRATE_TO_SERIALIZABLE;
 	}
 
 	/**

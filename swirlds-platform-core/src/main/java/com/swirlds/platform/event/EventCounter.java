@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -43,7 +43,7 @@ public class EventCounter {
 	}
 
 	/**
-	 * Called when an event is cleared
+	 * Called when an event is cleared, to decrement the count of how many uncleared events are in memory
 	 */
 	public static void eventCleared() {
 		numEventsInMemory.decrementAndGet();

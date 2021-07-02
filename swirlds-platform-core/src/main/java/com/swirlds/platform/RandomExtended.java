@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -13,49 +13,54 @@
  */
 package com.swirlds.platform;
 
+import com.swirlds.common.FastCopyable;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
-import com.swirlds.common.FastCopyable;
 
 import java.io.IOException;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * A class similar to Random, but with extra methods to clone it and add entropy, and without thread safety.
  * <p>
  * The {@link #clone} method makes a copy, after which both the original and copy will generate identical
- * sequences of pseudorandom numbers. The {@link absorbEntropy} method can be used at any time to give
+ * sequences of pseudorandom numbers. The {@link #absorbEntropy(long)} method can be used at any time to give
  * additional entropy. Each pseudorandom number that is generated is a deterministic function of the initial
- * seed, of the entropy given it by all calls to {@link absorbEntropy} so far, and by when in the sequence
+ * seed, of the entropy given it by all calls to {@link #absorbEntropy(long)} so far, and by when in the sequence
  * those calls were made.
  * <p>
  * It is certainly not cryptographically secure. It might not even be good enough for some simulations. But
  * it may be fine for casual use, such as for a game.
  */
-public class RandomExtended extends Random implements SelfSerializable, FastCopyable<RandomExtended> {
+public class RandomExtended extends Random implements SelfSerializable, FastCopyable {
 
-	// The version history of this class.
-	// Versions that have been released must NEVER be given a different value.
 	/**
-	 * In this version, serialization was performed by copyTo/copyToExtra and deserialization was performed by
-	 * copyFrom/copyFromExtra. This version is not supported by later deserialization methods and must be handled
-	 * specially by the platform.
+	 * The version history of this class.
+	 * Versions that have been released must NEVER be given a different value.
 	 */
-	private static final int VERSION_ORIGINAL = 1;
-	/**
-	 * In this version, serialization was performed by serialize/deserialize.
-	 */
-	private static final int VERSION_MIGRATE_TO_SERIALIZABLE = 2;
+	private static class ClassVersion {
+		/**
+		 * In this version, serialization was performed by copyTo/copyToExtra and deserialization was performed by
+		 * copyFrom/copyFromExtra. This version is not supported by later deserialization methods and must be handled
+		 * specially by the platform.
+		 */
+		public static final int ORIGINAL = 1;
+		/**
+		 * In this version, serialization was performed by serialize/deserialize.
+		 */
+		public static final int MIGRATE_TO_SERIALIZABLE = 2;
+	}
 
 	private static final long CLASS_ID = 0xefb0c8ec488537fL;
 
 	private long seed = 0L;
 	private static final long serialVersionUID = 1L;
-	private final static long multiplier = 0x5DEECE66DL;
-	private final static long addend = 0xBL;
-	private final static long mask = (1L << 48) - 1;
-	private volatile static long seedUniquifier = 8682522807148012L;
+	private static final long multiplier = 0x5DEECE66DL;
+	private static final long addend = 0xBL;
+	private static final long mask = (1L << 48) - 1;
+	private static final AtomicLong seedUniquifier = new AtomicLong(8682522807148012L);
 
 	private boolean immutable;
 
@@ -63,8 +68,8 @@ public class RandomExtended extends Random implements SelfSerializable, FastCopy
 	 * Initialize with a random seed, based on the current time.
 	 */
 	public RandomExtended() {
-		this(++seedUniquifier + System.nanoTime());
-		seedUniquifier++;
+		this(seedUniquifier.incrementAndGet() + System.nanoTime());
+		seedUniquifier.getAndIncrement();
 	}
 
 	private RandomExtended(final RandomExtended sourceValue) {
@@ -132,31 +137,10 @@ public class RandomExtended extends Random implements SelfSerializable, FastCopy
 
 	/**
 	 * {@inheritDoc}
-	 *
-	 * @throws IOException
-	 * 		any errors on the stream
-	 */
-	@Override
-	public void copyFrom(SerializableDataInputStream inStream) throws IOException {
-		// Discard the version number
-		inStream.readLong();
-
-		seed = inStream.readLong();
-	}
-
-	/**
-	 * {@inheritDoc}
 	 */
 	@Override
 	public void release() {
 
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void copyFromExtra(SerializableDataInputStream inStream) throws IOException {
 	}
 
 	/**
@@ -188,7 +172,7 @@ public class RandomExtended extends Random implements SelfSerializable, FastCopy
 	 */
 	@Override
 	public int getVersion() {
-		return VERSION_MIGRATE_TO_SERIALIZABLE;
+		return ClassVersion.MIGRATE_TO_SERIALIZABLE;
 	}
 
 	/**
@@ -196,7 +180,7 @@ public class RandomExtended extends Random implements SelfSerializable, FastCopy
 	 */
 	@Override
 	public int getMinimumSupportedVersion() {
-		return VERSION_MIGRATE_TO_SERIALIZABLE;
+		return ClassVersion.MIGRATE_TO_SERIALIZABLE;
 	}
 
 	/**

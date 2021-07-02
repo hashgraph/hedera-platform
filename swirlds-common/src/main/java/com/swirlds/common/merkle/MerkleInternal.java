@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,8 +14,12 @@
 
 package com.swirlds.common.merkle;
 
+import com.swirlds.common.MutabilityException;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.merkle.utility.AbstractMerkleInternal;
+import com.swirlds.common.merkle.exceptions.MerkleRouteException;
+import com.swirlds.common.merkle.route.MerkleRoute;
+import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
+import com.swirlds.common.merkle.utility.AbstractNaryMerkleInternal;
 
 import java.util.List;
 
@@ -38,14 +42,24 @@ import java.util.List;
  * - getChild()
  * - isLeaf()
  *
- * It is highly recommended that any class implementing this interface extend {@link AbstractMerkleInternal}.
+ * It is highly recommended that any class implementing this interface extend either
+ * {@link AbstractBinaryMerkleInternal} (if the node has 2 or fewer children) or {@link AbstractNaryMerkleInternal}
+ * (if the node has greater than 2 children).
  */
 public interface MerkleInternal extends MerkleNode {
 
 	/**
 	 * The maximum number of children that a MerkleInternal node can have
 	 */
-	int MAX_CHILD_COUNT = 64;
+	int MAX_CHILD_COUNT_UBOUND = 64;
+	/**
+	 * The maximum number of children that a MerkleInternal node can have
+	 */
+	int MAX_CHILD_COUNT_LBOUND = 1;
+	/**
+	 * The minimum number of children that a MerkleInternal node can have
+	 */
+	int MIN_CHILD_COUNT = 0;
 
 	/**
 	 * Returns the number of all immediate children that are a MerkleNode object.
@@ -58,28 +72,66 @@ public interface MerkleInternal extends MerkleNode {
 
 	/**
 	 * Returns deterministically the child at position <i>index</i>
-	 *
+	 * <p>
 	 * This function must not change the number of children or modify any children in any way.
+	 * <p>
+	 * If a child at an index that does not violate {@link #getMaximumChildCount(int)} is requested
+	 * but that child has never been set, then null should be returned.
 	 *
 	 * @param index
 	 * 		The position to look for the child.
 	 * @param <T>
-	 *           the type of the child
+	 * 		the type of the child
+	 * @return the child at the position <i>index</i>
+	 * @throws com.swirlds.common.merkle.exceptions.IllegalChildIndexException if the index is negative or if
+	 * the index is greater than {@link #getMaximumChildCount(int)}.
 	 */
 	<T extends MerkleNode> T getChild(final int index);
 
 	/**
 	 * Set the child at a particular index.
 	 *
-	 * This method responsible for updating the reference count of the new child and the previous child
-	 * (if a child gets replaced).
+	 * Additionally, method is expected to perform the following operations:
+	 * - invalidating this node's hash
+	 * - decrementing the reference count of the displaced child (if any)
+	 * - incrementing the reference count of the new child (if not null)
+	 * - updating the route of the new child (if not null)
 	 *
 	 * @param index
 	 * 		The position where the child will be inserted.
 	 * @param child
 	 * 		A MerkleNode object.
+	 * @throws MutabilityException
+	 * 		if the child is immutable
+	 * @throws MerkleRouteException
+	 * 		if the child's route is changed in an illegal manner
 	 */
 	void setChild(final int index, final MerkleNode child);
+
+	/**
+	 * Set the child at a particular index.
+	 *
+	 * Uses a precomputed route for the child. Useful for setting a child where the route is already known without
+	 * paying the performance penalty of recreating the route.
+	 *
+	 * Additionally, method is expected to perform the following operations:
+	 * - invalidating this node's hash
+	 * - decrementing the reference count of the displaced child (if any)
+	 * - incrementing the reference count of the new child (if not null)
+	 * - updating the route of the new child (if not null)
+	 *
+	 * @param index
+	 * 		The position where the child will be inserted.
+	 * @param child
+	 * 		A MerkleNode object.
+	 * @param childRoute
+	 * 		A precomputed route. No error checking, assumed to be correct.
+	 * @throws MutabilityException
+	 * 		if the child is immutable
+	 * @throws com.swirlds.common.merkle.exceptions.MerkleRouteException
+	 * 		if the child's route is changed in an illegal manner
+	 */
+	void setChild(final int index, final MerkleNode child, final MerkleRoute childRoute);
 
 	/**
 	 * The minimum number of children that this node may have.
@@ -89,7 +141,7 @@ public interface MerkleInternal extends MerkleNode {
 	 * @return The minimum number of children at the specified version.
 	 */
 	default int getMinimumChildCount(final int version) {
-		return 0;
+		return MIN_CHILD_COUNT;
 	}
 
 	/**
@@ -103,7 +155,7 @@ public interface MerkleInternal extends MerkleNode {
 	 * @return The maximum number of children at the specified version.
 	 */
 	default int getMaximumChildCount(final int version) {
-		return MAX_CHILD_COUNT;
+		return MAX_CHILD_COUNT_UBOUND;
 	}
 
 	/**
@@ -136,15 +188,10 @@ public interface MerkleInternal extends MerkleNode {
 	}
 
 	/**
-	 * This method is called after this node's children and all its descendents have been constructed and initialized.
+	 * This method is called after this node's children and all its descendants have been constructed and initialized.
 	 * Nodes that maintain metadata derived from descendant nodes may build that metadata here.
-	 *
-	 * @param oldNode
-	 * 		If this merkleNode was constructed by mutating a node of the same type, pass a reference to that
-	 * 		node here. May be null. If not null, metadata from the old node may be used to construct metadata
-	 * 		for this node more efficiently.
 	 */
-	default void initialize(MerkleInternal oldNode) {
+	default void initialize() {
 
 	}
 
@@ -166,4 +213,35 @@ public interface MerkleInternal extends MerkleNode {
 	 */
 	@Override
 	Hash getHash();
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * When the route of a merkle internal is changed, this method must update the routes of all descendant nodes.
+	 */
+	@Override
+	void setRoute(MerkleRoute route);
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * There are currently 3 strategies that internal nodes use to perform copy.
+	 *
+	 * 1) Cascading copy. When a node using this strategy is copied it simply calls copy on all of its children and
+	 * adds those copies to the new object. This is inefficient -- a copy of a tree that uses cascading copy is an
+	 * O(n) operation (where n is the number of nodes).
+	 *
+	 * 2) Smart copy (aka copy-on-write). When a node using this strategy is copied, it copies the root
+	 * of its subtree. When a descendant is modified, it creates a path from the root down to the node
+	 * and then modifies the copy of the node.
+	 *
+	 * 3) Self copy. When this internal node is copied it only copies metadata. Its children are uncopied, and the new
+	 * node has null in place of any children. This strategy can only CURRENTLY be used on nodes where copying is
+	 * managed by an ancestor node (for example, an ancestor that does smart copies).
+	 *
+	 * Eventually there will be utilities that manage all aspects of copying a merkle tree. At that point in time, all
+	 * internal nodes will be required to implement copy strategy 3.
+	 */
+	@Override
+	MerkleInternal copy();
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -27,40 +27,64 @@ public enum StreamValidationResult {
 	 */
 	STREAM_FILE_EMPTY,
 	/**
-	 * stream file doesn't contain initialRunningHash
+	 * stream file doesn't contain startRunningHash
 	 */
-	STREAM_FILE_MISS_INITIAL_HASH,
+	STREAM_FILE_MISS_START_HASH,
 	/**
 	 * stream file doesn't contain objects
 	 */
 	STREAM_FILE_MISS_OBJECTS,
 	/**
-	 * stream file doesn't contain lastRunningHash
+	 * stream file doesn't contain endRunningHash
 	 */
-	STREAM_FILE_MISS_LAST_HASH,
+	STREAM_FILE_MISS_END_HASH,
 	/**
-	 * lastRunningHash in the stream file doesn't match the calculated result from initialRunningHash and objects
+	 * endRunningHash in the stream file doesn't match the calculated result from startRunningHash and objects
 	 */
-	CALCULATED_LAST_HASH_NOT_MATCH,
+	CALCULATED_END_HASH_NOT_MATCH,
 
 	/**
 	 * fail to parse signature file
 	 */
 	PARSE_SIG_FILE_FAIL,
 	/**
-	 * signature bytes in the signature file doesn't match lastRunningHash in the stream file
+	 * signature bytes in the signature file doesn't match endRunningHash in the stream file
 	 */
 	SIG_NOT_MATCH_FILE,
+	/**
+	 * metaSignature in the signature file doesn't match metaHash
+	 */
+	INVALID_META_SIGNATURE,
+	/**
+	 * entireSignature in the signature file doesn't match entireHash
+	 */
+	INVALID_ENTIRE_SIGNATURE,
+	/**
+	 * entireHash saved in the signature file doesn't match the entireHash of the stream file
+	 */
+	SIG_HASH_NOT_MATCH_FILE,
 	/**
 	 * number of signature files is not equal to number of stream files
 	 */
 	SIG_FILE_COUNT_MISMATCH,
 	/**
-	 * initialRunningHash read from stream file doesn't match expected Hash
+	 * startRunningHash read from stream file doesn't match expected Hash
 	 */
-	INITIAL_HASH_NOT_MATCH,
+	START_HASH_NOT_MATCH,
 	/**
 	 * pass validation
 	 */
-	OK
+	OK,
+	/**
+	 * there is no file exists for validation
+	 */
+	NO_FILE_EXISTS,
+	/**
+	 * prevFileHash read from stream file doesn't match the hash calculated from the previous file
+	 */
+	PREV_FILE_HASH_NOT_MATCH,
+	/**
+	 * fail to calculate entire hash for the stream file
+	 */
+	FAIL_TO_CALCULATE_ENTIRE_HASH
 }

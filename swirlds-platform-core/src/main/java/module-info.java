@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -19,7 +19,6 @@ module com.swirlds.platform {
 	/* Public Package Exports */
 	exports com.swirlds.blob;
 	exports com.swirlds.platform;
-	exports com.swirlds.throttle;
 	exports com.swirlds.platform.state;
 
 	/* Targeted Exports to External Libraries */
@@ -34,6 +33,9 @@ module com.swirlds.platform {
 			com.fasterxml.jackson.databind;
 	exports com.swirlds.platform.swirldapp to com.swirlds.platform.test;
 	exports com.swirlds.platform.stats;
+	exports com.swirlds.platform.components to com.swirlds.platform.test;
+	exports com.swirlds.platform.observers to com.swirlds.platform.test;
+	exports com.swirlds.platform.eventhandling to com.swirlds.platform.test;
 
 	/* Swirlds Libraries */
 	requires transitive com.swirlds.common;
@@ -75,6 +77,7 @@ module com.swirlds.platform {
 	requires com.fasterxml.jackson.core;
 	requires com.fasterxml.jackson.databind;
 	requires com.fasterxml.jackson.datatype.jsr310;
+	requires com.swirlds.fchashmap;
 
 
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -22,7 +22,6 @@ import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.io.IOException;
-import java.util.Arrays;
 
 /**
  * A class used to store base event data that does not affect the hash of that event.
@@ -78,9 +77,13 @@ public class BaseEventUnhashedData implements SelfSerializable {
 
 	@Override
 	public boolean equals(final Object o) {
-		if (this == o) return true;
+		if (this == o) {
+			return true;
+		}
 
-		if (o == null || getClass() != o.getClass()) return false;
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
 
 		final BaseEventUnhashedData that = (BaseEventUnhashedData) o;
 
@@ -104,11 +107,12 @@ public class BaseEventUnhashedData implements SelfSerializable {
 
 	@Override
 	public String toString() {
+		final int signatureLength = signature == null ? 0 : signature.length;
 		return "BaseEventUnhashedData{" +
 				"creatorSeq=" + creatorSeq +
 				", otherId=" + otherId +
 				", otherSeq=" + otherSeq +
-				", signature=" + CommonUtils.hex(signature, 5) +
+				", signature=" + CommonUtils.hex(signature, signatureLength) +
 				'}';
 	}
 

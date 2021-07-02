@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,14 +14,17 @@
 
 package com.swirlds.common.internal;
 
-import com.swirlds.common.Transaction;
-
 import java.security.MessageDigest;
 import java.time.Instant;
 
 public abstract class HashUtils {
 	/**
 	 * hash the given long
+	 *
+	 * @param digest
+	 * 		the message digest to update
+	 * @param n
+	 * 		the long value to be hashed
 	 */
 	public static void update(MessageDigest digest, long n) {
 		for (int i = 0; i < Long.BYTES; i++) {
@@ -32,6 +35,11 @@ public abstract class HashUtils {
 
 	/**
 	 * hash the given int
+	 *
+	 * @param digest
+	 * 		the message digest to update
+	 * @param n
+	 * 		the int value to be hashed
 	 */
 	public static void update(MessageDigest digest, int n) {
 		for (int i = 0; i < Integer.BYTES; i++) {
@@ -42,6 +50,15 @@ public abstract class HashUtils {
 
 	/**
 	 * hash the given array of bytes
+	 *
+	 * @param digest
+	 * 		the message digest to update
+	 * @param t
+	 * 		the byte array to be hashed
+	 * @param offset
+	 * 		the offset to start from in the array of bytes
+	 * @param length
+	 * 		the number of bytes to use, starting at {@code offset}
 	 */
 	public static void update(MessageDigest digest, byte[] t, int offset, int length) {
 		if (t == null) {
@@ -55,6 +72,11 @@ public abstract class HashUtils {
 
 	/**
 	 * hash the given Instant
+	 *
+	 * @param digest
+	 * 		the message digest to update
+	 * @param i
+	 * 		the Instant to be hashed
 	 */
 	public static void update(MessageDigest digest, Instant i) {
 		// the instant class consists of only 2 parts, the seconds and the nanoseconds
@@ -64,6 +86,10 @@ public abstract class HashUtils {
 
 	/**
 	 * hash the given array of byte arrays
+	 * @param digest
+	 * 		the message digest to update
+	 * @param t
+	 * 		the array to be hashed
 	 */
 	public static void update(MessageDigest digest, byte[][] t) {
 		if (t == null) {
@@ -83,6 +109,10 @@ public abstract class HashUtils {
 
 	/**
 	 * hash the given array of bytes
+	 * @param digest
+	 * 		the message digest to update
+	 * @param t
+	 * 		the array of bytes to be hashed
 	 */
 	public static void update(MessageDigest digest, byte[] t) {
 		if (t == null) {
@@ -92,24 +122,4 @@ public abstract class HashUtils {
 			digest.update(t);
 		}
 	}
-
-
-	/**
-	 * hash the given array of transactions
-	 */
-	public static void update(MessageDigest digest, Transaction[] t) {
-		if (t == null) {
-			update(digest, 0);
-		} else {
-			update(digest, t.length);
-			for (Transaction a : t) {
-				if (a == null) {
-					update(digest, 0);
-				} else {
-					a.computeDigest(digest);
-				}
-			}
-		}
-	}
-
 }

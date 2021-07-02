@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,19 +14,18 @@
 
 package com.swirlds.fcmap.internal;
 
-import com.swirlds.common.FCMKey;
-import com.swirlds.common.FCMValue;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializedObjectProvider;
+import com.swirlds.common.merkle.MerkleNode;
+import com.swirlds.common.merkle.route.MerkleRoute;
+import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
 
-import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.Objects;
 
 import static java.util.Map.Entry;
 
-public class FCMLeaf<K extends FCMKey, V extends FCMValue>
-		extends AbstractFCMNode<K, V> {
+public class FCMLeaf<K extends MerkleNode, V extends MerkleNode>
+		extends AbstractBinaryMerkleInternal
+		implements FCMNode<K, V> {
 
 	private static class ClassVersion {
 		public static final int ORIGINAL = 1;
@@ -34,53 +33,11 @@ public class FCMLeaf<K extends FCMKey, V extends FCMValue>
 
 	public static final long CLASS_ID = 0xc1bd3ae28094acdeL;
 
-	private static final String DELETE_MESSAGE = "FCMLeaf has been deleted";
-
 	private static class ChildIndices {
 		public static final int KEY = 0;
 		public static final int VALUE = 1;
 
 		public static final int CHILD_COUNT = 2;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getNumberOfChildren() {
-		return ChildIndices.CHILD_COUNT;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getMinimumChildCount(int version) {
-		return ChildIndices.CHILD_COUNT;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getMaximumChildCount(int version) {
-		return ChildIndices.CHILD_COUNT;
-	}
-
-	public K getKey() {
-		return getChild(ChildIndices.KEY);
-	}
-
-	private void setKey(K key) {
-		setChild(ChildIndices.KEY, key);
-	}
-
-	public V getValue() {
-		return getChild(ChildIndices.VALUE);
-	}
-
-	private void setValue(V value) {
-		setChild(ChildIndices.VALUE, value);
 	}
 
 	public FCMLeaf(final K key, final V value) {
@@ -93,29 +50,44 @@ public class FCMLeaf<K extends FCMKey, V extends FCMValue>
 		super();
 	}
 
-	@SuppressWarnings("unchecked")
 	private FCMLeaf(final FCMLeaf<K, V> otherLeaf) {
-		super(otherLeaf.getParent());
-		setKey((K) otherLeaf.getKey().copy());
-		setValue((V) otherLeaf.getValue().copy());
+		super(otherLeaf);
 		setImmutable(false);
 		otherLeaf.setImmutable(true);
 	}
 
-	/**
-	 *
-	 * @return
-	 */
-	protected V getMutableValue() {
-		return (V) this.getValue().copy();
+	public K getKey() {
+		return getChild(ChildIndices.KEY);
 	}
 
-	public V getValueForModify() {
-		if (this.isPathUnique()) {
-			return this.getValue();
-		}
+	public void setKey(K key) {
+		setChild(ChildIndices.KEY, key);
+	}
 
-		return this.getMutableValue();
+	public V getValue() {
+		return getChild(ChildIndices.VALUE);
+	}
+
+	public void setValue(V value) {
+		setChild(ChildIndices.VALUE, value);
+	}
+
+	/**
+	 * A special setter for key and value that recycles existing routes. Much more efficient of the routes for
+	 * the key and value exist and are known a priori.
+	 *
+	 * @param key
+	 * 		the key to be set
+	 * @param keyRoute
+	 * 		the route that describes the location where the key is going
+	 * @param value
+	 * 		the value to be set
+	 * @param valueRoute
+	 * 		the route that describes the location where the value is going
+	 */
+	public void emplaceChildren(final K key, final MerkleRoute keyRoute, final V value, final MerkleRoute valueRoute) {
+		setChild(ChildIndices.KEY, key, keyRoute);
+		setChild(ChildIndices.VALUE, value, valueRoute);
 	}
 
 	/**
@@ -181,42 +153,8 @@ public class FCMLeaf<K extends FCMKey, V extends FCMValue>
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void copyFrom(final SerializableDataInputStream inStream) {
-
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void copyFromExtra(final SerializableDataInputStream inStream) {
-
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public long getClassId() {
 		return CLASS_ID;
-	}
-
-	@SuppressWarnings("unchecked")
-	public void deserializeThroughProviders(final SerializedObjectProvider keyProvider,
-			final SerializedObjectProvider valueProvider,
-			final SerializableDataInputStream inStream) throws IOException {
-		this.setKey((K) keyProvider.deserialize(inStream));
-		this.setValue((V) valueProvider.deserialize(inStream));
-	}
-
-	@SuppressWarnings("unchecked")
-	public static <K extends FCMKey, V extends FCMValue> FCMLeaf<K, V> deserialize(
-			final SerializedObjectProvider keyProvider,
-			final SerializedObjectProvider valueProvider,
-			final SerializableDataInputStream inStream) throws IOException {
-		final K key = (K) keyProvider.deserialize(inStream);
-		final V value = (V) valueProvider.deserialize(inStream);
-		return new FCMLeaf<>(key, value);
 	}
 
 	/**

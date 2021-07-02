@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,7 +15,7 @@ package com.swirlds.platform;
 
 import com.swirlds.common.AddressBook;
 import com.swirlds.common.NodeId;
-import com.swirlds.common.SwirldState;
+import com.swirlds.common.StartupTime;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
@@ -26,21 +26,27 @@ import com.swirlds.logging.payloads.ReconnectLoadFailurePayload;
 import com.swirlds.logging.payloads.ReconnectStartPayload;
 import com.swirlds.logging.payloads.UnableToReconnectPayload;
 import com.swirlds.platform.event.EventUtils;
+import com.swirlds.platform.internal.SystemExitReason;
+import com.swirlds.platform.reconnect.ReconnectException;
 import com.swirlds.platform.reconnect.ReconnectReceiver;
 import com.swirlds.platform.state.SigInfo;
 import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateDumpSource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.HEARTBEAT;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.logging.LogMarker.SOCKET_EXCEPTIONS;
-import static com.swirlds.logging.LogMarker.SYNC_SGM;
+import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.logging.LogMarker.SYNC_START;
 
 /**
@@ -58,7 +64,12 @@ class SyncCaller implements Runnable {
 	/** the member ID for self */
 	private final NodeId selfId;
 	/** the type of this caller */
-	private SyncCallerType callerType;
+	private final SyncCallerType callerType;
+
+	/**
+	 * The number of times reconnect has failed since the last succesfull reconnect.
+	 */
+	private int failedReconnectsInARow;
 
 	/**
 	 * The platform instantiates this, and gives it the self ID number, plus other info that will be useful
@@ -84,6 +95,7 @@ class SyncCaller implements Runnable {
 		this.selfId = selfId;
 		this.callerNumber = callerNumber;
 		this.callerType = callerType;
+		this.failedReconnectsInARow = 0;
 	}
 
 	/**
@@ -103,12 +115,13 @@ class SyncCaller implements Runnable {
 					if (failedAttempts >= Settings.callerSkipsBeforeSleep) {
 						failedAttempts = 0;
 						try {
+							// Necessary to slow down the attempts after N failures
 							Thread.sleep(Settings.sleepCallerSkips);
 							platform.getStats().sleep1perSecond.cycle();
-						} catch (InterruptedException e) {
+						} catch (InterruptedException ex) {
 							Thread.currentThread().interrupt();
 							return;
-						} catch (Exception e) {
+						} catch (Exception ex) {
 							// Suppress any exception thrown by the stats update
 						}
 					}
@@ -137,11 +150,12 @@ class SyncCaller implements Runnable {
 			/** array with a null element for each member whose signature is still needed on signed state */
 			SigInfo[] sigs = null;
 
+			boolean reconnected = false;
 			if (platform.getSyncManager().hasFallenBehind()) {
 				// we will not sync if we have fallen behind
 				if (callerNumber == 0) {
 					// caller number 0 will do the reconnect, the others will wait
-					boolean reconnected = doReconnect();
+					reconnected = doReconnect();
 					// if reconnect failed, we will start over
 					if (!reconnected) {
 						return -1;
@@ -150,7 +164,13 @@ class SyncCaller implements Runnable {
 				} else {
 					return -1;
 				}
+				reconnected = true;
+				log.debug(RECONNECT.getMarker(),
+						"`callRequestSync` : node {} fell behind and has reconnected, thread ID callerNumber = {}",
+						selfId,
+						callerNumber);
 			}
+
 
 			// check transThrottle, if there is no reason to call, don't call anyone
 			if (!platform.getSyncManager().transThrottle()) {
@@ -170,7 +190,7 @@ class SyncCaller implements Runnable {
 
 				// self is the only member, so create an event for just this one transaction,
 				// and immediately put it into the hashgraph. No syncing is needed.
-				platform.getHashgraph().createEvent(
+				platform.getEventTaskCreator().createEvent(
 						selfId.getId()/*selfId assumed to be main*/); // otherID (so self will count as the "other")
 				Thread.sleep(50);
 				platform.getSyncManager().successfulSync();
@@ -183,7 +203,24 @@ class SyncCaller implements Runnable {
 			}
 
 			// the sync manager will tell us who we need to call
-			List<Long> nodeList = platform.getSyncManager().getNeighborsToCall(callerType);
+			final List<Long> nodeList;
+
+			if (Browser.isLoadedSavedState()) {
+				// If this node loaded saved state from disk but has not created any event yet,
+				// then this node is a newly added node to the network.
+				// Only allow this node to sync with other pre-existing nodes, or
+				// any new nodes that have finished synchronization already
+				//
+				// The way to tell if a node is pre-existing node or a node has finished synchronization
+				// is to check whether it has any event created. EventMapper is used for this purpose
+				// since it is populated with most recent event from each node after loading
+				// a signed state
+				nodeList = platform.getSyncManager().getNeighborsToCall(callerType).stream()
+						.filter(x -> platform.getEventMapper().getMostRecentEvent(x.intValue()) != null)
+						.collect(Collectors.toList());
+			} else {
+				nodeList = platform.getSyncManager().getNeighborsToCall(callerType);
+			}
 
 			// the array is sorted in ascending or from highest to lowest priority, so we go through the array and
 			// try to
@@ -192,9 +229,6 @@ class SyncCaller implements Runnable {
 			for (int i = 0; i < nodeList.size(); i++) {
 				otherId = nodeList.get(i).intValue();
 				// otherId is now the member to call
-
-				log.debug(SYNC_START.getMarker(), "{} about to call {}",
-						selfId, otherId);
 
 				// get the existing connection, or null if none. Do NOT try to recreate a broken connection
 				conn = platform.getSyncClient().getExistingCallerConn(otherId);
@@ -208,25 +242,27 @@ class SyncCaller implements Runnable {
 					continue;
 				}
 
-				log.debug(SYNC_START.getMarker(),
+				log.debug(reconnected ? RECONNECT.getMarker() : SYNC_START.getMarker(),
 						"{} about to call {} (connection looks good)", selfId,
 						otherId);
-				log.debug(HEARTBEAT.getMarker(),
+
+				log.debug(reconnected ? RECONNECT.getMarker() : HEARTBEAT.getMarker(),
 						"about to lock platform[{}].syncServer.lockCallListen[{}] and lockCallHeartbeat",
 						platform.getSelfId(), otherId);
 
-				LoggingReentrantLock lockCallListen = platform.getSyncServer().lockCallListen
-						.get(otherId);
-				LoggingReentrantLock lockCallHeartbeat = platform.getSyncServer().lockCallHeartbeat
-						.get(otherId);
+
+				final ReentrantLock lockCallListen = platform.getSyncServer().lockCallListen.get(otherId);
+				final ReentrantLock lockCallHeartbeat = platform.getSyncServer().lockCallHeartbeat.get(otherId);
 
 				// Try to get both locks. If either is unavailable, then try the next node. Never block.
-				if (!lockCallListen.tryLock("SyncCaller.callRequestSync 1")) {
+				if (!lockCallListen.tryLock()) {
 					continue;
 				}
-				log.debug(HEARTBEAT.getMarker(),
+
+				log.debug(reconnected ? RECONNECT.getMarker() : HEARTBEAT.getMarker(),
 						"locked platform[{}].syncServer.lockCallListen[{}]",
 						platform.getSelfId(), otherId);
+
 				try {
 					// Ensure SyncCaller and heartbeat takes turns on this socket.
 					// So block forever until this lock can be obtained. But it will
@@ -235,74 +271,81 @@ class SyncCaller implements Runnable {
 					// be holding it, and it holds it for a VERY short time, at fairly long intervals (much
 					// less
 					// than 1% of the time).
-					if (!lockCallHeartbeat
-							.tryLock("SyncCaller.callRequestSync 3")) {
+					if (!lockCallHeartbeat.tryLock()) {
 						continue;
 					}
-					log.debug(HEARTBEAT.getMarker(),
-							"locked platform[{}].syncServer.lockCallHeartbeat[{}]",
-							platform.getSelfId(), otherId);
+
 					try {
+						log.debug(HEARTBEAT.getMarker(),
+								"locked platform[{}].syncServer.lockCallHeartbeat[{}]",
+								platform.getSelfId(), otherId);
+
 						// Check again in case the heartbeat thread closed the connection while waiting for
 						// lock. The above check was for efficiency, but this one is the important check.
 						conn = platform.getSyncClient()
 								.getExistingCallerConn(otherId);
 						if (conn != null && conn.connected()) {
 							// try to initiate a sync. If they accept the request, then sync
-							lockCallHeartbeat.setNote("about to sync");
 							platform.getSyncServer().numSyncs.incrementAndGet(); // matching decr in finally
 							try {
-								log.debug(SYNC_SGM.getMarker(), " `SyncCaller: entering `SyncUtils.sync`");
-								syncAccepted = SyncUtils.sync(conn, true,
-										false);
+								final boolean ignored = false;
+								syncAccepted = NodeSynchronizerImpl.synchronize(conn, true, ignored, reconnected);
+								if (reconnected) {
+									log.debug(RECONNECT.getMarker(),
+											"`callRequestSync` : {} synced with {} ? {}",
+											selfId,
+											otherId,
+											syncAccepted);
+								}
 								if (syncAccepted) {
 									break;
 								}
+
 							} catch (IOException e) {
 								// IOException covers both SocketTimeoutException and EOFException, plus more
 								log.error(SOCKET_EXCEPTIONS.getMarker(),
 										"SyncCaller.sync SocketException (so incrementing iCSyncPerSec) while {} " +
 												"listening for {}:",
 										platform.getSelfId(), otherId, e);
-								if (conn != null) {
-									// close the connection, don't reconnect until needed.
-									conn.disconnect(true, 1);
-								}
+
+								// close the connection, don't reconnect until needed.
+								conn.disconnect(true, 1);
 							} catch (Exception e) {
 								log.error(EXCEPTION.getMarker(),
 										"! SyncCaller.sync Exception (so incrementing iCSyncPerSec) while {} " +
 												"listening for {}:",
 										platform.getSelfId(), otherId, e);
-								if (conn != null) {
-									// close the connection, don't reconnect until needed.
-									conn.disconnect(true, 2);
-								}
+
+								// close the connection, don't reconnect until needed.
+								conn.disconnect(true, 2);
 							} finally {
 								platform.getSyncServer().numSyncs.decrementAndGet();
 							}
-							lockCallHeartbeat.setNote("finished sync");
 						}
 					} finally {
-						lockCallHeartbeat
-								.unlock("SyncCaller.callRequestSync 4");
-						log.debug(HEARTBEAT.getMarker(),
+						lockCallHeartbeat.unlock();
+
+						log.debug(reconnected ? RECONNECT.getMarker() : HEARTBEAT.getMarker(),
 								"SyncCaller unlocked platform[{}].syncServer.lockCallHeartbeat[{}]",
 								platform.getSelfId(), otherId);
+
 					}
 				} finally {
-					lockCallListen.unlock("SyncCaller.callRequestSync 2");
-					log.debug(HEARTBEAT.getMarker(),
+					lockCallListen.unlock();
+
+					log.debug(reconnected ? RECONNECT.getMarker() : HEARTBEAT.getMarker(),
 							"SyncCaller unlocked platform[{}].syncServer.lockCallListen[{}]",
 							platform.getSelfId(), otherId);
+
 				}
 			}
+
 			if (syncAccepted) {
 				platform.getSyncManager().successfulSync();
 				return otherId;
 			} else {
 				return -1;
 			}
-
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 
@@ -328,24 +371,66 @@ class SyncCaller implements Runnable {
 		}
 	}
 
-	private boolean doReconnect() throws InterruptedException {
-		// if reconnect is off, die
-		if (!Settings.reconnect.isActive()) {
+	/**
+	 * The state used to reconnect may not be hashed.
+	 */
+	private static void hashStateForReconnect(final State workingState) {
+		try {
+			CryptoFactory.getInstance().digestTreeAsync(workingState).get();
+		} catch (ExecutionException e) {
+			log.error(EXCEPTION.getMarker(), () -> new ReconnectFailurePayload(
+					"Error encountered while hashing state for reconnect",
+					ReconnectFailurePayload.CauseOfFailure.ERROR).toString(), e);
+			throw new ReconnectException(e);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			log.error(EXCEPTION.getMarker(), () -> new ReconnectFailurePayload(
+					"Interrupted while attempting to hash state",
+					ReconnectFailurePayload.CauseOfFailure.ERROR).toString(), e);
+		}
+	}
 
-			log.debug(EXCEPTION.getMarker(), () -> new UnableToReconnectPayload(
-					"Node has fallen behind, will die", platform.getSelfId().getIdAsInt()).toString());
-			System.exit(0);
+	/**
+	 * Check if a reconnect is currently allowed. If not then kill the node.
+	 */
+	private void exitIfReconnectIsDisabled() {
+
+		if (!Settings.reconnect.isActive()) {
+			log.warn(STARTUP.getMarker(), () -> new UnableToReconnectPayload(
+					"Node has fallen behind, reconnect is disabled, will die",
+					platform.getSelfId().getIdAsInt()).toString());
+			Browser.exitSystem(SystemExitReason.BEHIND_RECONNECT_DISABLED);
 		}
 
-		log.debug(RECONNECT.getMarker(),
-				"{} has fallen behind, will stop and clear EventFlow and Hashgraph",
+		if (Settings.reconnect.getReconnectWindowSeconds() >= 0 &&
+				Settings.reconnect.getReconnectWindowSeconds() < StartupTime.getTimeSinceStartup().toSeconds()) {
+			log.warn(STARTUP.getMarker(), () -> new UnableToReconnectPayload(
+					"Node has fallen behind, reconnect is disabled outside of time window, will die",
+					platform.getSelfId().getIdAsInt()).toString());
+			Browser.exitSystem(SystemExitReason.BEHIND_RECONNECT_DISABLED);
+		}
+	}
+
+	/**
+	 * Called to initiate the reconnect attempt by the {@link #callRequestSync()} method.
+	 *
+	 * @return true if the reconnect attempt completed successfully; otherwise false
+	 */
+	private boolean doReconnect() {
+		exitIfReconnectIsDisabled();
+
+		log.info(RECONNECT.getMarker(),
+				"{} has fallen behind, will stop and clear EventFlow, Hashgraph, and ShadowGraph",
 				platform.getSelfId());
 
-		platform.getHashgraph().clear();
+		platform.getIntakeQueue().clear();
 
-		// clear RunningHashCalculator after finish clearing Hashgraph
-		// to make sure that for forRunningHash is empty during reconnect
-		platform.getRunningHashCalculator().stopAndClear();
+		platform.getEventMapper().clear();
+		platform.getSyncShadowGraphManager().clear();
+
+		log.info(RECONNECT.getMarker(),
+				"{} has fallen behind, Hashgraph and shadow graph are now cleared",
+				platform.getSelfId());
 
 		// clear EventFlow after finish clearing RunningHashCalculator,
 		// to make sure that forCons queue is empty during reconnect
@@ -353,125 +438,216 @@ class SyncCaller implements Runnable {
 
 		SyncConnection conn;
 		List<Long> reconnectNeighbors = platform.getSyncManager().getNeighborsForReconnect();
-		log.debug(RECONNECT.getMarker(),
+		log.info(RECONNECT.getMarker(),
 				"{} has fallen behind, will try to reconnect with {}",
 				platform::getSelfId, reconnectNeighbors::toString);
 
-		SwirldState runningState = platform.getEventFlow().getConsensusState();
-		// We create a short lived signed state for the purposes of reconnect
-		SignedState tmpSignedState = new SignedState(runningState);
-		// we need to make sure that our current state has all the hashes
-		CryptoFactory.getInstance().digestTreeAsync(tmpSignedState);
+		final State workingState = platform.getEventFlow().getConsensusState();
 
-		for (Long neighborId : reconnectNeighbors) {
-			// get the existing connection, or null if none. Do NOT try to recreate a broken connection
-			conn = platform.getSyncClient().getExistingCallerConn(neighborId.intValue());
-			if (conn == null || !conn.connected()) {
-				// if we're not connected, try someone else
-				continue;
-			}
-			LoggingReentrantLock lockCallHeartbeat = platform.getSyncServer().lockCallHeartbeat
-					.get(neighborId.intValue());
-			// try to get the lock, it should be available if we have fallen behind
-			if (!lockCallHeartbeat.tryLock("SyncCaller.doReconnect 1")) {
-				continue;
-			}
-			SignedState signedState = null;
-			try {
-				log.debug(RECONNECT.getMarker(), () -> new ReconnectStartPayload(
-						"Starting reconnect in role of the receiver.",
-						true,
-						platform.getSelfId().getIdAsInt(),
-						neighborId.intValue(),
-						platform.getSignedStateManager().getLastCompleteRound()).toString());
+		// Reserve the state
+		workingState.incrementReferenceCount();
 
-				ReconnectReceiver reconnect =
-						new ReconnectReceiver(conn, addressBook, tmpSignedState, platform.getCrypto());
-				reconnect.execute();
-				signedState = reconnect.getSignedState();
-				final long lastRoundReceived = signedState.getLastRoundReceived();
+		// Hash the state if it has not yet been hashed
+		hashStateForReconnect(workingState);
 
-				log.debug(RECONNECT.getMarker(), () -> new ReconnectFinishPayload(
-						"Finished reconnect in the role of the receiver.",
-						true,
-						platform.getSelfId().getIdAsInt(),
-						neighborId.intValue(),
-						lastRoundReceived).toString());
-
-				log.debug(RECONNECT.getMarker(),
-						"signed state events:\n{}", EventUtils.toShortStrings(signedState.getEvents()));
-			} catch (Exception e) {
-				if (Utilities.isOrCausedBySocketException(e)) {
-					log.error(SOCKET_EXCEPTIONS.getMarker(), () -> new ReconnectFailurePayload(
-							"Got socket exception while receiving a signed state!",
-							true).toString(), e);
-				} else {
-					log.error(EXCEPTION.getMarker(), () -> new ReconnectFailurePayload(
-							"Error while receiving a signed state!",
-							false).toString(), e);
+		try {
+			for (Long neighborId : reconnectNeighbors) {
+				// get the existing connection, or null if none. Do NOT try to recreate a broken connection
+				conn = platform.getSyncClient().getExistingCallerConn(neighborId.intValue());
+				if (conn == null || !conn.connected()) {
+					// if we're not connected, try someone else
+					continue;
 				}
-				// if we failed to receive a state from this node, we will try the next one
-				continue;
-			} finally {
-				lockCallHeartbeat
-						.unlock("SyncCaller.doReconnect 2");
-				// we are now done with the temporary signed state, so we delete it
-				tmpSignedState.release();
-			}
-
-			// the state was received, so now we load it's data into different objects
-			try {
-
-				// Inject a self signature
-				final byte[] signature = platform.getCrypto().sign(signedState.getHash().getValue());
-				final SigInfo selfSigInfo = new SigInfo(signedState.getLastRoundReceived(),
-						platform.getSelfId().getIdAsInt(), signedState.getHash().getValue(), signature);
-				signedState.getSigSet().addSigInfo(selfSigInfo);
-
-				// The signed state will eventually be deleted, so we it will keep copy of the state we received, which
-				// will immutable. The mutable copy will be the consensus state
-				SwirldState consState = signedState.getState().copy();
-				if (consState.isImmutable()) {
-					throw new IllegalStateException("copy is not mutable");
+				final ReentrantLock lockCallHeartbeat = platform.getSyncServer().lockCallHeartbeat.get(
+						neighborId.intValue());
+				// try to get the lock, it should be available if we have fallen behind
+				if (!lockCallHeartbeat.tryLock()) {
+					continue;
 				}
 
-				consState.init(platform, addressBook);
+				final SignedState signedState;
 
-				platform.getSignedStateManager().addCompleteSignedState(signedState, false);
-				platform.getHashgraph().loadFromSignedState(signedState);
-
-				platform.getEventFlow().setState(consState);
-				platform.getEventFlow().loadDataFromSignedState(signedState, true);
-
-				// This was added to support writing signed state JSON files after every reconnect
-				// This is enabled/disabled via settings and is disabled by default
-				platform.getSignedStateManager().jsonifySignedState(signedState, StateDumpSource.RECONNECT);
-
-				// Notify any listeners that the reconnect has been completed
 				try {
-					signedState.reserveState();
-					NotificationFactory.getEngine().dispatch(
-							ReconnectCompleteListener.class,
-							new ReconnectCompleteNotification(signedState.getLastRoundReceived(),
-									signedState.getConsensusTimestamp(), signedState.getState())
-					);
+					signedState = receiveStateFromNeighbor(neighborId, conn, workingState);
+
+					if (signedState == null) {
+						// The other node was unwilling to help this node to reconnect or the connection was broken
+						continue;
+					}
+				} catch (Exception e) {
+					if (Utilities.isOrCausedBySocketException(e)) {
+						log.error(SOCKET_EXCEPTIONS.getMarker(), () -> new ReconnectFailurePayload(
+								"Got socket exception while receiving a signed state!",
+								ReconnectFailurePayload.CauseOfFailure.SOCKET).toString(), e);
+					} else {
+						log.error(EXCEPTION.getMarker(), () -> new ReconnectFailurePayload(
+								"Error while receiving a signed state!",
+								ReconnectFailurePayload.CauseOfFailure.ERROR).toString(), e);
+						conn.disconnect(true, 0);
+					}
+
+					failedReconnectsInARow++;
+					if (failedReconnectsInARow >= Settings.reconnect.getMaximumReconnectFailuresBeforeShutdown()) {
+						log.error(EXCEPTION.getMarker(), "Too many reconnect failures in a row, killing node");
+						System.exit(1);
+					}
+
+					// if we failed to receive a state from this node, we will try the next one
+					continue;
 				} finally {
-					signedState.releaseState();
+					lockCallHeartbeat.unlock();
 				}
-				platform.getEventFlow().startAll();
-				platform.getRunningHashCalculator().startCalcRunningHashThread();
-				platform.getSyncManager().resetFallenBehind();
-			} catch (Exception e) {
-				log.error(EXCEPTION.getMarker(), () -> new ReconnectLoadFailurePayload(
-						"Error while loading a received SignedState!").toString(), e);
-				// this means we need to start the reconnect process from the beginning
-				return false;
+
+				log.debug(RECONNECT.getMarker(), "{} `doReconnect` : finished, found peer node {}",
+						platform.getSelfId(),
+						conn.getOtherId());
+
+				failedReconnectsInARow = 0;
+
+				return reloadState(signedState);
 			}
-			// if everything was done with no exceptions, return true
-			return true;
+
+			log.debug(RECONNECT.getMarker(), "{} `doReconnect` : finished, no peer nodes found",
+					platform.getSelfId());
+
+			// if no nodes were found to reconnect with, return false
+			return false;
+		} finally {
+			workingState.decrementReferenceCount();
 		}
-		// if no nodes were found to reconnect with, return false
-		return false;
+	}
+
+	/**
+	 * Attempts to receive a new signed state by reconnecting with the specified neighbor.
+	 *
+	 * @param neighborId
+	 * 		the id of the neighbor from which to initiate reconnect
+	 * @param conn
+	 * 		the sync connection to use for the reconnect attempt
+	 * @param initialState
+	 * 		the initial signed state against which to perform a delta based reconnect
+	 * @return the signed state received from the neighbor if the other node is willing to reconnect,
+	 * 		or null if the other node is not willing to reconnect
+	 * @throws ReconnectException
+	 * 		if any error occurs during the reconnect attempt
+	 */
+	private SignedState receiveStateFromNeighbor(
+			final Long neighborId,
+			final SyncConnection conn,
+			final State initialState) throws ReconnectException {
+		SignedState signedState;
+
+		log.info(RECONNECT.getMarker(), () -> new ReconnectStartPayload(
+				"Starting reconnect in role of the receiver.",
+				true,
+				platform.getSelfId().getIdAsInt(),
+				neighborId.intValue(),
+				platform.getSignedStateManager().getLastCompleteRound()).toString());
+
+		ReconnectReceiver reconnect =
+				new ReconnectReceiver(conn, addressBook, initialState, platform.getCrypto(),
+						Settings.reconnect.getAsyncInputStreamTimeoutMilliseconds());
+
+		final boolean reconnectWasAttempted = reconnect.execute();
+		if (!reconnectWasAttempted) {
+			return null;
+		}
+
+		signedState = reconnect.getSignedState();
+		final long lastRoundReceived = signedState.getLastRoundReceived();
+
+		log.info(RECONNECT.getMarker(), () -> new ReconnectFinishPayload(
+				"Finished reconnect in the role of the receiver.",
+				true,
+				platform.getSelfId().getIdAsInt(),
+				neighborId.intValue(),
+				lastRoundReceived).toString());
+
+		log.info(RECONNECT.getMarker(),
+				"signed state events:\n{}", EventUtils.toShortStrings(signedState.getEvents()));
+
+		return signedState;
+	}
+
+	/**
+	 * Used by the {@link #doReconnect()} method to load the state received from the sender.
+	 *
+	 * @param signedState
+	 * 		the signed state that was received from the sender
+	 * @return true if the state was successfully loaded; otherwise false
+	 */
+	private boolean reloadState(final SignedState signedState) {
+		log.debug(RECONNECT.getMarker(), "{} `reloadState` : reloading state", platform.getSelfId());
+
+		// if the received state is null then we have failed to reconnect and must retry
+		if (signedState == null) {
+			return false;
+		}
+
+		// the state was received, so now we load it's data into different objects
+		try {
+
+			// Inject a self signature
+			final byte[] signature = platform.getCrypto().sign(signedState.getStateHashBytes());
+			final SigInfo selfSigInfo = new SigInfo(signedState.getLastRoundReceived(),
+					platform.getSelfId().getIdAsInt(), signedState.getStateHashBytes(), signature);
+			signedState.getSigSet().addSigInfo(selfSigInfo);
+
+			// The signed state will eventually be deleted, so we it will keep copy of the state we received, which
+			// will immutable. The mutable copy will be the consensus state
+			State consState = signedState.getState().copy();
+			platform.getEventFlow().setState(consState);
+
+			consState.getSwirldState().init(platform, addressBook.copy());
+
+			platform.getSignedStateManager().addCompleteSignedState(signedState, false);
+			platform.loadIntoConsensusAndEventIntake(signedState);
+
+			platform.getEventFlow().loadDataFromSignedState(signedState, true);
+
+			// This was added to support writing signed state JSON files after every reconnect
+			// This is enabled/disabled via settings and is disabled by default
+			platform.getSignedStateManager().jsonifySignedState(signedState, StateDumpSource.RECONNECT);
+
+			// Notify any listeners that the reconnect has been completed
+			try {
+				signedState.reserveState();
+				NotificationFactory.getEngine().dispatch(
+						ReconnectCompleteListener.class,
+						new ReconnectCompleteNotification(signedState.getLastRoundReceived(),
+								signedState.getConsensusTimestamp(), signedState.getState().getSwirldState()));
+			} finally {
+				signedState.releaseState();
+			}
+
+			log.debug(RECONNECT.getMarker(),
+					"{} `reloadState` : reloading state, finished. Restarting threads",
+					platform.getSelfId());
+			platform.getEventFlow().startAll();
+			log.debug(RECONNECT.getMarker(),
+					"{} `reloadState` : Restarting threads, finished. Resetting fallen-behind",
+					platform.getSelfId());
+			platform.getSyncManager().resetFallenBehind();
+			log.debug(RECONNECT.getMarker(),
+					"{} `reloadState` : Resetting fallen-behind, finished",
+					platform.getSelfId());
+		} catch (Exception e) {
+			log.error(EXCEPTION.getMarker(), () -> new ReconnectLoadFailurePayload(
+					"Error while loading a received SignedState!").toString(), e);
+			// this means we need to start the reconnect process from the beginning
+			log.debug(RECONNECT.getMarker(),
+					"{} `reloadState` : reloading state, finished, failed, returning `false`: Restart the " +
+							"reconnection process",
+					platform.getSelfId());
+			return false;
+		}
+
+		log.debug(RECONNECT.getMarker(),
+				"{} `reloadState` : reloading state, finished, succeeded, returning `true`",
+				platform.getSelfId());
+
+		// if everything was done with no exceptions, return true
+		return true;
 	}
 
 	/** an enum that is used to determine the type of caller */

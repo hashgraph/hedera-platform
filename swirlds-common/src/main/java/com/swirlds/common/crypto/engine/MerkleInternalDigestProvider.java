@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -53,8 +53,11 @@ public class MerkleInternalDigestProvider extends
 			if (childHash == null) {
 				final MerkleNode childNode = node.getChild(index);
 				final String msg = String.format(
-						"Child has an unexpected null hash [ parentClass = '%s', childClass = '%s' ]",
-						node.getClass().getName(), childNode.getClass().getName());
+						"Child has an unexpected null hash " +
+								"[ parentClass = '%s', childClass = '%s', childRoute = %s ]",
+						node.getClass().getName(),
+						childNode.getClass().getName(),
+						childNode.getRoute());
 
 
 				log().trace(CryptoEngine.LOGM_TESTING_EXCEPTIONS, msg);

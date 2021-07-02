@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -35,6 +35,9 @@ public class MutationQueue<V> extends ConcurrentLinkedDeque<Mutation<V>> {
 	/**
 	 * Add a new mutation to the queue. If the version of this mutation matches the version of the most recent mutation
 	 * then simply update the most recent mutation.
+	 *
+	 * @param mutation
+	 * 		the new mutation to be added
 	 */
 	public void maybeAddLast(Mutation<V> mutation) {
 		Mutation<V> last = peekLast();
@@ -56,7 +59,7 @@ public class MutationQueue<V> extends ConcurrentLinkedDeque<Mutation<V>> {
 	}
 
 	/**
-	 * @return
+	 * @return whether this queue has been deleted
 	 */
 	public boolean isDeleted() {
 		return deleted;

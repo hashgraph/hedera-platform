@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -34,7 +34,7 @@ import java.time.Instant;
  * then the developer is responsible for making sure {@code SwirldMain} never changes the contents of that
  * array. Or the getter can simply return a deep copy of the array instead of the original.
  */
-public interface SwirldState extends MerkleNode, Archivable, FastCopyable<SwirldState> {
+public interface SwirldState extends Archivable, MerkleNode {
 
 	/**
 	 * Initialize everything to reflect the consensus state at the start of history, before any transactions
@@ -120,12 +120,11 @@ public interface SwirldState extends MerkleNode, Archivable, FastCopyable<Swirld
 	 * 		hasn't reached consensus yet)
 	 * @param trans
 	 * 		the transaction to handle, encoded any way the swirld app author chooses
-	 * @param address
-	 * 		this transaction is a request by member "id" to create a new member with this address
+	 * @param swirldDualState
+	 * 		current dualState object which can be read/written by the application
 	 */
 	void handleTransaction(long id, boolean isConsensus,
-			Instant timeCreated, Instant timestamp, Transaction trans,
-			Address address);
+			Instant timeCreated, Instant timestamp, SwirldTransaction trans, SwirldDualState swirldDualState);
 
 	/**
 	 * For a given SwirldState object, the Platform will call handleTransaction multiple times, then call
@@ -138,18 +137,18 @@ public interface SwirldState extends MerkleNode, Archivable, FastCopyable<Swirld
 	void noMoreTransactions();
 
 	/**
-	 * Called against a given {@link Transaction} only once and immediately after the event is added to the
-	 * hashgraph. This method may modify the given {@link Transaction} by doing nothing, adding additional
+	 * Called against a given {@link SwirldTransaction} only once and immediately after the event is added to the
+	 * hashgraph. This method may modify the given {@link SwirldTransaction} by doing nothing, adding additional
 	 * signatures, removing existing signatures, or replacing signatures with versions that expand the
 	 * public key from an application specific identifier to an actual public key. Additional signatures
 	 * extracted from the transaction payload can also be added to the list of signatures to be verified.
 	 *
 	 * @param trans
 	 * 		the transaction for which signature expansion should occur
-	 * @see Transaction
+	 * @see SwirldTransaction
 	 * @see TransactionSignature
 	 */
-	void expandSignatures(Transaction trans);
+	void expandSignatures(SwirldTransaction trans);
 
 	/**
 	 * {@inheritDoc}
@@ -160,6 +159,12 @@ public interface SwirldState extends MerkleNode, Archivable, FastCopyable<Swirld
 	@Override
 	default void archive() {
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	SwirldState copy();
 
 	/**
 	 * Normally, an app must define a state class that implements SwirldState. The Platform then sends

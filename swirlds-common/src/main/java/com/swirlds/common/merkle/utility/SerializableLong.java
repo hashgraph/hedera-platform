@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -22,7 +22,7 @@ import com.swirlds.common.io.SerializableDataOutputStream;
 import java.io.IOException;
 import java.util.Objects;
 
-public class SerializableLong implements FastCopyable<SerializableLong>, SelfSerializable {
+public class SerializableLong implements FastCopyable, SelfSerializable {
 
 	private static final long CLASS_ID = 0x70deca6058a40bc6L;
 

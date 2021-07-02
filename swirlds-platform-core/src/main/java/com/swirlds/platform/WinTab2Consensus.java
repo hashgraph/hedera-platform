@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -48,9 +48,9 @@ class WinTab2Consensus extends WinBrowser.PrePaintableJPanel {
 			AbstractPlatform platform = ((InfoMember) (WinBrowser.memberDisplayed)).platform;
 			String s = "";
 			s += platform.getPlatformName();
-			long r1 = platform.getHashgraph().getDeleteRound();
-			long r2 = platform.getHashgraph().getLastRoundDecided();
-			long r3 = platform.getHashgraph().getMaxRound();
+			long r1 = platform.getConsensus().getDeleteRound();
+			long r2 = platform.getConsensus().getLastRoundDecided();
+			long r3 = platform.getConsensus().getMaxRound();
 			long r0 = platform.getSignedStateManager().getLastCompleteRound();
 
 			if (r1 == -1) {

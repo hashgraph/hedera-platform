@@ -1,5 +1,5 @@
 <!--
-  ~ (c) 2016-2020 Swirlds, Inc.
+  ~ (c) 2016-2021 Swirlds, Inc.
   ~
   ~ This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
   ~ intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -21,7 +21,7 @@
 	<!-- Project Configuration -->
 	<groupId>com.swirlds</groupId>
 	<artifactId>swirlds-platform</artifactId>
-	<version>0.8.0-orvw.1</version>
+	<version>0.15.1-orvw.1</version>
 
 	<packaging>pom</packaging>
 
@@ -94,7 +94,7 @@
 
 		<!-- Code Analysis Plugins -->
 		<plugin.sonar.version>3.7.0.1746</plugin.sonar.version>
-		<plugin.jacoco.version>0.8.5</plugin.jacoco.version>
+		<plugin.jacoco.version>0.8.6</plugin.jacoco.version>
 
 		<!-- VCS Information Plugins -->
 		<plugin.git.commitid.version>4.0.2</plugin.git.commitid.version>
@@ -117,7 +117,7 @@
 
 		<!-- Maven CI/CD Utilities -->
 		<plugin.versions.maven.version>2.8.1</plugin.versions.maven.version>
-		<plugin.dependency.check.version>6.0.1</plugin.dependency.check.version>
+		<plugin.dependency.check.version>6.1.5</plugin.dependency.check.version>
 		<plugin.license.maven.version>4.0.rc2</plugin.license.maven.version>
 		<plugin.build.helper.version>3.2.0</plugin.build.helper.version>
 		<plugin.nexus.staging.version>1.6.8</plugin.nexus.staging.version>
@@ -133,23 +133,23 @@
 		<dep.commons.lang3.version>3.11</dep.commons.lang3.version>
 		<dep.commons.collections4.version>4.4</dep.commons.collections4.version>
 		<dep.slf4j.version>1.8.0-beta2</dep.slf4j.version>
-		<dep.bouncy.castle.version>1.66</dep.bouncy.castle.version>
+		<dep.bouncy.castle.version>1.68</dep.bouncy.castle.version>
 		<dep.hikaricp.version>3.3.1</dep.hikaricp.version>
 		<dep.postgresql.version>42.2.16</dep.postgresql.version>
 		<dep.flywaydb.version>5.2.4</dep.flywaydb.version>
 		<dep.javafx.version>12.0.2</dep.javafx.version>
-		<dep.lazysodium.version>4.3.0</dep.lazysodium.version>
-		<dep.jna.version>5.5.0</dep.jna.version>
-		<dep.libly.version>1.3.7</dep.libly.version>
+		<dep.lazysodium.version>5.0.1</dep.lazysodium.version>
+		<dep.jna.version>5.8.0</dep.jna.version>
 		<dep.jocl.version>2.0.2</dep.jocl.version>
 		<dep.classgraph.version>4.8.65</dep.classgraph.version>
 
 		<!-- Test Dependencies -->
 		<dep.junit.jupiter.version>5.5.0-M1</dep.junit.jupiter.version>
-
+		<dep.mockito.version>3.7.7</dep.mockito.version>
 
 		<!-- SonarCloud Properties -->
 		<sonar.jacoco.path>target/site/jacoco-aggregate/jacoco.xml</sonar.jacoco.path>
+		<sonar.jacoco.alt.path>target/site/jacoco/jacoco.xml</sonar.jacoco.alt.path>
 		<sonar.organization>swirlds</sonar.organization>
 		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
 		<sonar.language>java</sonar.language>
@@ -157,34 +157,18 @@
 
 		<sonar.coverage.jacoco.xmlReportPaths>
 			${sonar.jacoco.path},
+			${project.basedir}/../regression/${sonar.jacoco.path},
+			${project.basedir}/../platform-apps/tests/PlatformTestingTool/${sonar.jacoco.path},
 			${project.basedir}/../swirlds-platform-core/${sonar.jacoco.path},
 			${project.basedir}/../swirlds-fchashmap/${sonar.jacoco.path},
 			${project.basedir}/../swirlds-unit-tests/common/swirlds-common-test/${sonar.jacoco.path},
 			${project.basedir}/../swirlds-unit-tests/common/swirlds-logging-test/${sonar.jacoco.path},
 			${project.basedir}/../swirlds-unit-tests/core/swirlds-platform-test/${sonar.jacoco.path},
+			${project.basedir}/../swirlds-unit-tests/core/swirlds-platform-test/${sonar.jacoco.alt.path},
 			${project.basedir}/../swirlds-unit-tests/structures/swirlds-fcmap-test/${sonar.jacoco.path},
 			${project.basedir}/../swirlds-unit-tests/structures/swirlds-fcqueue-test/${sonar.jacoco.path}
 		</sonar.coverage.jacoco.xmlReportPaths>
 	</properties>
-
-	<repositories>
-		<repository>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
-			<id>libly</id>
-			<name>libly-bintray</name>
-			<url>https://dl.bintray.com/libly/maven</url>
-		</repository>
-		<repository>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
-			<id>jcenter</id>
-			<name>jcenter-bintray</name>
-			<url>https://jcenter.bintray.com</url>
-		</repository>
-	</repositories>
 
 	<!-- Profiles -->
 	<profiles>
@@ -388,14 +372,9 @@
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-source-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>attach-sources</id>
-								<goals>
-									<goal>jar-no-fork</goal>
-								</goals>
-							</execution>
-						</executions>
+						<configuration>
+							<skipSource>true</skipSource>
+						</configuration>
 					</plugin>
 				</plugins>
 			</build>
@@ -623,7 +602,7 @@
 
 			<!-- LazySodium -->
 			<dependency>
-				<groupId>com.goterl.lazycode</groupId>
+				<groupId>com.goterl</groupId>
 				<artifactId>lazysodium-java</artifactId>
 				<version>${dep.lazysodium.version}</version>
 			</dependency>
@@ -632,12 +611,6 @@
 				<groupId>net.java.dev.jna</groupId>
 				<artifactId>jna</artifactId>
 				<version>${dep.jna.version}</version>
-			</dependency>
-
-			<dependency>
-				<groupId>co.libly</groupId>
-				<artifactId>resource-loader</artifactId>
-				<version>${dep.libly.version}</version>
 			</dependency>
 
 			<!-- JOCL -->
@@ -661,6 +634,14 @@
 				<version>${dep.junit.jupiter.version}</version>
 				<type>pom</type>
 				<scope>import</scope>
+			</dependency>
+
+			<!-- Mockito -->
+			<dependency>
+				<groupId>org.mockito</groupId>
+				<artifactId>mockito-core</artifactId>
+				<version>${dep.mockito.version}</version>
+				<scope>test</scope>
 			</dependency>
 
 		</dependencies>
@@ -809,6 +790,7 @@
 						<serverId>ossrh</serverId>
 						<nexusUrl>https://oss.sonatype.org/</nexusUrl>
 						<autoReleaseAfterClose>false</autoReleaseAfterClose>
+						<stagingProgressTimeoutMinutes>15</stagingProgressTimeoutMinutes>
 					</configuration>
 				</plugin>
 				<plugin>
@@ -847,6 +829,7 @@
 						<id>jacoco-report</id>
 						<phase>verify</phase>
 						<goals>
+							<goal>report</goal>
 							<goal>report-aggregate</goal>
 						</goals>
 					</execution>
@@ -972,6 +955,9 @@
 					<nugetconfAnalyzerEnabled>false</nugetconfAnalyzerEnabled>
 					<nuspecAnalyzerEnabled>false</nuspecAnalyzerEnabled>
 					<swiftPackageManagerAnalyzerEnabled>false</swiftPackageManagerAnalyzerEnabled>
+					<!-- Temporary Fix for NIST NVD data feed corruption -->
+					<cveUrlModified>https://freedumbytes.gitlab.io/setup/nist-nvd-mirror/nvdcve-1.1-modified.json.gz</cveUrlModified>
+					<cveUrlBase>https://freedumbytes.gitlab.io/setup/nist-nvd-mirror/nvdcve-1.1-%d.json.gz</cveUrlBase>
 				</configuration>
 			</plugin>
 		</plugins>

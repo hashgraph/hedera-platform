@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -110,9 +110,7 @@ class WinTabNetwork extends WinBrowser.PrePaintableJPanel {
 	 */
 	void goTab(int n) {
 		requestFocus(true);
-		// tabbed.getSelectedComponent().setVisible(false);
 		tabbed.setSelectedIndex(n);
-		// tabbed.getSelectedComponent().setVisible(true);
 		WinBrowser.prePaintThenRepaint();
 	}
 }

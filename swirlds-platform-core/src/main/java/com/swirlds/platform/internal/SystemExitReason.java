@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -18,7 +18,11 @@ public enum SystemExitReason {
 	BROWSER_WINDOW_CLOSED(0),
 	SAVED_STATE_NOT_LOADED(200),
 	STATE_RECOVER_FINISHED(0),
-	SWIRLD_MAIN_THREW_EXCEPTION(201);
+	SWIRLD_MAIN_THREW_EXCEPTION(201),
+	/**
+	 * This node has fallen behind but can not reconnect due to policy.
+	 */
+	BEHIND_RECONNECT_DISABLED(202);
 
 	private int exitCode;
 

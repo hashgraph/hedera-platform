@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -86,8 +86,8 @@ public class NodeDataMessage implements Releasable, SelfSerializable {
 		out.writeLong(node.getClassId());
 		out.writeInt(node.getVersion());
 
-		if (node instanceof MerkleLeaf) {
-			((MerkleLeaf) node).serialize(out);
+		if (node.isLeaf()) {
+			node.asLeaf().serialize(out);
 		} else {
 			out.writeSerializableList(childHashes, true, true);
 		}
@@ -121,10 +121,10 @@ public class NodeDataMessage implements Releasable, SelfSerializable {
 		}
 
 		if (node instanceof MerkleLeaf) {
-			((MerkleLeaf) node).deserialize(in, nodeVersion);
+			node.asLeaf().deserialize(in, nodeVersion);
 		} else {
 			try {
-				childHashes = in.readSerializableList(MerkleInternal.MAX_CHILD_COUNT, true, Hash::new);
+				childHashes = in.readSerializableList(MerkleInternal.MAX_CHILD_COUNT_UBOUND, true, Hash::new);
 			} catch (Exception e) {
 				throw new IOException(
 						String.format(
@@ -138,7 +138,7 @@ public class NodeDataMessage implements Releasable, SelfSerializable {
 
 	protected void gatherChildHashes() throws MerkleSynchronizationException {
 		childHashes = new LinkedList<>();
-		MerkleInternal internal = (MerkleInternal) node;
+		final MerkleInternal internal = node.cast();
 		for (int childIndex = 0; childIndex < internal.getNumberOfChildren(); childIndex++) {
 			MerkleNode child = internal.getChild(childIndex);
 			if (child == null) {

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -59,5 +59,17 @@ public abstract class ByteUtils {
 		data[pos + 5] = (byte) (value >> (8 * 2));
 		data[pos + 6] = (byte) (value >> (8 * 1));
 		data[pos + 7] = (byte) (value >> (8 * 0));
+	}
+
+	/**
+	 * Convert an int to a byte array, little endian.
+	 *
+	 * @param i
+	 * 		the int to convert
+	 * @return the byte array
+	 */
+	public static byte[] intToBytes(int i) {
+		return new byte[] { (byte) i, (byte) (i >> 8), (byte) (i >> 16),
+				(byte) (i) };
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,11 +14,11 @@
 
 package com.swirlds.common.crypto.engine;
 
-import com.goterl.lazycode.lazysodium.LazySodiumJava;
-import com.goterl.lazycode.lazysodium.SodiumJava;
-import com.goterl.lazycode.lazysodium.interfaces.Sign;
-import com.swirlds.common.crypto.TransactionSignature;
+import com.goterl.lazysodium.LazySodiumJava;
+import com.goterl.lazysodium.SodiumJava;
+import com.goterl.lazysodium.interfaces.Sign;
 import com.swirlds.common.crypto.SignatureType;
+import com.swirlds.common.crypto.TransactionSignature;
 
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
@@ -30,7 +30,8 @@ import static com.swirlds.common.CommonUtils.hex;
  * Implementation of a Ed25519 signature verification provider. This implementation only supports Ed25519 signatures and
  * depends on LazySodium (libSodium) for all operations.
  */
-public class VerificationProvider extends OperationProvider<TransactionSignature, Void, Boolean, Sign.Native, SignatureType> {
+public class VerificationProvider extends OperationProvider<TransactionSignature, Void, Boolean, Sign.Native,
+		SignatureType> {
 
 	private static final Sign.Native algorithm;
 
@@ -58,7 +59,7 @@ public class VerificationProvider extends OperationProvider<TransactionSignature
 	 * 		the public key used to verify the signature
 	 * @return true if the provided signature is valid; false otherwise
 	 */
-	private boolean compute(final byte[] message, final byte[] signature,
+	protected boolean compute(final byte[] message, final byte[] signature,
 			final byte[] publicKey) {
 		return compute(message, signature, publicKey, SignatureType.ED25519);
 	}
@@ -76,7 +77,7 @@ public class VerificationProvider extends OperationProvider<TransactionSignature
 	 * 		the public key used to verify the signature
 	 * @return true if the provided signature is valid; false otherwise
 	 */
-	private boolean compute(final byte[] message, final byte[] signature, final byte[] publicKey,
+	protected boolean compute(final byte[] message, final byte[] signature, final byte[] publicKey,
 			final SignatureType algorithmType) {
 		final Sign.Native algorithm = loadAlgorithm(algorithmType);
 		return compute(algorithm, algorithmType, message, signature, publicKey);

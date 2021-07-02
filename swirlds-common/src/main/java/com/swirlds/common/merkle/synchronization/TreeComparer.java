@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -24,19 +24,24 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 
-import static com.swirlds.common.merkle.synchronization.TreeComparer.MerkleNodeDiffReason.*;
+import static com.swirlds.common.merkle.synchronization.TreeComparer.MerkleNodeDiffReason.CHILD_COUNT;
+import static com.swirlds.common.merkle.synchronization.TreeComparer.MerkleNodeDiffReason.CLASS_DIFFERENT;
+import static com.swirlds.common.merkle.synchronization.TreeComparer.MerkleNodeDiffReason.DIFF_TYPE;
+import static com.swirlds.common.merkle.synchronization.TreeComparer.MerkleNodeDiffReason.HASH_DIFF;
+import static com.swirlds.common.merkle.synchronization.TreeComparer.MerkleNodeDiffReason.ITERATOR_MISMATCH;
+import static com.swirlds.common.merkle.synchronization.TreeComparer.MerkleNodeDiffReason.NODE_NULL;
 
 public abstract class TreeComparer {
 
-	public static MerkleNodeDiff findNextDiff(Iterator<MerkleNode> it1, Iterator<MerkleNode> it2) {
+	public static MerkleNodeDiff findNextDiff(final Iterator<MerkleNode> it1, final Iterator<MerkleNode> it2) {
 		while (it1.hasNext()) {
 
 			if (!it2.hasNext()) {
 				return new MerkleNodeDiff(it1.next(), null, ITERATOR_MISMATCH);
 			}
 
-			MerkleNode node1 = it1.next();
-			MerkleNode node2 = it2.next();
+			final MerkleNode node1 = it1.next();
+			final MerkleNode node2 = it2.next();
 
 			if (node1 == null && node2 == null) {
 				continue;
@@ -58,13 +63,9 @@ public abstract class TreeComparer {
 				if (!Objects.equals(node1.getHash(), node2.getHash())) {
 					return new MerkleNodeDiff(node1, node2, HASH_DIFF);
 				}
-
-//				if (!Objects.equals(node1, node2)) {
-//					return new MerkleNodeDiff(node1, node2, NOT_EQUALS);
-//				}
 			} else {
-				MerkleInternal int1 = (MerkleInternal) node1;
-				MerkleInternal int2 = (MerkleInternal) node2;
+				final MerkleInternal int1 = node1.cast();
+				final MerkleInternal int2 = node2.cast();
 
 				if (int1.getNumberOfChildren() != int2.getNumberOfChildren()) {
 					return new MerkleNodeDiff(node1, node2, CHILD_COUNT);
@@ -76,13 +77,6 @@ public abstract class TreeComparer {
 		}
 
 		return null;
-	}
-
-	public static MerkleNodeDiff findFirstDiff(MerkleNode root1, MerkleNode root2) {
-		Iterator<MerkleNode> it1 = new MerkleBreadthFirstIterator<>(root1);
-		Iterator<MerkleNode> it2 = new MerkleBreadthFirstIterator<>(root2);
-
-		return findNextDiff(it1, it2);
 	}
 
 	private static class DiffIterator implements Iterator<MerkleNodeDiff> {
@@ -124,7 +118,7 @@ public abstract class TreeComparer {
 			if (next == null) {
 				throw new NoSuchElementException();
 			}
-			MerkleNodeDiff ret = next;
+			final MerkleNodeDiff ret = next;
 			next = null;
 			return ret;
 		}
@@ -154,8 +148,10 @@ public abstract class TreeComparer {
 		private final MerkleNode node2;
 		private final MerkleNodeDiffReason reason;
 
-		public MerkleNodeDiff(MerkleNode node1, MerkleNode node2,
-				MerkleNodeDiffReason reason) {
+		public MerkleNodeDiff(
+				final MerkleNode node1,
+				final MerkleNode node2,
+				final MerkleNodeDiffReason reason) {
 			this.node1 = node1;
 			this.node2 = node2;
 			this.reason = reason;

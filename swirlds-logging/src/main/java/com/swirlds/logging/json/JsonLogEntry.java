@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -81,6 +81,8 @@ public class JsonLogEntry {
 
 	/**
 	 * Get the timestamp of when the log message was written.
+	 *
+	 * @return the timestamp of when the log message was written
 	 */
 	public Instant getTimestamp() {
 		return timestamp;
@@ -88,6 +90,8 @@ public class JsonLogEntry {
 
 	/**
 	 * Get the name of the thread that wrote the message.
+	 *
+	 * @return the name of the thread that wrote the message
 	 */
 	public String getThread() {
 		return thread;
@@ -95,6 +99,8 @@ public class JsonLogEntry {
 
 	/**
 	 * Get the log level, e.g. "INFO", "ERROR", etc.
+	 *
+	 * @return the log level
 	 */
 	public String getLevel() {
 		return level;
@@ -102,6 +108,8 @@ public class JsonLogEntry {
 
 	/**
 	 * Get the name of the logger that wrote the message. Usually corresponds the class that is writing the log.
+	 *
+	 * @return the name of the logger that wrote the message
 	 */
 	public String getLoggerName() {
 		return loggerName;
@@ -109,6 +117,8 @@ public class JsonLogEntry {
 
 	/**
 	 * Get the name of the log marker used for this message.
+	 *
+	 * @return the name of the log marker used for this message
 	 */
 	public String getMarker() {
 		return marker;
@@ -116,6 +126,8 @@ public class JsonLogEntry {
 
 	/**
 	 * Check if there is an exception attached to this entry.
+	 *
+	 * @return whether there is an exception attached to this entry
 	 */
 	public boolean hasException() {
 		return exceptionType != null;
@@ -123,6 +135,8 @@ public class JsonLogEntry {
 
 	/**
 	 * Get the type of the exception, e.g. "java.lang.RuntimeException".
+	 *
+	 * @return the type of the exception
 	 */
 	public String getExceptionType() {
 		return exceptionType;
@@ -130,6 +144,8 @@ public class JsonLogEntry {
 
 	/**
 	 * Get the message contained by the exception.
+	 *
+	 * @return the message contained by the exception
 	 */
 	public String getExceptionMessage() {
 		return exceptionMessage;
@@ -137,6 +153,8 @@ public class JsonLogEntry {
 
 	/**
 	 * Get the payload of the log entry in its serialized form.
+	 *
+	 * @return the payload of the log entry in its serialized form
 	 */
 	public String getRawPayload() {
 		return payload;
@@ -147,6 +165,9 @@ public class JsonLogEntry {
 	 *
 	 * @param type
 	 * 		the expected type of the payload
+	 * @param <T>
+	 * 		type of the payload
+	 * @return the instantiated payload object
 	 */
 	public <T extends LogPayload> T getPayload(Class<T> type) {
 		return parsePayload(type, payload);

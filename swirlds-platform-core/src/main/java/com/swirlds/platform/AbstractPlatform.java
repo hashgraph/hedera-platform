@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,7 +14,6 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.Address;
 import com.swirlds.common.AddressBook;
 import com.swirlds.common.InvalidNodeIdException;
 import com.swirlds.common.NodeId;
@@ -22,13 +21,21 @@ import com.swirlds.common.Platform;
 import com.swirlds.common.SwirldMain;
 import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.Cryptography;
-import com.swirlds.common.events.Event;
+import com.swirlds.common.stream.EventStreamManager;
+import com.swirlds.common.threading.QueueThread;
+import com.swirlds.platform.components.CriticalQuorum;
+import com.swirlds.platform.components.EventMapper;
+import com.swirlds.platform.components.EventTaskCreator;
+import com.swirlds.platform.components.SwirldMainManager;
+import com.swirlds.platform.components.SystemTransactionHandler;
+import com.swirlds.platform.components.TransactionTracker;
+import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.internal.SignedStateLoadingException;
+import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.SignedStateManager;
+import com.swirlds.platform.sync.SyncShadowGraphManager;
 
-import java.time.Instant;
-
-public abstract class AbstractPlatform implements Platform {
+public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	/**
 	 * Returns the ID of the member running this Platform. This value will never change for the Platform
 	 * object.
@@ -63,20 +70,10 @@ public abstract class AbstractPlatform implements Platform {
 	abstract String getMainClassName();
 
 	/**
-	 * This is called just before an event is created, to give the Platform a chance to create any system
-	 * transactions that should be sent out immediately. It is similar to SwirldMain.preEvent, except that
-	 * the "app" is the Platform itself, and it will pass "true" for it being a system transaction.
-	 */
-	abstract void preEvent();
-
-	/**
 	 * {@inheritDoc}
 	 */
 	@Override
 	public abstract byte[] sign(byte[] data);
-
-	/** used to calculate Java hashes for HashMap keys that are cryptographic hashes */
-	abstract int getHashMapSeed();
 
 	/**
 	 * get the FreezeManager used by this platform
@@ -86,43 +83,18 @@ public abstract class AbstractPlatform implements Platform {
 	public abstract FreezeManager getFreezeManager();
 
 	/**
+	 * get the StartUpEventFrozenManager used by this platform
+	 *
+	 * @return The StartUpEventFrozenManager used by this platform
+	 */
+	abstract StartUpEventFrozenManager getStartUpEventFrozenManager();
+
+	/**
 	 * Returns the SignedStateFileManager used by this platform to manage signed state on disk
 	 *
 	 * @return the SignedStateFileManager
 	 */
 	abstract SignedStateFileManager getSignedStateFileManager();
-
-	/**
-	 * All system transactions are handled by calling this method. Platform.handleTransactions is the
-	 * equivalent of SwirldMain.handleTransaction, except that the "app" is the Platform itself.
-	 * <p>
-	 * Every system transaction is sent here twice, first with consensus being false, and again with
-	 * consensus being true. In other words, the platform will act like an app that implements SwirldState2
-	 * rather than an app implementing SwirldState.
-	 * <p>
-	 * This method is only called by the doCons thread in EventFlow. But it could have deadlock problems if
-	 * it tried to get a lock on Platform or Hashgraph while, for example, one of the syncing threads is
-	 * holding those locks and waiting for the forCons queue to not be full. So if this method is changed,
-	 * it should avoid that.
-	 *
-	 * @param creator
-	 * 		the ID number of the member who created this transaction
-	 * @param isConsensus
-	 * 		is this transaction's timeCreated and position in history part of the consensus?
-	 * @param timeCreated
-	 * 		the time when this transaction was first created and sent to the network, as claimed by
-	 * 		the member that created it (which might be dishonest or mistaken)
-	 * @param timestamp
-	 * 		the consensus timestamp for when this transaction happened (or an estimate of it, if it
-	 * 		hasn't reached consensus yet)
-	 * @param trans
-	 * 		the transaction to handle, encoded any way the swirld app author chooses
-	 * @param address
-	 * 		this transaction is a request by member "id" to create a new member with this address
-	 */
-	abstract void handleSystemTransaction(long creator, boolean isConsensus,
-			Instant timeCreated, Instant timestamp, Transaction trans,
-			Address address);
 
 	/**
 	 * @return The EventFlow object used by this platform
@@ -140,15 +112,33 @@ public abstract class AbstractPlatform implements Platform {
 	/**
 	 * Get the round number of the last event recovered from event stream file
 	 *
+	 * @return the round number of the last event recovered from event stream file
 	 */
 	public abstract long getRoundOfLastRecoveredEvent();
 
 	/**
-	 * get the hashgraph used by this platform
-	 *
-	 * @return the hashgraph used by this platform
+	 * @return the instance responsible for creating event tasks
 	 */
-	public abstract Hashgraph getHashgraph();
+	abstract EventTaskCreator getEventTaskCreator();
+
+	abstract EventMapper getEventMapper();
+
+	abstract QueueThread<EventIntakeTask> getIntakeQueue();
+
+	/**
+	 * @return the consensus object used by this platform
+	 */
+	abstract Consensus getConsensus();
+
+	/**
+	 * @return the object that tracks recent events created
+	 */
+	abstract CriticalQuorum getCriticalQuorum();
+
+	/**
+	 * @return the object that tracks user transactions in the hashgraph
+	 */
+	abstract TransactionTracker getTransactionTracker();
 
 	/**
 	 * Return the sync server used by this platform.
@@ -178,6 +168,11 @@ public abstract class AbstractPlatform implements Platform {
 	abstract SignedStateManager getSignedStateManager();
 
 	/**
+	 * @return the system transaction handler for this platform
+	 */
+	abstract SystemTransactionHandler getSystemTransactionHandler();
+
+	/**
 	 * @return the sync client for this platform
 	 */
 	abstract SyncClient getSyncClient();
@@ -191,14 +186,6 @@ public abstract class AbstractPlatform implements Platform {
 	 * @return the connection graph of all the connections in the network
 	 */
 	abstract RandomGraph getConnectionGraph();
-
-	/**
-	 * Looks for a saved state on disk and loads the latest one if any are found. This should be called before the
-	 * platform has started
-	 *
-	 * @return whether a saved state has been loaded from Disk
-	 */
-	abstract boolean loadSavedStateFromDisk() throws SignedStateLoadingException;
 
 	/**
 	 * Store the infoMember that has metadata about this (app,swirld,member) triplet. This also creates the
@@ -263,17 +250,19 @@ public abstract class AbstractPlatform implements Platform {
 	 * called by SignedStateMgr.newSelfSigned() to create the system transaction in which self signs a new
 	 * signed state.
 	 *
-	 * @param trans
+	 * @param systemTransaction
 	 * 		the new system transaction to be included in a future Event
 	 * @return true if successful, false otherwise
 	 */
-	public abstract boolean createSystemTransaction(byte[] trans);
+	public abstract boolean createSystemTransaction(final Transaction systemTransaction);
 
 	/**
 	 * Record a statistics value in the Statistics object
 	 *
 	 * @param statsType
+	 * 		type of this stats
 	 * @param value
+	 * 		value to be recorded
 	 */
 	public abstract void recordStatsValue(SwirldsPlatform.StatsType statsType, double value);
 
@@ -308,33 +297,24 @@ public abstract class AbstractPlatform implements Platform {
 	 * 		if the specified {@code nodeId} is invalid
 	 */
 	public boolean isZeroStakeNode(final long nodeId) {
-		return isZeroStakeNode(getAddressBook(), nodeId);
+		return getAddressBook().isZeroStakeNode(nodeId);
 	}
 
 	/**
-	 * Indicates whether or not the stake configured in the {@link AddressBook} for this {@link
-	 * Platform} instance is set to zero.
+	 * @return the instance for calculating runningHash and writing event stream files
+	 */
+	abstract EventStreamManager<EventImpl> getEventStreamManager();
+
+	/**
+	 * Loads the signed state data into consensus and event intake
 	 *
-	 * @param addressBook
-	 * 		the current platform address book
-	 * @param nodeId
-	 * 		the node identifier
-	 * @return true if this Platform has zero stake assigned; otherwise, false if stake is greater than zero
-	 * @throws InvalidNodeIdException
-	 * 		if the specified {@code nodeId} is invalid
+	 * @param signedState
+	 * 		the state to get the data from
 	 */
-	public static boolean isZeroStakeNode(final AddressBook addressBook, final long nodeId) {
-		final Address nodeAddress = addressBook.getAddress(nodeId);
-
-		if (nodeAddress == null) {
-			throw new InvalidNodeIdException("NodeId may not be null");
-		}
-
-		return nodeAddress.getStake() == 0;
-	}
+	abstract void loadIntoConsensusAndEventIntake(SignedState signedState) throws SignedStateLoadingException;
 
 	/**
-	 * @return the instance for calculating RunningHash of all consensus Events
+	 * Sets event creation to be frozen, platform's status will be MAINTENANCE after this method is called
 	 */
-	abstract RunningHashCalculator getRunningHashCalculator();
+	public abstract void enterMaintenance();
 }

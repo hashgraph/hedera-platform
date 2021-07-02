@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -13,7 +13,9 @@
  */
 package com.swirlds.common.internal;
 
-import java.time.Instant;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntBinaryOperator;
+import java.util.function.IntUnaryOperator;
 
 /**
  * Keep a running history of a double value vs. time. History is divided into at most maxbins different
@@ -24,10 +26,28 @@ import java.time.Instant;
  * while another thread is calling any of the methods.
  */
 public class StatsBuffer {
+
+	/**
+	 * if the value is less than max, return value + 1;
+	 * else return this value
+	 */
+	private static final IntBinaryOperator INC_BY_ONE_WITHIN_MAX = (value, max) -> {
+		if (value < max) {
+			return value + 1;
+		} else {
+			return value;
+		}
+	};
+
+	/**
+	 * return half of an int value
+	 */
+	private static final IntUnaryOperator DIVIDE_NUM_BY_TWO = value -> value / 2;
+
 	/** 0 if storing all of history. Else store only this many seconds of recent history */
 	final double recentSeconds;
 
-	/** the time record() was first called, in seconds since the start of the epoch */
+	/** the time record() was first called, in seconds */
 	private double start = -1;
 
 	/**
@@ -41,7 +61,6 @@ public class StatsBuffer {
 	private final double binSeconds;
 	/** store at most this many bins in the history */
 	private final int maxBins;
-
 	/** min of the all x values in each bin */
 	private final double[] xMins;
 	/** max of the all x values in each bin */
@@ -56,7 +75,7 @@ public class StatsBuffer {
 	private final double[] yVars;
 
 	/** number of bins currently stored in all the arrays */
-	private int numBins = 0;
+	private final AtomicInteger numBins;
 	/** index in all arrays of the bin with the oldest data */
 	private int firstBin = 0;
 	/** index in all arrays of the bin currently being added to (-1 if no bins exist) */
@@ -99,11 +118,16 @@ public class StatsBuffer {
 		yMaxs = new double[this.maxBins];
 		yAvgs = new double[this.maxBins];
 		yVars = new double[this.maxBins];
+		numBins = new AtomicInteger();
 	}
 
-	/** get the number of bins currently in use */
+	/**
+	 * get the number of bins currently in use
+	 *
+	 * @return the number of bins currently in use
+	 */
 	public int numBins() {
-		return numBins;
+		return numBins.get();
 	}
 
 	/**
@@ -114,7 +138,7 @@ public class StatsBuffer {
 	 * @return the average
 	 */
 	public double xAvg(int i) {
-		int ii = (firstBin + i) % numBins;
+		int ii = (firstBin + i) % numBins();
 		return (xMins[ii] + xMaxs[ii]) / 2;
 	}
 
@@ -126,7 +150,7 @@ public class StatsBuffer {
 	 * @return the average
 	 */
 	public double yAvg(int i) {
-		int ii = (firstBin + i) % numBins;
+		int ii = (firstBin + i) % numBins();
 		return yAvgs[ii];
 	}
 
@@ -138,7 +162,7 @@ public class StatsBuffer {
 	 * @return the average
 	 */
 	public double xMin(int i) {
-		int ii = (firstBin + i) % numBins;
+		int ii = (firstBin + i) % numBins();
 		return xMins[ii];
 	}
 
@@ -150,7 +174,7 @@ public class StatsBuffer {
 	 * @return the average
 	 */
 	public double yMin(int i) {
-		int ii = (firstBin + i) % numBins;
+		int ii = (firstBin + i) % numBins();
 		return yMins[ii];
 	}
 
@@ -162,7 +186,7 @@ public class StatsBuffer {
 	 * @return the average
 	 */
 	public double xMax(int i) {
-		int ii = (firstBin + i) % numBins;
+		int ii = (firstBin + i) % numBins();
 		return xMaxs[ii];
 	}
 
@@ -174,7 +198,7 @@ public class StatsBuffer {
 	 * @return the average
 	 */
 	public double yMax(int i) {
-		int ii = (firstBin + i) % numBins;
+		int ii = (firstBin + i) % numBins();
 		return yMaxs[ii];
 	}
 
@@ -187,7 +211,7 @@ public class StatsBuffer {
 	 * @return the average
 	 */
 	public double yStd(int i) {
-		int ii = (firstBin + i) % numBins;
+		int ii = (firstBin + i) % numBins();
 		return Math.sqrt(yVars[ii]);
 	}
 
@@ -198,8 +222,9 @@ public class StatsBuffer {
 	 * @return the standard deviation
 	 */
 	public double yStdMostRecent() {
-		if (numBins > 0) {
-			int ii = (currBin) % numBins;
+		final int currNumBins = numBins();
+		if (currNumBins > 0) {
+			int ii = (currBin) % currNumBins;
 			return Math.sqrt(yVars[ii]);
 		} else {
 			return 0;
@@ -212,8 +237,9 @@ public class StatsBuffer {
 	 * @return the minimum y value
 	 */
 	public double yMinMostRecent() {
-		if (numBins > 0) {
-			int ii = (currBin) % numBins;
+		final int currNumBins = numBins();
+		if (currNumBins > 0) {
+			int ii = (currBin) % currNumBins;
 			return yMins[ii];
 		} else {
 			return 0;
@@ -226,8 +252,9 @@ public class StatsBuffer {
 	 * @return the maximum y value
 	 */
 	public double yMaxMostRecent() {
-		if (numBins > 0) {
-			int ii = (currBin) % numBins;
+		final int currNumBins = numBins();
+		if (currNumBins > 0) {
+			int ii = (currBin) % currNumBins;
 			return yMaxs[ii];
 		} else {
 			return 0;
@@ -241,7 +268,7 @@ public class StatsBuffer {
 	 */
 	public double xMin() {
 		double v = Double.MAX_VALUE;
-		for (int i = 0; i < numBins; i++) {
+		for (int i = 0; i < numBins(); i++) {
 			v = Math.min(v, xMins[(firstBin + i) % maxBins]);
 		}
 		return v;
@@ -254,7 +281,7 @@ public class StatsBuffer {
 	 */
 	public double xMax() {
 		double v = -Double.MAX_VALUE;
-		for (int i = 0; i < numBins; i++) {
+		for (int i = 0; i < numBins(); i++) {
 			v = Math.max(v, xMaxs[(firstBin + i) % maxBins]);
 		}
 		return v;
@@ -267,7 +294,7 @@ public class StatsBuffer {
 	 */
 	public double yMin() {
 		double v = Double.MAX_VALUE;
-		for (int i = 0; i < numBins; i++) {
+		for (int i = 0; i < numBins(); i++) {
 			v = Math.min(v, yMins[(firstBin + i) % maxBins]);
 		}
 		return v;
@@ -280,25 +307,26 @@ public class StatsBuffer {
 	 */
 	public double yMax() {
 		double v = -Double.MAX_VALUE;
-		for (int i = 0; i < numBins; i++) {
+		for (int i = 0; i < numBins(); i++) {
 			v = Math.max(v, yMaxs[(firstBin + i) % maxBins]);
 		}
 		return v;
 	}
 
 	/**
-	 * the age (number of seconds since the start of the epoch) right now
+	 * Return the time in seconds right now
+	 *
+	 * @return the time in seconds right now
 	 */
 	public double xNow() {
-		Instant now = Instant.now();
-		return now.getEpochSecond() + (((double) now.getNano()) / 1e9);
+		return ((double) System.nanoTime()) / 1e9;
 	}
 
 	/**
 	 * Merge the given (age,value) into the latest existing bin.
 	 *
 	 * @param x
-	 * 		the x value to store (seconds since the epoch)
+	 * 		the x value to store (time in seconds)
 	 * @param y
 	 * 		the y value to store
 	 */
@@ -318,7 +346,7 @@ public class StatsBuffer {
 	 * Create a new bin at the given index in all the arrays, holding only the given (x, y) sample.
 	 *
 	 * @param x
-	 * 		the x value to store (seconds since the epoch)
+	 * 		the x value to store (time in seconds)
 	 * @param y
 	 * 		the y value to store
 	 */
@@ -334,15 +362,18 @@ public class StatsBuffer {
 		numLastBin = 1;
 		currBin = i;
 
-		if (numBins < maxBins) { // if not full yet, then increment count
-			numBins++;
+		if (numBins() < maxBins) { // if not full yet, then increment count
+			numBins.getAndAccumulate(maxBins, INC_BY_ONE_WITHIN_MAX);
 		} else if (binSeconds > 0) { // if full and wrapping around
 			firstBin = (firstBin + 1) % maxBins; // then the oldest must have been overwritten
 		}
 	}
 
 	/**
-	 * /** record the given y value, associated with an x value equal to the time right now
+	 * record the given y value, associated with an x value equal to the time right now
+	 *
+	 * @param y
+	 * 		the value to be recorded
 	 */
 	public void record(double y) {
 		double x = xNow();
@@ -352,7 +383,7 @@ public class StatsBuffer {
 		if (x - start < startDelay) {// don't actually record anything during the first half life.
 			return;
 		}
-		if (numBins == 0) {
+		if (numBins() == 0) {
 			// this is the first sample in all of history
 			createBin(x, y);
 		} else if (binSeconds > 0 && x < xMins[currBin] + binSeconds) {
@@ -364,15 +395,17 @@ public class StatsBuffer {
 		} else if (numLastBin < numPerBin) {
 			// Storing all. The latest bin still has room for more samples
 			addToBin(x, y);
-		} else if (numBins + 1 < maxBins) {
+		} else if (numBins() + 1 < maxBins) {
 			// Storing all. Need to create a new bin, and it won't fill the buffer
 			createBin(x, y);
 		} else {
 			// Storing all. Need to create a new bin, which fills the buffer
 			createBin(x, y);
+			final int currNumBins = numBins();
 			// we're now full, so merge pairs of bins to shrink to half the size
-			for (int i = 0; i < numBins / 2; i++) {
-				// set bin i to the merger of bin j=2*i with bin k=2*2+1
+			for (int i = 0; i < currNumBins / 2 && (2 * i + 1) < maxBins; i++) {
+				// set bin i to the merger of bin j=2*i with bin k=2*i+1
+				// and make sure the indices are not out of bounds
 				int j = 2 * i;
 				int k = 2 * i + 1;
 				xMins[i] = Math.min(xMins[j], xMins[k]);
@@ -384,8 +417,8 @@ public class StatsBuffer {
 				double dk = yAvgs[k] - yAvgs[i];
 				yVars[i] = (yVars[j] + yVars[k] + dj * dj + dk * dk) / 2;
 			}
-			numBins = numBins / 2;
-			currBin = numBins - 1;
+			final int newNumBins = numBins.updateAndGet(DIVIDE_NUM_BY_TWO);
+			currBin = newNumBins - 1;
 			numPerBin *= 2;
 			numLastBin = numPerBin;
 		}

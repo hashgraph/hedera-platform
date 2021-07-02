@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -146,6 +146,7 @@ public class PortMapperPortForwarder implements PortForwarder, Runnable {
 				refresher.start();
 			}
 		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
 			closeService();
 		} catch (Exception e) {
 			log.error(MARKER, "An exception occurred while trying to do port forwarding:", e);
@@ -168,6 +169,7 @@ public class PortMapperPortForwarder implements PortForwarder, Runnable {
 						mappedPort.getExternalAddress().getHostAddress());
 
 			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
 				closeService();
 			} catch (NullPointerException | IllegalArgumentException | IllegalStateException e) {
 				log.error(MARKER, "An exception occurred while refreshing a mapped port:", e);

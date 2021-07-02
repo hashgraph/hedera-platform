@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -19,21 +19,20 @@ import com.swirlds.common.crypto.CryptographyException;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.HashBuilder;
-import com.swirlds.common.crypto.Hashable;
 import com.swirlds.common.crypto.Message;
 import com.swirlds.common.crypto.SerializableHashable;
-import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.crypto.SignatureType;
+import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.crypto.VerificationStatus;
 import com.swirlds.common.crypto.internal.AbstractCryptography;
 import com.swirlds.common.crypto.internal.CryptographySettings;
 import com.swirlds.common.futures.WaitingFuture;
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.logging.LogMarker;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.hash.FutureMerkleHash;
 import com.swirlds.common.merkle.hash.MerkleHashBuilder;
+import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
@@ -135,11 +134,25 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 */
 	private final MerkleInternalDigestProvider merkleInternalDigestProvider;
 
-	/** The digest provider instance that is used to generate running Hash.
+	/**
+	 * The digest provider instance that is used to generate running hashes.
 	 */
 	private final RunningHashProvider runningHashProvider;
 
+	/**
+	 * The merkle provider used to compute digests for merkle trees.
+	 */
 	private final MerkleHashBuilder merkleHashBuilder;
+
+	/**
+	 * The digest provider instance that is used to compute hashes of {@link Message} instances and byte arrays.
+	 */
+	private final DigestProvider digestProvider;
+
+	/**
+	 * The verification provider used to perform signature verification of {@link TransactionSignature} instances.
+	 */
+	private final VerificationProvider verificationProvider;
 
 	/**
 	 * the total number of available physical processors and physical processor cores
@@ -179,6 +192,8 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	public CryptoEngine(final CryptographySettings settings) {
 		this.settings = settings;
 		this.availableCpuCount = Runtime.getRuntime().availableProcessors();
+		this.digestProvider = new DigestProvider();
+		this.verificationProvider = new VerificationProvider();
 		this.serializationDigestProvider = new SerializationDigestProvider();
 		this.merkleInternalDigestProvider = new MerkleInternalDigestProvider();
 		this.runningHashProvider = new RunningHashProvider();
@@ -214,7 +229,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 *
 	 * @return the current configuration settings
 	 */
-	public CryptographySettings getSettings() {
+	public synchronized CryptographySettings getSettings() {
 		return settings;
 	}
 
@@ -267,7 +282,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Future<byte[]> digestAsync(final byte[] message, final DigestType digestType) {
+	public Future<Hash> digestAsync(final byte[] message, final DigestType digestType) {
 		final Message wrappedMessage = new Message(message, digestType);
 		try {
 			digestQueue.put(Collections.singletonList(wrappedMessage));
@@ -290,7 +305,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public byte[] digestSync(final Message message) {
+	public Hash digestSync(final Message message) {
 		final DigestProvider provider = new DigestProvider();
 		final WaitingFuture<Void> future = new WaitingFuture<>();
 		future.done(null);
@@ -303,12 +318,11 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 */
 	@Override
 	public void digestSync(final List<Message> messages) {
-		final DigestProvider provider = new DigestProvider();
 		final WaitingFuture<Void> future = new WaitingFuture<>();
 		future.done(null);
 
 		for (Message message : messages) {
-			digestSyncInternal(message, provider, future);
+			digestSyncInternal(message, digestProvider, future);
 		}
 	}
 
@@ -316,11 +330,13 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public byte[] digestSync(final byte[] message, final DigestType digestType) {
-		final Message wrappedMessage = new Message(message, digestType);
-		return digestSync(wrappedMessage);
+	public Hash digestSync(final byte[] message, final DigestType digestType) {
+		return digestSyncInternal(message, digestType, digestProvider);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public Hash digestSync(SelfSerializable serializable, DigestType digestType) {
 		try {
@@ -342,11 +358,17 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 		}
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public Hash digestTreeSync(MerkleNode root, DigestType digestType) {
 		return merkleHashBuilder.digestTreeSync(root);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public FutureMerkleHash digestTreeAsync(MerkleNode root, DigestType digestType) {
 		return merkleHashBuilder.digestTreeAsync(root);
@@ -363,6 +385,9 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 		}
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public Hash getNullHash(DigestType digestType) {
 		return nullHashes.get(digestType);
@@ -435,11 +460,10 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 */
 	@Override
 	public boolean verifySync(final TransactionSignature signature) {
-		final VerificationProvider provider = new VerificationProvider();
 		final WaitingFuture<Void> future = new WaitingFuture<>();
 		future.done(null);
 
-		return verifySyncInternal(signature, provider, future);
+		return verifySyncInternal(signature, verificationProvider, future);
 	}
 
 	/**
@@ -447,14 +471,13 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 */
 	@Override
 	public boolean verifySync(final List<TransactionSignature> signatures) {
-		final VerificationProvider provider = new VerificationProvider();
 		final WaitingFuture<Void> future = new WaitingFuture<>();
 		future.done(null);
 
 		boolean finalOutcome = true;
 
 		for (TransactionSignature signature : signatures) {
-			if (!verifySyncInternal(signature, provider, future)) {
+			if (!verifySyncInternal(signature, verificationProvider, future)) {
 				finalOutcome = false;
 			}
 		}
@@ -468,18 +491,17 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	@Override
 	public boolean verifySync(final byte[] data, final byte[] signature, final byte[] publicKey,
 			final SignatureType signatureType) {
-		final TransactionSignature wrappedSignature = wrap(data, signature, publicKey, signatureType);
-		return verifySync(wrappedSignature);
+		return verificationProvider.compute(data, signature, publicKey, signatureType);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void calcRunningHash(final Hashable hashable, final Hash newHashToAdd,
+	public Hash calcRunningHash(final Hash runningHash, final Hash newHashToAdd,
 			final DigestType digestType) {
 		try {
-			hashable.setHash(runningHashProvider.compute(hashable, newHashToAdd, digestType));
+			return runningHashProvider.compute(runningHash, newHashToAdd, digestType);
 		} catch (NoSuchAlgorithmException e) {
 			throw new CryptographyException(e, LogMarker.EXCEPTION);
 		}
@@ -520,8 +542,8 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 
 		// Launch new background threads with the new settings
 		this.verificationDispatcher = new IntakeDispatcher<>(this, TransactionSignature.class, this.verificationQueue,
-				new VerificationProvider(), settings.computeCpuVerifierThreadCount(), this::verificationHandler);
-		this.digestDispatcher = new IntakeDispatcher<>(this, Message.class, this.digestQueue, new DigestProvider(),
+				this.verificationProvider, settings.computeCpuVerifierThreadCount(), this::verificationHandler);
+		this.digestDispatcher = new IntakeDispatcher<>(this, Message.class, this.digestQueue, this.digestProvider,
 				settings.computeCpuDigestThreadCount(), this::digestHandler);
 	}
 
@@ -734,9 +756,10 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * 		the {@link Future} to be associated with the {@link Message}
 	 * @return the cryptographic hash for the given message contents
 	 */
-	private byte[] digestSyncInternal(final Message message, final DigestProvider provider,
+	private Hash digestSyncInternal(final Message message, final DigestProvider provider,
 			final WaitingFuture<Void> future) {
-		byte[] hash = null;
+		final Hash hash;
+
 		try {
 			hash = provider.compute(message, message.getDigestType());
 			message.setHash(hash);
@@ -748,6 +771,25 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 		message.setFuture(future);
 
 		return hash;
+	}
+
+	/**
+	 * Common private utility method for performing synchronous digest computations.
+	 *
+	 * @param message
+	 * 		the message contents to be hashed
+	 * @param digestType
+	 * 		the type of digest used to compute the hash
+	 * @param provider
+	 * 		the underlying provider to be used
+	 * @return the cryptographic hash for the given message contents
+	 */
+	private Hash digestSyncInternal(final byte[] message, final DigestType digestType, final DigestProvider provider) {
+		try {
+			return provider.compute(message, digestType);
+		} catch (NoSuchAlgorithmException ex) {
+			throw new CryptographyException(ex, LogMarker.EXCEPTION);
+		}
 	}
 
 	/**
@@ -763,7 +805,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 */
 	private boolean verifySyncInternal(final TransactionSignature signature, final VerificationProvider provider,
 			final WaitingFuture<Void> future) {
-		boolean isValid = false;
+		final boolean isValid;
 
 		try {
 			isValid = provider.compute(signature, signature.getSignatureType());

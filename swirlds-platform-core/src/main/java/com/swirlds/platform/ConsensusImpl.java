@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -19,8 +19,12 @@ import com.swirlds.common.NodeId;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.internal.CreatorSeqPair;
+import com.swirlds.platform.internal.SignedStateLoadingException;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.stats.ConsensusStats;
+import com.swirlds.platform.sync.SyncLogging;
+import com.swirlds.platform.sync.SyncShadowGraphManager;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,7 +34,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -45,12 +48,13 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.function.ToLongFunction;
 
 import static com.swirlds.logging.LogMarker.ADD_EVENT;
-import static com.swirlds.logging.LogMarker.EXCEPTION;
+import static com.swirlds.logging.LogMarker.EXPIRE_EVENT;
 import static com.swirlds.logging.LogMarker.INVALID_EVENT_ERROR;
+import static com.swirlds.logging.LogMarker.RECONNECT_SGM;
 import static com.swirlds.logging.LogMarker.STARTUP;
+import static com.swirlds.platform.Settings.minTransTimestampIncrNanos;
 
 /**
  * All the code for calculating the consensus for events in a hashgraph. This calculates
@@ -62,7 +66,71 @@ import static com.swirlds.logging.LogMarker.STARTUP;
  * are volatile, so calls to the getters by other threads may not see effects of addEvent immediately.
  *
  * The consensus order is calculated incrementally: each time a new event is added to the hashgraph, it
- * immediately finds the consensus order for all the older events for which that is possible.
+ * immediately finds the consensus order for all the older events for which that is possible. It uses a
+ * fundamental theorem that was not included in the tech report. That theorem is:
+ *
+ * Theorem: If every known witness in round R in hashgraph A has its fame decided by A, and S_{A,R} is the
+ * set of known famous witnesses in round R in hashgraph A, and if at least one event created in round R+2
+ * is known in A, then S_{A,R} is immutable and will never change as the hashgraph grows in the future.
+ * Furthermore, any consistent hashgraph B will have an S_{B,R} that is a subset of S_{A,R}, and as B grows
+ * during gossip, it will eventually be the case that S_{B,R} = S_{A,R} with probability one.
+ *
+ * Proof: the R+2 event strongly sees more than 2/3 of members having R+1 witnesses that vote NO on the fame
+ * of any unknown R event X that will be discovered in the future. Any future R+2 voter will strongly see a
+ * (possibly) different set of more than 2/3 of the R+1 population, and the intersection of the two sets
+ * will all be NO votes for the new voter. So the new voter will see less than 1/3 YES votes, and more than
+ * 1/3 NO votes, and will therefore vote no. Therefore every R+3 voter will see unanimous NO votes, and will
+ * decide NO. Therefore X will not be famous. So the set of famous in R will never grow in the future. (And
+ * so the consensus theorems imply that B will eventually agree).
+ *
+ * In other words, you never know whether new events and witnesses will be added to round R in the future.
+ * But if all the known witnesses in that round have their fame decided (and if a round R+2 event is known),
+ * then you know for sure that there will never be any more famous witnesses discovered for round R. So you
+ * can safely calculate the received round and consensus time stamp for every event that will have a
+ * received round of R. This is the key to the incremental algorithm: as soon as all known witnesses in R
+ * have their fame decided (and there is at least one R+2 event), then we can decide the consensus for a new
+ * batch of events: all those with received round R.
+ *
+ * There will be at least one famous event in each round. This is a theorem in the tech report, but both the
+ * theorem and its proof should be adjusted to say the following:
+ *
+ * Definition: a "voter" is a witness in round R that is strongly seen by at least one witness in round R+1.
+ *
+ * Theorem: For any R, there exists a witness X in round R that will be famous, and this will be decided at
+ * the latest when one event in round R+3 is known.
+ *
+ * Proof: Each voter in R+1 strongly sees more than 2n/3 witnesses in R, therefore each witness in R is on
+ * average strongly seen by more than 2n/3 of the voters in R+1. There must be at least one that is not
+ * below average, so let X be an R witness that is strongly seen by more than 2n/3 round R+1 voters. Those
+ * voters will vote YES on the fame of X, because they see X. Any round R+2 witness will receive votes from
+ * more than 2n/3 round R+1 voters, therefore it will receive a majority of its votes for X being YES,
+ * therefore it will either vote or decide YES. If any R+2 witness decides, then X is known to be famous at
+ * that time. If none do, then as soon as an R+3 witness exists, it will see unanimous YES votes, and it
+ * will decide YES. So X will be known to be famous after the first witness of R+3 is known (or earlier).
+ *
+ * In normal operation, with everyone online and everyone honest, we might expect that all of the round R
+ * witnesses will be known to be famous after the first event of round R+2 is known. But even in the worst
+ * case, where some computers are down (even honest ones), and many dishonest members are forking, the
+ * theorem still guarantees at least one famous witness is known by R+3.
+ *
+ * It is another theorem that the d12 and d2 algorithm have more than two thirds of the population creating
+ * unique famous witnesses (judges) in each round. It is a theorem that d1 does, too, for the algorithmn described in
+ * 2016, and is conjectured to be true for the 2019 version, too.
+ *
+ * Another new theorem used here:
+ *
+ * Theorem: If a new witness X is added to round R, but at least one already exists in round R+2, then X
+ * will not be famous (so there is no need to hold the elections).
+ *
+ * Proof: If an event X currently exists in round R+2, then when the new event Y is added to round R, it
+ * won't be an ancestor of X, nor of the witnesses that X strongly sees. Therefore, X will collect unanimous
+ * votes of NO for the fame of Y, so X will decide that Y is not famous. Therefore, once a round R+2 event
+ * is added to the hashgraph, the set of possible unique famous witnesses for round R is fixed, and the
+ * unique famous witnesses will end up being a subset of it.
+ *
+ * NOTE: for concision, all of the above talks about things like "2/3 of the members" or "2/3 of the witnesses". In
+ * every case, it should be interpreted to actually mean "members whose stake adds up to more than 2/3 of the total
+ * stake", and "witnesses created by members whose stake is more than 2/3 of the total".
  **/
 public class ConsensusImpl implements Consensus {
 	private static final Logger log = LogManager.getLogger();
@@ -78,6 +146,26 @@ public class ConsensusImpl implements Consensus {
 
 	/** a method that accepts minimum generation info */
 	private final BiConsumer<Long, Long> minGenConsumer;
+
+	///////////////////////////
+
+	//the following are used for handling the judge hashes from 3 rounds, which were saved in the signed state,
+	//and loaded during a restart or reconnect. When certain events are later loaded, they immediately have their
+	//roundCreated set, if their hashes match any in the 3 lists. And when the first list has all of its events
+	//loaded, then any event that is an ancestor of all of them will have its consensus set to true, so that it
+	//won't be treated as reaching consensus later, and its transactions will never be handled.
+
+	/** the roundCreated to set for a new event, if its hash is here (used during restart and reconnect) */
+	private Map<Hash, Long> hashRoundCreated = null; //null means none are known
+
+	/** hashRoundCreated is either null, or it contains entries for only hashRound, hashRound-1, hashRound-2 */
+	private long hashRound = -1; //-1 means none are known
+
+	/** the number of judges in round hashRound that are not yet added to the hashgraph  (or 0 if not needed) */
+	private int numInitJudgesMissing = 0;
+
+	/** all judges in round hashRound that have been added so far (still need numInitJudgesMissing more) */
+	private List<EventImpl> hashRoundJudges = null;
 
 	/**
 	 * the triple hash list for each round. In this class, it's only used in the getter. Deleted when round
@@ -120,7 +208,7 @@ public class ConsensusImpl implements Consensus {
 	private final AtomicLong minRound = new AtomicLong(-1);
 
 	/**
-	 * "rounds" is a HashMap mapping round number (starts at 1) to a RoundInfo that knows the witnesses etc.
+	 * "rounds" is a HashMap mapping round number (starts at 0) to a RoundInfo that knows the witnesses etc.
 	 * for that round. It includes the max created round of all events ever added to the hashgraph (by
 	 * consRecordEvent()), but it may not include very old rounds that have already been decided and
 	 * discarded.
@@ -137,13 +225,15 @@ public class ConsensusImpl implements Consensus {
 	 * Number of events that have reached consensus order. This is used for setting consensus order numbers
 	 * in events, so it must be part of the signed state.
 	 */
-	private final AtomicLong numConsensus = new AtomicLong(0);
+	private volatile long numConsensus = 0;
 
 	/**
 	 * The minimum consensus timestamp for the next event that reaches consensus. This is null if no event
 	 * has reached consensus yet. As each event reaches its consensus, its timestamp is moved forward (if
-	 * necessary) to be at least this time. And then minTimestamp is moved forward by n nanoseconds, if the
+	 * necessary) to be at least this time.
+	 * And then minTimestamp is moved forward by n * {@link Settings#minTransTimestampIncrNanos} nanoseconds, if the
 	 * event had n transactions (or n=1 if no transactions).
+	 * Then minTimestamp is rounded up to the nearest multiple of {@link Settings#minTransTimestampIncrNanos}
 	 */
 	private Instant minTimestamp = null;
 
@@ -158,6 +248,26 @@ public class ConsensusImpl implements Consensus {
 
 	/** the number of coin rounds that have happened so far (used to update the statistics) */
 	private long numCoinRounds = 0;
+
+	/**
+	 * The minimum judge generation number from the oldest non-expired round, if there is one.
+	 * Else, this is the minimum judge generation number from the oldest round in memory, if there is one.
+	 * Else, this is {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}.
+	 * <p>
+	 * Updated only on consensus thread, read concurrently from gossip threads.
+	 * </p>
+	 */
+	private volatile long minRoundGeneration = RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
+
+	/**
+	 * The minimum judge generation number from the most recent fame-decided round, if there is one.
+	 * Else, this is the minimum judge generation from the most recent event round, if there is one.
+	 * Else, this is {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}.
+	 * <p>
+	 * Updated only on consensus thread, read concurrently from gossip threads.
+	 * </p>
+	 */
+	private volatile long maxRoundGeneration = RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Public constructors
@@ -175,8 +285,12 @@ public class ConsensusImpl implements Consensus {
 	 * @param addressBook
 	 * 		the global address book, which never changes
 	 */
-	public ConsensusImpl(Supplier<ConsensusStats> statsSupplier, BiConsumer<Long, Long> minGenConsumer,
-			NodeId selfId, AddressBook addressBook) {
+	public ConsensusImpl(
+			final Supplier<ConsensusStats> statsSupplier,
+			final BiConsumer<Long, Long> minGenConsumer,
+			final NodeId selfId,
+			final AddressBook addressBook) {
+
 		this.statsSupplier = statsSupplier;
 		this.minGenConsumer = minGenConsumer;
 
@@ -189,7 +303,6 @@ public class ConsensusImpl implements Consensus {
 		this.rounds = new ConcurrentHashMap<>();
 
 		this.lastConsEventByMember = new AtomicReferenceArray<>(addressBook.getSize());
-		//prevRoundSetAddressBook = ;
 	}
 
 	/**
@@ -207,21 +320,31 @@ public class ConsensusImpl implements Consensus {
 	 * @param signedState
 	 * 		a state to read from
 	 */
-	public ConsensusImpl(Supplier<ConsensusStats> statsSupplier, BiConsumer<Long, Long> minGenConsumer,
-			NodeId selfId, AddressBook addressBook, SignedState signedState) {
+	public ConsensusImpl(
+			final Supplier<ConsensusStats> statsSupplier,
+			final BiConsumer<Long, Long> minGenConsumer,
+			final NodeId selfId,
+			final AddressBook addressBook,
+			final SignedState signedState,
+			final SyncShadowGraphManager sgm) throws SignedStateLoadingException {
 		this(statsSupplier, minGenConsumer, selfId, addressBook);
 
 		EventImpl[] events = signedState.getEvents();
 		// the first part of the array of events will be old events, they are kept so that we can know what the last
 		// event of each member is. we don't need to create rounds for these events or put them in the map, they will
 		// only be stored in lastEventByMember
-		long roundNew = getLowestFromHighestSequence(events, EventImpl::getRoundCreated);
+		long roundNew = Utilities.getLowestFromHighestSequence(events, EventImpl::getRoundCreated);
 
-		for (EventImpl event : events) {
-			// this event is loaded from saved state, it should have reached consensus;
-			// when an EventImpl is read from saved state, its InternalEventData is empty,
-			// we set its `isConsensus` to be true here,
-			// so that this event would not be put into forCons queue again
+		// map round numbers to minimum generation for easy access
+		final Map<Long, Long> minGen = new HashMap<>();
+		for (final Pair<Long, Long> pair : signedState.getMinGenInfo()) {
+			minGen.put(pair.getKey(), pair.getValue());
+		}
+
+		for (final EventImpl event : events) {
+
+			addShadowEvent(sgm, event);
+
 			event.setConsensus(true);
 
 			lastConsEventByMember.set((int) event.getCreatorId(), event);
@@ -236,55 +359,335 @@ public class ConsensusImpl implements Consensus {
 
 				// events are store in consensus order, so the last event in consensus order should be
 				// incremented by 1 to get the numConsensus
-				numConsensus.set(event.getConsensusOrder() + 1);
+				numConsensus = event.getConsensusOrder() + 1;
 
-				RoundInfo roundInfo = rounds.get(event.getRoundCreated());
-				if (roundInfo == null) {
-					roundInfo = new RoundInfo(event.getRoundCreated(), addressBook.getSize());
-					rounds.put(event.getRoundCreated(), roundInfo);
-
-					maxRound.set(Math.max(maxRound.get(), roundInfo.round));
-					minRound.set((minRound.get() == -1) ? roundInfo.round
-							: Math.min(minRound.get(), roundInfo.round));
-				}
+				final RoundInfo roundInfo = createRoundForSignedStateConstructor(event.getRoundCreated(), minGen);
 
 				roundInfo.allEvents.add(event);
-
-				if (event.isWitness()) {
-					roundInfo.witnesses.add(event);
-					roundInfo.numWitnesses++;
-					if (event.isFamous()) {
-						roundInfo.addFamousWitness(event);
-						roundInfo.fameDecided = true;
-					}
-				}
+				roundInfo.fameDecided = true;
 			}
 		}
 
 		// The minTimestamp is just above the last transaction that has been handled
-		minTimestamp = signedState.getLastTransactionTimestamp().plusNanos(1);
+		minTimestamp = calcMinTimestampForNextEvent(signedState.getLastTransactionTimestamp());
 
 		fameDecidedBelow.set(signedState.getLastRoundReceived() + 1);
+
+		createRoundForSignedStateConstructor(signedState.getLastRoundReceived(), minGen);
+
+		updateMaxRoundGeneration();
+		updateMinRoundGeneration();
+
+		LogManager.getLogger().debug(STARTUP.getMarker(),
+				"ConsensusImpl is initialized from signed state. minRound: {}(min gen = {}), maxRound: {}(max gen = " +
+						"{})",
+				minRound::get,
+				() -> minRoundGeneration,
+				maxRound::get,
+				() -> maxRoundGeneration);
 	}
 
+	/**
+	 * Update the min round judge generation.
+	 *
+	 * Executed only on consensus thread.
+	 */
+	private void updateMinRoundGeneration() {
+
+		long newMinRoundGeneration;
+
+		if (rounds.isEmpty()) {
+			// First execution
+			newMinRoundGeneration = RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
+		} else if (rounds.get(getMinRoundNonExpired()) != null) {
+			// This is typical.
+			newMinRoundGeneration = rounds.get(getMinRoundNonExpired()).getMinGeneration();
+		} else {
+			// This usually happens at genesis or after a reconnect.
+			// It's possible this branch may be executed during steady state operation, but that should be rare.
+			newMinRoundGeneration = rounds.get(getMinRound()).getMinGeneration();
+		}
+
+		// 13 May 2021
+		// Guarantee that the round generation is non-decreasing. When we have a local events file,
+		// this condition will be implicit, so this clause will be removed.
+		if (minRoundGeneration != RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED) {
+			if (newMinRoundGeneration < minRoundGeneration) {
+				newMinRoundGeneration = minRoundGeneration;
+			}
+		}
+
+		// 13 May 2021
+		// This check is desirable, and we will re-enable this in future, but this condition can
+		// cause an exception after a node restart or reconnect. A local events file will pass this check.
+		// That is a separate task, and will be implemented in future. For now, we disable this check,
+		// and replace it with the enforced non-decreasing clause above.
+//		if (newMinRoundGeneration < minRoundGeneration) {
+//
+//			final String msg = String.format(
+//					"Consensus min round generation can not decrease. Change %s -> %s disallowed (min round = %s, min" +
+//							" " +
+//							"round non-expired = %s)",
+//					minRoundGeneration,
+//					newMinRoundGeneration,
+//					minRound.get(),
+//					fameDecidedBelow.get() - Settings.state.roundsExpired);
+//
+//			throw new IllegalStateException(msg);
+//		}
+
+		minRoundGeneration = newMinRoundGeneration;
+	}
+
+	/**
+	 * Update the max round judge generation
+	 *
+	 * Executed only on consensus thread.
+	 */
+	private void updateMaxRoundGeneration() {
+
+		long newMaxRoundGeneration;
+
+		if (rounds.isEmpty()) {
+			// First execution
+			newMaxRoundGeneration = RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
+		} else if (rounds.get(fameDecidedBelow.get() - 1) != null) {
+			// This is typical.
+			newMaxRoundGeneration = rounds.get(fameDecidedBelow.get() - 1).getMinGeneration();
+		} else {
+			// This happens universally, just after genesis.
+			newMaxRoundGeneration = rounds.get(getMaxRound()).getMinGeneration();
+		}
+
+		// 13 May 2021
+		// Guarantee that the round generation is non-decreasing. When we have a local events file,
+		// this condition will be implicit, so this clause will be removed.
+		if (maxRoundGeneration != RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED) {
+			if (newMaxRoundGeneration < maxRoundGeneration) {
+				newMaxRoundGeneration = maxRoundGeneration;
+			}
+		}
+
+		// 13 May 2021
+		// This check is desirable, and we will re-enable this in future, but this condition can
+		// cause an exception after a node restart or reconnect. A local events file will pass this check.
+		// That is a separate task, and will be implemented in future. For now, we disable this check,
+		// and replace it with the enforced non-decreasing clause above.
+//		if (newMaxRoundGeneration < maxRoundGeneration) {
+//			final String msg = String.format(
+//					"Consensus max round generation can not decrease. Change %s -> %s disallowed. (LFD round = %s,
+//					max" +
+//							" " +
+//							"round = %s)",
+//					maxRoundGeneration,
+//					newMaxRoundGeneration,
+//					fameDecidedBelow.get() - 1,
+//					maxRound.get());
+//
+//			throw new IllegalStateException(msg);
+//		}
+
+		maxRoundGeneration = newMaxRoundGeneration;
+	}
+
+	/**
+	 * Used ONLY by the constructor that loads data from a signed state.
+	 * If the supplied round already exists, it will simply return the existing one.
+	 * If the round does not exist, it will create it as well as any other rounds to ensure that there are no gaps in
+	 * the round numbers. If will set the round generation information for each of these rounds.
+	 *
+	 * @param round
+	 * 		the round to create and return
+	 * @param minGen
+	 * 		a mapping between round numbers and round generations
+	 * @return the round requested
+	 * @throws SignedStateLoadingException
+	 * 		if any issue occurs when creating these rounds
+	 */
+	private RoundInfo createRoundForSignedStateConstructor(long round,
+			Map<Long, Long> minGen) throws SignedStateLoadingException {
+		RoundInfo requestedRound = rounds.get(round);
+		if (requestedRound != null) {
+			// round already exists
+			return requestedRound;
+		}
+		// fill in the gaps
+		final long startRound = round < minRound.get() ? round : maxRound.get();
+		final long endRound = round > maxRound.get() ? round : minRound.get();
+		if (startRound > endRound) {
+			throw new SignedStateLoadingException(
+					String.format("Issue in determining which rounds to create from a SignedState." +
+									"startRound:%d endRound:%d",
+							startRound, endRound)
+			);
+		}
+		for (long r = startRound; r <= endRound; r++) {
+			RoundInfo roundInfo = new RoundInfo(round, addressBook.getSize());
+			rounds.put(round, roundInfo);
+
+			maxRound.set(Math.max(maxRound.get(), roundInfo.getRound()));
+			minRound.set((minRound.get() == -1) ? roundInfo.getRound()
+					: Math.min(minRound.get(), roundInfo.getRound()));
+
+			// set the minGeneration as stored in state
+			Long minGeneration = minGen.get(roundInfo.getRound());
+			if (minGeneration == null) {
+				throw new SignedStateLoadingException(String.format(
+						"MinGen info missing for round %d", roundInfo.getRound()
+				));
+			} else {
+				roundInfo.updateMinGeneration(minGeneration);
+			}
+			if (r == round) {
+				requestedRound = roundInfo;
+			}
+		}
+
+		if (requestedRound == null) {
+			throw new SignedStateLoadingException(String.format(
+					"An issue occurred when creating round %d", round
+			));
+		}
+
+		return requestedRound;
+	}
+
+	/**
+	 * Construct a shadow event for the given event and add it to the shadow graph.
+	 *
+	 * @param sgm
+	 * 		the shadow graph manager
+	 * @param event
+	 * 		the hashgraph event (assumed to be non-null)
+	 */
+	private void addShadowEvent(final SyncShadowGraphManager sgm, final EventImpl event) {
+		// (Shadow Graph Manager may be null for testing.)
+		if (sgm == null) {
+			return;
+		}
+
+		log.debug(RECONNECT_SGM.getMarker(),
+				"{}: `addShadowEvent`: adding to shadow graph: {}",
+				() -> selfId,
+				() -> SyncLogging.getSyncLogString(event));
+
+		final boolean inserted = sgm.addEvent(event);
+
+		if (!inserted) {
+			log.debug(RECONNECT_SGM.getMarker(),
+					"{}: `addShadowEvent`: failed to add event {} to shadow graph",
+					() -> selfId,
+					() -> SyncLogging.getSyncLogString(event));
+
+		}
+	}
+
+	/**
+	 * Constructor for the consensus object that takes a round number and a list of 3 lists of hashes.
+	 *
+	 * The list contains 3 lists. The first is the hashes of the famous witnesses in round "round".
+	 * The second is the hashes of witnesses in round "round"-1 which are ancestors of those in the first
+	 * list. The third is the hashes of witnesses in round "round"-2 which are ancestors of those in
+	 * the first list.
+	 *
+	 * As each event is added, it will be given an appropriate roundCreated if it
+	 * has a hash in any of the 3 lists, or has an ancestor in any of the 3 lists. But if it doesn't have an
+	 * ancestor in those lists, then it will be given a roundCreated of -1, which represents negative infinity.
+	 *
+	 * @param statsSupplier
+	 * 		should return the statistics object
+	 * @param minGenConsumer
+	 * 		a method that accepts minimum generation info
+	 * @param selfId
+	 * 		the memberID of the member running this consensus
+	 * @param addressBook
+	 * 		the global address book, which never changes
+	 * @param round
+	 * 		the 3 lists are for witnesses in rounds: round, round-1, round-2
+	 * @param witnessHashes
+	 * 		the list of 3 lists of hashes of witnesses (famous for round "round", and ancestors of those). This must
+	 * 		must be non-null and contain exactly 3 lists.
+	 */
+	public ConsensusImpl(
+			final Supplier<ConsensusStats> statsSupplier,
+			final BiConsumer<Long, Long> minGenConsumer,
+			final NodeId selfId,
+			final AddressBook addressBook,
+			final long round,
+			final List<List<Hash>> witnessHashes) {
+
+		this.statsSupplier = statsSupplier;
+		this.minGenConsumer = minGenConsumer;
+		this.selfId = selfId;
+		// until we implement address book changes, we will just use the use this address book
+		this.addressBook = addressBook;
+		this.hashRound = round;
+		hashRoundCreated = new HashMap<>();
+		for (int i = 0; i < 3; i++) {
+			for (Hash hash : witnessHashes.get(i)) {
+				hashRoundCreated.put(hash, round - i);
+			}
+		}
+		//once we get this many, mark appropriate events as already having consensus before we started
+		numInitJudgesMissing = witnessHashes.get(0).size();
+		hashRoundJudges = new ArrayList<>();
+
+		this.eventsByCreatorSeq = new ConcurrentHashMap<>();
+		this.lastConsEventByMember = new AtomicReferenceArray<>(addressBook.getSize());
+
+		this.rounds = new ConcurrentHashMap<>();
+	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Public getters
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public long getMaxRoundGeneration() {
+		return maxRoundGeneration;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public long getMinRoundGeneration() {
+		return minRoundGeneration;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public long getLastRoundDecided() {
 		return fameDecidedBelow.get();  //not synchronized because it's AtomicLong
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public long getMaxRound() {
 		return maxRound.get();  //not synchronized because it's AtomicLong
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public long getMinRound() {
 		return minRound.get();  //not synchronized because it's AtomicLong
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public long getDeleteRound() {
+		return getMinRound() - 1;
 	}
 
 	/**
@@ -302,7 +705,7 @@ public class ConsensusImpl implements Consensus {
 			for (int i = 0; i < 10; i++) {
 				RoundInfo ri = rounds.get(minRound.get());
 				if (ri != null) {
-					return ri.minGeneration;
+					return ri.getMinGeneration();
 				}
 			}
 		}
@@ -312,13 +715,39 @@ public class ConsensusImpl implements Consensus {
 		for (int i = 0; i < 10; i++) {
 			RoundInfo ri = rounds.get(getLastRoundDecided() - Settings.state.roundsStale);
 			if (ri != null) {
-				return ri.minGeneration;
+				return ri.getMinGeneration();
 			}
 		}
 		// in case we don't find it, we throw an exception that will likely never happen
 		throw new RuntimeException("Cannot find stale round!");
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public synchronized long getMinRoundNonExpired() {
+		return getLastRoundDecided() - Settings.state.roundsExpired;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public synchronized long getMinGenerationNonExpired() {
+		final long minRoundNotExpired = getLastRoundDecided() - Settings.state.roundsExpired;
+		long minGenNotExpired = -1;
+		final RoundInfo expRound = rounds.get(minRoundNotExpired);
+		if (expRound != null) {
+			minGenNotExpired = expRound.getMinGeneration();
+		}
+
+		return minGenNotExpired;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public synchronized EventImpl[] getAllEvents() {
 		ArrayList<EventImpl> all = new ArrayList<>();
@@ -334,12 +763,15 @@ public class ConsensusImpl implements Consensus {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public synchronized int getNumEvents() {
 		int count = 0;
 		for (long r = minRound.get(); r <= maxRound.get(); r++) {
-			RoundInfo info = rounds.get(r); // each element of rounds has its own lock
-			if (info != null)
+			final RoundInfo info = rounds.get(r); // each element of rounds has its own lock
+
+			if (info != null) {
 				count += info.allEvents.size(); // allEvents has its own lock
+			}
 		}
 		return count;
 	}
@@ -348,27 +780,34 @@ public class ConsensusImpl implements Consensus {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized EventImpl[] getRecentEvents(long minGenerationNumber) {
-		ArrayList<EventImpl> recentEvents = new ArrayList<>();
+	public synchronized EventImpl[] getRecentEvents(final long minGenerationNumber) {
+		final ArrayList<EventImpl> recentEvents = new ArrayList<>();
 
-		for(long r = maxRound.get(); r >= minRound.get(); --r) {
+		for (long r = maxRound.get(); r >= minRound.get(); --r) {
 			RoundInfo info = rounds.get(r); // each element of rounds has its own lock
-			if(info == null)
+
+			if (info == null) {
 				// Round has been deleted because expired, so all older rounds are
 				// also deleted-as-expired.
 				break;
+			}
 
-			for(EventImpl e : info.allEvents)
-				if(e.getGeneration() >= minGenerationNumber)
+			for (final EventImpl e : info.allEvents) {
+				if (e.getGeneration() >= minGenerationNumber) {
 					recentEvents.add(e);
+				}
+			}
 		}
 
 		return recentEvents.toArray(new EventImpl[0]);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public synchronized EventImpl getEvent(CreatorSeqPair pair) {
-		EventImpl event = eventsByCreatorSeq.get(pair);
+		final EventImpl event = eventsByCreatorSeq.get(pair);
 		if (event == null) {
 			EventImpl lastEvent = lastConsEventByMember.get((int) pair.getCreatorId());
 			if (lastEvent != null && lastEvent.getSeq() == pair.getSeq()) {
@@ -386,35 +825,12 @@ public class ConsensusImpl implements Consensus {
 		return staleNotConsensusEvents;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public synchronized List<List<Hash>> getWitnessHashes(final long round) {
 		return hashLists.get(round);
-	}
-
-	//find the minimum number n such that the given array has at at least one element returning each
-	//of the numbers n, n+1, n+2, ..., up to the maximum value that is returned.
-	static synchronized <T> long getLowestFromHighestSequence(T[] array, ToLongFunction<T> getLong) {
-		T[] sorted = array.clone();
-		Arrays.sort(sorted, Comparator.comparingLong(getLong));
-		long lowest = getLong.applyAsLong(sorted[sorted.length - 1]);
-		for (int i = sorted.length - 2; i >= 0; i--) {
-			long curr = getLong.applyAsLong(sorted[i]);
-			if (lowest - curr > 1) {
-				break;
-			}
-			lowest = curr;
-		}
-		return lowest;
-	}
-
-	/**
-	 * Get the RoundInfo for the most recent round that has reached consensus. The caller must not modify anything in
-	 * it.
-	 *
-	 * @return the RoundInfo of the most recent round that has reached consensus (or null, if none)
-	 */
-	public synchronized RoundInfo getLatestRoundInfo() {
-		return rounds.get(fameDecidedBelow.get() - 1);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -489,19 +905,24 @@ public class ConsensusImpl implements Consensus {
 		RoundInfo roundInfo = setRoundCreated(event, stronglySeen);
 		statsSupplier.get().addedEvent(event);
 
-		// set event.isWitness appropriately, and propagate consensus info
-		findIsWitness(event, roundInfo);
+		//force it to memoize for this event now, to avoid deep recursion of stronglySeeP later.
+		stronglySeeP(event, 0);
 
-		//evaluate this once, to trigger the precalculation and memoization.
-		//This makes it act like dynamic programming, and avoids problems with the recursion going too deep for Java
-		stronglySeeP(event,event.getCreatorId());
+		// set event.isWitness appropriately, and propagate consensus info
+		setIsWitness(event, roundInfo);
 
 		// check if it's a witness. If so, vote in all elections in the current round, put new consensus events in nce
 		final List<EventImpl> newConsensusEvents = vote(event, roundInfo, stronglySeen);
-
+		LogManager.getLogger().info(ADD_EVENT.getMarker(), "Event to be added: {} for round: {}, " +
+						"stronglySeen: {}, newConsensusEvents: {}",
+				() -> EventUtils.toShortString(event),
+				() -> roundInfo.getRound(),
+				() -> EventUtils.toShortStrings(stronglySeen),
+				() -> EventUtils.toShortStrings(newConsensusEvents));
 		// finish recording the event in 2 ways
 		roundInfo.allEvents.add(event); // this was an event created in this round
 		roundInfo.nonConsensusEvents.add(event); // there isn't yet a consensus on this event
+
 		return newConsensusEvents;
 	}
 
@@ -523,27 +944,23 @@ public class ConsensusImpl implements Consensus {
 			return null;
 		}
 		List<EventImpl> cons = new LinkedList<>();//all events reaching consensus now, in consensus order
-		for (RoundInfo.ElectionRound election = roundInfo.elections; election != null; election =
-				election.nextElection) { // for all elections
+		int voterId = (int) event.getCreatorId();
+		for (RoundInfo.ElectionRound election = roundInfo.elections; election != null; election = election.nextElection) { // for all elections
 			if (election.age == 1) {
 				// first round of an election. Vote TRUE for self-ancestors of those you firstSee. Don't decide.
 				EventImpl w = firstSee(event, election.event.getCreatorId());
 				while (w != null && w.getRoundCreated() > event.getRoundCreated() - 1 && w.getSelfParent() != null) {
 					w = firstSelfWitnessS(w.getSelfParent());
 				}
-				election.vote.set(event.getWitnessSeq(), election.event == w);
+				election.vote[voterId] = (election.event == w);
 			} else {
 				// either a coin round or normal round, so count votes from witnesses you strongly see
 				long yesStake = 0; //total stake of all members voting yes
 				long noStake = 0; //total stake of all members voting yes
 				for (EventImpl w : stronglySeen) {
-					long stake = addressBook.getStake(w.getCreatorId());
-					//Collect the vote from w.
-					//If w was loaded from a saved state, then it will have a witnessSeq == -1,
-					//and it should be treated as if it votes NO on any new elections (because
-					//any new witnesses in previous rounds weren't loaded, and so weren't ancestors of it,
-					//and so would have a NO vote.
-					if (w.getWitnessSeq() < 0 || election.prevRound.vote.get(w.getWitnessSeq())) {
+					int id = (int) w.getCreatorId();
+					long stake = addressBook.getStake(id);
+					if (election.prevRound.vote[id]) {
 						yesStake += stake;
 					} else {
 						noStake += stake;
@@ -553,18 +970,17 @@ public class ConsensusImpl implements Consensus {
 				boolean superMajority = Utilities.isSupermajority(yesStake, totalStake)
 						|| Utilities.isSupermajority(noStake, totalStake);
 
-				election.vote.set(event.getWitnessSeq(), yesStake >= noStake);
+				election.vote[voterId] = (yesStake >= noStake);
 				if ((election.age % Settings.coinFreq) == 0) {
 					// a coin round. Vote randomly unless you strongly see a supermajority. Don't decide.
 					numCoinRounds++;
 					if (!superMajority) {
 						if ((election.age % (2
 								* Settings.coinFreq)) == Settings.coinFreq) {
-							election.vote.set(event.getWitnessSeq(), true); // every other "coin round" is just
-							// coin=true
+							election.vote[voterId] = true; // every other "coin round" is just coin=true
 						} else {
 							// coin is one bit from signature (LSB of second of two middle bytes)
-							election.vote.set(event.getWitnessSeq(), coin(event));
+							election.vote[voterId] = coin(event);
 						}
 					}
 				} else {
@@ -574,7 +990,7 @@ public class ConsensusImpl implements Consensus {
 						//we've decided one famous event. Set it as famous. If that round is now decided, remember the
 						// new consensus events
 						List<EventImpl> c = setFamous(election.event, rounds.get(election.event.getRoundCreated()),
-								election.vote.get(event.getWitnessSeq()));
+								election.vote[voterId], election);
 						if (c != null) {
 							cons.addAll(c);
 						}
@@ -588,6 +1004,30 @@ public class ConsensusImpl implements Consensus {
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// All methods and inner classes below this line are private
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// The following is the complete call graph for all the consensus methods:
+	//
+	// ----addEvent
+	// --------setFastVars
+	// --------consSetAncestorFirstSeq
+	// --------setRoundCreated
+	// ------------getOrCreateRoundInfo (called twice)
+	// ----------------*** newElection (called twice)
+	// --------setIsWitness
+	// ------------*** newElection
+	// ------------### setFamous (see below)
+	// --------vote
+	// ------------### setFamous
+	// ----------------setRoundFameDecidedTrue
+	// --------------------findReceivedInRound
+	// ------------------------setIsConsensusTrue
+	// --------------------setConsensusOrder
+	// --------------------delRounds
+	//
+	// Each method calls those indented under it. Each method calls that one only once, except where
+	// noted otherwise in parentheses after it. If a method appears twice, it is prefaced with *** or ###.
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	/**
@@ -653,14 +1093,15 @@ public class ConsensusImpl implements Consensus {
 		maxRound.set(Math.max(maxRound.get(), round));
 		minRound.set((minRound.get() == -1) ? round : Math.min(minRound.get(), round));
 
+		updateMinRoundGeneration();
+
 		// create elections in this round based on the previous one
 		RoundInfo oldRoundInfo = rounds.get(round - 1);
 		if (oldRoundInfo != null) { // if there is a previous round, use it 2 ways:
-			// each election in the previous round continues as an election here
+			// create elections copying all from previous round to this new round
 			for (RoundInfo.ElectionRound e = oldRoundInfo.elections; e != null; e = e.nextElection) {
 				newElection(e.event, roundInfo, e);
 			}
-			// each witness in the previous round starts a new election here
 			for (EventImpl witness : oldRoundInfo.witnesses) {
 				newElection(witness, roundInfo, null);
 			}
@@ -680,33 +1121,28 @@ public class ConsensusImpl implements Consensus {
 	 * 		the roundInfo for the round this event is created in
 	 * @return list of all events that reach consensus during this method call, in consensus order (or null if none)
 	 */
-	private List<EventImpl> findIsWitness(EventImpl event, RoundInfo roundInfo) {
+	private List<EventImpl> setIsWitness(EventImpl event, RoundInfo roundInfo) {
 		if (event.getSelfParent() != null && event.getRoundCreated() == event.getSelfParent().getRoundCreated()) {
 			event.setWitness(false);
-			event.setWitnessSeq(-1);
 			return null;
 		}
 		// the event is a witness, so mark it as such, and record it.
 		event.setWitness(true);
-		event.setWitnessSeq(roundInfo.numWitnesses);
 		roundInfo.witnesses.add(event); // this is the only place new witnesses are ever added
 		roundInfo.numWitnesses++;
-		for (RoundInfo.ElectionRound e = roundInfo.elections; e != null; e = e.nextElection) {
-			e.vote.add(false); //this new witness will vote in every election in this round
-		}
 
 		if (rounds.get(event.getRoundCreated() + 2) != null) {
 			// theorem says it can't be famous, so decide it now, with no elections.
 			roundInfo.numUnknownFame++;
 			// numUnknownFame will be decremented in setFamous(), we need to increment it here so we don't loose
 			// track of how many witnesses we need to determine fame for. This was the cause of bug #197
-			return setFamous(event, roundInfo, false);
+			return setFamous(event, roundInfo, false, null);
 		} else {
 			// the theorem doesn't apply, so we can't decide yet
 			roundInfo.numUnknownFame++;
-			RoundInfo nextRound = rounds.get(roundInfo.round + 1);
+			RoundInfo nextRound = rounds.get(roundInfo.getRound() + 1);
 			if (nextRound != null) {
-				// event is in round R, there is a round R+1, but not an R+2, so create an election in R+1
+				// event is round R, there is a round R+1, but not an R+2, so create election in R+1
 				newElection(event, nextRound, null);
 			}
 		}
@@ -729,14 +1165,11 @@ public class ConsensusImpl implements Consensus {
 			RoundInfo.ElectionRound prevRound) {
 		RoundInfo.ElectionRound election = new RoundInfo.ElectionRound(roundInfo,
 				getAddressBook().getSize(), witness,
-				roundInfo.round - witness.getRoundCreated()); // this is the only place this is called
+				roundInfo.getRound() - witness.getRoundCreated()); // this is the only place this is called
 		election.nextRound = null;
 		election.prevRound = prevRound;
 		election.prevElection = null;
 		election.nextElection = roundInfo.elections;
-		for (int i = 0; i < roundInfo.numWitnesses; i++) {
-			election.vote.add(false); //all this round's witnesses will vote on fame of witness. Votes init to false.
-		}
 		if (witness.getFirstElection() == null) {
 			witness.setFirstElection(election);
 		}
@@ -762,11 +1195,11 @@ public class ConsensusImpl implements Consensus {
 	 * @return list of all events that reach consensus during this method call, in consensus order (or null if none)
 	 */
 	private List<EventImpl> setFamous(EventImpl event, RoundInfo roundInfo,
-			boolean isFamous) {
+			boolean isFamous, RoundInfo.ElectionRound TEMP) {
 		event.setFamous(isFamous);
 		event.setFameDecided(true);
 		if (isFamous) {
-			//remember it as a judge (or don't, if it's a fork that won't be the judge)
+			//remember it as a judge (or don't, if it's a fork that won't be the unique famous witness)
 			roundInfo.addFamousWitness(event);
 		}
 		roundInfo.numUnknownFame--;
@@ -826,9 +1259,9 @@ public class ConsensusImpl implements Consensus {
 		// Note: more witnesses may be added to this round in the future, but
 		// they'll all be instantly marked as not famous.
 		roundInfo.fameDecided = true;
-		long round = roundInfo.round;
+		long round = roundInfo.getRound();
 		while (fameDecidedBelow.get() == round && roundInfo.fameDecided) {
-			minGenConsumer.accept(round, roundInfo.minGeneration);
+			minGenConsumer.accept(round, roundInfo.getMinGeneration());
 			findReceivedInRound(roundInfo, newConsensusEvents);
 			round++;
 			fameDecidedBelow.set(
@@ -836,10 +1269,13 @@ public class ConsensusImpl implements Consensus {
 			statsSupplier.get().consensusReachedOnRound();
 			roundInfo = rounds.get(round);
 		}
+
+		updateMaxRoundGeneration();
+
 		delRounds(); // we could delete old rounds more often, but once per new decided round is enough
 
 		//now that a new round reached consensus, some events became ancient, so set the non-consensus ones to stale
-		for (long r = minRound.get(); r <= roundInfo.round; r++) {
+		for (long r = minRound.get(); r <= roundInfo.getRound(); r++) {
 			RoundInfo info = rounds.get(r); // each element of rounds has its own lock
 			if (info != null) {
 				for (EventImpl e : info.allEvents) { // allEvents has its own lock
@@ -862,18 +1298,18 @@ public class ConsensusImpl implements Consensus {
 	 * greater than R until after it has been called on round R.
 	 *
 	 * @param roundInfo
-	 * 		the info for the round with the judges, which is also the round received for these events
+	 * 		the info for the round with the unique famous witnesses, which is also the round received for these events
 	 * 		reaching consensus now
 	 * @param newConsensusEvents
 	 * 		a (possibly-nonempty) list that will have added to it all events that reach consensus during this
 	 * 		method call, adding them in consensus order
 	 */
 	private void findReceivedInRound(RoundInfo roundInfo, List<EventImpl> newConsensusEvents) {
-		byte[] whitening; //an XOR of the signatures of judges in a round, used during sorting
+		byte[] whitening; //an XOR of the signatures of unique famous witnesses in a round, used during sorting
 		ArrayList<EventImpl> consensus = new ArrayList<>(); //the newly-consensus events where round received is "round"
 		EventImpl[] judges = roundInfo.judges; //all judges for this round
 		int numJudges = 0; //number of judges in this round
-		long round = roundInfo.round; //the round where we just got consensus on the set of judges
+		long round = roundInfo.getRound(); //the round where we just got consensus on the set of unique famous witnesses
 		List<Hash> hashesR0 = new ArrayList<>(); //hashes of judges in round
 		List<Hash> hashesR1 = new ArrayList<>(); //hashes of round-1 witnesses that are ancestors of hashesR0
 		List<Hash> hashesR2 = new ArrayList<>(); //hashes of round-2 witnesses that are ancestors of hashesR0
@@ -889,7 +1325,7 @@ public class ConsensusImpl implements Consensus {
 
 		// find whitening for round
 		Arrays.fill(roundInfo.whitening, (byte) 0);
-		for (EventImpl w : judges) {
+		for (EventImpl w : judges) { //calculate the whitening byte array
 			if (w != null) {
 				numJudges++;
 				int mn = Math.min(roundInfo.whitening.length, w.getSignature().length);
@@ -903,17 +1339,17 @@ public class ConsensusImpl implements Consensus {
 		// get the minimum generation of famous witnesses for [roundsStale] rounds ago
 		// any event with generation less than minGenConsensus is ancient, and will be stale if not already consensus
 		long minGenConsensus = 0;
-		long staleRound = roundInfo.round - Settings.state.roundsStale;
+		long staleRound = roundInfo.getRound() - Settings.state.roundsStale;
 		if (staleRound < minRound.get()) {
 			// this can happen after a restart when loading a state saved with the old code
 			staleRound = minRound.get();
 		}
 		if (staleRound >= 0) {
-			minGenConsensus = rounds.get(staleRound).minGeneration;
+			minGenConsensus = rounds.get(staleRound).getMinGeneration();
 		}
 
 		ArrayList<EventImpl> staleEvents = new ArrayList<>(); // new stale events in round r
-		ArrayList<EventImpl> visited = new ArrayList<>(); //each event visited by iterator from at least one judge
+		ArrayList<EventImpl> visited = new ArrayList<>(); //each event visited by iterator from at least one ufw witness
 
 		//for each judge in this round that just decided fame
 		for (EventImpl w : roundInfo.judges) {
@@ -923,7 +1359,7 @@ public class ConsensusImpl implements Consensus {
 						e -> (!e.isConsensus() && !e.isStale()));
 				ValidAncestorsView threeRoundAncestors = new ValidAncestorsView(w,
 						e -> (e.getRoundCreated() == round - 1 || e.getRoundCreated() == round - 2));
-				hashesR0.add(new Hash(w.getBaseHash())); //remember hash of each judge in round
+				hashesR0.add(new Hash(w.getBaseHash())); //remember hash of each UFW in round
 				//find hashes of all ancestors of w that are witnesses in rounds round-1 or round-2
 				for (EventImpl event : threeRoundAncestors) {
 					if (event.isWitness() && event.getRoundCreated() == round - 1) {
@@ -933,7 +1369,7 @@ public class ConsensusImpl implements Consensus {
 					}
 				}
 				//walk through all non-consensus, non-stale ancestors of w, using a predicate lambda to check for that
-				//for every ancestor of the judge that isn't consensus/stale/expired yet
+				//for every ancestor of the ufw that isn't consensus/stale/expired yet
 				for (EventImpl event : nonConsensusAncestors) {
 					if (event.getGeneration() < minGenConsensus) {
 						// this non-stale, non-consensus event is too old, so it should now be declared stale
@@ -943,17 +1379,22 @@ public class ConsensusImpl implements Consensus {
 						if (eventRoundInfo == null) {
 							// added to figure out issue #2344
 							RoundInfo minRound = rounds.get(getMinRound());
+							final long finalMinGenConsensus = minGenConsensus;
 							log.error(INVALID_EVENT_ERROR.getMarker(),
-									"Judge {} rc:{} gen:{}\n" +
+									"Judge {} rc:{}\n" +
 											"has ancestor:\n" +
-											"{} rc:{} gen:{} cons:{} stale:{}\n" +
+											"{} rc:{} cons:{} stale:{}\n" +
 											"which is not stale or consensus and its round is missing!\n" +
 											"minGenConsensus:{} minRound:{} minRound.minGeneration:{}\n",
-									w.getCreatorSeqPair(), w.getRoundCreated(), w.getGeneration(),
-									event.getCreatorSeqPair(), event.getRoundCreated(), event.getGeneration(),
-									event.isConsensus(), event.isStale(),
-									minGenConsensus, getMinRound(),
-									minRound != null ? minRound.minGeneration : null
+									w::toShortString,
+									w::getRoundCreated,
+									event::toShortString,
+									event::getRoundCreated,
+									event::isConsensus,
+									event::isStale,
+									() -> finalMinGenConsensus,
+									this::getMinRound,
+									() -> minRound != null ? minRound.getMinGeneration() : null
 							);
 						} else {
 							eventRoundInfo.nonConsensusEvents.remove(event);
@@ -967,7 +1408,7 @@ public class ConsensusImpl implements Consensus {
 					//this is one of the times that will affect the median
 					event.getRecTimes().add(nonConsensusAncestors.getTime()); //this is reset to null after this loop
 
-					//if it reached all the judges, then it now has consensus
+					//if it reached all the ufws, then it now has consensus
 					if (event.getRecTimes().size() == numJudges) {
 						// event has reached consensus, so store it, set consensus timestamp, and set isConsensus to
 						// true
@@ -998,26 +1439,18 @@ public class ConsensusImpl implements Consensus {
 			//subsort ties by extended median timestamp
 			ArrayList<Instant> recTimes1 = e1.getRecTimes();
 			ArrayList<Instant> recTimes2 = e2.getRecTimes();
-			int size1 = recTimes1.size();
-			int size2 = recTimes2.size();
 
-			int m1 = size1 / 2; //middle position of e1 (the later of the two middles, if even length)
-			int m2 = size2 / 2; //middle position of e2 (the later of the two middles, if even length)
+			int m1 = recTimes1.size() / 2; //middle position of e1 (the later of the two middles, if even length)
+			int m2 = recTimes2.size() / 2; //middle position of e2 (the later of the two middles, if even length)
 			int d = -1; //offset from median position to look at
 			while (m1 + d >= 0
 					&& m2 + d >= 0
-					&& m1 + d < size1
-					&& m2 + d < size2) {
+					&& m1 + d < recTimes1.size()
+					&& m2 + d < recTimes2.size()) {
 				c = recTimes1.get(m1 + d).compareTo(recTimes2.get(m2 + d));
 				if (c != 0)
 					return c;
 				d = d < 0 ? -d : -d - 1; //use the median position plus -1, 1, -2, 2, -3, 3, ...
-			}
-			if (size1 > size2) {
-				return 1; //this should never happen. They should be the same length.
-			}
-			if (size1 < size2) {
-				return -1; //this should never happen. They should be the same length.
 			}
 
 			//subsort ties by generation
@@ -1041,7 +1474,7 @@ public class ConsensusImpl implements Consensus {
 			newConsensusEvents.add(e);
 		}
 		for (EventImpl e : visited) {
-			e.setFrozen(true); //never recalculate roundCreated again for an event that was an ancestor of a judge
+			e.setFrozen(true); //never recalculate roundCreated again for an event that was an ancestor of a ufw
 			e.setRecTimes(null); //reclaim the memory for the list of received times
 		}
 	}
@@ -1060,8 +1493,12 @@ public class ConsensusImpl implements Consensus {
 		long minGenNotExpired = -1;
 		RoundInfo expRound = rounds.get(minRoundNotExpired);
 		if (expRound != null) {
-			minGenNotExpired = expRound.minGeneration;
+			minGenNotExpired = expRound.getMinGeneration();
 		}
+
+		final long curMinRound = minRound.get();
+		long newMinRound = curMinRound;
+
 		roundLoop:
 		for (long r = minRound.get(); r < minRoundNotExpired; r++) {
 			RoundInfo info = rounds.get(r);
@@ -1073,33 +1510,56 @@ public class ConsensusImpl implements Consensus {
 						break roundLoop;
 					}
 				}
-
-				// at this point, every event in the round is expired, every witness has fame decided, no
-				// elections exist, so this round can be removed
-				rounds.remove(r);
-				hashLists.remove(r);
-				for (EventImpl e : info.allEvents) {
-					if (!e.isConsensus() && !e.isStale()) {
-						staleEvent(e); //this should be incredibly rare: expiring before being marked stale
-					}
-					// if the event is the lastConsEventByMember, we might still need it in the future if the node
-					// starts generating events again. For this reason, we will not clear it until we get another
-					// event from that node
-					if (isLastConsEventByMember(e)) {
-						toBeCleared.add(e);
-					} else {
-						// null out the references to other events, so the garbage collector can delete
-						// those older events
-						e.clear();
-					}
-
-					// remove it from the record of all the events in the universe.
-					eventsByCreatorSeq.remove(new CreatorSeqPair(
-							e.getCreatorId(), e.getCreatorSeq()));
-				}
 			}
-			minRound.set(r + 1);
+
+			newMinRound++;
 		}
+
+		if (newMinRound > curMinRound) {
+			minRound.set(newMinRound);
+		}
+
+		updateMinRoundGeneration();
+
+		for (long r = curMinRound; r < newMinRound; r++) {
+			// at this point, every event in the round is expired, every witness has fame decided, no
+			// elections exist, so this round can be removed
+			final RoundInfo info = rounds.get(r);
+			rounds.remove(r);
+			hashLists.remove(r);
+			if (r == hashRound) {
+				// we've now discarded the most recent of the hashList events, so clear everything for all 3 lists,
+				// except don't clear hashLists, because it is storing lists to be saved in the future, not the
+				// lists that were loaded at startup
+				hashRoundCreated = null;
+				hashRound = -1;
+				numInitJudgesMissing = 0;
+				hashRoundJudges = null;
+			}
+
+			for (final EventImpl e : info.allEvents) {
+				if (!e.isConsensus() && !e.isStale()) {
+					staleEvent(e); // this should be incredibly rare: expiring before being marked stale
+				}
+				// if the event is the lastConsEventByMember, we might still need it in the future if the node
+				// starts generating events again. For this reason, we will not clear it until we get another
+				// event from that node
+				if (isLastConsEventByMember(e)) {
+					toBeCleared.add(e);
+				} else {
+					// null out the references to other events, so the garbage collector can delete
+					// those older events
+					e.clear();
+					log.debug(EXPIRE_EVENT.getMarker(),
+							"HG removing {}", e::toShortString);
+				}
+
+				// remove it from the record of all the events in the universe.
+				eventsByCreatorSeq.remove(new CreatorSeqPair(e.getCreatorId(), e.getCreatorSeq()));
+			}
+		}
+
+
 		// events were added to the toBeCleared array because they were the last event by a member. If this is no
 		// longer the case, we can clear this event
 		Iterator<EventImpl> it = toBeCleared.iterator();
@@ -1107,6 +1567,8 @@ public class ConsensusImpl implements Consensus {
 			EventImpl next = it.next();
 			if (!isLastConsEventByMember(next)) {
 				next.clear();
+				log.debug(EXPIRE_EVENT.getMarker(),
+						"HG removing {}", next::toShortString);
 				it.remove();
 			}
 		}
@@ -1124,10 +1586,10 @@ public class ConsensusImpl implements Consensus {
 		if (event.isCleared()) {
 			return; // no need to update discarded events
 		}
-		event.setRoundReceived(receivedRoundInfo.round);
+		event.setRoundReceived(receivedRoundInfo.getRound());
 		event.setConsensus(true);
 
-		ArrayList<Instant> times = event.getRecTimes(); //list of when e1 first became ancestor of each judge
+		ArrayList<Instant> times = event.getRecTimes(); //list of when e1 first became ancestor of each ufw
 		//sort ascending the received times. Used to find the median now, and the extended median later.
 		Collections.sort(times);
 		// take middle. If there are 2 middle (even length) then use the 2nd (max) of them
@@ -1148,18 +1610,19 @@ public class ConsensusImpl implements Consensus {
 	 * @param events
 	 * 		the events to set (such that a for(EventImpl e:events) loop visits them in consensus order)
 	 */
-	private void setConsensusOrder(Collection<EventImpl> events) {
+	private synchronized void setConsensusOrder(Collection<EventImpl> events) {
 		EventImpl last = null;
 		for (EventImpl e : events) {
 			last = e;
-			e.setConsensusOrder(numConsensus.longValue());
-			numConsensus.incrementAndGet();
+			e.setConsensusOrder(numConsensus);
+			numConsensus++;
+
 			// advance this event's consensus timestamp to be at least minTimestamp. Update minTimestamp
 			if (minTimestamp != null
 					&& e.getConsensusTimestamp().isBefore(minTimestamp)) {
 				e.setConsensusTimestamp(minTimestamp);
 			}
-			minTimestamp = e.getLastTransTime().plusNanos(1);
+			minTimestamp = calcMinTimestampForNextEvent(e.getLastTransTime());
 		}
 		if (last != null) {
 			last.setLastInRoundReceived(true);
@@ -1343,9 +1806,9 @@ public class ConsensusImpl implements Consensus {
 			long prop = parentRound(op); //parent round of other parent of x
 
 			x.initStronglySeeP(numMembers);
-
 			for (int mm = 0; mm < numMembers; mm++) {
-				if (stronglySeeP(sp, mm) != null && prx == prsp) {
+				if (stronglySeeP(sp,
+						mm) != null && prx == prsp) {
 					x.setStronglySeeP(mm, stronglySeeP(sp, mm));
 				} else if (stronglySeeP(op, mm) != null && prx == prop) {
 					x.setStronglySeeP(mm, stronglySeeP(op, mm));
@@ -1394,7 +1857,7 @@ public class ConsensusImpl implements Consensus {
 	private long round(EventImpl x) {
 		int numMembers = getAddressBook().getSize(); //number of members that are voting, with ID 0 to numMembers-1
 		EventImpl op, sp; //other parent, self parent
-		long rop, rsp, stake; //roundCreated of other parent, roundCreated of self parent, sum of stake involved
+		long rop, rsp, stake; //roundCreated of other parent, roundCerated of self parent, sum of stake involved
 
 		if (x == null) {
 			return 0;
@@ -1403,6 +1866,60 @@ public class ConsensusImpl implements Consensus {
 			return x.getRoundCreated();
 		}
 		//calculate the round, memoize it, and return it
+
+		//if this was in the hash lists given to the constructor, then assign it the roundCreated they specified
+		if (hashRoundCreated != null) {
+			Long r = hashRoundCreated.get(x.getBaseHash()); //the round to assign to x
+			if (r != null) {
+				if (r == hashRound) {
+					//we found one of the missing judges in round hashRound
+					hashRoundJudges.add(x);
+					numInitJudgesMissing--;
+					if (numInitJudgesMissing == 0) {
+						//we now have the last of the missing judges, so find every known event that is an ancestor
+						//of all of them, and mark it as having consensus.  We won't handle its transactions or do
+						//anything else with it, since it had earlier achieved consensus and affected the signed state
+						//that we started from. We won't even set its consensus fields such as roundReceived, because
+						//they aren't known, will never be known, and aren't needed.  We'll just mark it as having
+						//consensus, so we don't calculate consensus for it again in the future.
+
+						for (EventImpl w : hashRoundJudges) {
+							ValidAncestorsView nonConsensusAncestors = new ValidAncestorsView(w,
+									e -> (!e.isConsensus() && !e.isStale()));
+							//temporarily use consensusOrder as a counter of how many judges it's an ancestor of
+							for (EventImpl event : nonConsensusAncestors) {
+								event.setConsensusOrder(0);
+							}
+						}
+						for (EventImpl w : hashRoundJudges) {
+							ValidAncestorsView nonConsensusAncestors = new ValidAncestorsView(w,
+									e -> (!e.isConsensus() && !e.isStale()));
+							//temporarily use consensusOrder as a counter of how many judges it's an ancestor of
+							for (EventImpl event : nonConsensusAncestors) {
+								long count = 1 + event.getConsensusOrder();
+								event.setConsensusOrder(count);
+								if (count == hashRoundJudges.size()) {
+									//this event is an ancestor of all the judges, and so would have reached consensus
+									//sometime before the signed state was created.  Mark it as having consensus so it
+									//won't reach consensus again.
+									event.setConsensus(true);
+								}
+							}
+						}
+						for (EventImpl w : hashRoundJudges) {
+							ValidAncestorsView nonConsensusAncestors = new ValidAncestorsView(w,
+									e -> (!e.isConsensus() && !e.isStale()));
+							//it's no longer needed as a counter. We'll never get consensus. So just leave it as a zero
+							for (EventImpl event : nonConsensusAncestors) {
+								event.setConsensusOrder(0);
+							}
+						}
+					}
+				}
+				x.setRoundCreated(r);
+				return x.getRoundCreated();
+			}
+		}
 
 		op = x.getOtherParent();
 		sp = x.getSelfParent();
@@ -1532,7 +2049,7 @@ public class ConsensusImpl implements Consensus {
 	}
 
 	/**
-	 * Return the result of a "coin flip". It doesn't need to be cryptographically strong. It just needs to be the case
+	 * Return the result of a "coin flip". It doesn't need to be cryptographicaly strong. It just needs to be the case
 	 * that an attacker cannot predict the coin flip results before seeing the event, even if they can manipulate the
 	 * internet traffic to the creator of this event earlier. It's even OK if the attacker can predict the coin flip
 	 * 90% of the time. There simply needs to be some epsilon such that the probability of a wrong prediction is always
@@ -1545,6 +2062,30 @@ public class ConsensusImpl implements Consensus {
 	 */
 	private boolean coin(EventImpl event) {
 		return ((event.getSignature()[(event.getSignature().length / 2)] & 1) == 1);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isEventOld(final EventImpl event) {
+		return event.getRoundCreated() > 0 && event.getRoundCreated() <= getMinRound();
+	}
+
+	/**
+	 * Calculates the minimum consensus timestamp for the next event based on current event's last transaction timestamp
+	 *
+	 * @param lastTransTimestamp
+	 * 		current event's last transaction timestamp
+	 * @return the minimum consensus timestamp for the next event that reaches consensus
+	 */
+	static Instant calcMinTimestampForNextEvent(final Instant lastTransTimestamp) {
+		// adds minTransTimestampIncrNanos
+		Instant t = lastTransTimestamp.plusNanos(minTransTimestampIncrNanos);
+		// rounds up to the nearest multiple of minTransTimestampIncrNanos
+		t = t.plusNanos(minTransTimestampIncrNanos - 1
+				- ((minTransTimestampIncrNanos + t.getNano() - 1) % minTransTimestampIncrNanos));
+		return t;
 	}
 
 	/////////////////////////////////////////////////////////////
@@ -1651,7 +2192,7 @@ public class ConsensusImpl implements Consensus {
 					throw new NoSuchElementException("no more events left to iterator over");
 				}
 				while (true) { //keep recursing until we reach the return statement in the case state == 2
-					curr.setMark(currMark); //mark this event so we don't explore it again later for this judge
+					curr.setMark(currMark); //mark this event so we don't explore it again later for this ufw
 					if (state == 0) { //try to recurse into selfParent
 						EventImpl p = curr.getSelfParent();
 						state = 1;
@@ -1693,9 +2234,6 @@ public class ConsensusImpl implements Consensus {
 						timeReachedRoot = stackTime.pop();
 						return toReturn; //return the child of the vertex we just backtracked to
 					} else { //this should never happen (illegal state number)
-						log.error(EXCEPTION.getMarker(),
-								"illegal state number: iterator state {} is not in range [0,2]",
-								state);
 					}
 				}
 			}

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -65,7 +65,12 @@ public class ExtendedDataOutputStream extends DataOutputStream {
 	}
 
 	/**
+	 * Writes a byte array to the stream. Can be null.
 	 * Same as {@link #writeByteArray(byte[], boolean)} with {@code writeChecksum} set to false
+	 * @param data
+	 * 		the array to write
+	 * @throws IOException
+	 * 		thrown if any IO problems occur
 	 */
 	public void writeByteArray(byte[] data) throws IOException {
 		writeByteArray(data, debug);
@@ -312,5 +317,56 @@ public class ExtendedDataOutputStream extends DataOutputStream {
 		}
 		this.writeLong(instant.getEpochSecond());
 		this.writeLong(instant.getNano());
+	}
+
+	/**
+	 * Get serialized length of a long array
+	 *
+	 * @param data
+	 * 		the array to write
+	 */
+	public static int getArraySerializedLength(final long[] data) {
+		int totalByteLength = Integer.BYTES;
+		totalByteLength += (data == null) ? 0 : (data.length * Long.BYTES);
+		return totalByteLength;
+	}
+
+	/**
+	 * Get serialized length of an integer array
+	 *
+	 * @param data
+	 * 		the array to write
+	 */
+	public static int getArraySerializedLength(final int[] data) {
+		int totalByteLength = Integer.BYTES;
+		totalByteLength += (data == null) ? 0 : (data.length * Integer.BYTES);
+		return totalByteLength;
+	}
+
+	/**
+	 * Get serialized length of a byte array
+	 *
+	 * @param data
+	 * 		the array to write
+	 */
+	public static int getArraySerializedLength(final byte[] data) {
+		return getArraySerializedLength(data, debug);
+	}
+
+	/**
+	 * Get serialized length of a byte array
+	 *
+	 * @param data
+	 * 		the array to write
+	 * @param writeChecksum
+	 * 		whether to read the checksum or not
+	 */
+	public static int getArraySerializedLength(final byte[] data, final boolean writeChecksum) {
+		int totalByteLength = Integer.BYTES;	// add the the size of array length field
+		if (writeChecksum) {
+			totalByteLength += Integer.BYTES; // add the length of checksum
+		}
+		totalByteLength += (data == null) ? 0 : data.length;
+		return totalByteLength;
 	}
 }

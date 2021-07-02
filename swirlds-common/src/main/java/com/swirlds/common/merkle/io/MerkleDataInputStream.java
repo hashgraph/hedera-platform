@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -18,18 +18,18 @@ import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.SerializableAbbreviated;
 import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.merkle.exceptions.IllegalChildCountException;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.MerkleNode;
+import com.swirlds.common.merkle.exceptions.IllegalChildCountException;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.LinkedList;
 import java.util.Queue;
 
-import static com.swirlds.common.io.SerializableStreamConstants.MerkleSerializationProtocolVersion.CURRENT;
 import static com.swirlds.common.io.SerializableStreamConstants.MerkleSerializationProtocolVersion.ADDED_OPTIONS;
+import static com.swirlds.common.io.SerializableStreamConstants.MerkleSerializationProtocolVersion.CURRENT;
 import static com.swirlds.common.io.SerializableStreamConstants.MerkleSerializationProtocolVersion.ORIGINAL;
 import static com.swirlds.common.io.SerializableStreamConstants.NULL_CLASS_ID;
 
@@ -50,6 +50,8 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 	 *
 	 * @param in
 	 * 		the specified input stream.
+	 * @param abbreviated
+	 * 		whether the nodes are serialized in an abbreviated form
 	 */
 	public MerkleDataInputStream(InputStream in, boolean abbreviated) {
 		super(in);
@@ -59,6 +61,9 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 
 	/**
 	 * Add a child to its parent.
+	 *
+	 * @param child
+	 * 		the child to be added
 	 */
 	private void addToParent(MerkleNode child) {
 		if (internalNodes.size() == 0) {
@@ -75,6 +80,11 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 
 	/**
 	 * Finish deserializing a leaf node.
+	 *
+	 * @param node
+	 * 		the leaf node to be read
+	 * @param version
+	 * 		version of this leaf
 	 */
 	private void finishReadingLeaf(MerkleLeaf node, int version) throws IOException {
 		if (abbreviated && node.isDataExternal()) {
@@ -89,6 +99,11 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 
 	/**
 	 * Finish deserializing an internal node.
+	 *
+	 * @param node
+	 * 		the internal node to be read
+	 * @param version
+	 * 		version of this internal node
 	 */
 	private void finishReadingInternal(MerkleInternal node, int version) throws IOException {
 		int childCount = readInt();
@@ -106,6 +121,9 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 
 	/**
 	 * Read the node from the stream.
+	 *
+	 * @param options
+	 * 		the options we used when reading the node
 	 */
 	void readNextNode(MerkleTreeSerializationOptions options) throws IOException {
 		long classId = readLong();
@@ -124,9 +142,9 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 		validateVersion(node, classVersion);
 
 		if (node.isLeaf()) {
-			finishReadingLeaf((MerkleLeaf) node, classVersion);
+			finishReadingLeaf(node.asLeaf(), classVersion);
 		} else {
-			finishReadingInternal((MerkleInternal) node, classVersion);
+			finishReadingInternal(node.asInternal(), classVersion);
 		}
 		if (options.getWriteHashes()) {
 			node.setHash(
@@ -137,6 +155,15 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 
 	/**
 	 * Read a merkle tree from a stream.
+	 *
+	 * @param maxNumberOfNodes
+	 * 		maximum number of nodes to read
+	 * @param <T>
+	 * 		Type of the node
+	 * @return
+	 * 		the merkle tree read from the stream
+	 * @throws IOException
+	 * 		thrown when version or the options or nodes count are invalid
 	 */
 	@SuppressWarnings("unchecked")
 	public <T extends MerkleNode> T readMerkleTree(int maxNumberOfNodes) throws IOException {
