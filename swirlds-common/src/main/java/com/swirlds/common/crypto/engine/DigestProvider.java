@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,6 +15,7 @@
 package com.swirlds.common.crypto.engine;
 
 import com.swirlds.common.crypto.DigestType;
+import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.Message;
 
 import java.security.MessageDigest;
@@ -24,7 +25,7 @@ import java.security.NoSuchAlgorithmException;
  * Implementation of a message digest provider. This implementation depends on the JCE {@link MessageDigest} providers
  * and supports all algorithms supported by the JVM.
  */
-public class DigestProvider extends CachingOperationProvider<Message, Void, byte[], MessageDigest, DigestType> {
+public class DigestProvider extends CachingOperationProvider<Message, Void, Hash, MessageDigest, DigestType> {
 
 	/**
 	 * Default Constructor.
@@ -43,7 +44,7 @@ public class DigestProvider extends CachingOperationProvider<Message, Void, byte
 	 * @throws NoSuchAlgorithmException
 	 * 		if an implementation of the required algorithm cannot be located or loaded
 	 */
-	private byte[] compute(final byte[] msg) throws NoSuchAlgorithmException {
+	protected Hash compute(final byte[] msg) throws NoSuchAlgorithmException {
 		return compute(msg, DigestType.SHA_384);
 	}
 
@@ -58,7 +59,7 @@ public class DigestProvider extends CachingOperationProvider<Message, Void, byte
 	 * @throws NoSuchAlgorithmException
 	 * 		if an implementation of the required algorithm cannot be located or loaded
 	 */
-	private byte[] compute(final byte[] msg, final DigestType algorithmType) throws NoSuchAlgorithmException {
+	protected Hash compute(final byte[] msg, final DigestType algorithmType) throws NoSuchAlgorithmException {
 		if (msg == null) {
 			throw new IllegalArgumentException("msg");
 		}
@@ -80,7 +81,7 @@ public class DigestProvider extends CachingOperationProvider<Message, Void, byte
 	 * @throws NoSuchAlgorithmException
 	 * 		if an implementation of the required algorithm cannot be located or loaded
 	 */
-	private byte[] compute(final byte[] msg, final int offset, final int length) throws NoSuchAlgorithmException {
+	private Hash compute(final byte[] msg, final int offset, final int length) throws NoSuchAlgorithmException {
 		return compute(msg, offset, length, DigestType.SHA_384);
 	}
 
@@ -100,10 +101,10 @@ public class DigestProvider extends CachingOperationProvider<Message, Void, byte
 	 * @throws NoSuchAlgorithmException
 	 * 		if an implementation of the required algorithm cannot be located or loaded
 	 */
-	private byte[] compute(final byte[] msg, final int offset, final int length,
+	private Hash compute(final byte[] msg, final int offset, final int length,
 			final DigestType algorithmType) throws NoSuchAlgorithmException {
 		final MessageDigest algorithm = loadAlgorithm(algorithmType);
-		return compute(algorithm, msg, offset, length);
+		return new Hash(compute(algorithm, msg, offset, length), algorithmType);
 	}
 
 	/**
@@ -119,9 +120,9 @@ public class DigestProvider extends CachingOperationProvider<Message, Void, byte
 	 * {@inheritDoc}
 	 */
 	@Override
-	protected byte[] handleItem(final MessageDigest algorithm, final DigestType algorithmType, final Message item,
+	protected Hash handleItem(final MessageDigest algorithm, final DigestType algorithmType, final Message item,
 			final Void optionalData) {
-		return compute(algorithm, item.getPayloadDirect(), item.getOffset(), item.getLength());
+		return new Hash(compute(algorithm, item.getPayloadDirect(), item.getOffset(), item.getLength()), algorithmType);
 	}
 
 

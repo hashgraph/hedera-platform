@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -21,6 +21,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.HEARTBEAT;
@@ -97,8 +98,7 @@ class SyncHeartbeat implements Runnable {
 		log.debug(HEARTBEAT.getMarker(),
 				"about to lock platform[{}].syncServer.lockCallHeartbeat[{}]",
 				platform.getSelfId(), otherId);
-		LoggingReentrantLock lock = platform.getSyncServer().lockCallHeartbeat
-				.get(otherId.getIdAsInt());
+		final ReentrantLock lock = platform.getSyncServer().lockCallHeartbeat.get(otherId.getIdAsInt());
 		DataOutputStream dos = conn.getDos();
 		DataInputStream dis = conn.getDis();
 		if (dis == null || dos == null) {
@@ -106,25 +106,24 @@ class SyncHeartbeat implements Runnable {
 		}
 		// Ensure SyncCaller and heartbeat takes turns on this socket.
 		// If the SyncCaller is currently syncing, block forever until it's done.
-		lock.lock("SyncHeartbeat.run 1"); // block forever until available
+		lock.lock(); // block forever until available
 		try {
 			log.debug(HEARTBEAT.getMarker(),
 					"locked platform[{}].syncServer.lockCallHeartbeat[{}]",
 					platform.getSelfId(), otherId);
 			log.debug(HEARTBEAT.getMarker(), "about to send heartbeat");
-			// conn.disconnect(otherId, true, 3);
 
 			long startTime = System.nanoTime();
-			dos.write((int) SyncConstants.heartbeat);
+			dos.write((int) SyncConstants.HEARTBEAT);
 			dos.flush();
 			conn.getSocket().setSoTimeout(Settings.timeoutSyncClientSocket);
 			byte b = dis.readByte();
 			platform.getStats().avgPingMilliseconds[otherId.getIdAsInt()].recordValue(
 					(System.nanoTime() - startTime) / 1_000_000.0);
-			if (b != SyncConstants.heartbeatAck) {
+			if (b != SyncConstants.HEARTBEAT_ACK) {
 				log.error(HEARTBEAT.getMarker(),
 						"received {} but expected {} (heartbeatACK)", b,
-						SyncConstants.heartbeatAck);
+						SyncConstants.HEARTBEAT_ACK);
 				conn.disconnect(true, 12);
 				platform.getSyncClient().getCallerConnOrConnectOnce(otherId); // try once to reconnect
 			}
@@ -141,7 +140,7 @@ class SyncHeartbeat implements Runnable {
 			log.debug(HEARTBEAT.getMarker(),
 					"unlocked platform[{}].syncServer.lockCallHeartbeat[{}]",
 					platform.getSelfId(), otherId);
-			lock.unlock("SyncHeartbeat.run 2");
+			lock.unlock();
 		}
 	}
 }

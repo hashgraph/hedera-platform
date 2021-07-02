@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -23,7 +23,6 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -36,7 +35,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class StandardWorkGroup {
 
-	private static final String POOL_PREFIX_PATTERN = "< work group: %s ";
+	private static final String DEFAULT_TASK_NAME = "IDLE";
 
 	private final String groupName;
 	private final ExecutorService executorService;
@@ -49,12 +48,10 @@ public class StandardWorkGroup {
 		this.exceptions = new ConcurrentLinkedQueue<>();
 		this.futures = new ConcurrentFuturePool<>(this::handleError);
 
-		final ThreadFactory threadFactory = new StandardThreadFactoryBuilder()
-				.poolNamePrefixPattern(POOL_PREFIX_PATTERN)
-				.poolName(groupName)
-				.build();
+		final ThreadConfiguration configuration = new ThreadConfiguration()
+				.setComponent("work group " + groupName).setThreadName(DEFAULT_TASK_NAME);
 
-		this.executorService = Executors.newCachedThreadPool(threadFactory);
+		this.executorService = Executors.newCachedThreadPool(configuration.buildFactory());
 	}
 
 
@@ -88,12 +85,12 @@ public class StandardWorkGroup {
 	}
 
 	public void execute(final String taskName, final Runnable command) {
-		final String threadName = String.format(POOL_PREFIX_PATTERN + "@ task: %s >", groupName, taskName);
 		final Runnable wrapper = () -> {
 			final String originalThreadName = Thread.currentThread().getName();
+			final String newThreadName = originalThreadName.replaceFirst(DEFAULT_TASK_NAME, taskName);
 
 			try {
-				Thread.currentThread().setName(threadName);
+				Thread.currentThread().setName(newThreadName);
 				command.run();
 			} finally {
 				Thread.currentThread().setName(originalThreadName);

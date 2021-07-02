@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,13 +15,12 @@
 package com.swirlds.platform.state;
 
 import com.swirlds.common.Releasable;
-import com.swirlds.common.SwirldState;
 import com.swirlds.platform.EventImpl;
 
 /** hold a SwirldState along with some information about it */
 public class StateInfo implements Releasable {
-	/** the SwirldState that this object describes */
-	private SwirldState state;
+	/** the SwirldState root that this object describes */
+	private State state;
 	/**
 	 * lastCons is a consensus event whose transactions have already been handled by state, as have all
 	 * consensus events before it in the consensus order.
@@ -40,7 +39,7 @@ public class StateInfo implements Releasable {
 	 * @param frozen
 	 * 		has state.freeze() been called yet, to promise never to send another transaction?
 	 */
-	public StateInfo(SwirldState state, EventImpl lastCons, boolean frozen) {
+	public StateInfo(State state, EventImpl lastCons, boolean frozen) {
 		this.setState(state);
 		this.setLastCons(lastCons);
 		this.setFrozen(frozen);
@@ -54,6 +53,8 @@ public class StateInfo implements Releasable {
 
 	/**
 	 * make a copy of this StateInfo, where it also makes a new copy of the state
+	 *
+	 * @return a copy of this StateInfo
 	 */
 	public StateInfo copy() {
 		return new StateInfo(this);
@@ -61,14 +62,14 @@ public class StateInfo implements Releasable {
 
 	@Override
 	public void release() {
-		getState().decrementReferenceCount();
+		state.decrementReferenceCount();
 	}
 
-	public SwirldState getState() {
+	public State getState() {
 		return state;
 	}
 
-	public void setState(SwirldState state) {
+	public void setState(State state) {
 		if (this.state != null) {
 			this.state.decrementReferenceCount();
 		}

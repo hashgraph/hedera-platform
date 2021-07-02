@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -20,7 +20,6 @@ import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
-import com.swirlds.platform.Utilities;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -32,11 +31,13 @@ import java.io.IOException;
  * One signature on a signed state, plus related info. An immutable 4-tuple of (round, member, state hash,
  * signature). It does NOT do defensive copying, so callers should be careful to not modify array elements.
  */
-public class SigInfo implements FastCopyable<SigInfo>, SelfSerializable {
+public class SigInfo implements FastCopyable, SelfSerializable {
 	private static final long CLASS_ID = 0xea25a1f0f38a7497L;
-	private static final int VERSION_ORIGINAL = 1;
-	private static final int VERSION_MIGRATE_TO_SERIALIZABLE = 2;
-	private static final int CLASS_VERSION = VERSION_MIGRATE_TO_SERIALIZABLE;
+
+	private static class CLassVersion {
+		public static final int ORIGINAL = 1;
+		public static final int MIGRATE_TO_SERIALIZABLE = 2;
+	}
 
 	/**
 	 * This version number should be used to handle compatibility issues that may arise from any future
@@ -109,18 +110,6 @@ public class SigInfo implements FastCopyable<SigInfo>, SelfSerializable {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void copyFrom(SerializableDataInputStream inStream) throws IOException {
-		classVersion = inStream.readLong();
-		round = inStream.readLong();
-		memberId = inStream.readLong();
-		hash = Utilities.readByteArray(inStream);
-		sig = Utilities.readByteArray(inStream);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public void release() {
 	}
 
@@ -164,17 +153,14 @@ public class SigInfo implements FastCopyable<SigInfo>, SelfSerializable {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void copyFromExtra(SerializableDataInputStream inStream) throws IOException {
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public boolean equals(Object o) {
-		if (this == o) return true;
+		if (this == o) {
+			return true;
+		}
 
-		if (o == null || getClass() != o.getClass()) return false;
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
 
 		SigInfo sigInfo = (SigInfo) o;
 
@@ -226,7 +212,15 @@ public class SigInfo implements FastCopyable<SigInfo>, SelfSerializable {
 	 */
 	@Override
 	public int getVersion() {
-		return CLASS_VERSION;
+		return CLassVersion.MIGRATE_TO_SERIALIZABLE;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getMinimumSupportedVersion() {
+		return CLassVersion.MIGRATE_TO_SERIALIZABLE;
 	}
 
 	/**

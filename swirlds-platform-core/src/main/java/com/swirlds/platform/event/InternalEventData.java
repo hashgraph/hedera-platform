@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,7 +15,6 @@
 package com.swirlds.platform.event;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.RoundInfo;
 
@@ -24,7 +23,7 @@ import java.util.ArrayList;
 
 /**
  * A class that stores temporary data that is used while calculating consensus inside the platform. This data is not
- * relevant after consensus has been calculated.  It does not affect the hash that is signed.
+ * relevant after consensus has been calculated.
  */
 public class InternalEventData {
 	/** the self parent of this */
@@ -36,8 +35,15 @@ public class InternalEventData {
 	/** the time this event was first received locally */
 	@JsonIgnore
 	private Instant timeReceived;
+	/** an estimate of what the consensus timestamp will be (could be a very bad guess) */
+	@JsonIgnore
+	private Instant estimatedTime;
 	/** has this event been cleared (because it was old and should be discarded)? */
 	private boolean cleared = false;
+	/** is this a witness? (is round > selfParent's round, or there is no self parent?) */
+	private boolean isWitness;
+	/** is this both a witness and the fame election is over? */
+	private boolean isFamous;
 	/** is roundCreated frozen (won't change with address book changes)? True if an ancestor of a famous witness */
 	private boolean isFrozen = false;
 	/** is this both a witness and the fame election is over? */
@@ -50,9 +56,6 @@ public class InternalEventData {
 	/** the Election associated with the earliest round involved in the election for this event's fame */
 	@JsonIgnore
 	private RoundInfo.ElectionRound firstElection;
-	/** n-1 for the nth witness added to a round (-1 if not a witness. Can be different on different computers) */
-	@JsonIgnore
-	private int witnessSeq = -1;
 	/** does this event contains user transactions (not just system transactions) */
 	private boolean hasUserTransactions = false;
 	/** lastSee[m] is the last ancestor created by m (memoizes function from Swirlds-TR-2020-01) */
@@ -80,12 +83,9 @@ public class InternalEventData {
 	@JsonIgnore
 	private boolean isLastEventBeforeShutdown = false;
 
-	/** a running hash of all consensus events in history, up through this event */
-	@JsonIgnore
-	private Hash runningHash;
-
 	public InternalEventData() {
 		this.timeReceived = Instant.now();
+		this.estimatedTime = this.timeReceived;  //until a better estimate is found, just guess the time it was received
 		this.mark = 0; //ConsensusImpl.currMark starts at 1 and counts up, so all events initially count as unmarked
 	}
 
@@ -101,7 +101,10 @@ public class InternalEventData {
 				"selfParent=" + EventUtils.toShortString(selfParent) +
 				", otherParent=" + EventUtils.toShortString(otherParent) +
 				", timeReceived=" + timeReceived +
+				", estimatedTime=" + estimatedTime +
 				", cleared=" + cleared +
+				", isWitness=" + isWitness +
+				", isFamous=" + isFamous +
 				", isFrozen=" + isFrozen +
 				", isFameDecided=" + isFameDecided +
 				", isConsensus=" + isConsensus +
@@ -185,6 +188,21 @@ public class InternalEventData {
 	}
 
 	/**
+	 * @return an estimate of what the consensus timestamp will be (could be a very bad guess)
+	 */
+	public Instant getEstimatedTime() {
+		return estimatedTime;
+	}
+
+	/**
+	 * @param estimatedTime
+	 * 		an estimate of what the consensus timestamp will be (could be a very bad guess)
+	 */
+	public void setEstimatedTime(Instant estimatedTime) {
+		this.estimatedTime = estimatedTime;
+	}
+
+	/**
 	 * @return has this event been cleared (because it was old and should be discarded)?
 	 */
 	public boolean isCleared() {
@@ -197,6 +215,22 @@ public class InternalEventData {
 	 */
 	public void setCleared(boolean cleared) {
 		this.cleared = cleared;
+	}
+
+	public boolean isWitness() {
+		return isWitness;
+	}
+
+	public void setWitness(boolean witness) {
+		isWitness = witness;
+	}
+
+	public boolean isFamous() {
+		return isFamous;
+	}
+
+	public void setFamous(boolean famous) {
+		isFamous = famous;
 	}
 
 	/**
@@ -292,6 +326,8 @@ public class InternalEventData {
 
 
 	/**
+	 * @param m
+	 * 		the member ID
 	 * @return last ancestor created by m (memoizes lastSee function from Swirlds-TR-2020-01)
 	 */
 	public EventImpl getLastSee(int m) {
@@ -302,7 +338,9 @@ public class InternalEventData {
 	 * remember event, the last ancestor created by m (memoizes lastSee function from Swirlds-TR-2020-01)
 	 *
 	 * @param m
+	 * 		the member ID
 	 * @param event
+	 * 		the last seen {@link EventImpl} object created by m
 	 */
 	public void setLastSee(int m, EventImpl event) {
 		lastSee[m] = event;
@@ -311,6 +349,9 @@ public class InternalEventData {
 	/**
 	 * Initialize the lastSee array to hold n elements (for n &ge; 0) (memoizes lastSee function from
 	 * Swirlds-TR-2020-01)
+	 *
+	 * @param n
+	 * 		number of members in the initial address book
 	 */
 	public void initLastSee(int n) {
 		lastSee = n == 0 ? null : new EventImpl[n];
@@ -324,6 +365,8 @@ public class InternalEventData {
 	}
 
 	/**
+	 * @param m
+	 * 		the member ID
 	 * @return strongly-seen witness in parent round by m (memoizes stronglySeeP function from Swirlds-TR-2020-01)
 	 */
 	public EventImpl getStronglySeeP(int m) {
@@ -335,7 +378,9 @@ public class InternalEventData {
 	 * Swirlds-TR-2020-01)
 	 *
 	 * @param m
+	 * 		the member ID
 	 * @param event
+	 * 		the strongly-seen witness in parent round created by m
 	 */
 	public void setStronglySeeP(int m, EventImpl event) {
 		stronglySeeP[m] = event;
@@ -344,6 +389,9 @@ public class InternalEventData {
 	/**
 	 * Initialize the stronglySeeP array to hold n elements (for n &ge; 0) (memoizes stronglySeeP function from
 	 * Swirlds-TR-2020-01)
+	 *
+	 * @param n
+	 * 		number of members in AddressBook
 	 */
 	public void initStronglySeeP(int n) {
 		stronglySeeP = n == 0 ? null : new EventImpl[n];
@@ -431,35 +479,5 @@ public class InternalEventData {
 	 */
 	public void setLastEventBeforeShutdown(boolean isLastEventBeforeShutdown) {
 		this.isLastEventBeforeShutdown = isLastEventBeforeShutdown;
-	}
-
-	/**
-	 * @return the running hash of all consensus events in history, up through this event
-	 */
-	public Hash getRunningHash() {
-		return runningHash;
-	}
-
-	/**
-	 * @param runningHash
-	 * 		the running hash of all consensus events in history, up through this event
-	 */
-	public void setRunningHash(Hash runningHash) {
-		this.runningHash = runningHash;
-	}
-
-	/**
-	 * @return n-1 for the nth witness added to a round (-1 if not a witness. Can be different on different computers)
-	 */
-	public int getWitnessSeq() {
-		return witnessSeq;
-	}
-
-	/**
-	 * @param witnessSeq
-	 * 		n-1 for the nth witness added to a round (-1 if not a witness. Can be different on different computers)
-	 */
-	public void setWitnessSeq(int witnessSeq) {
-		this.witnessSeq = witnessSeq;
 	}
 }

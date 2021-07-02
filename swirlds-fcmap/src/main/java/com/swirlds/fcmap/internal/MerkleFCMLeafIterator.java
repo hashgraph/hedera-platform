@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -16,10 +16,8 @@ package com.swirlds.fcmap.internal;
 
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.iterators.MerkleDepthFirstIterator;
-import com.swirlds.common.FCMKey;
-import com.swirlds.common.FCMValue;
 
-public class MerkleFCMLeafIterator<K extends FCMKey, V extends FCMValue>
+public class MerkleFCMLeafIterator<K extends MerkleNode, V extends MerkleNode>
 		extends MerkleDepthFirstIterator<FCMNode<K, V>, FCMLeaf<K, V>> {
 
 	public MerkleFCMLeafIterator(final FCMNode<K, V> root) {
@@ -33,6 +31,6 @@ public class MerkleFCMLeafIterator<K extends FCMKey, V extends FCMValue>
 
 	@Override
 	public boolean shouldNodeBeReturned(final FCMNode<K, V> node) {
-		return node!= null && node.isFCMLeaf();
+		return node != null && node.isFCMLeaf();
 	}
 }

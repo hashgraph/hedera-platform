@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -32,14 +32,14 @@ class StepMeasure {
 	private volatile Checkpoint firstCheckpoint = null;
 	private final Map<Long, Checkpoint> prevCheckpoints = new ConcurrentHashMap<>();
 	private final Map<String, StepInfo> stepInfos = new ConcurrentHashMap<>();
-	private List<StepInfo> stepList = new LinkedList<>();
+	private final List<StepInfo> stepList = new LinkedList<>();
 	@SuppressWarnings("unused")
 	private volatile long count = 0;
 	private boolean enabled = true;
 	private final Instant createdTime = Instant.now();
-	private int logSeconds = 500;
+	private static final int logSeconds = 500;
 	private volatile long printCount = 0;
-	private boolean printEveryTime = false;
+	private static final boolean printEveryTime = false;
 
 	public StepMeasure(String measureName) {
 		super();
@@ -103,9 +103,9 @@ class StepMeasure {
 		log.error(EXCEPTION.getMarker(), sb.toString());
 	}
 
-	private class Checkpoint {
-		private String checkpointName;
-		private Instant instant;
+	private static class Checkpoint {
+		private final String checkpointName;
+		private final Instant instant;
 
 		public Checkpoint(String checkpointName, Instant instant) {
 			super();
@@ -123,7 +123,7 @@ class StepMeasure {
 
 	}
 
-	private class StepInfo {
+	private static class StepInfo {
 		private final String stepName;
 		private volatile long sumTime = 0;
 		private volatile long count = 0;
@@ -135,7 +135,7 @@ class StepMeasure {
 			this.stepName = stepName;
 		}
 
-		public void addTime(long time) {
+		public synchronized void addTime(long time) {
 			if (count == 0) {
 				maxTime = time;
 				minTime = time;

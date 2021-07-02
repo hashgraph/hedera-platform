@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -26,15 +26,17 @@ import com.swirlds.common.NodeId;
 import com.swirlds.common.SwirldState;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.Event;
-import com.swirlds.logging.LogMarker;
 import com.swirlds.common.merkle.io.MerkleDataInputStream;
 import com.swirlds.common.merkle.io.MerkleDataOutputStream;
+import com.swirlds.common.merkle.io.MerkleTreeSerializationOptions;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteListener;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteNotification;
+import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.state.SavedStateInfo;
 import com.swirlds.platform.state.SigSet;
 import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateDumpSource;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
@@ -64,7 +66,7 @@ public class SignedStateFileManager implements Runnable {
 	/** The current version of the signed state file */
 	private static final int FILE_VERSION = 1;
 
-	private static final int MAX_MERKLE_NODES_IN_SIGNED_STATE = Integer.MAX_VALUE;
+	private static final int MAX_MERKLE_NODES_IN_STATE = Integer.MAX_VALUE;
 
 	/** task queue that is polled forever */
 	private final BlockingQueue<FileManagerTask> taskQueue = new LinkedBlockingQueue<>(20);
@@ -87,10 +89,10 @@ public class SignedStateFileManager implements Runnable {
 
 				switch (task.operation) {
 					case WRITE:
-						writeSignedStateToDisk(task.signedState, task.snapshotTask, task.description);
+						writeSignedStateToDisk(task.signedState, task.snapshotTask, task.description, task.getDir());
 						break;
 					case DELETE:
-						deleteRecursively(task.round);
+						deleteRecursively(task.getDir());
 						break;
 					default:
 						log.error(EXCEPTION.getMarker(),
@@ -99,6 +101,9 @@ public class SignedStateFileManager implements Runnable {
 						break;
 
 				}
+			} catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+				return;
 			} catch (Exception e) {
 				log.error(EXCEPTION.getMarker(),
 						"Exception in SignedStateFileManager.run():", e);
@@ -116,17 +121,16 @@ public class SignedStateFileManager implements Runnable {
 	 * 		an optional database snapshot operation to be performed when the object is written to disk
 	 * @param taskDescription
 	 * 		a description of the task
+	 * @param dir
+	 * 		the directory where the state will be stored
 	 * @throws IOException
 	 * 		if there is any problems with writing to a file
 	 */
 	void writeSignedStateToDisk(final SignedState signedState, final SnapshotTask snapshotTask,
-			final String taskDescription) throws IOException {
+			final String taskDescription, File dir) throws IOException {
 
 		try {
 			log.info(STATE_TO_DISK.getMarker(), "Started writing '{}' to disk", taskDescription);
-
-			// the directory where the state will be stored
-			File dir = this.getSignedStateDir(signedState.getLastRoundReceived());
 
 			// we need to create the directories where the file should be stored if it doesn't exist
 			if (!dir.mkdirs()) {
@@ -154,20 +158,22 @@ public class SignedStateFileManager implements Runnable {
 					out.write(VERSIONED_FILE_BYTE);
 					out.writeInt(FILE_VERSION);
 					out.writeProtocolVersion();
-					out.writeMerkleTree(signedState);
-					out.writeSerializable(signedState.getHash(), true);
+					out.writeMerkleTree(signedState.getState());
+					out.writeSerializable(signedState.getState().getHash(), true);
 					out.writeSerializable(signedState.getSigSet(), true);
 				});
 
 				log.info(STATE_TO_DISK.getMarker(),
 						"Done writing saved state with HashEventsCons {}, starting with local events",
-						() -> signedState.getHashEventsCons());
+						signedState::getHashEventsCons);
 
-				writeAndRename(events, tmpEvents, (out) -> {
-					out.writeInt(FILE_VERSION);
-					out.writeProtocolVersion();
-					out.writeSerializable(signedState.getLocalStateEvents(), true);
-				});
+				if (Settings.state.saveLocalEvents) {
+					writeAndRename(events, tmpEvents, (out) -> {
+						out.writeInt(FILE_VERSION);
+						out.writeProtocolVersion();
+						out.writeSerializable(signedState.getLocalStateEvents(), true);
+					});
+				}
 
 				Settings.writeSettingsUsed(dir);
 
@@ -194,8 +200,9 @@ public class SignedStateFileManager implements Runnable {
 					new StateWriteToDiskCompleteNotification(
 							signedState.getLastRoundReceived(),
 							signedState.getConsensusTimestamp(),
-							signedState.getState(),
-							dir
+							signedState.getSwirldState(),
+							dir,
+							signedState.isFreezeState()
 					)
 			);
 		} finally {
@@ -210,9 +217,10 @@ public class SignedStateFileManager implements Runnable {
 
 	public static void writeAndRename(File file, File tmpFile,
 			WritingConsumer<MerkleDataOutputStream> writeMethod) throws Exception {
+		final MerkleTreeSerializationOptions options = MerkleTreeSerializationOptions.builder().setAbbreviated(true);
 		try (FileOutputStream fileOut = new FileOutputStream(tmpFile);
 			 BufferedOutputStream bufOut = new BufferedOutputStream(fileOut);
-			 MerkleDataOutputStream out = new MerkleDataOutputStream(bufOut, true)) {
+			 MerkleDataOutputStream out = new MerkleDataOutputStream(bufOut, options)) {
 
 			writeMethod.write(out);
 
@@ -247,13 +255,11 @@ public class SignedStateFileManager implements Runnable {
 	 *
 	 * @param file
 	 * 		the file to read from
-	 * @param signedState
-	 * 		the legacy signed state that will read the data
 	 * @return a {@link Pair} containing the original {@link Hash} and the {@link SignedState} that were read from disk
 	 * @throws IOException
 	 * 		if there is any problems with reading from a file
 	 */
-	public static Pair<Hash, SignedState> readSignedStateFromFile(final File file, final SignedState signedState)
+	public static Pair<Hash, SignedState> readSignedStateFromFile(final File file)
 			throws IOException {
 		if (!file.exists()) {
 			throw new IOException(
@@ -264,10 +270,7 @@ public class SignedStateFileManager implements Runnable {
 					"File " + file.getAbsolutePath() + " is not a file!");
 		}
 
-		return readSavedState(
-				new SavedStateInfo(0/* unused */, file, null),
-				signedState
-		);
+		return readSavedState(new SavedStateInfo(0/* unused */, file, null));
 	}
 
 	/**
@@ -275,50 +278,36 @@ public class SignedStateFileManager implements Runnable {
 	 *
 	 * @param info
 	 * 		information about where the saved state is stored
-	 * @param signedState
-	 * 		the signed state that will read the data
+	 * @return a pair of Hash and SignedState
 	 * @throws IOException
 	 * 		if there is any problems with reading from a file
 	 */
-	public static Pair<Hash, SignedState> readSavedState(final SavedStateInfo info, final SignedState signedState)
+	public static Pair<Hash, SignedState> readSavedState(final SavedStateInfo info)
 			throws IOException {
 		Pair<Hash, SignedState> returnState;
 		try (FileInputStream fileIn = new FileInputStream(info.getStateFile());
 			 BufferedInputStream bufIn = new BufferedInputStream(fileIn);
-			 MerkleDataInputStream in = new MerkleDataInputStream(bufIn, true);) {
-			// we need to read in the first byte to determine which kind of signed state file we are reading
-			in.mark(1);
-			byte firstByte = in.readByte();
+			 MerkleDataInputStream in = new MerkleDataInputStream(bufIn, true)) {
 
-			if (firstByte == VERSIONED_FILE_BYTE) {
-
-				// Delete legacy state
-				// If state on disk uses new merkle protocol this state is not needed
-				// There will be no reservations, tryDelete should never fail
-				if (signedState != null) {
-					if (!signedState.tryDelete()) {
-						log.error(LogMarker.ERROR.getMarker(), "Unable to delete legacy signed state.");
-					}
-				}
-
-				in.readInt();// file version
-				in.readProtocolVersion();
-
-				final SignedState merkleState = in.readMerkleTree(MAX_MERKLE_NODES_IN_SIGNED_STATE);
-				final Hash hash = in.readSerializable();
-				final SigSet sigSet = in.readSerializable(true, () -> new SigSet(merkleState.getAddressBook()));
-
-				merkleState.setSigSet(sigSet);
-
-				returnState = Pair.of(hash, merkleState);
-			} else {
-				// unread the first byte in this case
-				in.reset();
-				signedState.copyFrom(in);
-				signedState.copyFromExtra(in);
-
-				returnState = Pair.of(signedState.getHash(), signedState);
+			byte versionByte = in.readByte();
+			if (versionByte != VERSIONED_FILE_BYTE) {
+				throw new IOException("File is not versioned -- data corrupted or is an unsupported legacy state");
 			}
+
+			in.readInt();// file version
+			in.readProtocolVersion();
+
+			final State merkleState = in.readMerkleTree(MAX_MERKLE_NODES_IN_STATE);
+
+			final Hash hash = in.readSerializable();
+			final SigSet sigSet = in.readSerializable(true, () ->
+					new SigSet(merkleState.getPlatformState().getAddressBook()));
+
+			final SignedState newSignedState = new SignedState(merkleState);
+
+			newSignedState.setSigSet(sigSet);
+
+			returnState = Pair.of(hash, newSignedState);
 		}
 
 		if (!info.hasEvents()) {
@@ -330,7 +319,7 @@ public class SignedStateFileManager implements Runnable {
 
 		try (FileInputStream fileIn = new FileInputStream(info.getEvents());
 			 BufferedInputStream bufIn = new BufferedInputStream(fileIn);
-			 MerkleDataInputStream in = new MerkleDataInputStream(bufIn, true);) {
+			 MerkleDataInputStream in = new MerkleDataInputStream(bufIn, true)) {
 			in.readInt();// file version
 			in.readProtocolVersion();
 			returnState.getValue().setLocalStateEvents(in.readSerializable());
@@ -339,21 +328,21 @@ public class SignedStateFileManager implements Runnable {
 		return returnState;
 	}
 
-	void deleteRecursively(final long roundNumber) {
-		deleteRecursively(getSignedStateDir(roundNumber));
-	}
-
 	static void deleteRecursively(final File f) {
 		if (!f.exists()) {
 			log.error(EXCEPTION.getMarker(),
 					"Could not delete because it doesn't exist: '{}'", f.getAbsolutePath());
 			return;
 		}
+
 		if (f.isDirectory()) {
-			for (File c : f.listFiles())
+			for (File c : f.listFiles()) {
 				deleteRecursively(c);
+			}
 		}
+
 		boolean deleted = f.delete();
+
 		if (!deleted) {
 			log.error(EXCEPTION.getMarker(), "Could not delete: '{}'", f.getAbsolutePath());
 		} else {
@@ -379,20 +368,45 @@ public class SignedStateFileManager implements Runnable {
 				signedState.getLastRoundReceived())
 				: null;
 
-		boolean accepted = taskQueue.offer(new FileManagerTask(
+		return offerTask(new FileManagerTask(
 				FileManagerOperation.WRITE,
 				signedState,
 				signedState.getLastRoundReceived(),
 				snapshotTask,
-				taskDesc));
+				taskDesc,
+				getSignedStateDir(signedState.getLastRoundReceived())));
+	}
 
-		if (!accepted) {
-			log.error(EXCEPTION.getMarker(),
-					"'{}' cannot be written to disk because queue is full!",
-					taskDesc);
-		}
+	/**
+	 * Saves a signed state to disk that had an ISS.
+	 *
+	 * Ideally this would not be a separate method, but there wasn't a trivial way to change the directory of the
+	 * snapshot, so the snapshot is not included in the ISS.
+	 *
+	 * @param signedState
+	 * 		the signed state to be saved which has an ISS
+	 */
+	public void saveIssStateToDisk(SignedState signedState) {
+		String taskDesc = "ISS signed state for round " + signedState.getLastRoundReceived();
 
-		return accepted;
+		offerTask(
+				new FileManagerTask(
+						FileManagerOperation.WRITE,
+						signedState,
+						signedState.getLastRoundReceived(),
+						null,
+						taskDesc,
+						CommonUtils.canonicalFile(
+								Settings.savedDirPath,
+								"iss",
+								String.format(
+										"node%d_round%d",
+										platform.getSelfId().getId(),
+										signedState.getLastRoundReceived()
+								)
+						)
+				)
+		);
 	}
 
 	/**
@@ -402,12 +416,32 @@ public class SignedStateFileManager implements Runnable {
 	 * 		the signed state to be deleted
 	 */
 	public void deleteSignedStateFromDisk(final Long roundNumber) {
-		//if (!deleteFileAsynchronously(getSignedStateDir(roundNumber))) {
-		if (!taskQueue.offer(new FileManagerTask(FileManagerOperation.DELETE, null, roundNumber, null))) {
+		offerTask(
+				new FileManagerTask(
+						FileManagerOperation.DELETE,
+						null,
+						roundNumber,
+						null,
+						"delete task",
+						getSignedStateDir(roundNumber)
+				));
+	}
+
+	/**
+	 * Add a task to the queue and log an error if it fails
+	 *
+	 * @param task
+	 * 		the task to add to the queue
+	 * @return true if the task was added
+	 */
+	private boolean offerTask(FileManagerTask task) {
+		if (!taskQueue.offer(task)) {
 			log.error(EXCEPTION.getMarker(),
-					"Signed state for round {} cannot be deleted from disk because queue is full!",
-					roundNumber);
+					"SignedStateFileManager task: '{}' for round {} cannot be added because queue is full!",
+					task.getDescription(), task.getRound());
+			return false;
 		}
+		return true;
 	}
 
 	/**
@@ -537,19 +571,17 @@ public class SignedStateFileManager implements Runnable {
 		private final SnapshotTask snapshotTask;
 		/** a description of the task */
 		private final String description;
+		/** the directory where the files are stored */
+		private final File dir;
 
-		private FileManagerTask(final FileManagerOperation operation,
-				final SignedState signedState, final long round, final SnapshotTask snapshotTask) {
-			this(operation, signedState, round, snapshotTask, null);
-		}
-
-		private FileManagerTask(final FileManagerOperation operation, final SignedState signedState,
-				final long round, final SnapshotTask snapshotTask, final String description) {
+		public FileManagerTask(FileManagerOperation operation, SignedState signedState, long round,
+				SnapshotTask snapshotTask, String description, File dir) {
 			this.operation = operation;
 			this.signedState = signedState;
 			this.round = round;
 			this.snapshotTask = snapshotTask;
 			this.description = description;
+			this.dir = dir;
 		}
 
 		public FileManagerOperation getOperation() {
@@ -570,6 +602,10 @@ public class SignedStateFileManager implements Runnable {
 
 		public String getDescription() {
 			return description;
+		}
+
+		public File getDir() {
+			return dir;
 		}
 	}
 

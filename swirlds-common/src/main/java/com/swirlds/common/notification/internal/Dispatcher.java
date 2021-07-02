@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -18,7 +18,7 @@ import com.swirlds.common.notification.DispatchException;
 import com.swirlds.common.notification.Listener;
 import com.swirlds.common.notification.Notification;
 import com.swirlds.common.notification.NotificationResult;
-import com.swirlds.common.threading.StandardThreadFactory;
+import com.swirlds.common.threading.ThreadConfiguration;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -28,7 +28,7 @@ import java.util.function.Consumer;
 public class Dispatcher<L extends Listener> {
 
 	private static final int THREAD_STOP_WAIT_MS = 5000;
-	private static final int THREAD_PRIORITY = 5;
+	private static final String COMPONENT_NAME = "dispatch";
 
 	private final PriorityBlockingQueue<DispatchTask<?, ?>> asyncDispatchQueue;
 
@@ -62,12 +62,11 @@ public class Dispatcher<L extends Listener> {
 			stop();
 		}
 
-		dispatchThread = StandardThreadFactory.newThread(
-				String.format("< notify dispatch: %s >", listenerClassName),
-				this::worker,
-				true,
-				THREAD_PRIORITY
-		);
+		dispatchThread = new ThreadConfiguration()
+				.setComponent(COMPONENT_NAME)
+				.setThreadName(String.format("notify %s", listenerClassName))
+				.setRunnable(this::worker)
+				.build();
 
 		running = true;
 		dispatchThread.start();

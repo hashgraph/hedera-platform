@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,7 +15,6 @@
 package com.swirlds.common.merkle;
 
 import com.swirlds.common.crypto.SerializableHashable;
-import com.swirlds.common.io.SelfSerializable;
 
 /**
  * A Merkle Leaf has the following properties:
@@ -42,10 +41,8 @@ public interface MerkleLeaf extends MerkleNode, SerializableHashable {
 	}
 
 	/**
-	 * Do not override this method.
-	 *
-	 * Overriding this method will lead to undefined behavior in various merkle algorithms.
+	 * {@inheritDoc}
 	 */
 	@Override
-	boolean equals(Object that);
+	MerkleLeaf copy();
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -72,14 +72,14 @@ public interface Platform extends Signer {
 	 * A transaction can be at most 1024 bytes. If trans.length &gt; 1024, then this will return false, and
 	 * will not actually create a transaction.
 	 * <p>
-	 * WARNING: Do not add signatures to the {@link Transaction} here! Any signatures added will be silently
+	 * WARNING: Do not add signatures to the {@link SwirldTransaction} here! Any signatures added will be silently
 	 * ignored!
 	 *
 	 * @param trans
 	 * 		the transaction to handle, encoded any way the swirld author chooses
 	 * @return true if successful
 	 */
-	boolean createTransaction(Transaction trans);
+	boolean createTransaction(SwirldTransaction trans);
 
 	/**
 	 * Create a new window of the recommended size and location, including the Swirlds menu.
@@ -137,14 +137,6 @@ public interface Platform extends Signer {
 	Event[] getAllEvents();
 
 	/**
-	 * Get the ApplicationStatistics object that has user-added statistics monitoring entries
-	 *
-	 * @return the ApplicationStatistics object associated with this platform
-	 * @see ApplicationStatistics
-	 */
-	//ApplicationStatistics getAppStats();
-
-	/**
 	 * Return the sequence numbers of the last event created by each member. This is a copy, so it is OK for
 	 * the caller to modify it.
 	 *
@@ -155,6 +147,16 @@ public interface Platform extends Signer {
 	 * @return an array of sequence numbers indexed by member id number
 	 */
 	long[] getLastSeqByCreator();
+
+	/**
+	 * get the highest sequence number of all events with the given creator
+	 *
+	 * @param creatorID
+	 * 	the ID of the node in question
+	 * @return
+	 *  the last sequence number known stored for the given creator ID
+	 */
+	long getLastSeq(long creatorID);
 
 	/**
 	 * Get the speed of the last sync for a given node
@@ -273,21 +275,6 @@ public interface Platform extends Signer {
 	void setAbout(String about);
 
 	/**
-	 * Sets the period in which the platform will stop creating events and accepting transactions. This is used to
-	 * safely shut down the platform for maintenance.
-	 *
-	 * @param startHour
-	 * 		The start hour, a value between 0 and 23
-	 * @param startMin
-	 * 		The start minute, a value between 0 and 59
-	 * @param endHour
-	 * 		The end hour, a value between 0 and 23
-	 * @param endMin
-	 * 		The end minute, a value between 0 and 59
-	 */
-	void setFreezeTime(int startHour, int startMin, int endHour, int endMin);
-
-	/**
 	 * set the speed of the last sync for a given node
 	 *
 	 * @param nodeIndex
@@ -330,5 +317,21 @@ public interface Platform extends Signer {
 	 * @return consensusTimestamp of the last signed state
 	 */
 	Instant getLastSignedStateTimestamp();
+
+	/**
+	 * Returns the latest signed {#link SwirldState} signed by members with more than 1/3 of total stake.
+	 *
+	 * The {#link SwirldState} is returned in a {#link AutoCloseableWrapper} that <b>must</b> be use with
+	 * a try-with-resources
+	 *
+	 * @param <T> A type extending from {#link SwirldState}
+	 * @return the latest complete signed swirld state, or null if none are complete
+	 */
+	<T extends SwirldState> AutoCloseableWrapper<T> getLastCompleteSwirldState();
+
+	/**
+	 * @return true if state recovery is in progress
+	 */
+	boolean isStateRecoveryInProgress();
 
 }

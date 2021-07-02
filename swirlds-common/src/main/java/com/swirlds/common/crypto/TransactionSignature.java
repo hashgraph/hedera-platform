@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -42,31 +42,31 @@ public class TransactionSignature implements Comparable<TransactionSignature> {
 	private static final Logger log = LogManager.getLogger();
 
 	/** Pointer to the transaction contents */
-	private byte[] contents;
+	private final byte[] contents;
 
 	/** (Optional) Pointer to actual public key */
-	private byte[] expandedPublicKey;
+	private final byte[] expandedPublicKey;
 
 	/** The offset of the message contained in the contents array */
-	private int messageOffset;
+	private final int messageOffset;
 
 	/** The length of the message contained in the contents array */
-	private int messageLength;
+	private final int messageLength;
 
 	/** The offset of the public key contained in the contents array */
-	private int publicKeyOffset;
+	private final int publicKeyOffset;
 
 	/** The length of the public key contained in the contents array */
-	private int publicKeyLength;
+	private final int publicKeyLength;
 
 	/** The offset of the signature contained in the contents array */
-	private int signatureOffset;
+	private final int signatureOffset;
 
 	/** The length of the signature contained in the contents array */
-	private int signatureLength;
+	private final int signatureLength;
 
 	/** The type of cryptographic algorithm used to create the signature */
-	private SignatureType signatureType;
+	private final SignatureType signatureType;
 
 	/** Indicates whether the signature is valid/invalid or has yet to be verified */
 	private VerificationStatus signatureStatus;
@@ -299,8 +299,9 @@ public class TransactionSignature implements Comparable<TransactionSignature> {
 	 * 		if any of the offsets or lengths fall outside the bounds of the {@code contents}
 	 * 		array
 	 */
-	public TransactionSignature(final TransactionSignature other, final byte[] expandedPublicKey, final int publicKeyOffset,
-			final int publicKeyLength, final int messageOffset, final int messageLength) {
+	public TransactionSignature(final TransactionSignature other, final byte[] expandedPublicKey,
+			final int publicKeyOffset, final int publicKeyLength,
+			final int messageOffset, final int messageLength) {
 		if (other == null) {
 			throw new NullPointerException("other");
 		}
@@ -382,7 +383,8 @@ public class TransactionSignature implements Comparable<TransactionSignature> {
 	 * @throws NullPointerException
 	 * 		if the {@code signature} or {@code dos} parameters are null
 	 */
-	private static void serialize(final TransactionSignature signature, final DataOutputStream dos, final int[] byteCount)
+	private static void serialize(final TransactionSignature signature, final DataOutputStream dos,
+			final int[] byteCount)
 			throws IOException {
 		if (signature == null) {
 			throw new NullPointerException("signature");
@@ -424,7 +426,8 @@ public class TransactionSignature implements Comparable<TransactionSignature> {
 	}
 
 	/**
-	 * Reconstructs a {@link TransactionSignature} object from a binary representation read from a {@link DataInputStream}.
+	 * Reconstructs a {@link TransactionSignature} object from a binary representation read from a {@link
+	 * DataInputStream}.
 	 *
 	 * @param dis
 	 * 		the {@link DataInputStream} from which to read
@@ -504,8 +507,8 @@ public class TransactionSignature implements Comparable<TransactionSignature> {
 		buffer.put(pk);
 		buffer.put(sig);
 
-		return new TransactionSignature(buffer.array(), msg.length + pk.length, sig.length, msg.length, pk.length, 0, msg.length,
-				sigType);
+		return new TransactionSignature(buffer.array(), msg.length + pk.length, sig.length, msg.length, pk.length, 0,
+				msg.length, sigType);
 	}
 
 	/**
@@ -615,7 +618,7 @@ public class TransactionSignature implements Comparable<TransactionSignature> {
 	 *
 	 * @return a future linked to the signature verification state
 	 */
-	public Future<Void> getFuture() {
+	public synchronized Future<Void> getFuture() {
 		return future;
 	}
 
@@ -667,8 +670,9 @@ public class TransactionSignature implements Comparable<TransactionSignature> {
 	 * </p>
 	 *
 	 * @return a future linked to the signature verification state
-	 * @throws InterruptedException if any thread interrupted the current thread before or
-	 *         while the current thread was waiting
+	 * @throws InterruptedException
+	 * 		if any thread interrupted the current thread before or
+	 * 		while the current thread was waiting
 	 */
 	public synchronized Future<Void> waitForFuture() throws InterruptedException {
 		// Block until future becomes available

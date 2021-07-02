@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -23,9 +23,7 @@ import java.util.Arrays;
 
 public class PipelineErrorHandler {
 
-	private static final String SQLSTATE_PATH_NOT_FOUND = "F2128";
-
-	private Pipeline pipeline;
+	private final Pipeline pipeline;
 
 	PipelineErrorHandler(final Pipeline pipeline) {
 		this.pipeline = pipeline;
@@ -58,55 +56,17 @@ public class PipelineErrorHandler {
 				new DbErrorSource[errorSrc.length] :
 				new DbErrorSource[0];
 
-		for (int i = 0; i < dbErrorSources.length; i++) {
-			dbErrorSources[i] = DbErrorSource.valueOf(errorSrc[i]);
+		if (errorSrc != null && errorSrc.length > 0) {
+			for (int i = 0; i < dbErrorSources.length; i++) {
+				dbErrorSources[i] = DbErrorSource.valueOf(errorSrc[i]);
+			}
 		}
-
-		Object[] finalContext = context;
-
-//		if (context != null && context.length > 1) {
-//			if (DbErrorContext.SOURCE_PATH.equals(dbErrorContext)) {
-//				finalContext = new Object[] { context[0] };
-//			} else if (DbErrorContext.DEST_PATH.equals(dbErrorContext)) {
-//				finalContext = new Object[] { context[1] };
-//			}
-//		}
 
 		if (DbErrorCode.NOT_FOUND.equals(dbErrorCode) && DbErrorContext.IDENTIFIER.equals(dbErrorContext)) {
 			throw new BinaryObjectNotFoundException(
 					String.format("BinaryObject: Object Not Found [ context = %s, code = %s, sources = %s ]",
 							dbErrorContext, dbErrorCode, Arrays.toString(dbErrorSources)), priorException);
 		}
-
-//		if (DbErrorCode.NOT_FOUND.equals(dbErrorCode)) {
-//			if (DbErrorContext.PATH.equals(dbErrorContext) ||
-//					DbErrorContext.SOURCE_PATH.equals(dbErrorContext) ||
-//					DbErrorContext.DEST_PATH.equals(dbErrorContext)) {
-//
-//				throw new PathNotFoundException(
-//						String.format("FCFileSystem: Path not found [ context = %s, code = %s, sources = %s ]",
-//								Arrays.toString(finalContext), dbErrorCode,
-//								Arrays.toString(dbErrorSources)), priorException);
-//			} else {
-//				throw new FileSystemException(
-//						String.format("FCFileSystem: Resource not found [ context = %s, code = %s, sources = %s ]",
-//								dbErrorContext, dbErrorCode, Arrays.toString(dbErrorSources)), priorException);
-//			}
-//		} else if (DbErrorCode.ALREADY_EXISTS.equals(dbErrorCode)) {
-//			if (DbErrorContext.PATH.equals(dbErrorContext) ||
-//					DbErrorContext.SOURCE_PATH.equals(dbErrorContext) ||
-//					DbErrorContext.DEST_PATH.equals(dbErrorContext)) {
-//
-//				throw new EntityAlreadyExistsException(
-//						String.format("FCFileSystem: Path already exists [ context = %s, code = %s, sources = %s ]",
-//								Arrays.toString(finalContext), dbErrorCode,
-//								Arrays.toString(dbErrorSources)), priorException);
-//			} else {
-//				throw new FileSystemException(
-//						String.format("FCFileSystem: Resource already exists[ context = %s, code = %s, sources = %s ]",
-//								dbErrorContext, dbErrorCode, Arrays.toString(dbErrorSources)), priorException);
-//			}
-//		}
 
 		throw new BinaryObjectException(
 				String.format("BinaryObject: Error during operation [ context = %s, code = %s, sources = %s ]",
@@ -122,7 +82,7 @@ public class PipelineErrorHandler {
 			if (pipeline.isTransactional()) {
 				pipeline.rollback();
 			}
-		} catch (SQLException e) {
+		} catch (SQLException ignored) {
 			// Suppressing Intentionally
 		}
 

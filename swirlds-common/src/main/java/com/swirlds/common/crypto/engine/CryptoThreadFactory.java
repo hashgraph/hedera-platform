@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -18,8 +18,11 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Custom {@link ThreadFactory} implementation that supports custom thread names and an option exception handler.
+ * Custom {link ThreadFactory} implementation that supports custom thread names and an option exception handler.
+ *
+ * @deprecated use {@link com.swirlds.common.threading.ThreadConfiguration} and it's factory instead
  */
+@Deprecated
 public class CryptoThreadFactory implements ThreadFactory {
 
 	private final AtomicInteger threadNumber = new AtomicInteger(1);

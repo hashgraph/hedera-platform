@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -29,13 +29,15 @@ public class StateWriteToDiskCompleteNotification extends AbstractNotification {
 	private final Instant consensusTimestamp;
 	private final SwirldState state;
 	private final File folder;
+	private final boolean isFreezeState;
 
 	public StateWriteToDiskCompleteNotification(final long roundNumber, final Instant consensusTimestamp,
-			final SwirldState state, final File folder) {
+			final SwirldState state, final File folder, final boolean isFreezeState) {
 		this.roundNumber = roundNumber;
 		this.consensusTimestamp = consensusTimestamp;
 		this.state = state;
 		this.folder = folder;
+		this.isFreezeState = isFreezeState;
 	}
 
 	/**
@@ -72,5 +74,13 @@ public class StateWriteToDiskCompleteNotification extends AbstractNotification {
 	 */
 	public File getFolder() {
 		return folder;
+	}
+
+	/**
+	 * Gets whether this is a freeze state
+	 * @return whether this is a freeze state
+	 */
+	public boolean isFreezeState() {
+		return isFreezeState;
 	}
 }

@@ -1,5 +1,5 @@
 <!--
-  ~ (c) 2016-2020 Swirlds, Inc.
+  ~ (c) 2016-2021 Swirlds, Inc.
   ~
   ~ This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
   ~ intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,13 +14,33 @@
 
 <html>
 <body>
-<h2>Acknowledgments</h2>
+<h1>Acknowledgments</h1>
 
 Portions of this Swirlds, Inc. Software may utilize the following copyrighted material,
 the use of which is hereby acknowledged.
 
+<h2>Table of Contents</h2>
+<ul>
+	<li><a href="#log4j2">Log4j 2 (Apache 2.0 License)</a></li>
+	<li><a href="#slf4j">SLF4J (MIT License)</a></li>
+	<li><a href="#portmapper">Portmapper (Apache 2.0 License)</a></li>
+	<li><a href="#bouncy-castle">Bouncy Castle (MIT License)</a></li>
+	<li><a href="#jocl">JOCL (MIT License)</a></li>
+	<li><a href="#lazy-sodium">Lazy Sodium (MPL 2.0 License)</a></li>
+	<li><a href="#class-graph">ClassGraph (MIT License)</a></li>
+	<li><a href="#junit">JUnit (Apache 2.0/EPL 2.0 License)</a></li>
+	<li><a href="#postgres-driver">PostgreSQL JDBC Driver (Custom MIT License)</a></li>
+	<li><a href="#jackson-json">Jackson JSON Processor (Apache 2.0 License)</a></li>
+	<li><a href="#commons-lang">Apache Commons Lang (Apache 2.0 License)</a></li>
+	<li><a href="#commons-io">Apache Commons IO (Apache 2.0 License)</a></li>
+	<li><a href="#commons-collections">Apache Commons Collections (Apache 2.0 License)</a></li>
+	<li><a href="#hikari-cp">HikariCP (Apache 2.0 License)</a></li>
+	<li><a href="#flyway-ce">Flyway Community Edition (Apache 2.0 License)</a></li>
+	<li><a href="#jsch">JSch (Custom MIT License)</a></li>
+</ul>
+
 <h3>Log4J 2 - copyright 2016, The Apache Software Foundation -
-	<a href="http://logging.apache.org/log4j">logging.apache.org/log4j</a></h3>
+	<a id="log4j2" href="http://logging.apache.org/log4j">logging.apache.org/log4j</a></h3>
 
 <blockquote>
 	<small>
@@ -231,7 +251,7 @@ the use of which is hereby acknowledged.
 </blockquote>
 
 <h3>Simple Logging Facade for Java (SLF4J) - copyright 2004-2013 QOS.ch -
-	<a href="http://www.slf4j.org">www.slf4j.org</a></h3>
+	<a id="slf4j" href="http://www.slf4j.org">www.slf4j.org</a></h3>
 
 <blockquote>
 	<small>
@@ -263,7 +283,7 @@ Copyright (c) 2004-2013 QOS.ch
 </blockquote>
 
 <h3>Portmapper - copyright 2016 -
-	<a href="https://github.com/offbynull/portmapper">github.com/offbynull/portmapper</a></h3>
+	<a id="portmapper" href="https://github.com/offbynull/portmapper">github.com/offbynull/portmapper</a></h3>
 <blockquote>
 	<small>
 <pre>
@@ -474,7 +494,7 @@ Copyright (c) 2004-2013 QOS.ch
 
 
 <h3>The Legion of the Bouncy Castle -
-	<a href="https://www.bouncycastle.org/">www.bouncycastle.org</a></h3>
+	<a id="bouncy-castle" href="https://www.bouncycastle.org/">www.bouncycastle.org</a></h3>
 
 <blockquote>
 	<small>
@@ -501,7 +521,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 
 
 <h3>JOCL - Java binding for OpenCL - copyright 2009-2016, Marco Hutter -
-	<a href="https://github.com/gpu/JOCL/blob/master/LICENSE.TXT">github.com/gpu/JOCL/blob/master/LICENSE.TXT</a></h3>
+	<a id="jocl"
+	   href="https://github.com/gpu/JOCL/blob/master/LICENSE.TXT">github.com/gpu/JOCL/blob/master/LICENSE.TXT</a></h3>
 
 <blockquote>
 	<small>
@@ -535,7 +556,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 </blockquote>
 
 <h3>LazySodium - A Complete Java wrapper over the Libsodium library - copyright 2018-2020 -
-	<a href="https://github.com/terl/lazysodium-java/blob/master/LICENSE.md">github.com/terl/lazysodium-java/blob/master/LICENSE.md</a>
+	<a id="lazy-sodium" href="https://github.com/terl/lazysodium-java/blob/master/LICENSE.md">github.com/terl/lazysodium-java/blob/master/LICENSE.md</a>
 </h3>
 
 <blockquote>
@@ -920,7 +941,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
 
 <h3>ClassGraph - copyright 2019, Luke Hutchison -
-	<a href="https://github.com/classgraph/classgraph/blob/latest/LICENSE-ClassGraph.txt">github.com/classgraph/classgraph/blob/latest/LICENSE-ClassGraph.txt</a>
+	<a id="class-graph" href="https://github.com/classgraph/classgraph/blob/latest/LICENSE-ClassGraph.txt">github.com/classgraph/classgraph/blob/latest/LICENSE-ClassGraph.txt</a>
 </h3>
 
 <blockquote>
@@ -952,7 +973,7 @@ SOFTWARE.
 </blockquote>
 
 <h3>JUnit - copyright 2018 -
-	<a href="https://github.com/junit-team/junit5/blob/master/LICENSE.md">github.com/junit-team/junit5/blob/master/LICENSE.md</a>
+	<a id="junit" href="https://github.com/junit-team/junit5/blob/master/LICENSE.md">github.com/junit-team/junit5/blob/master/LICENSE.md</a>
 </h3>
 
 <blockquote>
@@ -972,7 +993,7 @@ Please see the `LICENSE.md` files in the subfolders for details.
 </blockquote>
 
 <h3>PostgreSQL Java Driver - copyright 1997, PostgreSQL Global Development Group -
-	<a href="https://github.com/pgjdbc/pgjdbc/blob/master/LICENSE">github.com/pgjdbc/pgjdbc/blob/master/LICENSE</a>
+	<a id="postgres-driver" href="https://github.com/pgjdbc/pgjdbc/blob/master/LICENSE">github.com/pgjdbc/pgjdbc/blob/master/LICENSE</a>
 </h3>
 
 <blockquote>
@@ -1006,7 +1027,7 @@ POSSIBILITY OF SUCH DAMAGE.
 </blockquote>
 
 <h3>Jackson JSON Processor - copyright FasterXML -
-	<a href="https://github.com/FasterXML/jackson">github.com/FasterXML/jackson</a></h3>
+	<a id="jackson-json" href="https://github.com/FasterXML/jackson">github.com/FasterXML/jackson</a></h3>
 
 <blockquote>
 	<small>
@@ -1220,7 +1241,7 @@ limitations under the License.
 </blockquote>
 
 <h3>Apache Commons Lang - copyright Apache Software Foundation -
-	<a href="https://github.com/apache/commons-lang">github.com/apache/commons-lang</a></h3>
+	<a id="commons-lang" href="https://github.com/apache/commons-lang">github.com/apache/commons-lang</a></h3>
 
 <blockquote>
 	<small>
@@ -1433,7 +1454,7 @@ limitations under the License.
 </blockquote>
 
 <h3>Apache Commons IO - copyright Apache Software Foundation -
-	<a href="https://github.com/apache/commons-io">github.com/apache/commons-io</a></h3>
+	<a id="commons-io" href="https://github.com/apache/commons-io">github.com/apache/commons-io</a></h3>
 
 <blockquote>
 	<small>
@@ -1646,7 +1667,8 @@ limitations under the License.
 </blockquote>
 
 <h3>Apache Commons Collections - copyright Apache Software Foundation -
-	<a href="https://github.com/apache/commons-collections">github.com/apache/commons-collections</a></h3>
+	<a id="commons-collections" href="https://github.com/apache/commons-collections">github.com/apache/commons-collections</a>
+</h3>
 
 <blockquote>
 	<small>
@@ -1860,7 +1882,7 @@ limitations under the License.
 
 
 <h3>HikariCP - copyright Brett Wooldridge -
-	<a href="https://github.com/brettwooldridge/HikariCP">github.com/brettwooldridge/HikariCP</a></h3>
+	<a id="hikari-cp" href="https://github.com/brettwooldridge/HikariCP">github.com/brettwooldridge/HikariCP</a></h3>
 
 <blockquote>
 	<small>
@@ -2073,7 +2095,8 @@ limitations under the License.
 </blockquote>
 
 <h3>Flyway Community Edition - copyright 2010-2018, Boxfuse GmbH -
-	<a href="https://flywaydb.org/licenses/flyway-community">flywaydb.org/licenses/flyway-community</a></h3>
+	<a id="flyway-ce" href="https://flywaydb.org/licenses/flyway-community">flywaydb.org/licenses/flyway-community</a>
+</h3>
 
 <blockquote>
 	<small>
@@ -2287,7 +2310,7 @@ limitations under the License.
 </blockquote>
 
 <h3>Jsch - copyright 2002-2015, Atsuhiko Yamanaka, JCraft,Inc.
-	<a href="https://github.com/is/jsch">Jsch</a></h3>
+	<a id="jsch" href="https://github.com/is/jsch">Jsch</a></h3>
 
 <blockquote>
 	<small>

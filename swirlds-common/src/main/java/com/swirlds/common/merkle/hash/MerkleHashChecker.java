@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -25,7 +25,7 @@ import java.util.function.Consumer;
 import static com.swirlds.common.merkle.utility.MerkleConstants.MERKLE_DIGEST_TYPE;
 
 public class MerkleHashChecker {
-	private Cryptography cryptography;
+	private final Cryptography cryptography;
 
 	/**
 	 * Construct an object which calculates the hash of a merkle tree.
@@ -52,7 +52,11 @@ public class MerkleHashChecker {
 	 * @param mismatchCallback
 	 * 		the method to call if a mismatch is found
 	 */
-	public static void checkSync(Cryptography cryptography, MerkleNode root, Consumer<MerkleNode> mismatchCallback) {
+	public static void checkSync(
+			final Cryptography cryptography,
+			final MerkleNode root,
+			final Consumer<MerkleNode> mismatchCallback) {
+
 		if (root == null) {
 			return;
 		}

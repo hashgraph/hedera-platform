@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,26 +14,19 @@
 
 package com.swirlds.fcmap.internal;
 
-import com.swirlds.common.FCMKey;
-import com.swirlds.common.FCMValue;
-import com.swirlds.common.FastCopyable;
-import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.SerializableHashable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializedObjectProvider;
-import com.swirlds.common.merkle.MerkleInternal;
+import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
-import com.swirlds.common.merkle.utility.AbstractMerkleInternal;
+import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
 import com.swirlds.common.merkle.utility.MerkleLong;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.Marker;
-import org.apache.logging.log4j.MarkerManager;
 
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
+import java.util.function.Consumer;
+
+import static com.swirlds.common.merkle.copy.MerkleCopy.adoptChildren;
+import static com.swirlds.common.merkle.copy.MerkleCopy.copyTreeToLocation;
+import static com.swirlds.common.merkle.copy.MerklePathReplacement.replacePath;
+import static com.swirlds.common.merkle.utility.MerkleUtils.findChildPositionInParent;
 
 /**
  * Fast Copyable Merkle Tree
@@ -43,39 +36,13 @@ import java.util.List;
  * @param <V>
  * 		Type for values
  */
-public class FCMTree<K extends FCMKey, V extends FCMValue>
-		extends AbstractMerkleInternal
-		implements MerkleInternal, FastCopyable<FCMTree<K, V>> {
+public class FCMTree<K extends MerkleNode, V extends MerkleNode> extends AbstractBinaryMerkleInternal {
 
 	public static final long CLASS_ID = 0x84bec080aa5cfeecL;
 
 	private static class ClassVersion {
 		public static final int ORIGINAL = 1;
 	}
-
-	/**
-	 * Delimiter to identify to the beginning of a serialized tree
-	 */
-	public static final int BEGIN_MARKER_VALUE = 1_835_364_971; // 'm', 'e', 'r', 'k'
-
-	/**
-	 * Delimiter to identify the end of a serialized tree
-	 */
-	public static final int END_MARKER_VALUE = 1_818_588_274; // 'l', 'e', 't', 'r'
-
-	private static final Marker FCM_TREE = MarkerManager.getMarker("FCM_TREE");
-
-	private static final Logger LOG = LogManager.getLogger(FCMTree.class);
-
-	/**
-	 * Deserializer for keys
-	 */
-	private final SerializedObjectProvider keyProvider;
-
-	/**
-	 * Deserializer for values
-	 */
-	private final SerializedObjectProvider valueProvider;
 
 	/**
 	 * Keeps track of the right most leaf in order to replace a deleted
@@ -95,30 +62,6 @@ public class FCMTree<K extends FCMKey, V extends FCMValue>
 		public static final int ROOT = 1;
 
 		public static final int CHILD_COUNT = 2;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getNumberOfChildren() {
-		return ChildIndices.CHILD_COUNT;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getMinimumChildCount(int version) {
-		return ChildIndices.CHILD_COUNT;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getMaximumChildCount(int version) {
-		return ChildIndices.CHILD_COUNT;
 	}
 
 	/**
@@ -157,92 +100,43 @@ public class FCMTree<K extends FCMKey, V extends FCMValue>
 	}
 
 	/**
-	 * Creates an instance of {@link FCMTree} that mustn't need the
-	 * Key's and Value's SerializedObjectProviders.
+	 * Creates an instance of {@link FCMTree}
 	 * {@link SerializableHashable}
 	 */
 	public FCMTree() {
-		this(null, null);
+		this(new MerkleLong(0), new FCMInternalNode<>());
 	}
 
-	public FCMTree(final SerializedObjectProvider keyProvider, final SerializedObjectProvider valueProvider) {
-		this(new MerkleLong(0), new FCMInternalNode<>(), keyProvider, valueProvider);
-	}
-
-	private FCMTree(final MerkleLong size,
-			final FCMInternalNode<K, V> root,
-			final SerializedObjectProvider keyProvider,
-			final SerializedObjectProvider valueProvider) {
+	private FCMTree(final MerkleLong size, final FCMInternalNode<K, V> root) {
 		super();
 		setSize(size);
 		setRoot(root);
-		this.keyProvider = keyProvider;
-		this.valueProvider = valueProvider;
 	}
 
-	private FCMTree(final FCMTree<K, V> fcmTreeSource) {
-		super();
+	protected FCMTree(final FCMTree<K, V> fcmTreeSource) {
+		super(fcmTreeSource);
 		this.setSize(fcmTreeSource.getSize().copy());
-		this.setRoot(fcmTreeSource.getRoot().copy());
+
+		// Create a new instance of the root, use references to all data below root
+		this.setRoot(new FCMInternalNode<>());
+		adoptChildren(fcmTreeSource.getRoot(), getRoot());
+
 		this.rightMostLeaf = fcmTreeSource.rightMostLeaf;
-		this.keyProvider = fcmTreeSource.keyProvider;
-		this.valueProvider = fcmTreeSource.valueProvider;
 		fcmTreeSource.rightMostLeaf = null;
+
 		setImmutable(false);
 		fcmTreeSource.setImmutable(true);
 	}
 
-	public FCMTree<K, V> copy() {
-		throwIfImmutable();
-		throwIfReleased();
-		return new FCMTree<>(this);
-	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void copyFrom(SerializableDataInputStream inStream) throws IOException {
-		final int beginMarker = inStream.readInt();
-		if (BEGIN_MARKER_VALUE != beginMarker) {
-			throw new IOException("The stream is not at the beginning of a serialized FCMap");
-		}
-
-		deserializeRootHash(inStream); // discards root hash
-		final int endMarker = inStream.readInt();
-		if (END_MARKER_VALUE != endMarker) {
-			throw new IOException("The serialized FCMap stream ends unexpectedly");
-		}
-	}
-
-	public List<FCMLeaf<K, V>> copyTreeFrom(SerializableDataInputStream inputStream) throws IOException {
-		try {
-			// Discard the version number
-			inputStream.readLong();
-			final List<FCMLeaf<K, V>> leaves = deserializeLeaves(inputStream);
-			setSize(new MerkleLong(leaves.size()));
-			if (getSize().getValue() == 0) {
-				setRoot(new FCMInternalNode<>());
-				return leaves;
-			}
-
-			List<? extends FCMNode<K, V>> internalNodes = this.generateInitialInternalNodes(leaves);
-			while (internalNodes.size() > 1) {
-				internalNodes = this.generateInternalLevel(internalNodes);
-			}
-
-			setRoot((FCMInternalNode<K, V>) internalNodes.get(0));
-			this.setRightMostLeaf();
-			return leaves;
-		} catch (IOException ioException) {
-			throw ioException;
-		} catch (Exception exception) {
-			throw new RuntimeException(exception);
-		}
-	}
-
-	private List<FCMLeaf<K, V>> deserializeLeaves(final SerializableDataInputStream inputStream) throws IOException {
-		return new FCSerializer<K, V>().deserialize(this.keyProvider, this.valueProvider, inputStream);
+	public FCMTree<K, V> copy() {
+		throwIfImmutable();
+		throwIfReleased();
+		return new FCMTree<>(this);
 	}
 
 	/**
@@ -284,72 +178,165 @@ public class FCMTree<K extends FCMKey, V extends FCMValue>
 	 *
 	 * @param leafToDelete
 	 * 		Leaf to be removed from the tree
+	 * @param updateCache
+	 * 		a function that is used to register changes that may need to be tracked by a cache in the outer scope
 	 */
-	public void delete(final FCMLeaf<K, V> leafToDelete) {
+	public void delete(final FCMLeaf<K, V> leafToDelete, final Consumer<FCMLeaf<K, V>> updateCache) {
 		throwIfImmutable();
 		if (leafToDelete == null) {
 			throw new NullPointerException("Delete does not support null leaves");
 		}
 
 		if (getSize().getValue() < 3) {
-			this.deleteLeafFromBasicTree(leafToDelete);
-			return;
+			this.deleteLeafFromBasicTree(leafToDelete, updateCache);
+		} else {
+			this.deleteLeaf(leafToDelete, updateCache);
 		}
 
-		this.deleteLeaf(leafToDelete);
 		getSize().decrement();
 		this.setRightMostLeaf();
+	}
+
+	/**
+	 * Delete the right most leaf.
+	 *
+	 * @param updateCache
+	 * 		a function that is used to register changes that may need to be tracked by a cache in the outer scope
+	 */
+	@SuppressWarnings("unchecked")
+	private void deleteRightMostLeaf(final Consumer<FCMLeaf<K, V>> updateCache) {
+
+		// Replace a path from the root down to the grandparent of the rightmost leaf.
+		// Don't bother replacing parent here, sibling will replace parent.
+		final MerkleNode[] path = replacePath(getRoot(), rightMostLeaf.getRoute(), 2);
+
+		final FCMInternalNode<K, V> parentOfRightMostLeaf = path[path.length - 2].cast();
+		final FCMLeaf<K, V> siblingOfRightMostLeaf = parentOfRightMostLeaf.getLeftChild().cast();
+		final FCMInternalNode<K, V> grandparentOfRightMostLeaf = path[path.length - 3].cast();
+		final int indexOfParentInGrandparent =
+				findChildPositionInParent(grandparentOfRightMostLeaf, parentOfRightMostLeaf);
+
+		// Move the sibling up to replace its parent
+		final FCMLeaf<K, V> copy = copyTreeToLocation(
+				grandparentOfRightMostLeaf,
+				indexOfParentInGrandparent,
+				siblingOfRightMostLeaf);
+
+		updateCache.accept(copy);
+	}
+
+	/**
+	 * Delete the sibling of the right most leaf.
+	 *
+	 * @param path
+	 * 		a path of nodes that have been replaced down to the parent of the right most leaf
+	 * @param parentOfRightMostLeaf
+	 * 		the parent of the right most leaf, pre-computed by the caller
+	 * @param updateCache
+	 * 		a function that is used to register changes that may need to be tracked by a cache in the outer scope
+	 */
+	@SuppressWarnings("unchecked")
+	private void deleteRightMostLeafSibling(
+			final MerkleNode[] path,
+			final MerkleNode parentOfRightMostLeaf,
+			final Consumer<FCMLeaf<K, V>> updateCache) {
+
+		// Note: path has been replaced by caller
+
+		final FCMInternalNode<K, V> grandparentOfRightMostLeaf = path[path.length - 3].cast();
+
+		final int indexOfParentInGrandparent =
+				findChildPositionInParent(grandparentOfRightMostLeaf, parentOfRightMostLeaf);
+
+		// Move the right most leaf up to replace its parent.
+		final FCMLeaf<K, V> copy = copyTreeToLocation(grandparentOfRightMostLeaf, indexOfParentInGrandparent, rightMostLeaf);
+		updateCache.accept(copy);
+	}
+
+	/**
+	 * Delete a leaf that is neither the right most leaf nor its sibling.
+	 */
+	private void deleteMiddleLeaf(
+			final FCMInternalNode<K, V> parentOfNodeToDelete,
+			final FCMLeaf<K, V> leafToDelete,
+			final Consumer<FCMLeaf<K, V>> updateCache) {
+
+		final int indexOfChildToDelete = findChildPositionInParent(parentOfNodeToDelete, leafToDelete);
+
+		// Move the right most leaf to replace the leaf being deleted
+		final FCMLeaf<K, V> copy = copyTreeToLocation(parentOfNodeToDelete, indexOfChildToDelete, rightMostLeaf);
+		updateCache.accept(copy);
+
+		// Move the sibling of the rightmost leaf to replace its parent.
+		// Since we already have copied the rightmost leaf, it is safe to simply delete the original tree.
+		deleteRightMostLeaf(updateCache);
+	}
+
+	/**
+	 * Delete a leaf that is not the right most leaf.
+	 */
+	@SuppressWarnings("unchecked")
+	private void deleteNonRightMostLeaf(final FCMLeaf<K, V> leafToDelete, final Consumer<FCMLeaf<K, V>> updateCache) {
+
+		// Replace a path from the root down to the parent of the leaf to delete.
+		final MerkleNode[] path = replacePath(getRoot(), leafToDelete.getRoute(), 1);
+		final FCMInternalNode<K, V> parentOfNodeToDelete = path[path.length - 2].cast();
+
+		if (parentOfNodeToDelete.getRightChild() == rightMostLeaf) {
+			// We are deleting the sibling of the right most leaf.
+			deleteRightMostLeafSibling(path, parentOfNodeToDelete, updateCache);
+		} else {
+			deleteMiddleLeaf(parentOfNodeToDelete, leafToDelete, updateCache);
+		}
 	}
 
 	/**
 	 * Deletes a leaf.
 	 *
 	 * @param leafToDelete
-	 * 		Leaf to delete from the tree
+	 * 		leaf to delete from the tree
+	 * @param updateCache
+	 * 		a function that is used to register changes that may need to be tracked by a cache in the outer scope
 	 */
-	private void deleteLeaf(final FCMLeaf<K, V> leafToDelete) {
-		if (this.rightMostLeaf.equals(leafToDelete)) {
-			// Leaf deleted is right most leaf. Its sibling modifies its parent
-			final FCMInternalNode<K, V> parentOfLeafToDelete = leafToDelete.getParent();
-			final FCMLeaf<K, V> leftLeaf = (FCMLeaf<K, V>) parentOfLeafToDelete.getLeftChild();
-			this.setReplacementPath(parentOfLeafToDelete, leftLeaf);
+	private void deleteLeaf(final FCMLeaf<K, V> leafToDelete, final Consumer<FCMLeaf<K, V>> updateCache) {
+		if (rightMostLeaf == leafToDelete) {
+			// Leaf deleted is right most leaf.
+			deleteRightMostLeaf(updateCache);
 		} else {
-			final FCMInternalNode<K, V> rightMostParent = this.rightMostLeaf.getParent();
-			final FCMInternalNode<K, V> parent = leafToDelete.getParent();
-			if (rightMostParent.equals(parent)) {
-				// Leaf deleted is sibling of right most leaf
-				this.setReplacementPath(parent, this.rightMostLeaf);
-			} else {
-				this.setReplacementPath(leafToDelete, this.rightMostLeaf);
-				final FCMLeaf<K, V> newLeaf = (FCMLeaf<K, V>) rightMostParent.getLeftChild();
-				this.setReplacementPath(rightMostParent, newLeaf);
-			}
+			// Leaf deleted is not the right most leaf.
+			deleteNonRightMostLeaf(leafToDelete, updateCache);
 		}
 	}
 
 	/**
-	 * Deletes a leaf from a basic tree.
+	 * Deletes a leaf from a tree with 1 or 2 leaves.
 	 *
 	 * @param leafToDelete
 	 * 		Leaf to delete from the tree
+	 * @param updateCache
+	 * 		a function that is used to register changes that may need to be tracked by a cache in the outer scope
 	 */
-	private void deleteLeafFromBasicTree(final FCMLeaf<K, V> leafToDelete) {
+	private void deleteLeafFromBasicTree(
+			final FCMLeaf<K, V> leafToDelete,
+			final Consumer<FCMLeaf<K, V>> updateCache) {
+
 		if (getSize().getValue() < 1) {
 			throw new IllegalStateException("The tree is empty. No leaf to delete");
 		} else if (getSize().getValue() == 1) {
-			this.setRoot(new FCMInternalNode<>());
-			this.rightMostLeaf = null;
+			getRoot().setLeftChild(null);
+			rightMostLeaf = null;
 		} else if (getSize().getValue() == 2) {
-			final FCMInternalNode<K, V> oldRoot = this.getRoot();
-			if (this.rightMostLeaf.equals(leafToDelete)) {
-				this.rightMostLeaf = (FCMLeaf<K, V>) oldRoot.getLeftChild();
-				this.setRoot(oldRoot.createNewNodeWithOnlyLeftChild());
+			if (rightMostLeaf.equals(leafToDelete)) {
+				// we are deleting the rightmost leaf
+				getRoot().setRightChild(null);
+				rightMostLeaf = getRoot().getLeftChild().cast();
 			} else {
-				this.setRoot(oldRoot.createNewNodeWithRightChildAsLeftChild());
+				// we are deleting the sibling of the rightmost leaf
+				rightMostLeaf = copyTreeToLocation(getRoot(), 0, rightMostLeaf);
+				updateCache.accept(rightMostLeaf);
+				getRoot().setRightChild(null);
 			}
 		}
-
-		getSize().decrement();
 	}
 
 	/**
@@ -359,35 +346,13 @@ public class FCMTree<K extends FCMKey, V extends FCMValue>
 		if (getSize().getValue() < 3) {
 			final FCMInternalNode<K, V> root = this.getRoot();
 			final FCMNode<K, V> child = root.getRightChild() != null ? root.getRightChild() : root.getLeftChild();
-			this.rightMostLeaf = (FCMLeaf<K, V>) child;
+			rightMostLeaf = child == null ? null : child.cast();
 		} else {
 			final long leftMostOneBit = BitUtil.findLeftMostBit(getSize().getValue() - 1);
 			FCMNode<K, V> node = this.findFirstLeafAtCompleteSubtree(leftMostOneBit, getSize().getValue() - 1,
 					this.getRoot());
-			this.rightMostLeaf = (FCMLeaf<K, V>) node.getRightChild();
+			rightMostLeaf = node.getRightChild().cast();
 		}
-	}
-
-	/**
-	 * Creates and sets the replacement path up to the root for the specified new node.
-	 *
-	 * @param oldNode
-	 * 		Node that is going to be removed from the path
-	 * @param newNode
-	 * 		New node that is going to take place of the old node in the replaced path
-	 */
-	private void setReplacementPath(final FCMNode<K, V> oldNode, final FCMNode<K, V> newNode) {
-		final FCMInternalNode<K, V> oldRoot = this.getRoot();
-		final FCMInternalNode<K, V> oldParent = oldNode.getParent();
-		final FCMInternalNode<K, V> newParent = oldParent.createNewNodeWithChildReplaced(oldNode, newNode);
-		final FCMInternalNode<K, V> newRoot;
-		if (oldParent.equals(oldRoot)) {
-			newRoot = newParent;
-		} else {
-			newRoot = this.createReplacementPath(oldParent, newParent);
-		}
-
-		this.setRoot(newRoot);
 	}
 
 	/**
@@ -398,19 +363,59 @@ public class FCMTree<K extends FCMKey, V extends FCMValue>
 	 * @param newLeaf
 	 * 		New leaf replacing
 	 */
+	@SuppressWarnings("unchecked")
 	public void update(final FCMLeaf<K, V> oldLeaf, final FCMLeaf<K, V> newLeaf) {
 		throwIfImmutable();
+
 		if (oldLeaf == null || newLeaf == null) {
 			throw new NullPointerException("Update does not support null leaves");
 		} else if (getSize().getValue() < 1) {
 			throw new IllegalStateException("The tree is empty. No leaf to replace");
 		}
 
-		if (this.rightMostLeaf.equals(oldLeaf)) {
-			this.rightMostLeaf = newLeaf;
+		// Replace a path down to the parent of the old leaf. Don't bother replacing the old leaf itself.
+		final MerkleNode[] path = replacePath(getRoot(), oldLeaf.getRoute(), 1);
+
+		final FCMInternalNode<K, V> parent = path[path.length - 2].cast();
+		final int indexOfChildInParent = findChildPositionInParent(parent, oldLeaf);
+
+		parent.setChild(indexOfChildInParent, newLeaf, oldLeaf.getRoute());
+
+		if (rightMostLeaf == oldLeaf) {
+			rightMostLeaf = newLeaf;
+		}
+	}
+
+	/**
+	 * Get an FCMLeaf with a value that is safe to modify. Does not make the key safe to modify.
+	 *
+	 * @param originalLeaf
+	 * 		the leaf to that will have its value modified
+	 * @return a leaf with a value that is safe to modify
+	 */
+	@SuppressWarnings("unchecked")
+	public FCMLeaf<K, V> getForModify(
+			final FCMLeaf<K, V> originalLeaf,
+			final Consumer<FCMLeaf<K, V>> updateCache) {
+
+		final MerkleNode[] path = replacePath(getRoot(), originalLeaf.getRoute(), 0);
+
+		// Path replacement currently DOES NOT fast copy internal nodes, it uses the constructable
+		// registry to make a pseudo-fast-copy. FCMLeaf is actually an internal node and not a leaf,
+		// so it won't have been fast copied. This means we must manually fast copy the value.
+		final FCMLeaf<K, V> newLeaf = path[path.length - 1].cast();
+		final V originalValue = newLeaf.getValue();
+		if (originalValue.getReferenceCount() > 1) {
+			newLeaf.setChild(1, newLeaf.getValue().copy(), newLeaf.getValue().getRoute());
 		}
 
-		this.setReplacementPath(oldLeaf, newLeaf);
+		updateCache.accept(newLeaf);
+
+		if (originalLeaf == rightMostLeaf) {
+			rightMostLeaf = newLeaf;
+		}
+
+		return newLeaf;
 	}
 
 	/**
@@ -425,62 +430,74 @@ public class FCMTree<K extends FCMKey, V extends FCMValue>
 	}
 
 	/**
+	 * Insert a leaf into a tree that currently has no leaves.
+	 *
+	 * @param leaf
+	 * 		the leaf to insert
+	 */
+	private void insertIntoEmptyTree(final FCMLeaf<K, V> leaf) {
+		getRoot().setLeftChild(leaf);
+		rightMostLeaf = leaf;
+	}
+
+	/**
+	 * Insert a leaf into a tree that currently has only one leaf
+	 *
+	 * @param leaf
+	 * 		the leaf to insert
+	 */
+	private void insertIntoTreeWithOneLeaf(final FCMLeaf<K, V> leaf) {
+		getRoot().setRightChild(leaf);
+		rightMostLeaf = leaf;
+	}
+
+	/**
 	 * Inserts a leaf into the tree.
 	 *
 	 * @param leaf
 	 * 		New leaf to be inserted into the tree
+	 * @param updateCache
+	 * 		a function that is used to register changes that may need to be tracked by a cache in the outer scope
 	 */
-	public void insert(final FCMLeaf<K, V> leaf) {
+	@SuppressWarnings("unchecked")
+	public void insert(final FCMLeaf<K, V> leaf, final Consumer<FCMLeaf<K, V>> updateCache) {
 		throwIfImmutable();
-		final FCMInternalNode<K, V> localRoot = this.getRoot();
+
 		if (getSize().getValue() == 0) {
 			this.insertIntoEmptyTree(leaf);
-			return;
 		} else if (getSize().getValue() == 1) {
-			this.insertIntoTreeWithOneLeaf(localRoot, leaf);
-			return;
+			this.insertIntoTreeWithOneLeaf(leaf);
+		} else {
+
+			final FCMLeaf<K, V> nodeToPush = this.findFirstLeafAtCompleteSubtree(
+					BitUtil.findLeftMostBit(getSize().getValue()),
+					getSize().getValue(),
+					getRoot()).cast();
+
+			// Take an artificial reference to the node to push down to prevent it from being released too soon.
+			nodeToPush.incrementReferenceCount();
+
+			// Replace path down to the parent of the node to push down.
+			final MerkleNode[] path = replacePath(getRoot(), nodeToPush.getRoute(), 1);
+
+			final FCMInternalNode<K, V> parentOfNodeToPush = path[path.length - 2].cast();
+			final int childIndexOfNodeToPush = findChildPositionInParent(parentOfNodeToPush, nodeToPush);
+
+			// Add a new internal node
+			final FCMInternalNode<K, V> newParent = new FCMInternalNode<>();
+			parentOfNodeToPush.setChild(childIndexOfNodeToPush, newParent);
+
+			// Copy the pushed-down node
+			FCMLeaf<K, V> copy = copyTreeToLocation(newParent, 0, nodeToPush);
+			updateCache.accept(copy);
+
+			// Release the artificial reference now that the copy has been made
+			nodeToPush.decrementReferenceCount();
+
+			newParent.setRightChild(leaf);
+			rightMostLeaf = leaf;
 		}
 
-		final long leftMostOneBit = BitUtil.findLeftMostBit(getSize().getValue());
-		final FCMNode<K, V> node = this.findFirstLeafAtCompleteSubtree(leftMostOneBit, getSize().getValue(), localRoot);
-
-		// replace the leaf node with a new node name newNode
-		final FCMInternalNode<K, V> newNode = new FCMInternalNode<>();
-		newNode.setRightChild(leaf);
-
-		final FCMInternalNode<K, V> newRoot = this.createReplacementPath(node, newNode);
-		newNode.setLeftChild(node);
-
-		this.setRoot(newRoot);
-
-		setLatestLeafAsRightMostLeaf(leaf);
-		getSize().increment();
-	}
-
-	private void setLatestLeafAsRightMostLeaf(final FCMLeaf<K, V> leaf) {
-		this.rightMostLeaf = leaf;
-	}
-
-	private void insertIntoTreeWithOneLeaf(final FCMInternalNode<K, V> oldRoot, final FCMLeaf<K, V> leaf) {
-		final FCMInternalNode<K, V> newRoot = new FCMInternalNode<>();
-		final FCMNode<K, V> leftChild = oldRoot.getLeftChild();
-		newRoot.setLeftChild(leftChild);
-		leftChild.setParent(newRoot);
-
-		newRoot.setRightChild(leaf);
-		leaf.setParent(newRoot);
-
-		this.setRoot(newRoot);
-		this.rightMostLeaf = leaf;
-		getSize().increment();
-	}
-
-	private void insertIntoEmptyTree(final FCMLeaf<K, V> leaf) {
-		final FCMInternalNode<K, V> newRoot = new FCMInternalNode<>();
-		newRoot.setLeftChild(leaf);
-		leaf.setParent(newRoot);
-		this.setRoot(newRoot);
-		this.rightMostLeaf = leaf;
 		getSize().increment();
 	}
 
@@ -504,18 +521,6 @@ public class FCMTree<K extends FCMKey, V extends FCMValue>
 		return node;
 	}
 
-	private FCMInternalNode<K, V> createReplacementPath(FCMNode<K, V> node, FCMInternalNode<K, V> newNode) {
-		FCMInternalNode<K, V> oldParent = node.getParent();
-		while (oldParent != null) {
-			FCMInternalNode<K, V> newParent = oldParent.createNewNodeWithChildReplaced(node, newNode);
-			node = oldParent;
-			newNode = newParent;
-			oldParent = oldParent.getParent();
-		}
-
-		return newNode;
-	}
-
 	/**
 	 * Returns the right most leaf of the tree.
 	 * This method is available in order to test correctness
@@ -524,7 +529,7 @@ public class FCMTree<K extends FCMKey, V extends FCMValue>
 	 * @return Right most leaf
 	 */
 	protected FCMLeaf<K, V> getRightMostLeaf() {
-		return this.rightMostLeaf;
+		return rightMostLeaf;
 	}
 
 	/**
@@ -572,86 +577,6 @@ public class FCMTree<K extends FCMKey, V extends FCMValue>
 	}
 
 	/**
-	 * Returns an iterator over the nodes of the tree
-	 * as a Breadth first search.
-	 *
-	 * @return Iterator over the nodes of the tree
-	 */
-	@Deprecated
-	public Iterator<FCMNode<K, V>> nodeIterator() {
-		return new MerkleFCMNodeIterator<>(this.getRoot());
-	}
-
-	/**
-	 * Generates the parents of the leaves.
-	 *
-	 * @param leaves
-	 * 		Leaves from the tree to build
-	 * @return List of parent nodes of the provided leaves
-	 */
-	private List<? extends FCMNode<K, V>> generateInitialInternalNodes(final List<FCMLeaf<K, V>> leaves) {
-		final long sizeofLastCompleteLevel = BitUtil.findLeftMostBit(leaves.size());
-		final long nextSizeOfLastCompleteLevel = sizeofLastCompleteLevel << 1;
-		final long numberOfLeavesInUpperLevel = nextSizeOfLastCompleteLevel - leaves.size();
-		final long numberOfLeavesAtTheBottom = leaves.size() - numberOfLeavesInUpperLevel;
-		if (numberOfLeavesAtTheBottom < 1) {
-			return this.generateInternalLevel(leaves);
-		}
-
-		final List<? extends FCMNode<K, V>> bottomLeaves = leaves.subList(0, (int) numberOfLeavesAtTheBottom);
-		final List<? extends FCMNode<K, V>> upperLeaves = leaves.subList((int) numberOfLeavesAtTheBottom,
-				leaves.size());
-		final List<FCMNode<K, V>> internalNodes = new ArrayList<>(generateInternalLevel(bottomLeaves));
-		internalNodes.addAll(upperLeaves);
-		return internalNodes;
-	}
-
-	/**
-	 * Generates the complete tree based on the provided nodes.
-	 *
-	 * @param nodes
-	 * 		Parent nodes
-	 * @return Parent nodes of the provided parent nodes
-	 */
-	private List<FCMInternalNode<K, V>> generateInternalLevel(List<? extends FCMNode<K, V>> nodes) {
-		List<FCMInternalNode<K, V>> internalNodes = new ArrayList<>(nodes.size() / 2);
-
-		if (nodes.size() == 1) {
-			FCMInternalNode<K, V> internalNode = new FCMInternalNode<>();
-			final FCMNode<K, V> leftChild = nodes.get(0);
-			internalNode.setLeftChild(leftChild);
-			leftChild.setParent(internalNode);
-			internalNodes.add(internalNode);
-			return internalNodes;
-		}
-
-		final int limit = nodes.size();
-		int index = 0;
-		while (index < limit) {
-			FCMInternalNode<K, V> internalNode = new FCMInternalNode<>();
-			FCMNode<K, V> leftChild = nodes.get(index++);
-			FCMNode<K, V> rightChild = nodes.get(index++);
-
-			internalNode.setLeftChild(leftChild);
-			internalNode.setRightChild(rightChild);
-
-			leftChild.setParent(internalNode);
-			rightChild.setParent(internalNode);
-
-			internalNodes.add(internalNode);
-		}
-
-		return internalNodes;
-	}
-
-
-	public static byte[] deserializeRootHash(final SerializableDataInputStream inStream) throws IOException {
-		final byte[] rootHash = new byte[DigestType.SHA_384.digestLength()];
-		inStream.readFully(rootHash, 0, DigestType.SHA_384.digestLength());
-		return rootHash;
-	}
-
-	/**
 	 * {@inheritDoc}
 	 */
 	@Override
@@ -671,7 +596,7 @@ public class FCMTree<K extends FCMKey, V extends FCMValue>
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void initialize(final MerkleInternal oldNode) {
+	public void initialize() {
 		this.setRightMostLeaf();
 	}
 }

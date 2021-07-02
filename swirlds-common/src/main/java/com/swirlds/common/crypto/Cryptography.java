@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -60,7 +60,7 @@ public interface Cryptography {
 	 * 		the message contents to be hashed
 	 * @return a {@link Future} containing the cryptographic hash for the given message contents when resolved
 	 */
-	default Future<byte[]> digestAsync(final byte[] message) {
+	default Future<Hash> digestAsync(final byte[] message) {
 		return digestAsync(message, DigestType.SHA_384);
 	}
 
@@ -75,7 +75,7 @@ public interface Cryptography {
 	 * 		the type of digest used to compute the hash
 	 * @return a {@link Future} containing the cryptographic hash for the given message contents when resolved
 	 */
-	Future<byte[]> digestAsync(final byte[] message, final DigestType digestType);
+	Future<Hash> digestAsync(final byte[] message, final DigestType digestType);
 
 	/**
 	 * Computes a cryptographic hash (message digest) for the given message. The resulting hash value will be
@@ -88,7 +88,7 @@ public interface Cryptography {
 	 * @throws CryptographyException
 	 * 		if an unrecoverable error occurs while computing the digest
 	 */
-	byte[] digestSync(final Message message);
+	Hash digestSync(final Message message);
 
 	/**
 	 * Computes a cryptographic hash (message digest) for the given list of messages. The resulting hash value will be
@@ -112,7 +112,7 @@ public interface Cryptography {
 	 * @throws CryptographyException
 	 * 		if an unrecoverable error occurs while computing the digest
 	 */
-	default byte[] digestSync(final byte[] message) {
+	default Hash digestSync(final byte[] message) {
 		return digestSync(message, DigestType.SHA_384);
 	}
 
@@ -127,11 +127,13 @@ public interface Cryptography {
 	 * @throws CryptographyException
 	 * 		if an unrecoverable error occurs while computing the digest
 	 */
-	byte[] digestSync(final byte[] message, final DigestType digestType);
+	Hash digestSync(final byte[] message, final DigestType digestType);
 
 	/**
 	 * Same as {@link #digestSync(SelfSerializable, DigestType)} with DigestType set to SHA_384
 	 *
+	 * @param serializable
+	 * 		the object to be hashed
 	 * @return the cryptographic hash for the {@link SelfSerializable} object
 	 */
 	default Hash digestSync(final SelfSerializable serializable) {
@@ -253,9 +255,9 @@ public interface Cryptography {
 	 */
 	default void digestSync(MerkleNode node, DigestType digestType) {
 		if (node.isLeaf()) {
-			digestSync((MerkleLeaf) node, digestType);
+			digestSync(node.asLeaf(), digestType);
 		} else {
-			digestSync((MerkleInternal) node, digestType);
+			digestSync(node.asInternal(), digestType);
 		}
 	}
 
@@ -290,7 +292,7 @@ public interface Cryptography {
 	 * 		the type of digest used to compute the hash
 	 * @return the {@link FutureMerkleHash} for the {@link MerkleNode} object
 	 */
-	FutureMerkleHash digestTreeAsync(final MerkleNode root, final DigestType digestType);
+	Future<Hash> digestTreeAsync(final MerkleNode root, final DigestType digestType);
 
 	/**
 	 * Same as {@link #digestTreeAsync(MerkleNode, DigestType)}  with DigestType set to SHA_384
@@ -299,7 +301,7 @@ public interface Cryptography {
 	 * 		the root of the tree to hash
 	 * @return the {@link FutureMerkleHash} for the {@link MerkleNode} object
 	 */
-	default FutureMerkleHash digestTreeAsync(final MerkleNode root) {
+	default Future<Hash> digestTreeAsync(final MerkleNode root) {
 		return digestTreeAsync(root, DigestType.SHA_384);
 	}
 
@@ -445,16 +447,17 @@ public interface Cryptography {
 			final SignatureType signatureType);
 
 	/**
-	 * Computes a cryptographic hash for the concatenation of Hash of the {@link Hashable} instance and
+	 * Computes a cryptographic hash for the concatenation of current running Hash and
 	 * the given newHashToAdd.
-	 * Then, the calculated hash is passed to the {@link Hashable} instance by calling {@link Hashable#setHash(Hash)}.
+	 * return the calculated running Hash
 	 *
-	 * @param hashable
-	 * 		the Hashable which maintains the running Hash
+	 * @param runningHash
+	 * 		the calculated running {@code Hash}
 	 * @param newHashToAdd
 	 * 		a Hash for updating the runningHash
 	 * @param digestType
 	 * 		the digest type used to compute runningHash
+	 * @return calculated running Hash
 	 */
-	void calcRunningHash(final Hashable hashable, final Hash newHashToAdd, final DigestType digestType);
+	Hash calcRunningHash(final Hash runningHash, final Hash newHashToAdd, final DigestType digestType);
 }

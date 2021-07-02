@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -16,7 +16,6 @@ package com.swirlds.common.merkle.synchronization;
 
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 
 import static com.swirlds.common.merkle.utility.MerkleConstants.MERKLE_DIGEST_TYPE;
@@ -30,7 +29,8 @@ public abstract class MerkleSynchronizationUtils {
 		if (node == null) {
 			return CryptoFactory.getInstance().getNullHash(MERKLE_DIGEST_TYPE);
 		} else if (node.getHash() == null) {
-			throw new MerkleSynchronizationException("Tree must be hashed prior to synchronization.");
+			throw new MerkleSynchronizationException("Tree must be hashed prior to synchronization. Node of type " +
+					node.getClass().getName() + " has a null hash.");
 		} else {
 			return node.getHash();
 		}
@@ -40,10 +40,10 @@ public abstract class MerkleSynchronizationUtils {
 	 * Get child if it exists, otherwise return null.
 	 */
 	public static MerkleNode getChild(MerkleNode parent, int childIndex) {
-		if (parent == null || parent.isLeaf() || ((MerkleInternal) parent).getNumberOfChildren() <= childIndex) {
+		if (parent == null || parent.isLeaf() || parent.asInternal().getNumberOfChildren() <= childIndex) {
 			return null;
 		}
-		return ((MerkleInternal) parent).getChild(childIndex);
+		return parent.asInternal().getChild(childIndex);
 	}
 
 	/**

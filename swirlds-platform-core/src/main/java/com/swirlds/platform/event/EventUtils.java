@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,9 +14,13 @@
 
 package com.swirlds.platform.event;
 
+import com.swirlds.common.events.Event;
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.EventStrings;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.function.BiPredicate;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -42,33 +46,14 @@ public abstract class EventUtils {
 	}
 
 	/**
-	 * Converts the event to a short string based on it's creator ID and sequence number. Internally this uses {@link
-	 * EventImpl#getCreatorSeqPair()}.
+	 * Converts the event to a short string. Should be replaced by {@link EventStrings#toShortString(EventImpl)}
 	 *
 	 * @param event
 	 * 		the event to convert
-	 * @return a short string of the form "(creatorId, creatorSeq)"
+	 * @return a short string
 	 */
 	public static String toShortString(EventImpl event) {
-		return (event != null) ? event.getCreatorSeqPair().toString() : "null";
-	}
-
-	/**
-	 * convert the event to a longer string, based on the creator ID and sequence number, of it and its other parent.
-	 *
-	 * @param event
-	 * 		the event to convert
-	 * @return a short string of the form "(creatorId, creatorSeq, otherId, otherSeq)"
-	 */
-	public static String toLongerString(EventImpl event) {
-		if (event == null) {
-			return "null";
-		}
-		return "("
-				+ event.getBaseEventHashedData().getCreatorId() + ","
-				+ event.getBaseEventUnhashedData().getCreatorSeq() + ","
-				+ event.getBaseEventUnhashedData().getOtherId() + ","
-				+ event.getBaseEventUnhashedData().getOtherSeq() + ")";
+		return EventStrings.toShortString(event);
 	}
 
 	/**
@@ -94,4 +79,15 @@ public abstract class EventUtils {
 				.map(EventUtils::toShortString)
 				.collect(Collectors.joining(","));
 	}
+
+	public static boolean sorted(List<EventImpl> events, BiPredicate<Event, Event> p) {
+		boolean sorted = true;
+		for(int i = 1; i < events.size(); ++i) {
+			sorted = sorted && p.test(events.get(i - 1), events.get(i));
+		}
+
+		return sorted;
+	}
+
+
 }

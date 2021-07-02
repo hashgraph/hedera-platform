@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,27 +14,10 @@
 
 package com.swirlds.fcmap.internal;
 
-import com.swirlds.common.FastCopyable;
-import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.crypto.ImmutableHash;
 import com.swirlds.common.merkle.MerkleInternal;
-import com.swirlds.common.FCMKey;
-import com.swirlds.common.FCMValue;
+import com.swirlds.common.merkle.MerkleNode;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
-public interface FCMNode<K extends FCMKey, V extends FCMValue>
-		extends MerkleInternal,
-		FastCopyable<FCMNode<K, V>> {
-
-	/**
-	 * Empty hash value
-	 */
-	Hash EMPTY_HASH = new ImmutableHash(new byte[48]);
-
-	FCMInternalNode<K, V> getParent();
-
-	void setParent(final FCMInternalNode<K, V> parent);
+public interface FCMNode<K extends MerkleNode, V extends MerkleNode> extends MerkleInternal {
 
 	FCMNode<K, V> getLeftChild();
 
@@ -42,11 +25,6 @@ public interface FCMNode<K extends FCMKey, V extends FCMValue>
 
 	boolean isFCMLeaf();
 
-	boolean isPathUnique();
-
-	void nullifyHashPath();
-
 	BalanceInfo getBalanceInfo();
 
-	String getMemoryReference();
 }

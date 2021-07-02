@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,11 +14,8 @@
 
 package com.swirlds.logging.json;
 
-import com.swirlds.logging.payloads.LogPayload;
-
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -52,7 +49,7 @@ public class PayloadTypeFilter implements Predicate<JsonLogEntry> {
 	 * @param types
 	 * 		a set of fully qualified payload type names
 	 */
-	public <T extends LogPayload> PayloadTypeFilter(Set<String> types) {
+	public PayloadTypeFilter(Set<String> types) {
 		this.types = types;
 	}
 

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -17,17 +17,17 @@ package com.swirlds.common.crypto.engine;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.HashBuilder;
-import com.swirlds.common.crypto.Hashable;
-import com.swirlds.common.crypto.SerializableHashable;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * Calculates and updates a running Hash each time a new Hash is added.
+ * Calculates and updates a running Hash each time a new RunningHashable is added.
  */
 public class RunningHashProvider extends
-		CachingOperationProvider<Hashable, Hash, Hash, HashBuilder, DigestType> {
+		CachingOperationProvider<Hash, Hash, Hash, HashBuilder, DigestType> {
+
+	public static final String NEW_HASH_NULL = "RunningHashProvider :: newHashToAdd is null";
 
 	/**
 	 * {@inheritDoc}
@@ -42,26 +42,21 @@ public class RunningHashProvider extends
 	 */
 	@Override
 	protected Hash handleItem(final HashBuilder hashBuilder, final DigestType algorithmType,
-			final Hashable hashable, Hash newHashToAdd) {
+			final Hash runningHash, Hash newHashToAdd) {
+		// newHashToAdd should not be null
+		if (newHashToAdd == null) {
+			log().trace(CryptoEngine.LOGM_TESTING_EXCEPTIONS, NEW_HASH_NULL);
+			throw new IllegalArgumentException(NEW_HASH_NULL);
+		}
 
 		hashBuilder.reset();
 
-		hashBuilder.update(hashable.getHash() == null ? newHashToAdd.getClassId() : hashable.getHash().getClassId());
-		hashBuilder.update(hashable.getHash() == null ? newHashToAdd.getVersion() : hashable.getHash().getVersion());
-
-		// if current hash is null, it denotes initialHash is null,
 		// we only digest current hash when it is not null
-		if (hashable.getHash() != null) {
-			hashBuilder.update(hashable.getHash());
+		if (runningHash != null) {
+			updateForHash(hashBuilder, runningHash);
 		}
-
-		// newHashToAdd should not be null
-		if (newHashToAdd == null) {
-			final String msg = "RunningHashProvider :: newHashToAdd is an unexpected null Hash";
-			log().trace(CryptoEngine.LOGM_TESTING_EXCEPTIONS, msg);
-			throw new IllegalArgumentException(msg);
-		}
-		hashBuilder.update(newHashToAdd);
+		// digest new hash
+		updateForHash(hashBuilder, newHashToAdd);
 
 		return hashBuilder.build();
 	}
@@ -70,8 +65,23 @@ public class RunningHashProvider extends
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Hash compute(final Hashable hashable, final Hash newHashToAdd, final DigestType algorithmType)
+	public Hash compute(final Hash runningHash, final Hash newHashToAdd,
+			final DigestType algorithmType)
 			throws NoSuchAlgorithmException {
-		return handleItem(loadAlgorithm(algorithmType), algorithmType, hashable, newHashToAdd);
+		return handleItem(loadAlgorithm(algorithmType), algorithmType, runningHash, newHashToAdd);
+	}
+
+	/**
+	 * update the digest using the given hash
+	 *
+	 * @param hashBuilder
+	 * 		for building hash
+	 * @param hash
+	 * 		a hash to be digested
+	 */
+	private static void updateForHash(final HashBuilder hashBuilder, final Hash hash) {
+		hashBuilder.update(hash.getClassId());
+		hashBuilder.update(hash.getVersion());
+		hashBuilder.update(hash);
 	}
 }

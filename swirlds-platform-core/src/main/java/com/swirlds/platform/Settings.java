@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,14 +14,14 @@
 package com.swirlds.platform;
 
 import com.swirlds.common.CommonUtils;
+import com.swirlds.common.settings.SettingsException;
 import com.swirlds.platform.internal.CryptoSettings;
 import com.swirlds.platform.internal.DatabaseBackupSettings;
 import com.swirlds.platform.internal.DatabaseRestoreSettings;
 import com.swirlds.platform.internal.DatabaseSettings;
-import com.swirlds.platform.internal.FreezeSettings;
 import com.swirlds.platform.internal.JsonExportSettings;
 import com.swirlds.platform.internal.SubSetting;
-import com.swirlds.platform.reconnect.ReconnectSettings;
+import com.swirlds.platform.reconnect.ReconnectSettingsImpl;
 import com.swirlds.platform.state.SignedStateManager;
 import com.swirlds.platform.state.StateSettings;
 import org.apache.logging.log4j.LogManager;
@@ -35,10 +35,12 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+import static com.swirlds.common.settings.ParsingUtils.parseDuration;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STARTUP;
 
@@ -79,8 +81,6 @@ class Settings {
 	static final String settingsUsedFilename = "settingsUsed.txt";
 	/** the directory where the settings used file will be created on startup if and only if settings.txt exists */
 	static final File settingsUsedDir = CommonUtils.canonicalFile(".");
-	/** path to settingsUsed.txt (which will be created if and only if settings.txt exists) */
-	static final File settingsUsedPath = CommonUtils.canonicalFile(settingsUsedDir, settingsUsedFilename);
 	/** path to log4j2.xml (which might not exist) */
 	static File logPath = CommonUtils.canonicalFile(".", "log4j2.xml");
 	/** path to data/keys/ */
@@ -98,8 +98,8 @@ class Settings {
 	///////////////////////////////////////////
 	// settings from settings.txt file
 
-	static String about = "Swirlds browser v. 0.7.4-alpha.4\n"
-			+ "(c)2016-2020 Swirlds Inc\n" + "This is an early alpha version. \n"
+	static String about = "Swirlds browser v. 0.15.1\n"
+			+ "(c)2016-2021 Swirlds Inc\n" + "This is an early alpha version. \n"
 			+ "The Swirlds™ software is covered by one or more patents \n"
 			+ "(see www.swirlds.com/ip). The browser is free to download, \n"
 			+ "to experiment with, and to test in building apps. To deploy \n"
@@ -126,8 +126,12 @@ class Settings {
 	/** should each lock log also create a file on disk describe all current threads? */
 	static boolean lockLogThreadDump = false;
 
-	// make thread sleep every this many milliseconds
-	static int THREAD_SLEEP_PERIOD_MS = 100;
+	/**
+	 * the consensus timestamp of a transaction is guaranteed to be at least this many nanoseconds
+	 * later than that of the transaction immediately before it in consensus order,
+	 * and to be a multiple of this (must be positive and a multiple of 10)
+	 */
+	static long minTransTimestampIncrNanos = 1_000;
 
 	/** settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors */
 	static StateSettings state = new StateSettings();
@@ -268,9 +272,8 @@ class Settings {
 	static int threadPriorityNonSync = Thread.NORM_PRIORITY;
 	/** maximum number of bytes allowed in a transaction */
 	static int transactionMaxBytes = 6144;
-
-	/** the settings that are related to event creation freezing */
-	static volatile FreezeSettings freezeSettings = new FreezeSettings();
+	/** the maximum number of address allowed in a address book, the same as the maximum allowed network size */
+	static int maxAddressSizeAllowed = 1024;
 
 	/**
 	 * do not create events for this many seconds after the platform has started (0 or less to not freeze at
@@ -291,7 +294,7 @@ class Settings {
 	static int maxTransactionCountPerEvent = 245760;
 
 	/**
-	 * if true, both nodes send and wait for a commSyncDone byte after finishing reading and writing all events of a
+	 * if true, both nodes send and wait for a COMM_EVENT_DONE byte after finishing reading and writing all events of a
 	 * sync
 	 */
 	static boolean sendSyncDoneByte = false;
@@ -299,7 +302,12 @@ class Settings {
 	/**
 	 * settings controlling the reconnect feature, ie. enabled/disabled, fallen behind, etc
 	 */
-	static ReconnectSettings reconnect = new ReconnectSettings();
+	static ReconnectSettingsImpl reconnect = new ReconnectSettingsImpl();
+
+	/**
+	 * Settings controlling FCHashMap.
+	 */
+	static FCHashMapSettingsImpl fcHashMap = new FCHashMapSettingsImpl();
 
 	/** settings related to database connectivity */
 	static DatabaseSettings dbConnection = new DatabaseSettings();
@@ -318,22 +326,27 @@ class Settings {
 	static boolean transThrottle = true;
 
 	/**
+	 * The absolute or relative folder path where all the statistics CSV files will be written. If this value is null or
+	 * an empty string, the current folder selection behavior will be used (ie: the SDK base path).
+	 */
+	static String csvOutputFolder = "";
+
+	/**
 	 * The prefix of the name of the CSV file that the platform will write statistics to. If this value is null or an
 	 * empty string, the platform will not write any statistics.
 	 */
 	static String csvFileName = "";
 
-	/** Indicates whether statistics should be appended to the CSV file */
+	/**
+	 * The frequency, in milliseconds, at which values are written to the statistics CSV file.
+	 */
+	static int csvWriteFrequency = CsvWriter.DEFAULT_WRITE_PERIOD;
+
+	/** Indicates whether statistics should be appended to the CSV file. */
 	static boolean csvAppend = false;
 
 	/** The value for the event intake queue at which the node should stop syncing */
 	static int eventIntakeQueueThrottleSize = 1;
-
-	/**
-	 * The number of intake threads as a fraction of the number of CPU cores. The number of threads will be:
-	 * [number of CPU cores] * [eventIntakeThreadMultiplier]
-	 */
-	static int eventIntakeThreadMultiplier = 1;
 
 	/**
 	 * If true, the platform will recalculate the hash of the signed state and check it against the written hash. It
@@ -359,16 +372,11 @@ class Settings {
 	static int staleEventPreventionThreshold = 5;
 
 	/**
-	 * If a childless event exists with a generation this much older than the maximum generation, we should
-	 * potentially create an event with it as the other parent.
+	 * The probability that we will create a child for a childless event.
+	 * The probability is 1 / X, where X is the value of rescueChildlessInverseProbability. A value of 0 means
+	 * that a node will not create any children for childless events.
 	 */
-	static int rescueChildlessGeneration = 30;
-	/**
-	 * The probability that we will create a child for a childless event that qualifies the above stated criteria.
-	 * The probability is is 1 in X, where X is the value of rescueChildlessProbability. A value of 0 means that a node
-	 * will not create any children for childless events.
-	 */
-	static int rescueChildlessProbability = 30;
+	static int rescueChildlessInverseProbability = 10;
 
 	/** Run a thread that checks if the JVM pauses for a long time */
 	static boolean runPauseCheckTimer = false;
@@ -383,15 +391,6 @@ class Settings {
 	 * NOTE: This should only be used for debugging, it will have a major impact on performance.
 	 */
 	static boolean checkSignedStateHashes = false;
-
-	///////////////////////////////////////////
-	// Stale Event During Gossip Threshold
-
-	/**
-	 * threshold for the allowable number of missing self events that we will compensate for during a sync by
-	 * artificially increasing our sequence number to match the sync peer
-	 */
-	static long syncStaleEventCompThreshold = 1_000;
 
 	///////////////////////////////////////////
 	// Beta Mirror Nodes
@@ -413,24 +412,6 @@ class Settings {
 
 	/** eventStream files will be generated in this directory */
 	static String eventsLogDir = "./eventstreams";
-
-	/** new marker for stream event start after which a version number is expected */
-	final static byte STREAM_EVENT_START_WITH_VERSION = 0x5a;
-
-	/**
-	 * new marker for stream event start with no transaction embedded in event,
-	 * after which a version number is expected
-	 */
-	final static byte STREAM_EVENT_START_NO_TRANS_WITH_VERSION = 0x5b;
-
-	/** The current version number for streamed events */
-	final static int STREAM_EVENT_VERSION = 3;
-
-	/** The current version number for EventStream file */
-	final static int EVENT_STREAM_FILE_VERSION = 3;
-
-	/** save disk space by not saving transaction */
-	static boolean stripTransactions = false;
 
 	///////////////////////////////////////////
 	// Setting for thread dump
@@ -455,12 +436,6 @@ class Settings {
 	static String playbackStreamFileDirectory = "";
 	/** last time stamp (inclusive) to stop the playback, format is "2019-10-02T19:46:30.037063163Z" */
 	static String playbackEndTimeStamp = "";
-
-	static final Settings INSTANCE = new Settings();
-
-	public static Settings getInstance() {
-		return INSTANCE;
-	}
 
 	private Settings() {
 	}
@@ -491,9 +466,7 @@ class Settings {
 	}
 
 	/**
-	 * Return true if the settings.txt file exists
-	 *
-	 * @return
+	 * @return true if the settings.txt file exists
 	 */
 	static boolean settingsTxtExists() {
 		return Settings.settingsPath.exists();
@@ -509,7 +482,7 @@ class Settings {
 	 * defaults set in this source file. The settings.txt file is only used for testing and debugging.
 	 */
 	static void loadSettings() {
-		Scanner scanner = null;
+		Scanner scanner;
 		if (!settingsTxtExists()) {
 			return; // normally, the file won't exist, so the defaults are used.
 		}
@@ -588,7 +561,7 @@ class Settings {
 		String subName = null;
 		if (name.contains(".")) {
 			// if the name contains a dot (.), then we need to set a variable that is inside an object
-			String split[] = name.split("\\.");
+			String[] split = name.split("\\.");
 			name = split[0];
 			subName = split[1];
 		}
@@ -605,7 +578,7 @@ class Settings {
 						good = setValue(subField, field.get(Settings.class), val);
 					}
 				}
-			} catch (IllegalArgumentException | IllegalAccessException e) {
+			} catch (IllegalArgumentException | IllegalAccessException | SettingsException e) {
 				log.error(EXCEPTION.getMarker(),
 						"illegal line in settings.txt: {}, {}  {}", pars[0],
 						pars[1], e);
@@ -683,6 +656,9 @@ class Settings {
 		} else if (t == double.class) {
 			field.set(object, Double.parseDouble(value));
 			return true;
+		} else if (t == Duration.class) {
+			field.set(object, parseDuration(value));
+			return true;
 		}
 		return false;
 	}
@@ -703,9 +679,10 @@ class Settings {
 					if (SubSetting.class.isAssignableFrom(f.getType())) {
 						Field[] subFields = f.getType().getDeclaredFields();
 						for (Field subField : subFields) {
+							Object subFieldValue = subField.get(f.get(Settings.class));
 							list.add(new String[] {
 									f.getName() + "." + subField.getName(),
-									subField.get(f.get(Settings.class)).toString()
+									subFieldValue == null ? "null" : subFieldValue.toString()
 							});
 						}
 					} else {

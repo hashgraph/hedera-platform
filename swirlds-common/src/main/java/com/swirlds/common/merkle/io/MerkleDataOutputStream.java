@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -106,6 +106,8 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
 	 *
 	 * @param root
 	 * 		the root of the tree
+	 * @throws IOException
+	 * 		thrown if any IO problems occur
 	 */
 	public void writeMerkleTree(MerkleNode root) throws IOException {
 		writeInt(CURRENT);
@@ -114,10 +116,12 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
 		Iterator<MerkleNode> it = new MerkleBreadthFirstIterator<>(root);
 		while (it.hasNext()) {
 			MerkleNode node = it.next();
-			if (node == null || node.isLeaf()) {
-				writeMerkleLeaf((MerkleLeaf) node);
+			if (node == null) {
+				writeMerkleLeaf(null);
+			} else if (node.isLeaf()) {
+				writeMerkleLeaf(node.asLeaf());
 			} else {
-				writeMerkleInternal((MerkleInternal) node);
+				writeMerkleInternal(node.asInternal());
 			}
 			if (node != null && options.getWriteHashes()) {
 				writeSerializable(node.getHash(), false);

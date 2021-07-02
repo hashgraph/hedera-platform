@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -17,7 +17,7 @@ package com.swirlds.common;
 /**
  * A class that is used to uniquely identify a Swirlds Node
  */
-public class NodeId {
+public class NodeId implements EventCreationRule {
 	/** used to distinguish between a main node and a mirror node */
 	private boolean isMirror;
 	/** ID number unique within the network, unique set for main network and mirror network */
@@ -121,6 +121,7 @@ public class NodeId {
 
 	/**
 	 * Check if ID is part of mirror network
+	 *
 	 * @return true if this ID is part of the mirror network, false if not
 	 */
 	public boolean isMirror() {
@@ -129,6 +130,7 @@ public class NodeId {
 
 	/**
 	 * Check if ID is part of main network
+	 *
 	 * @return true if this ID is part of the main network, false if not
 	 */
 	public boolean isMain() {
@@ -137,6 +139,7 @@ public class NodeId {
 
 	/**
 	 * Check if numeric part of this ID
+	 *
 	 * @return the numeric part of this ID
 	 */
 	public long getId() {
@@ -145,6 +148,7 @@ public class NodeId {
 
 	/**
 	 * get numeric part of ID and cast to an Integer
+	 *
 	 * @return the numeric part of this ID, cast to an integer
 	 */
 	public int getIdAsInt() {
@@ -157,5 +161,18 @@ public class NodeId {
 	@Override
 	public String toString() {
 		return (isMirror ? "m" : "") + id;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public EventCreationRuleResponse shouldCreateEvent() {
+		// Only main nodes should create events
+		if (isMain()) {
+			return EventCreationRuleResponse.PASS;
+		} else {
+			return EventCreationRuleResponse.DONT_CREATE;
+		}
 	}
 }

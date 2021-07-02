@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -35,7 +35,7 @@ public class Message implements Comparable<Message> {
 	private int length;
 
 	/** the final hash */
-	private byte[] hash;
+	private Hash hash;
 
 	/** the digest algorithm requested */
 	private DigestType digestType;
@@ -220,7 +220,7 @@ public class Message implements Comparable<Message> {
 	 *
 	 * @return the hash of the message payload
 	 */
-	public byte[] getHash() {
+	public Hash getHash() {
 		return hash;
 	}
 
@@ -230,7 +230,7 @@ public class Message implements Comparable<Message> {
 	 * @param hash
 	 * 		the computed hash
 	 */
-	public void setHash(final byte[] hash) {
+	public void setHash(final Hash hash) {
 		this.hash = hash;
 	}
 

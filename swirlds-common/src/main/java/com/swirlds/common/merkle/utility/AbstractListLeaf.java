@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -18,7 +18,6 @@ import com.swirlds.common.FastCopyable;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
-import com.swirlds.common.merkle.MerkleLeaf;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -33,8 +32,9 @@ import java.util.ListIterator;
  * @param <T>
  * 		The type contained by the list.
  */
-public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializable> extends AbstractMerkleLeaf
-		implements MerkleLeaf, List<T> {
+public abstract class AbstractListLeaf<T extends FastCopyable & SelfSerializable>
+		extends AbstractMerkleLeaf
+		implements List<T> {
 
 	/**
 	 * Version information for AbstractEmbeddedListLeaf.
@@ -43,10 +43,12 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 		public static final int ORIGINAL = 1;
 	}
 
+	protected List<T> elements;
+
 	/**
 	 * Create a new AbstractEmbeddedListLeaf.
 	 */
-	public AbstractListLeaf() {
+	protected AbstractListLeaf() {
 		elements = new ArrayList<>();
 	}
 
@@ -56,13 +58,27 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * @param elements
 	 * 		The list of elements to copy.
 	 */
-	public AbstractListLeaf(List<T> elements) {
+	@SuppressWarnings("unchecked")
+	protected AbstractListLeaf(final List<T> elements) {
 		if (elements.size() > getMaxSize()) {
 			throw new IllegalArgumentException("Provided list exceeds maximum size");
 		}
 		this.elements = new ArrayList<>(elements.size());
-		for (int index = 0; index < elements.size(); index++) {
-			this.elements.add(elements.get(index).copy());
+		for (final T element : elements) {
+			this.elements.add((T) element.copy());
+		}
+	}
+
+	/**
+	 * Copy constructor. Use this to implement child's copy constructor.
+	 */
+	@SuppressWarnings("unchecked")
+	protected AbstractListLeaf(final AbstractListLeaf<T> that) {
+		super(that);
+
+		this.elements = new ArrayList<>(that.elements.size());
+		for (final T element: that.elements) {
+			this.elements.add((T) element.copy());
 		}
 	}
 
@@ -72,7 +88,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * @param initialSize
 	 * 		The initial size of the list.
 	 */
-	public AbstractListLeaf(int initialSize) {
+	public AbstractListLeaf(final int initialSize) {
 		elements = new ArrayList<>(initialSize);
 	}
 
@@ -87,7 +103,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void serialize(SerializableDataOutputStream out) throws IOException {
+	public void serialize(final SerializableDataOutputStream out) throws IOException {
 		out.writeSerializableList(elements, true, false);
 	}
 
@@ -95,8 +111,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	@SuppressWarnings("unchecked")
-	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
+	public void deserialize(final SerializableDataInputStream in, int version) throws IOException {
 		elements = in.readSerializableList(getMaxSize());
 	}
 
@@ -107,8 +122,6 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	public final int getVersion() {
 		return ClassVersion.ORIGINAL;
 	}
-
-	protected List<T> elements;
 
 	/**
 	 * {@inheritDoc}
@@ -154,7 +167,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public <T1> T1[] toArray(T1[] a) {
+	public <T1> T1[] toArray(final T1[] a) {
 		return elements.toArray(a);
 	}
 
@@ -162,7 +175,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean add(T t) {
+	public boolean add(final T t) {
 		return elements.add(t);
 	}
 
@@ -170,7 +183,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean remove(Object o) {
+	public boolean remove(final Object o) {
 		return elements.remove(o);
 	}
 
@@ -178,7 +191,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean containsAll(Collection<?> c) {
+	public boolean containsAll(final Collection<?> c) {
 		return elements.containsAll(c);
 	}
 
@@ -186,7 +199,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean addAll(Collection<? extends T> c) {
+	public boolean addAll(final Collection<? extends T> c) {
 		return elements.addAll(c);
 	}
 
@@ -194,7 +207,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean addAll(int index, Collection<? extends T> c) {
+	public boolean addAll(final int index, final Collection<? extends T> c) {
 		return elements.addAll(index, c);
 	}
 
@@ -202,7 +215,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean removeAll(Collection<?> c) {
+	public boolean removeAll(final Collection<?> c) {
 		return elements.removeAll(c);
 	}
 
@@ -210,7 +223,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean retainAll(Collection<?> c) {
+	public boolean retainAll(final Collection<?> c) {
 		return elements.retainAll(c);
 	}
 
@@ -226,7 +239,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public T get(int index) {
+	public T get(final int index) {
 		return elements.get(index);
 	}
 
@@ -234,7 +247,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public T set(int index, T element) {
+	public T set(final int index, final T element) {
 		return elements.set(index, element);
 	}
 
@@ -242,7 +255,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void add(int index, T element) {
+	public void add(final int index, final T element) {
 		elements.add(index, element);
 	}
 
@@ -250,7 +263,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public T remove(int index) {
+	public T remove(final int index) {
 		return elements.remove(index);
 	}
 
@@ -258,7 +271,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public int indexOf(Object o) {
+	public int indexOf(final Object o) {
 		return elements.indexOf(o);
 	}
 
@@ -266,7 +279,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public int lastIndexOf(Object o) {
+	public int lastIndexOf(final Object o) {
 		return elements.lastIndexOf(o);
 	}
 
@@ -282,7 +295,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public ListIterator<T> listIterator(int index) {
+	public ListIterator<T> listIterator(final int index) {
 		return elements.listIterator(index);
 	}
 
@@ -290,16 +303,16 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 	 * {@inheritDoc}
 	 */
 	@Override
-	public List<T> subList(int fromIndex, int toIndex) {
+	public List<T> subList(final int fromIndex, final int toIndex) {
 		return elements.subList(fromIndex, toIndex);
 	}
 
 	public String toString() {
-		StringBuilder sb = new StringBuilder();
+		final StringBuilder sb = new StringBuilder();
 		sb.append("List size: ").append(elements.size());
 		sb.append(" [");
 		for (int index = 0; index < elements.size(); index++) {
-			T element = elements.get(index);
+			final T element = elements.get(index);
 			sb.append((element == null) ? "null" : element.toString());
 			if (index + 1 < elements.size()) {
 				sb.append(", ");
@@ -309,4 +322,10 @@ public abstract class AbstractListLeaf<T extends FastCopyable<T> & SelfSerializa
 
 		return sb.toString();
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public abstract AbstractListLeaf<T> copy();
 }

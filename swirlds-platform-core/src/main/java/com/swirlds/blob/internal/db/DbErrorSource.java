@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -27,7 +27,8 @@ public enum DbErrorSource {
 	BLOB_APPEND(4100),
 	BLOB_UPDATE(4101),
 	BLOB_DELETE(4102),
-	BLOB_RESTORE(4103);
+	BLOB_RESTORE(4103),
+	BLOB_INCREMENT_REF_COUNT(4104);
 
 
 	private static final Map<Integer, DbErrorSource> lookupTable = new HashMap<>();

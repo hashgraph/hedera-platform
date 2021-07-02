@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -13,12 +13,15 @@
  */
 
 package com.swirlds.platform.state;
-
+import com.swirlds.platform.stats.SignedStateStats;
+import org.apache.commons.lang3.time.StopWatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import static com.swirlds.logging.LogMarker.STATE_DELETER;
 import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS;
@@ -30,8 +33,9 @@ public class SignedStateGarbageCollector implements Runnable {
 
 	private static final int QUEUE_SIZE = 20;
 
-	private LinkedBlockingQueue<SignedState> deletionQueue;
-	private LinkedBlockingQueue<SignedState> archivalQueue;
+	private final LinkedBlockingQueue<SignedState> deletionQueue;
+	private final LinkedBlockingQueue<SignedState> archivalQueue;
+	private final Supplier<SignedStateStats> statsSupplier;
 
 	/**
 	 * The amount of time to sleep after attempting to delete/archive all requested states.
@@ -40,7 +44,8 @@ public class SignedStateGarbageCollector implements Runnable {
 
 	private volatile boolean alive;
 
-	public SignedStateGarbageCollector() {
+	public SignedStateGarbageCollector(Supplier<SignedStateStats> statsSupplier) {
+		this.statsSupplier = statsSupplier;
 		deletionQueue = new LinkedBlockingQueue<>(QUEUE_SIZE);
 		archivalQueue = new LinkedBlockingQueue<>(QUEUE_SIZE);
 		alive = true;
@@ -52,6 +57,8 @@ public class SignedStateGarbageCollector implements Runnable {
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
+
+		statsSupplier.get().updateDeletionQueue(deletionQueue.size());
 	}
 
 	public void archiveBackground(SignedState ss) {
@@ -60,6 +67,8 @@ public class SignedStateGarbageCollector implements Runnable {
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
+
+		statsSupplier.get().updateArchivalQueue(archivalQueue.size());
 	}
 
 	public int getQueueSize() {
@@ -80,30 +89,9 @@ public class SignedStateGarbageCollector implements Runnable {
 	public void run() {
 		while (alive) {
 
-			boolean deletePerformed = false;
-			Iterator<SignedState> deletionIterator = deletionQueue.iterator();
-			while (deletionIterator.hasNext()) {
-				SignedState forDelete = deletionIterator.next();
-				log.info(STATE_DELETER.getMarker(), " About to tryDelete signed state for round: {}",
-						forDelete.getLastRoundReceived());
-				if (forDelete.tryDelete()) {
-					log.info(STATE_DELETER.getMarker(), " Successfully deleted signed state for round: {}",
-							forDelete.getLastRoundReceived());
-					deletionIterator.remove();
-					deletePerformed = true;
+			boolean deletePerformed = processDeletionQueue();
 
-					forDelete.getLeaf().compareSnapshot();
-				}
-			}
-
-			boolean archivePerformed = false;
-			Iterator<SignedState> archivalIterator = archivalQueue.iterator();
-			while (archivalIterator.hasNext()) {
-				if (archivalIterator.next().tryArchive()) {
-					archivalIterator.remove();
-					archivePerformed = true;
-				}
-			}
+			boolean archivePerformed = processArchivalQueue();
 
 			boolean shouldSleep = !(deletePerformed && deletionQueue.size() > 0) &&
 					!(archivePerformed && archivalQueue.size() > 0);
@@ -118,5 +106,53 @@ public class SignedStateGarbageCollector implements Runnable {
 				}
 			}
 		}
+	}
+
+	private boolean processArchivalQueue() {
+		StopWatch watch;
+		boolean archivePerformed = false;
+		Iterator<SignedState> archivalIterator = archivalQueue.iterator();
+		while (archivalIterator.hasNext()) {
+			watch = new StopWatch();
+			watch.start();
+
+			if (archivalIterator.next().tryArchive()) {
+				archivalIterator.remove();
+				archivePerformed = true;
+
+				watch.stop();
+				statsSupplier.get().updateArchivalTime(watch.getTime(TimeUnit.MICROSECONDS));
+				statsSupplier.get().updateArchivalQueue(archivalQueue.size());
+			}
+		}
+		return archivePerformed;
+	}
+
+	private boolean processDeletionQueue() {
+		StopWatch watch;
+		boolean deletePerformed = false;
+		Iterator<SignedState> deletionIterator = deletionQueue.iterator();
+		while (deletionIterator.hasNext()) {
+			SignedState forDelete = deletionIterator.next();
+			log.info(STATE_DELETER.getMarker(), " About to tryDelete signed state for round: {}",
+					forDelete.getLastRoundReceived());
+
+			watch = new StopWatch();
+			watch.start();
+
+			if (forDelete.tryDelete()) {
+				log.info(STATE_DELETER.getMarker(), " Successfully deleted signed state for round: {}",
+						forDelete.getLastRoundReceived());
+				deletionIterator.remove();
+				deletePerformed = true;
+
+				watch.stop();
+				statsSupplier.get().updateDeletionTime(watch.getTime(TimeUnit.MICROSECONDS));
+				statsSupplier.get().updateDeletionQueue(deletionQueue.size());
+
+				forDelete.getState().getPlatformState().compareSnapshot();
+			}
+		}
+		return deletePerformed;
 	}
 }

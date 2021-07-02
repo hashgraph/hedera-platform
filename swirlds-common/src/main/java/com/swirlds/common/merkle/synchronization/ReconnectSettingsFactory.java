@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -13,6 +13,8 @@
  */
 
 package com.swirlds.common.merkle.synchronization;
+
+import java.time.Duration;
 
 /**
  * Utility class for fetching reconnect settings.
@@ -35,13 +37,28 @@ public abstract class ReconnectSettingsFactory {
 	private static ReconnectSettings getDefaultSettings() {
 		return new ReconnectSettings() {
 			@Override
+			public boolean isActive() {
+				return true;
+			}
+
+			@Override
+			public int getReconnectWindowSeconds() {
+				return -1;
+			}
+
+			@Override
+			public double getFallenBehindThreshold() {
+				return 0.5;
+			}
+
+			@Override
 			public int getAsyncInputStreamTimeoutMilliseconds() {
 				return 10_000;
 			}
 
 			@Override
-			public int getAsyncOutputStreamMaxUnflushedMessages() {
-				return 100;
+			public double getAsyncOutputStreamFlushFraction() {
+				return 0.01;
 			}
 
 			@Override
@@ -62,6 +79,16 @@ public abstract class ReconnectSettingsFactory {
 			@Override
 			public int getMaxAckDelayMilliseconds() {
 				return 10;
+			}
+
+			@Override
+			public int getMaximumReconnectFailuresBeforeShutdown() {
+				return 10;
+			}
+
+			@Override
+			public Duration getMinimumTimeBetweenReconnects() {
+				return Duration.ofMinutes(10);
 			}
 		};
 	}

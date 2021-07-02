@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -49,18 +49,18 @@ import static com.swirlds.common.merkle.utility.MerkleConstants.MERKLE_DIGEST_TY
  */
 public class ReceivingSynchronizer {
 
-	private Logger log;
-	private Marker marker;
+	private final Logger log;
+	private final Marker marker;
 
 	/**
 	 * Used to get data from the sender.
 	 */
-	private MerkleDataInputStream in;
+	private final MerkleDataInputStream in;
 
 	/**
 	 * Used to transmit data to the sender.
 	 */
-	private MerkleDataOutputStream out;
+	private final MerkleDataOutputStream out;
 
 	/**
 	 * The root of the merkle tree known by the receiver.
@@ -107,8 +107,12 @@ public class ReceivingSynchronizer {
 	 * 		The root of the merkle tree known by the receiver. The tree referenced by this root will
 	 * 		not be modified in any way by this method.
 	 */
-	public ReceivingSynchronizer(MerkleDataInputStream in, MerkleDataOutputStream out,
-			MerkleNode originalRoot, Logger log, Marker marker) throws MerkleSynchronizationException {
+	public ReceivingSynchronizer(
+			final MerkleDataInputStream in,
+			final MerkleDataOutputStream out,
+			final MerkleNode originalRoot,
+			final Logger log,
+			final Marker marker) throws MerkleSynchronizationException {
 		this.in = in;
 		this.out = out;
 		this.originalRoot = originalRoot;
@@ -134,7 +138,9 @@ public class ReceivingSynchronizer {
 	 * Utility method to aid in benchmarking. Allows for the output stream to be replaced
 	 * with a stream that simulates lag.
 	 */
-	protected AsyncOutputStream getAsyncOutputStream(MerkleDataOutputStream out, StandardWorkGroup workGroup) {
+	protected AsyncOutputStream getAsyncOutputStream(
+			final MerkleDataOutputStream out,
+			final StandardWorkGroup workGroup) {
 		return new AsyncOutputStream(out, workGroup);
 	}
 
@@ -144,15 +150,15 @@ public class ReceivingSynchronizer {
 	 * @return The root of the newly synchronized tree.
 	 */
 	public MerkleNode synchronize() throws InterruptedException {
-		long synchronizationStartTime = System.currentTimeMillis();
+		final long synchronizationStartTime = System.currentTimeMillis();
 
 		log.info(marker, "Starting synchronization in the role of the receiver.");
 
 		StandardWorkGroup workGroup = new StandardWorkGroup("receiving-synchronizer");
 
-		AsyncInputStream asyncIn = new AsyncInputStream(in, workGroup);
-		AsyncOutputStream asyncOut = getAsyncOutputStream(out, workGroup);
-		try (MerkleHashValidator validator = new MerkleHashValidator(
+		final AsyncInputStream asyncIn = new AsyncInputStream(in, workGroup);
+		final AsyncOutputStream asyncOut = getAsyncOutputStream(out, workGroup);
+		try (final MerkleHashValidator validator = new MerkleHashValidator(
 				ReconnectSettingsFactory.get().getHashValidationThreadPoolSize())) {
 
 			workGroup.execute("receiving-thread", () -> execute(asyncIn, asyncOut, validator));
@@ -184,7 +190,7 @@ public class ReceivingSynchronizer {
 	/**
 	 * Should be called if reconnect is started but fails. Cleans up resources.
 	 */
-	private void cleanupFailedSynchronization(AsyncInputStream asyncIn) {
+	private void cleanupFailedSynchronization(final AsyncInputStream asyncIn) {
 		if (newRoot != null) {
 			newRoot.release();
 		}
@@ -194,8 +200,12 @@ public class ReceivingSynchronizer {
 	/**
 	 * Prepare to receive data about a node in the future.
 	 */
-	private void prepareForNodeData(AsyncInputStream asyncIn, Hash expectedHash, MerkleInternal parent,
-			int childIndex, MerkleNode originalNode) {
+	private void prepareForNodeData(
+			final AsyncInputStream asyncIn,
+			final Hash expectedHash,
+			final MerkleInternal parent,
+			final int childIndex,
+			final MerkleNode originalNode) {
 		asyncIn.addAnticipatedMessage(new NodeDataMessage());
 		expectedNodeData.add(new ExpectedNodeData(expectedHash, parent, childIndex, originalNode));
 	}
@@ -203,18 +213,25 @@ public class ReceivingSynchronizer {
 	/**
 	 * Handle data containing a leaf node.
 	 */
-	private void handleLeafData(ExpectedNodeData expectedData, NodeDataMessage data, MerkleHashValidator validator) {
+	private void handleLeafData(
+			final ExpectedNodeData expectedData,
+			final NodeDataMessage data,
+			final MerkleHashValidator validator) {
 		validator.validateAsync(expectedData.getHash(), (MerkleLeaf) data.getNode());
 	}
 
 	/**
 	 * Handle data containing an internal node.
 	 */
-	private void handleInternalData(ExpectedNodeData expectedData, NodeDataMessage data, MerkleHashValidator validator,
-			AsyncInputStream asyncIn, AsyncOutputStream asyncOut) throws InterruptedException {
+	private void handleInternalData(
+			final ExpectedNodeData expectedData,
+			final NodeDataMessage data,
+			final MerkleHashValidator validator,
+			final AsyncInputStream asyncIn,
+			final AsyncOutputStream asyncOut) throws InterruptedException {
 
-		MerkleInternal node = (MerkleInternal) data.getNode();
-		MerkleNode originalNode = expectedData.getOriginalNode();
+		final MerkleInternal node = data.getNode().cast();
+		final MerkleNode originalNode = expectedData.getOriginalNode();
 		markForInitialization(node);
 
 		validator.validateAsync(expectedData.getHash(), node, data.getChildHashes());
@@ -225,12 +242,12 @@ public class ReceivingSynchronizer {
 				sendAck(asyncOut, false);
 			}
 
-			Hash childHash = data.getChildHashes().get(childIndex);
+			final Hash childHash = data.getChildHashes().get(childIndex);
 			prepareForNodeData(asyncIn, childHash, node, childIndex, getChild(originalNode, childIndex));
 		}
 	}
 
-	private void validateLocalData(MerkleHashValidator validator, ExpectedNodeData expectedNodeData) {
+	private void validateLocalData(final MerkleHashValidator validator, final ExpectedNodeData expectedNodeData) {
 		Hash hash;
 		if (expectedNodeData.getOriginalNode() == null) {
 			hash = CryptoFactory.getInstance().getNullHash(MERKLE_DIGEST_TYPE);
@@ -241,16 +258,16 @@ public class ReceivingSynchronizer {
 		validator.validate(expectedNodeData.getHash(), hash);
 	}
 
-	private void addToNodeCount(ExpectedNodeData expectedData, NodeDataMessage data) {
-		boolean isLeaf = data.getNode() == null || data.getNode().isLeaf();
+	private void addToNodeCount(final ExpectedNodeData expectedData, final NodeDataMessage data) {
+		final boolean isLeaf = data.getNode() == null || data.getNode().isLeaf();
 		if (isLeaf) {
 			leafNodesReceived++;
 		} else {
 			internalNodesReceived++;
 		}
-		Hash localHash = getHash(expectedData.getOriginalNode());
-		Hash newHash = expectedData.getHash();
-		boolean hashMatches = localHash.equals(newHash);
+		final Hash localHash = getHash(expectedData.getOriginalNode());
+		final Hash newHash = expectedData.getHash();
+		final boolean hashMatches = localHash.equals(newHash);
 		if (hashMatches) {
 			if (isLeaf) {
 				redundantLeafNodes++;
@@ -260,9 +277,12 @@ public class ReceivingSynchronizer {
 		}
 	}
 
-	private void handleData(ExpectedNodeData expectedData, NodeDataMessage data, MerkleHashValidator validator,
-			AsyncInputStream asyncIn, AsyncOutputStream asyncOut) throws InterruptedException {
-
+	private void handleData(
+			final ExpectedNodeData expectedData,
+			final NodeDataMessage data,
+			final MerkleHashValidator validator,
+			final AsyncInputStream asyncIn,
+			final AsyncOutputStream asyncOut) throws InterruptedException {
 
 		MerkleNode node;
 		if (data.currentNodeIsUpToDate()) {
@@ -285,17 +305,20 @@ public class ReceivingSynchronizer {
 	/**
 	 * Perform the synchronization algorithm in the role of the receiver.
 	 */
-	private void execute(AsyncInputStream asyncIn, AsyncOutputStream asyncOut, MerkleHashValidator validator) {
+	private void execute(
+			final AsyncInputStream asyncIn,
+			final AsyncOutputStream asyncOut,
+			final MerkleHashValidator validator) {
 		try {
 			asyncIn.addAnticipatedMessage(new Hash());
-			Hash rootHash = asyncIn.readAnticipatedMessage();
+			final Hash rootHash = asyncIn.readAnticipatedMessage();
 			sendAck(asyncOut, rootHash.equals(getHash(originalRoot)));
 			prepareForNodeData(asyncIn, rootHash, null, 0, originalRoot);
 
 			while ((expectedNodeData.size() > 0 && validator.isValidSoFar())
 					&& !Thread.currentThread().isInterrupted()) {
-				ExpectedNodeData expectedData = expectedNodeData.remove();
-				NodeDataMessage data = asyncIn.readAnticipatedMessage();
+				final ExpectedNodeData expectedData = expectedNodeData.remove();
+				final NodeDataMessage data = asyncIn.readAnticipatedMessage();
 				handleData(expectedData, data, validator, asyncIn, asyncOut);
 			}
 
@@ -314,10 +337,10 @@ public class ReceivingSynchronizer {
 	 * Initialize all nodes that were transmitted from the Sender.
 	 */
 	private void initialize() {
-		long startTime = System.currentTimeMillis();
+		final long startTime = System.currentTimeMillis();
 		log.info(marker, "Starting initialization of merkle tree.");
 		for (MerkleInternal node : uninitializedNodes) {
-			node.initialize(null);
+			node.initialize();
 		}
 		uninitializedNodes = null;
 		initializationTimeMilliseconds = System.currentTimeMillis() - startTime;
@@ -326,13 +349,13 @@ public class ReceivingSynchronizer {
 	/**
 	 * Prepare a node for later initialization.
 	 */
-	private void markForInitialization(MerkleInternal node) {
+	private void markForInitialization(final MerkleInternal node) {
 		// Nodes are added in reverse order
 		// This allows for a forward-iterator to initialize nodes before their ancestors
 		uninitializedNodes.addFirst(node);
 	}
 
-	private void sendAck(AsyncOutputStream asyncOut, boolean affirmative) throws InterruptedException {
+	private void sendAck(final AsyncOutputStream asyncOut, final boolean affirmative) throws InterruptedException {
 		if (affirmative) {
 			asyncOut.sendAsync(positiveAck);
 		} else {
@@ -343,7 +366,7 @@ public class ReceivingSynchronizer {
 	/**
 	 * Add a new node to its parent.
 	 */
-	private void addToParent(MerkleNode node, MerkleInternal parent, int childIndex) {
+	private void addToParent(final MerkleNode node, final MerkleInternal parent, final int childIndex) {
 		if (parent == null) {
 			// This node is the root
 			newRoot = node;

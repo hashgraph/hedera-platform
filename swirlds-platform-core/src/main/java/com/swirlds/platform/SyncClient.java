@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -21,6 +21,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
+import static com.swirlds.logging.LogMarker.SYNC_CLIENT;
 
 /**
  * This class remembers connections to multiple members. It connects to servers when requested. The get()
@@ -72,6 +73,10 @@ class SyncClient {
 	 * @return the connection (or null if none)
 	 */
 	SyncConnection getCallerConnOrConnectOnce(NodeId otherConnId) {
+		log.debug(SYNC_CLIENT.getMarker(),
+				"{} `getCallerConnOrConnectOnce` : getting connection",
+				platform.getSelfId());
+
 		SyncConnection connection;
 		NodeId selfConnId = platform.getSelfConnectionId();
 		if (selfConnId.sameNetwork(otherConnId) &&
@@ -92,6 +97,12 @@ class SyncClient {
 				platform.getSyncServer().connsCreated.incrementAndGet(); // count new connections
 			}
 		}
+
+		log.debug(SYNC_CLIENT.getMarker(),
+				"{} `getCallerConnOrConnectOnce` : got connection to {}",
+				platform.getSelfId(),
+				connection != null ? connection.getOtherId() : null);
+
 		return connection;
 	}
 

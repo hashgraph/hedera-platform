@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,17 +14,14 @@
 
 package com.swirlds.common.merkle.utility;
 
-import com.swirlds.common.FCMKey;
-import com.swirlds.common.FCMValue;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
-import com.swirlds.common.merkle.MerkleLeaf;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
 import java.io.IOException;
 import java.util.Objects;
 
-public class MerkleLong extends AbstractMerkleLeaf implements FCMKey, FCMValue {
+public class MerkleLong extends AbstractMerkleLeaf {
 
 	public static final long CLASS_ID = 0x46cd791173861c4cL;
 
@@ -40,6 +37,7 @@ public class MerkleLong extends AbstractMerkleLeaf implements FCMKey, FCMValue {
 	}
 
 	private MerkleLong(final MerkleLong sourceValue) {
+		super(sourceValue);
 		this.value = sourceValue.getValue();
 		setImmutable(false);
 		sourceValue.setImmutable(true);
@@ -47,6 +45,7 @@ public class MerkleLong extends AbstractMerkleLeaf implements FCMKey, FCMValue {
 
 	/**
 	 * get the long value in {@link MerkleLong}
+	 *
 	 * @return
 	 */
 	public long getValue() {
@@ -86,22 +85,6 @@ public class MerkleLong extends AbstractMerkleLeaf implements FCMKey, FCMValue {
 	public MerkleLong copy() {
 		throwIfImmutable();
 		return new MerkleLong(this);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void copyFrom(final SerializableDataInputStream inStream) throws IOException {
-		this.value = inStream.readLong();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void copyFromExtra(SerializableDataInputStream inStream) throws IOException {
-
 	}
 
 	/**

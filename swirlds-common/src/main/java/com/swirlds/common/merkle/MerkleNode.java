@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,11 +14,15 @@
 
 package com.swirlds.common.merkle;
 
-import com.swirlds.common.Releasable;
+import com.swirlds.common.FastCopyable;
 import com.swirlds.common.crypto.Hashable;
 import com.swirlds.common.io.SerializableDet;
+import com.swirlds.common.merkle.exceptions.MerkleRouteException;
 import com.swirlds.common.merkle.iterators.MerkleDepthFirstIterator;
 import com.swirlds.common.merkle.iterators.MerkleInternalIterator;
+import com.swirlds.common.merkle.route.MerkleRoute;
+import com.swirlds.common.merkle.route.MerkleRouteIterator;
+import com.swirlds.common.merkle.route.ReverseMerkleRouteIterator;
 
 import java.util.Iterator;
 import java.util.function.Consumer;
@@ -33,56 +37,136 @@ import java.util.function.Function;
  *     <li>Doesn't need to provide hints to the Crypto Module</li>
  * </ul>
  */
-public interface MerkleNode extends Releasable, Hashable, SerializableDet {
+public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 
 	/**
-	 * Check if this node is a leaf node.
+	 * Check if this node is a leaf node. As fast or faster than using instanceof.
 	 *
 	 * @return true if this is a leaf node in a merkle tree.
 	 */
 	boolean isLeaf();
 
-//	/**
-//	 * IMPORTANT: this method is a place holder -- routes are not yet fully enabled.
-//	 *
-//	 * Get the (encoded) route from the root of the tree down to this node.
-//	 *
-//	 * To read or manipulate the route returned, first wrap it in a {@link MerkleRoute} object.
-//	 *
-//	 * Returns the value specified by setPath().
-//	 *
-//	 * @return A MerkleRoute object.
-//	 */
-//	int[] getRoute();
-//
-//	/**
-//	 * IMPORTANT: this method is a place holder -- routes are not yet fully enabled.
-//	 *
-//	 * This method is used to store the route from the root to this node.
-//	 *
-//	 * It is expected that the value set by this method be stored and returned by getPath().
-//	 */
-//	void setRoute(int[] route);
+	/**
+	 * Blindly cast this merkle node into a leaf node, will fail if node is not actually a leaf node.
+	 */
+	default MerkleLeaf asLeaf() {
+		return cast();
+	}
 
 	/**
-	 * This method should be called every time this node is added as the child of another node.
+	 * Blindly cast this merkle node into an internal node, will fail if node is not actually an internal node.
+	 */
+	default MerkleInternal asInternal() {
+		return cast();
+	}
+
+	/**
+	 * Blindly cast this merkle node into the given type, will fail if node is not actually that type.
+	 *
+	 * @param <T>
+	 * 		this node will be cast into this type
+	 */
+	@SuppressWarnings("unchecked")
+	default <T extends MerkleNode> T cast() {
+		return (T) this;
+	}
+
+	/***
+	 * Returns the value specified by setRoute(), i.e. the route from the root of the tree down to this node.
+	 *
+	 * If setRoute() has not yet been called, this method should return an empty merkle route.
+	 */
+	MerkleRoute getRoute();
+
+	/**
+	 * This method is used to store the route from the root to this node.
+	 *
+	 * It is expected that the value set by this method be stored and returned by getPath().
+	 *
+	 * This method should NEVER be called manually. Only merkle utility code in AbstractMerkleInternal
+	 * should ever call this method.
+	 *
+	 * @throws MerkleRouteException
+	 * 		if this node has a reference count is not exactly 1. Routes may only be changed
+	 * 		when a node is first added as the child of another node or if there is a single parent
+	 * 		and the route of that parent changes.
+	 */
+	void setRoute(final MerkleRoute route);
+
+	/**
+	 * Returns an iterator that will iterate from this node along each node on a specified route.
+	 *
+	 * @param route
+	 * 		the route to follow
+	 * @return an iterator, first node returned will be this node, last node returned will
+	 * 		be the node at the end of the route
+	 */
+	default Iterator<MerkleNode> routeIterator(final MerkleRoute route) {
+		return new MerkleRouteIterator(this, route);
+	}
+
+	/**
+	 * Returns an iterator that will iterate from this node along each node on a specified route in reverse order.
+	 *
+	 * @param route
+	 * 		the route to follow
+	 * @return an iterator, last node returned will be this node, first node returned will
+	 * 		be the node at the end of the route
+	 */
+	default Iterator<MerkleNode> reverseRouteIterator(final MerkleRoute route) {
+		return new ReverseMerkleRouteIterator(this, route);
+	}
+
+	/**
+	 * Get the node that is reached by starting at this node and traversing along a provided route.
+	 *
+	 * @param route
+	 * 		the route to follow
+	 * @return the node at the end of the route
+	 */
+	default MerkleNode getNodeAtRoute(final MerkleRoute route) {
+		return new MerkleRouteIterator(this, route).getLast();
+	}
+
+	/**
+	 * This method should be called every time this node is added as the child of another node. Increases the
+	 * reference count by 1.
 	 *
 	 * The reference count of a node corresponds to the number of parent nodes which reference the node.
 	 * All nodes in a tree should have a reference count of at least 1 with the exception of the root
 	 * (which will have a reference count of 0).
+	 *
+	 * @throws com.swirlds.common.ReferenceCountException
+	 * 		if this node has already been released
 	 */
 	void incrementReferenceCount();
 
 	/**
-	 * This method should be called every time this node is removed as the child of another node. If the
-	 * reference count drops to 0, this method is responsible for deleting external data held by the node
+	 * This method should be called every time this node is removed as the child of another node.
+	 * <p>
+	 * If the reference count drops to 0, this method is responsible for deleting external data held by the node
 	 * and for decrementing the reference count of children (if this node has children).
+	 *
+	 * @throws com.swirlds.common.ReferenceCountException
+	 * 		if the reference count is 0 or of the node has already been released
 	 */
 	void decrementReferenceCount();
 
 	/**
-	 * @return the current reference count for this node. When newly created a node should have a reference count
-	 * of exactly 0.
+	 * Get the reference count for this node.
+	 * <p>
+	 * When initially constructed all nodes must have a reference count of 0. A node in this state is considered to
+	 * have an implicit reference.
+	 * <p>
+	 * If the reference count is greater than 1 it is considered to have explicit references. If a node has a
+	 * reference count of 0 and transitions to a reference count of 1 then its implicit reference is "dropped" and the
+	 * reference becomes explicit. Once a node has an explicit reference it can never again hold an implicit reference.
+	 * <p>
+	 * When a node is finally released (either by a reference count dropping from 1 to 0 or by the {@link #release()}
+	 * method being called), its reference count is set to -1. Once the reference count has been set to -1 it must never
+	 * be allowed to change again.
+	 *
+	 * @return the current reference count for this node
 	 */
 	int getReferenceCount();
 
@@ -97,6 +181,12 @@ public interface MerkleNode extends Releasable, Hashable, SerializableDet {
 	}
 
 	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	MerkleNode copy();
+
+	/**
 	 * Execute a function on each non-null node returned by an iterator that is walking over the the subtree rooted
 	 * at this node (which includes this node).
 	 *
@@ -104,8 +194,6 @@ public interface MerkleNode extends Releasable, Hashable, SerializableDet {
 	 * 		A method that returns an iterator.
 	 * @param operation
 	 * 		A method to call on each node returned by the iterator.
-	 * @param <T>
-	 * 		The type of the node returned by the iterator.
 	 */
 	default <T extends MerkleNode> void forEachNode(Function<MerkleNode, Iterator<T>> iteratorFactory,
 			Consumer<T> operation) {
@@ -122,6 +210,6 @@ public interface MerkleNode extends Releasable, Hashable, SerializableDet {
 	 * Utility method for initializing an entire tree.
 	 */
 	default void initializeTree() {
-		forEachNode(MerkleInternalIterator::new, (node) -> node.initialize(null));
+		forEachNode(MerkleInternalIterator::new, MerkleInternal::initialize);
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,9 +14,9 @@
 package com.swirlds.common;
 
 import com.swirlds.common.crypto.SerializablePublicKey;
+import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
-import com.swirlds.common.io.SelfSerializable;
 
 import java.io.IOException;
 import java.security.PublicKey;
@@ -91,6 +91,7 @@ public class Address implements SelfSerializable {
 	 * SerializablePublicKey, SerializablePublicKey, SerializablePublicKey, String)}
 	 * but with different key types.
 	 * Deprecated, should use the method mentioned above.
+	 *
 	 * @param id
 	 * 		the ID for that member
 	 * @param nickname
@@ -686,8 +687,6 @@ public class Address implements SelfSerializable {
 		outStream.writeNormalisedString(nickname);
 		outStream.writeNormalisedString(selfName);
 		outStream.writeLong(stake);
-		// this should not be written because it can differ on different nodes
-		// outStream.writeBoolean(ownHost);
 		outStream.writeByteArray(addressInternalIpv4);
 		outStream.writeInt(portInternalIpv4);
 		outStream.writeByteArray(addressExternalIpv4);
@@ -766,8 +765,14 @@ public class Address implements SelfSerializable {
 	 */
 	@Override
 	public boolean equals(Object o) {
-		if (this == o) return true;
-		if (o == null || getClass() != o.getClass()) return false;
+		if (this == o) {
+			return true;
+		}
+
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
+
 		Address address = (Address) o;
 		return id == address.id &&
 				ownHost == address.ownHost &&

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -19,7 +19,8 @@ package com.swirlds.common.merkle.exceptions;
  */
 public class IllegalChildTypeException extends IllegalArgumentException {
 	public IllegalChildTypeException(int index, long classId, int version, final long parentClassId) {
-		super(String.format("Invalid class ID %d(0x%08X) at index %d for version %d for parent with class id %d(0x%08X)",
+		super(String.format("Invalid class ID %d(0x%08X) at index %d for version %d for parent with class id %d" +
+						"(0x%08X)",
 				classId,
 				classId,
 				index,

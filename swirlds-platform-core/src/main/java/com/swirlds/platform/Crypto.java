@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -11,9 +11,10 @@
  * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
-	package com.swirlds.platform;
+package com.swirlds.platform;
 
 import com.swirlds.common.CommonUtils;
+import com.swirlds.common.crypto.CryptographyException;
 import com.swirlds.common.crypto.internal.CryptographySettings;
 import com.swirlds.common.internal.CryptoUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -23,7 +24,6 @@ import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
@@ -142,11 +142,9 @@ public class Crypto extends CryptoUtils {
 	// the algorithms and providers to use (AGR is key agreement, ENC is encryption, SIG is signatures)
 	final static String AGR_TYPE = "EC";
 	final static String AGR_PROVIDER = "SunEC";
-	// final static ObjectIdentifier AGR_ALG_ID = AlgorithmId.sha384WithECDSA_oid;
 
 	final static String ENC_TYPE = "EC";
 	final static String ENC_PROVIDER = "SunEC";
-	// final static ObjectIdentifier ENC_ALG_ID = AlgorithmId.sha384WithECDSA_oid;
 
 	final static String SIG_TYPE1 = Settings.useRSA  //
 			? "RSA" // or RSA or SHA384withRSA
@@ -249,8 +247,6 @@ public class Crypto extends CryptoUtils {
 		} catch (NoSuchAlgorithmException | UnrecoverableKeyException
 				| KeyStoreException | KeyManagementException
 				| CertificateException | IOException e) {
-			log.error(EXCEPTION.getMarker(), "", e);
-		} catch (Exception e) {
 			log.error(EXCEPTION.getMarker(), "", e);
 		}
 	}
@@ -401,6 +397,7 @@ public class Crypto extends CryptoUtils {
 				nonDetRandom = SecureRandom.getInstanceStrong();
 			} catch (NoSuchAlgorithmException e) {
 				log.error(EXCEPTION.getMarker(), "", e);
+				throw new CryptographyException(e, EXCEPTION);
 			}
 			// call nextBytes before setSeed, because some algorithms (like SHA1PRNG) become
 			// deterministic if you don't. This call might hang if the OS has too little entropy
@@ -644,8 +641,10 @@ public class Crypto extends CryptoUtils {
 						return null;
 					}
 				}
-			} catch (KeyStoreException | InterruptedException
-					| ExecutionException e) {
+			} catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+				return null;
+			} catch (KeyStoreException | ExecutionException ex) {
 				CommonUtils.tellUserConsolePopup("ERROR",
 						"Error: there was a problem reading "
 								+ filenames.get(i));
@@ -750,6 +749,8 @@ public class Crypto extends CryptoUtils {
 	 * The returned signature will be at most SIG_SIZE_BYTES bytes, which is 104 for the CNSA suite
 	 * parameters.
 	 *
+	 * @param keys
+	 * 		keypair to be used for signing
 	 * @param data
 	 * 		the data to sign
 	 * @return the signature (or null if any errors)

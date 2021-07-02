@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -24,9 +24,9 @@ import java.util.LinkedList;
  */
 public class ReverseMerkleRouteIterator implements Iterator<MerkleNode> {
 
-	Iterator<MerkleNode> iterator;
+	private final Iterator<MerkleNode> iterator;
 
-	public ReverseMerkleRouteIterator(MerkleNode root, int[] routeData) {
+	public ReverseMerkleRouteIterator(final MerkleNode root, final MerkleRoute routeData) {
 		LinkedList<MerkleNode> nodes = new LinkedList<>();
 
 		MerkleRouteIterator it = new MerkleRouteIterator(root, routeData);

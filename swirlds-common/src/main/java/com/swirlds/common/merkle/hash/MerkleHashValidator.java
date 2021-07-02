@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -104,11 +104,14 @@ public class MerkleHashValidator implements AutoCloseable {
 					outstandingValidations.getAndDecrement();
 				} else {
 					isValid = false;
-					log.error(LOGM_EXCEPTION, "Invalid Hash detected for node: " + node.getClass());
+					final String nodeType = node == null ? "null" : node.getClass().getName();
+					log.error(LOGM_EXCEPTION, "Invalid Hash detected for node: {}", nodeType);
 				}
 			} catch (Exception e) {
 				exception = e;
 				isValid = false;
+				final String nodeType = node == null ? "null" : node.getClass().getName();
+				log.error(LOGM_EXCEPTION, "Exception encountered when hashing node of type {}", nodeType, e);
 			}
 		};
 		threadPool.execute(runnable);
@@ -138,11 +141,12 @@ public class MerkleHashValidator implements AutoCloseable {
 					outstandingValidations.getAndDecrement();
 				} else {
 					isValid = false;
-					log.error(LOGM_EXCEPTION, "Invalid Hash detected for node: " + node.getClass());
+					log.error(LOGM_EXCEPTION, "Invalid Hash detected for node: {}", node.getClass());
 				}
 			} catch (Exception e) {
 				this.exception = e;
 				isValid = false;
+				log.error(LOGM_EXCEPTION, "Exception encountered when hashing node of type {}", node.getClass());
 			}
 		};
 		threadPool.execute(runnable);
@@ -150,15 +154,23 @@ public class MerkleHashValidator implements AutoCloseable {
 
 	/**
 	 * Validate that two hashes match. This is done on the caller's thread since a simple comparison is very fast.
+	 *
+	 * @param expectedHash
+	 * 		expected Hash
+	 * @param givenHash
+	 * 		the Hash to be validated
 	 */
 	public void validate(Hash expectedHash, Hash givenHash) {
 		if (!expectedHash.equals(givenHash)) {
 			isValid = false;
+			log.error(LOGM_EXCEPTION, "Hash {} was expected to equal {}", givenHash, expectedHash);
 		}
 	}
 
 	/**
 	 * Hashes are asynchronously validated. Returns true if no invalid hashes have yet been encountered.
+	 *
+	 * @return whether there is no invalid hashes have been encountered
 	 */
 	public boolean isValidSoFar() {
 		return isValid;
@@ -168,6 +180,10 @@ public class MerkleHashValidator implements AutoCloseable {
 	 * Blocks until all currently submitted hashes have been checked. Returns true if all those hashes are valid.
 	 *
 	 * This method should only be called once all hashes requiring validation have been submitted.
+	 *
+	 * @return whether all those hashes are valid
+	 * @throws ExecutionException
+	 * 		thrown when there is any Exception during validating
 	 */
 	public boolean isValid() throws ExecutionException {
 		while (outstandingValidations.get() > 0 && isValid) {

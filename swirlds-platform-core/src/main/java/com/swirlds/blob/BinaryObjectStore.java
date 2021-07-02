@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -49,11 +49,6 @@ public class BinaryObjectStore {
 	private static final Marker LOGM_STARTUP = MarkerManager.getMarker("STARTUP");
 
 	/**
-	 * the log marker used for diagnostic logging related to lock timing
-	 */
-	private static final Marker LOGM_BLOB_LOCK_WAIT_TIME = MarkerManager.getMarker("BLOB_LOCK_WAIT_TIME");
-
-	/**
 	 * the eagerly initialized singleton instance of the {@link BinaryObjectStore}
 	 */
 	private static final BinaryObjectStore instance = new BinaryObjectStore();
@@ -62,16 +57,6 @@ public class BinaryObjectStore {
 	 * the read/write lock providing thread safety for all operations
 	 */
 	private static final StampedLock lock = new StampedLock();
-
-	/**
-	 * the number of nanoseconds in a millisecond
-	 */
-	private static final int NANO_TO_MS = 1_000_000;
-
-	/**
-	 * write to log when an operation waits for or holds a lock longer than this value(in ms)
-	 */
-	private static final int LOCK_LOG_DURATION = 500;
 
 	/**
 	 * the list of binary objects to be recovered from their hashes
@@ -211,11 +196,6 @@ public class BinaryObjectStore {
 					"BinaryObject: The startInit() method must be called before the recover() method.");
 		}
 
-//		if (hashRefCountMap.size() == 0) {
-////			//no work to do
-////			return;
-////		}
-
 		log.debug(LOGM_STARTUP, "Recovering Objects [ objectCount = {}, uniqueObjectCount = {} ]",
 				binaryObjectRecoveryList.size(), hashRefCountMap.size());
 
@@ -278,16 +258,7 @@ public class BinaryObjectStore {
 	public byte[] get(final BinaryObject binaryObject) {
 		throwIfBinaryObjectDeleted(binaryObject);
 
-		final long startTime = System.nanoTime();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::get: waiting for readLock");
-		long readLock = lock.readLock();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::get: get readLock");
-		final long lockTime = System.nanoTime();
-		final long timeWaitLock = (lockTime - startTime) / NANO_TO_MS;
-		if (timeWaitLock > LOCK_LOG_DURATION) {
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::get: Time spent on waiting for readLock: {} ms",
-					timeWaitLock);
-		}
+		final long readLock = lock.readLock();
 
 		try (BlobStoragePipeline pipeline = DbManager.getInstance().blob()) {
 			pipeline.withTransaction();
@@ -301,13 +272,6 @@ public class BinaryObjectStore {
 			throw new BinaryObjectException("Failed to get BinaryObject", e);
 		} finally {
 			lock.unlock(readLock);
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::get: unlock readLock");
-			final long unlockTime = System.nanoTime();
-			final long lockDuration = (unlockTime - lockTime) / NANO_TO_MS;
-			if (lockDuration > LOCK_LOG_DURATION) {
-				log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::get: Time spent on holding readLock: {} ms",
-						lockDuration);
-			}
 		}
 	}
 
@@ -324,35 +288,19 @@ public class BinaryObjectStore {
 	 * 		if an error occurs while accessing the underlying data store
 	 */
 	public BinaryObject put(final byte[] bytes) {
-		final long startTime = System.nanoTime();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::put: waiting for writeLock");
-		long writeLock = lock.writeLock();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::put: get writeLock");
-		final long lockTime = System.nanoTime();
-		final long timeWaitLock = (lockTime - startTime) / NANO_TO_MS;
-		if (timeWaitLock > LOCK_LOG_DURATION) {
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::put: Time spent on waiting for writeLock: {} ms",
-					timeWaitLock);
-		}
+		final long writeLock = lock.writeLock();
 
 		try (BlobStoragePipeline pipeline = DbManager.getInstance().blob()) {
 			pipeline.withTransaction();
 
-			final BinaryObject object = pipeline.put(hashOf(bytes), bytes);
+			final BinaryObject newObject = pipeline.put(hashOf(bytes), bytes);
 
 			pipeline.commit();
-			return object;
+			return newObject;
 		} catch (SQLException e) {
 			throw new BinaryObjectException("Failed to insert BinaryObject", e);
 		} finally {
 			lock.unlock(writeLock);
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::put: unlock writeLock");
-			final long unlockTime = System.nanoTime();
-			final long lockDuration = (unlockTime - lockTime) / NANO_TO_MS;
-			if (lockDuration > LOCK_LOG_DURATION) {
-				log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::put: Time spent on holding writeLock: {} ms",
-						lockDuration);
-			}
 		}
 	}
 
@@ -374,16 +322,7 @@ public class BinaryObjectStore {
 		throwIfBinaryObjectDeleted(binaryObject);
 		throwIfImmutable(binaryObject);
 
-		final long startTime = System.nanoTime();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::append: waiting for writeLock");
-		long writeLock = lock.writeLock();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::append: get writeLock");
-		final long lockTime = System.nanoTime();
-		final long timeWaitLock = (lockTime - startTime) / NANO_TO_MS;
-		if (timeWaitLock > LOCK_LOG_DURATION) {
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::append: Time spent on waiting for writeLock: {} ms",
-					timeWaitLock);
-		}
+		final long writeLock = lock.writeLock();
 
 		try (BlobStoragePipeline pipeline = DbManager.getInstance().blob()) {
 			pipeline.withTransaction();
@@ -404,13 +343,6 @@ public class BinaryObjectStore {
 			throw new BinaryObjectException("Failed to append BinaryObject", e);
 		} finally {
 			lock.unlock(writeLock);
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::append: unlock writeLock");
-			final long unlockTime = System.nanoTime();
-			final long lockDuration = (unlockTime - lockTime) / NANO_TO_MS;
-			if (lockDuration > LOCK_LOG_DURATION) {
-				log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::append: Time spent on holding writeLock: {} ms",
-						lockDuration);
-			}
 		}
 	}
 
@@ -434,16 +366,7 @@ public class BinaryObjectStore {
 		throwIfBinaryObjectDeleted(binaryObject);
 		throwIfImmutable(binaryObject);
 
-		final long startTime = System.nanoTime();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::update: waiting for writeLock");
-		long writeLock = lock.writeLock();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::update: get writeLock");
-		final long lockTime = System.nanoTime();
-		final long timeWaitLock = (lockTime - startTime) / NANO_TO_MS;
-		if (timeWaitLock > LOCK_LOG_DURATION) {
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::update: Time spent on waiting for writeLock: {} ms",
-					timeWaitLock);
-		}
+		final long writeLock = lock.writeLock();
 
 		try (BlobStoragePipeline pipeline = DbManager.getInstance().blob()) {
 			pipeline.withTransaction();
@@ -456,13 +379,6 @@ public class BinaryObjectStore {
 			throw new BinaryObjectException("Failed to update BinaryObject", e);
 		} finally {
 			lock.unlock(writeLock);
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::update: unlock writeLock");
-			final long unlockTime = System.nanoTime();
-			final long lockDuration = (unlockTime - lockTime) / NANO_TO_MS;
-			if (lockDuration > LOCK_LOG_DURATION) {
-				log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::update: Time spent on holding writeLock: {} ms",
-						lockDuration);
-			}
 		}
 	}
 
@@ -474,17 +390,7 @@ public class BinaryObjectStore {
 	 * 		if an error occurs while accessing the underlying data store
 	 */
 	public long retrieveNumberOfBinaryObjects() {
-		final long startTime = System.nanoTime();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::retrieveNumberOfBinaryObjects: waiting for readLock");
-		long readLock = lock.readLock();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::retrieveNumberOfBinaryObjects: get readLock");
-		final long lockTime = System.nanoTime();
-		final long timeWaitLock = (lockTime - startTime) / NANO_TO_MS;
-		if (timeWaitLock > LOCK_LOG_DURATION) {
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME,
-					"BinaryObjectStore::retrieveNumberOfBinaryObjects: Time spent on waiting for readLock: {} ms",
-					timeWaitLock);
-		}
+		final long readLock = lock.readLock();
 
 		try (final BlobStoragePipeline pipeline = DbManager.getInstance().blob()) {
 			return pipeline.retrieveNumberOfBlobs();
@@ -492,14 +398,6 @@ public class BinaryObjectStore {
 			throw new BinaryObjectException("Failed to retrieve number of binary objects", ex);
 		} finally {
 			lock.unlock(readLock);
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::retrieveNumberOfBinaryObjects: unlock readLock");
-			final long unlockTime = System.nanoTime();
-			final long lockDuration = (unlockTime - lockTime) / NANO_TO_MS;
-			if (lockDuration > LOCK_LOG_DURATION) {
-				log.info(LOGM_BLOB_LOCK_WAIT_TIME,
-						"BinaryObjectStore::retrieveNumberOfBinaryObjects: Time spent on holding readLock: {} ms",
-						lockDuration);
-			}
 		}
 	}
 
@@ -516,17 +414,7 @@ public class BinaryObjectStore {
 	public void increaseReferenceCount(final BinaryObject binaryObject) {
 		throwIfBinaryObjectDeleted(binaryObject);
 
-		final long startTime = System.nanoTime();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::increaseReferenceCount: waiting for writeLock");
-		long writeLock = lock.writeLock();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::increaseReferenceCount: get writeLock");
-		final long lockTime = System.nanoTime();
-		final long timeWaitLock = (lockTime - startTime) / NANO_TO_MS;
-		if (timeWaitLock > LOCK_LOG_DURATION) {
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME,
-					"BinaryObjectStore::increaseReferenceCount: Time spent on waiting for writeLock: {} ms",
-					timeWaitLock);
-		}
+		final long writeLock = lock.writeLock();
 
 		try (BlobStoragePipeline pipeline = DbManager.getInstance().blob()) {
 			pipeline.withTransaction();
@@ -540,14 +428,6 @@ public class BinaryObjectStore {
 			throw new BinaryObjectException("Failed to increase reference count for BinaryObject", e);
 		} finally {
 			lock.unlock(writeLock);
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::increaseReferenceCount: unlock writeLock");
-			final long unlockTime = System.nanoTime();
-			final long lockDuration = (unlockTime - lockTime) / NANO_TO_MS;
-			if (lockDuration > LOCK_LOG_DURATION) {
-				log.info(LOGM_BLOB_LOCK_WAIT_TIME,
-						"BinaryObjectStore::increaseReferenceCount: Time spent on holding writeLock: {} ms",
-						lockDuration);
-			}
 		}
 	}
 
@@ -567,22 +447,13 @@ public class BinaryObjectStore {
 	 * 		if an error occurs while accessing the underlying data store
 	 */
 	public void delete(final BinaryObject binaryObject) {
-		if (binaryObject == null || binaryObject.isReleased()) {
+		if (binaryObject == null) {
 			return;
 		}
 
-		final long startTime = System.nanoTime();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::delete: waiting for writeLock");
-		long writeLock = lock.writeLock();
-		log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::delete: get writeLock");
-		final long lockTime = System.nanoTime();
-		final long timeWaitLock = (lockTime - startTime) / NANO_TO_MS;
-		if (timeWaitLock > LOCK_LOG_DURATION) {
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::delete: Time spent on waiting for writeLock: {} ms",
-					timeWaitLock);
-		}
+		final long writeLock = lock.writeLock();
 
-		try (BlobStoragePipeline pipeline = DbManager.getInstance().blob()) {
+		try (final BlobStoragePipeline pipeline = DbManager.getInstance().blob()) {
 			pipeline.withTransaction();
 
 			binaryObject.delete(pipeline);
@@ -592,13 +463,6 @@ public class BinaryObjectStore {
 			throw new BinaryObjectException("Failed to delete BinaryObject", e);
 		} finally {
 			lock.unlock(writeLock);
-			log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::delete: unlock writeLock");
-			final long unlockTime = System.nanoTime();
-			final long lockDuration = (unlockTime - lockTime) / NANO_TO_MS;
-			if (lockDuration > LOCK_LOG_DURATION) {
-				log.info(LOGM_BLOB_LOCK_WAIT_TIME, "BinaryObjectStore::delete: Time spent on holding writeLock: {} ms",
-						lockDuration);
-			}
 		}
 	}
 

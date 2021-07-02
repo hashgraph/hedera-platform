@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -70,6 +70,11 @@ public enum LogMarker {
 	INVALID_EVENT_ERROR(LogMarkerType.ERROR),
 
 	/**
+	 * to distinguish JVM pauses from other issues
+	 */
+	JVM_PAUSE_WARN(LogMarkerType.WARNING),
+
+	/**
 	 * logs events related to the startup of the application
 	 */
 	STARTUP(LogMarkerType.INFO),
@@ -88,6 +93,50 @@ public enum LogMarker {
 	 * about to sync
 	 */
 	SYNC_START(LogMarkerType.INFO),
+
+	/**
+	 * for NodeSynchronizer, sync steps 1 - 5
+	 */
+	SYNC_STEP_1(LogMarkerType.INFO),
+	SYNC_STEP_2(LogMarkerType.INFO),
+	SYNC_STEP_3(LogMarkerType.INFO),
+	SYNC_STEP_4(LogMarkerType.INFO),
+	SYNC_STEP_5(LogMarkerType.INFO),
+
+	/**
+	 * for logging consensus hashgraph generation numbers sent/received
+	 */
+	SYNC_GENERATIONS(LogMarkerType.INFO),
+
+	/**
+	 * for logging when a node has fallen behind
+	 */
+	SYNC_FALLEN_BEHIND(LogMarkerType.INFO),
+
+	/**
+	 * for sync throttle logging
+	 */
+	SYNC_THROTTLE(LogMarkerType.INFO),
+
+	/**
+	 * for SyncCaller
+	 */
+	SYNC_CALLER(LogMarkerType.INFO),
+
+	/**
+	 * for SyncListener
+	 */
+	SYNC_LISTENER(LogMarkerType.INFO),
+
+	/**
+	 * for SyncClient
+	 */
+	SYNC_CLIENT(LogMarkerType.INFO),
+
+	/**
+	 * for SyncConnection
+	 */
+	SYNC_CONNECTION(LogMarkerType.INFO),
 
 	/**
 	 * completed sync
@@ -113,6 +162,11 @@ public enum LogMarker {
 	 * log each event as it's added to the intake queue
 	 */
 	INTAKE_EVENT(LogMarkerType.INFO),
+
+	/**
+	 * log events when they are expired
+	 */
+	EXPIRE_EVENT(LogMarkerType.INFO),
 
 	/**
 	 * log every event sent and received
@@ -204,6 +258,16 @@ public enum LogMarker {
 	RECONNECT(LogMarkerType.INFO),
 
 	/**
+	 * for ReconnectSender
+	 */
+	RECONNECT_SENDER(LogMarkerType.INFO),
+
+	/**
+	 * logs events related to shadow graph construction on reconnect
+	 */
+	RECONNECT_SGM(LogMarkerType.INFO),
+
+	/**
 	 * logs related to PTA runs. It is useful during debugging PTA with info from the platform
 	 */
 	DEMO_INFO(LogMarkerType.INFO),
@@ -251,16 +315,23 @@ public enum LogMarker {
 	private LogMarkerType type;
 	private Marker marker;
 
-	LogMarker(LogMarkerType type) {
+	LogMarker(final LogMarkerType type) {
 		this.type = type;
 		this.marker = MarkerManager.getMarker(name());
 	}
 
+	/**
+	 * @return the com.swirlds.logging.LogMarkerType type instance referenced by this instance
+	 */
 	public LogMarkerType getType() {
 		return type;
 	}
 
+	/**
+	 * @return the org.apache.logging.log4j.Marker type instance referenced by this instance
+	 */
 	public Marker getMarker() {
 		return marker;
 	}
+
 }

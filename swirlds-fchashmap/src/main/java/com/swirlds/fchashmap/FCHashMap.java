@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * A map that with HashMap like performance that provides FastCopyable semantics.
@@ -49,50 +50,53 @@ import java.util.concurrent.ConcurrentHashMap;
  * those writes are to different keys and no thread attempts to concurrently read a key that is being written by
  * a different thread. This is sometimes useful when initializing a map. This behavior is disabled by default.
  */
-public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable<FCHashMap<K, V>> {
+public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 
 	/**
 	 * Monotonically increasing version number that is incremented every time copy() is called on the mutable copy.
 	 */
-	protected long version;
+	private long version;
 
 	/**
 	 * Is this object a mutable object?
 	 */
-	protected boolean immutable;
+	private boolean immutable;
 
-	protected ConcurrentHashMap<K, MutationQueue<V>> data;
+	private ConcurrentHashMap<K, MutationQueue<V>> data;
 
-	protected int size;
+	private int size;
 
-	protected FCHashMapGarbageCollector<K, V> garbageCollector;
+	private final CountDownLatch releasedLatch;
+
+	private FCHashMapGarbageCollector<K, V> garbageCollector;
 
 	/**
 	 * Tracks if this particular object has been deleted.
 	 */
-	protected boolean deleted;
-
-	/**
-	 * If this is true then we could receive write requests concurrently from different threads.
-	 * It is assumed that even in this case write requests will not simultaneously touch the same keys.
-	 */
-	protected volatile boolean concurrentWrites;
+	private boolean deleted;
 
 	/**
 	 * Initialized to contain an instance of the appropriate view the first time this view is requested.
 	 * The views is stateless, so there's no reason to create more than one. This same pattern is used
 	 * in AbstractMap.
 	 */
-	protected transient Set<Entry<K, V>> entrySet;
+	private transient Set<Entry<K, V>> entrySet;
 
 	public FCHashMap(int capacity) {
 		data = new ConcurrentHashMap<>(capacity);
 		immutable = false;
 		version = 0;
 		garbageCollector = new FCHashMapGarbageCollector<>(data);
-		garbageCollector.start();
+		startGarbageCollector();
 		deleted = false;
-		concurrentWrites = false;
+		releasedLatch = new CountDownLatch(1);
+	}
+
+	/**
+	 * Start the garbage collector. Can be overridden by tests that want to disable garbage collection.
+	 */
+	protected void startGarbageCollector() {
+		garbageCollector.start();
 	}
 
 	public FCHashMap() {
@@ -100,20 +104,16 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable<F
 	}
 
 	private FCHashMap(FCHashMap<K, V> other) {
-
-		if (concurrentWrites) {
-			throw new RuntimeException("It is not thread safe to make a copy while concurrent writes are enabled.");
-		}
-
 		data = other.data;
 		size = other.size;
 		garbageCollector = other.garbageCollector;
 		deleted = false;
-		concurrentWrites = false;
 
 		immutable = false;
 		other.immutable = true;
 		version = other.version + 1;
+
+		releasedLatch = new CountDownLatch(1);
 
 		garbageCollector.registerCopy(other);
 	}
@@ -123,6 +123,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable<F
 	 *
 	 * There can only be one mutable copy of an FCHashMap at any point in time.
 	 */
+	@Override
 	public FCHashMap<K, V> copy() {
 		throwIfImmutable();
 		throwIfReleased();
@@ -145,6 +146,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable<F
 	 * Must not be called at the same time another thread is attempting to read from this copy.
 	 */
 	public synchronized void release() {
+		releasedLatch.countDown();
 		if (!deleted) {
 			deleted = true;
 			garbageCollector.decrementReferenceCount();
@@ -157,6 +159,13 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable<F
 	@Override
 	public boolean isReleased() {
 		return deleted;
+	}
+
+	/**
+	 * Block until this FCHashMap has been released.
+	 */
+	public void waitUntilReleased() throws InterruptedException {
+		releasedLatch.await();
 	}
 
 	/**
@@ -184,7 +193,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable<F
 	 * 		Look up the mutation for this key.
 	 * @return The latest mutation for this version. May be null if the key is not in the map at this version.
 	 */
-	protected Mutation<V> getLatestMutation(K key) {
+	private Mutation<V> getLatestMutation(K key) {
 		MutationQueue<V> mutations = data.get(key);
 
 		if (mutations == null || mutations.isEmpty()) {
@@ -219,7 +228,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable<F
 	 * 		The new value for that key.
 	 * @return The previous value for a key
 	 */
-	protected V setValueAtKey(K key, V value) {
+	private V setValueAtKey(K key, V value) {
 		return this.setValueAtKey(key, value, false);
 	}
 
@@ -231,7 +240,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable<F
 	 * @return The previous value for a key or null if it was
 	 * 		previously deleted
 	 */
-	protected V deleteValueAtKey(K key) {
+	private V deleteValueAtKey(K key) {
 		return this.setValueAtKey(key, null, true);
 	}
 
@@ -298,22 +307,10 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable<F
 			final int newMutationQueueSize = mutations.size();
 
 			// Adjust the size of the map
-			if (concurrentWrites) {
-				if (insertion) {
-					synchronized (this) {
-						size++;
-					}
-				} else if (deletion) {
-					synchronized (this) {
-						size--;
-					}
-				}
-			} else {
-				if (insertion) {
-					size++;
-				} else if (deletion) {
-					size--;
-				}
+			if (insertion) {
+				size++;
+			} else if (deletion) {
+				size--;
 			}
 
 			// If the current mutation queue is not yet in the map then insert it.
@@ -329,28 +326,6 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable<F
 
 			return originalValue;
 		}
-	}
-
-	/**
-	 * By default concurrent writes are forbidden due to thread safety.
-	 *
-	 * After calling this function, it becomes thread safe to make simultaneous writes as long as a single key
-	 * is not updated simultaneously on multiple threads. Does not remove the restriction that a read against a key
-	 * must not happen at the same time that it is being written.
-	 *
-	 * Reduces performance of the write operation and disables copies.
-	 */
-	@Deprecated
-	public void enableConcurrentWrites() {
-		concurrentWrites = true;
-	}
-
-	/**
-	 * Disable concurrent reads, reverting to the default behavior.
-	 */
-	@Deprecated
-	public void disableConcurrentWrites() {
-		concurrentWrites = false;
 	}
 
 	/**

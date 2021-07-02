@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -21,7 +21,9 @@ public interface SwirldsLogParser<T> {
 
 	/**
 	 * Parse a line from the log.
-	 * @param line the line to parse
+	 *
+	 * @param line
+	 * 		the line to parse
 	 * @return a log entry if one was found. If the line is invalid then return null.
 	 */
 	T parse(String line);

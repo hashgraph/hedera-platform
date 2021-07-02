@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -42,4 +42,9 @@ public abstract class PlatformStatNames {
 	public static final String ROUND_SUPER_MAJORITY = "roundSup";
 	/** number of app transactions received per second (from unique events created by self and others) */
 	public static final String TRANSACTIONS_PER_SECOND = "trans/sec";
+	/** average time for a round trip message between 2 computers (in milliseconds) */
+	public static final String PING_DELAY = "ping";
+	/** Total number of stale event */
+	public static final String STALE_EVENT_TOTAL = "staleEvTot";
+
 }

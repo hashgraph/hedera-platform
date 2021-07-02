@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,9 +15,8 @@
 package com.swirlds.platform;
 
 import java.util.concurrent.TimeUnit;
-import java.util.function.LongConsumer;
 
-import static com.swirlds.common.Constants.MS_TO_NS;
+import static com.swirlds.common.Units.MILLISECONDS_TO_NANOSECONDS;
 
 /**
  * For detecting JVM pause
@@ -26,15 +25,15 @@ import static com.swirlds.common.Constants.MS_TO_NS;
  */
 public class JVMPauseDetectorThread extends Thread {
 
-	private static boolean allocateObjects = true;
+	private static final boolean ALLOCATE_OBJECTS = true;
 	public volatile Long lastSleepTimeObj; // public volatile to make sure allocs are not optimized away
 
-	private LongConsumer callback;
-	private int sleepMs;
+	private final JvmPauseCallback callback;
+	private final int sleepMs;
 
 	private volatile boolean doRun = true;
 
-	public JVMPauseDetectorThread(LongConsumer callback, int sleepMs) {
+	public JVMPauseDetectorThread(final JvmPauseCallback callback, final int sleepMs) {
 		super("jvm-pause-detector-thread");
 		this.callback = callback;
 		this.sleepMs = sleepMs;
@@ -42,15 +41,20 @@ public class JVMPauseDetectorThread extends Thread {
 	}
 
 	public void run() {
-		final long sleepNs = sleepMs * MS_TO_NS;
+		final long sleepNs = (long) sleepMs * MILLISECONDS_TO_NANOSECONDS;
 		try {
 			long shortestObservedDeltaTimeNs = Long.MAX_VALUE;
 			long timeBeforeMeasurement = Long.MAX_VALUE;
+			long allocateStartNs = Long.MAX_VALUE;
+			long allocateEndNs = Long.MAX_VALUE;
+
 			while (doRun) {
 				TimeUnit.NANOSECONDS.sleep(sleepNs);
-				if (allocateObjects) {
+				if (ALLOCATE_OBJECTS) {
+					allocateStartNs = System.nanoTime();
 					// Allocate an object to make sure potential allocation stalls are measured.
 					lastSleepTimeObj = timeBeforeMeasurement;
+					allocateEndNs = System.nanoTime();
 				}
 				final long timeAfterMeasurement = System.nanoTime();
 				final long deltaTimeNs = timeAfterMeasurement - timeBeforeMeasurement;
@@ -67,14 +71,30 @@ public class JVMPauseDetectorThread extends Thread {
 				}
 
 				long pauseTimeNs = deltaTimeNs - shortestObservedDeltaTimeNs;
-				callback.accept(pauseTimeNs / MS_TO_NS);
+				callback.pauseInfo(
+						pauseTimeNs / MILLISECONDS_TO_NANOSECONDS,
+						(allocateEndNs - allocateStartNs) / MILLISECONDS_TO_NANOSECONDS);
 			}
 		} catch (InterruptedException e) {
 			System.err.println("JVMPauseDetectorThread terminating...");
+			Thread.currentThread().interrupt();
 		}
 	}
 
 	public void terminate() {
 		doRun = false;
+	}
+
+	@FunctionalInterface
+	public interface JvmPauseCallback {
+		/**
+		 * A callback to report pause information
+		 *
+		 * @param totalPauseMs
+		 * 		the total pause time in milliseconds
+		 * @param allocationPauseMs
+		 * 		the allocation pause time in milliseconds
+		 */
+		void pauseInfo(long totalPauseMs, long allocationPauseMs);
 	}
 }

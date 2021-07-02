@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -42,29 +42,21 @@ public final class DbManager implements PipelineProvider {
 
 	private static final Logger log = LogManager.getLogger(DbManager.class);
 
-	private volatile static DbManager instance;
+	private static final DbManager instance = new DbManager();
 
-	private volatile HikariDataSource dataSource;
+	private static volatile HikariDataSource dataSource;
 
 	private DbManager() {
 	}
 
 	public static synchronized void ensureTablesExist() {
-		try (final BlobStorageMigration migration = new BlobStorageMigration(getInstance().getDataSource())) {
+		try (final BlobStorageMigration migration = new BlobStorageMigration(getDataSource())) {
 			migration.migrate();
 		}
 	}
 
 	public static DbManager getInstance(final boolean skipMigration) {
-		if (instance == null) {
-			synchronized (DbManager.class) {
-				if (instance == null) {
-					instance = new DbManager();
-					instance.initialize(skipMigration);
-				}
-			}
-		}
-
+		initialize(skipMigration);
 		return instance;
 	}
 
@@ -73,7 +65,7 @@ public final class DbManager implements PipelineProvider {
 	}
 
 	public static synchronized void purgeTables() {
-		try (BlobStorageMigration migration = new BlobStorageMigration(getInstance().getDataSource())) {
+		try (BlobStorageMigration migration = new BlobStorageMigration(getDataSource())) {
 			migration.clean();
 			migration.migrate();
 		}
@@ -129,22 +121,23 @@ public final class DbManager implements PipelineProvider {
 	}
 
 	public synchronized static Connection acquire() throws SQLException {
-		return pooledConnection(getInstance().getDataSource());
+		return pooledConnection(getDataSource());
 	}
 
-	public synchronized HikariDataSource getDataSource() {
+	public static synchronized HikariDataSource getDataSource() {
 		return dataSource;
 	}
 
-	private void initialize(final boolean skipMigration) {
+	private static synchronized void initialize(final boolean skipMigration) {
 		try {
 			if (Marshal.getDatabaseSettings().isActive()) {
-				dataSource = hikariDataSource(resolveJdbcUrl());
+				if (dataSource == null) {
+					dataSource = hikariDataSource(resolveJdbcUrl());
 
-				if (!skipMigration) {
-					ensureTablesExist();
+					if (!skipMigration) {
+						ensureTablesExist();
+					}
 				}
-
 			} else {
 				log.error(LOGM_EXCEPTION,
 						"DbManager: Initialization requested but database support is disabled via settings.");

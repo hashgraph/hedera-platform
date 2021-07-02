@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,44 +14,42 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.SwirldState;
-import com.swirlds.common.Transaction;
+import com.swirlds.platform.components.SignatureExpander;
+import com.swirlds.platform.components.TransThrottleSyncAndCreateRule;
+import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
+import com.swirlds.platform.components.TransactionPool;
+import com.swirlds.platform.components.TransactionSupplier;
+import com.swirlds.platform.observers.ConsensusEventObserver;
+import com.swirlds.platform.observers.PreConsensusEventObserver;
+import com.swirlds.platform.state.PlatformDualState;
 import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.State;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.concurrent.BlockingQueue;
 
-abstract class AbstractEventFlow {
-	/**
-	 * Add the given event (which just became consensus) to the forCons queue, to later be sent to
-	 * stateCons.
-	 * <p>
-	 * When Hashgraph first finds consensus for an event, it puts the event into {@link RunningHashCalculator}'s queue, which will then call this method.
-	 * If the queue is full, then this will block until it isn't full, which will block whatever thread called Hashgraph.consRecordEvent.
-	 * <p>
-	 * Thread interruptions are ignored.
-	 *
-	 * @param event
-	 * 		the new event to record
-	 */
-	abstract void forConsPut(EventImpl event);
+import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.SYNC_AND_CREATE;
+import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.PASS;
+
+abstract class AbstractEventFlow implements
+		PreConsensusEventObserver,
+		ConsensusEventObserver,
+		SignatureExpander,
+		TransactionSupplier,
+		TransactionPool,
+		FreezePeriodChecker,
+		TransThrottleSyncAndCreateRule {
 
 	/** add the given event to the forCurr queue, blocking if it is full */
 	abstract void forCurrPut(EventImpl event);
-
-	/**
-	 * @return the number of user transactions waiting to be put in an event
-	 */
-	abstract int numUserTransForEvent();
-
-	/** remove the list of transactions from the the transLists, so they can be put into a new Event */
-	abstract Transaction[] pollTransListsForEvent();
 
 	/**
 	 * Return the last state of the app that has reached consensus.
 	 *
 	 * @return the last app state to have reached consensus
 	 */
-	abstract SwirldState getConsensusState();
+	abstract State getConsensusState();
 
 	/**
 	 * Add information about the minimum generation of all famous witnesses for a particular round
@@ -62,8 +60,6 @@ abstract class AbstractEventFlow {
 	 * 		the minimum generation
 	 */
 	abstract void addMinGenInfo(long round, long minGeneration);
-
-	abstract int numFreezeTransEvent();
 
 	/**
 	 * @return the number of events in the forCurr queue
@@ -81,6 +77,11 @@ abstract class AbstractEventFlow {
 	abstract int getForConsSize();
 
 	/**
+	 * @return the number of signed states in the stateToHashSign queue
+	 */
+	abstract int getStateToHashSignSize();
+
+	/**
 	 * @return a list of transactions by self
 	 */
 	abstract TransLists getTransLists();
@@ -91,13 +92,13 @@ abstract class AbstractEventFlow {
 	abstract void stopAndClear();
 
 	/**
-	 * Set the {@link SwirldState} SwirldState to be used by {@link EventFlow}. This should be called on an object that
+	 * Set the {@link State} to be used by {@link EventFlow}. This should be called on an object that
 	 * has had {@link #stopAndClear()} previously called on it.
 	 *
 	 * @param state
 	 * 		the state to be set
 	 */
-	abstract void setState(SwirldState state);
+	abstract void setState(State state);
 
 
 	/**
@@ -122,4 +123,27 @@ abstract class AbstractEventFlow {
 	 * @return queue of events to send to stateCurr.
 	 */
 	abstract BlockingQueue<EventImpl> getForCurr();
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public boolean isInFreezePeriod(Instant consensusTime) {
+		final PlatformDualState dualState = getConsensusState().getPlatformDualState();
+		return dualState != null && dualState.isInFreezePeriod(consensusTime);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public TransThrottleSyncAndCreateRuleResponse shouldSyncAndCreate() {
+		// if we have transactions waiting to be put into an event, initiate a sync
+		// if current time is 1 minute before or during the freeze period, initiate a sync
+		if (numUserTransForEvent() > 0 || isInFreezePeriod(
+				Instant.now().plus(1, ChronoUnit.MINUTES)) ||
+				isInFreezePeriod(Instant.now())) {
+			return SYNC_AND_CREATE;
+		} else {
+			return PASS;
+		}
+	}
 }

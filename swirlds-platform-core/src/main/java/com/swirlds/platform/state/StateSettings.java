@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -43,15 +43,13 @@ public class StateSettings extends SubSetting {
 	/**
 	 * Events this many rounds old are expired, and can be deleted from memory
 	 */
-	// TODO (06 October 2020) Restore from parent branch.
-	public int roundsExpired = 15;
+	public int roundsExpired = 500;
 
 	/**
 	 * Events this many rounds old are ancient, so if they don't have consensus yet, they're stale, and will
 	 * never have their transactions handled.
 	 */
-	// TODO (06 October 2020) Restore from parent branch.
-	public int roundsStale = 8;
+	public int roundsStale = 25;
 
 	/**
 	 * Enabling the process of recovering signed state by playing back event files
@@ -67,11 +65,23 @@ public class StateSettings extends SubSetting {
 	public boolean dumpStateOnISS = false;
 
 	/**
+	 * If true, a snapshot of all events will be saved after every round. This can be used in conjunction with
+	 * dumpStateOnISS so that an ISS state will be saved with events.
+	 */
+	public boolean saveEventsForEveryState = false;
+
+	/**
 	 * If one ISS is detected, it is likely that others will be detected shortly afterwards. Specify the minimum
 	 * time, in seconds, that must transpire after dumping a state before another state dump is permitted. Ignored
 	 * if dumpStateOnISS is false.
 	 */
 	public double secondsBetweenISSDumps = 60;
+
+	/**
+	 * Whether to generate the file LocalEvents.evn or not.
+	 * This file is generated every time a SignedState is saved.
+	 */
+	public boolean saveLocalEvents = false;
 
 	/**
 	 * Used for debugging the ISS that appears due to concurrent modification of the SignedStateLeaf
@@ -138,6 +148,7 @@ public class StateSettings extends SubSetting {
 	 * setter for enabling signed state recovery by playing back event files
 	 *
 	 * @param enableStateRecovery
+	 * 		if true then state recovery will be enabled, if false then it will be disabled
 	 */
 	public void setEnableStateRecovery(boolean enableStateRecovery) {
 		this.enableStateRecovery = enableStateRecovery;

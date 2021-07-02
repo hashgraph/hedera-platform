@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -25,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 import javax.net.ssl.SSLException;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.net.ConnectException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
@@ -35,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.SOCKET_EXCEPTIONS;
 import static com.swirlds.logging.LogMarker.SYNC;
+import static com.swirlds.logging.LogMarker.SYNC_CONNECTION;
 import static com.swirlds.logging.LogMarker.SYNC_START;
 import static com.swirlds.logging.LogMarker.TCP_CONNECT_EXCEPTIONS;
 
@@ -56,10 +58,6 @@ public class SyncConnection {
 	private AbstractPlatform platform = null;
 	private AtomicBoolean connected = new AtomicBoolean(true);
 
-	SyncShadowGraphManager getSyncShadowGraphManager() {
-		return platform.getSyncShadowGraphManager();
-	}
-
 	/**
 	 * return the total number of bytes written to all the given connections since the last time this was
 	 * called. If a connection was closed and recreated, it will NOT include the bytes sent to the old
@@ -76,7 +74,7 @@ public class SyncConnection {
 				if (conn != null) {
 					long bytesSent = conn.getBytesWrittenSinceLast();
 					result += bytesSent;
-					((com.swirlds.platform.Statistics)platform.getStats()).avgBytePerSecSent[i].update(bytesSent);
+					((com.swirlds.platform.Statistics) platform.getStats()).avgBytePerSecSent[i].update(bytesSent);
 				}
 			}
 		}
@@ -119,6 +117,14 @@ public class SyncConnection {
 		return platform;
 	}
 
+	public SyncManager getSyncManager() {
+		return platform.getSyncManager();
+	}
+
+	public SyncServer getSyncServer() {
+		return platform.getSyncServer();
+	}
+
 	/**
 	 * End this connection by closing the socket and streams, and setting them to null. Also update the
 	 * statistics for the caller (if caller is true) or listener (if false).
@@ -157,7 +163,6 @@ public class SyncConnection {
 		socket = null;
 		dis = null;
 		dos = null;
-		selfId = otherId = null;
 	}
 
 	/**
@@ -200,19 +205,18 @@ public class SyncConnection {
 	 * 		which member to connect to
 	 * @return the new connection, or null if it couldn't connect on the first try
 	 */
-	static SyncConnection connect(
-		AbstractPlatform platform,
-		NodeId selfId, NodeId otherId)
-	{
-		log.debug(SYNC_START.getMarker(), "{} about to connect to {}",
-				platform.getSelfId(), otherId);
+	static SyncConnection connect(AbstractPlatform platform, NodeId selfId, NodeId otherId) {
+		log.debug(SYNC_CONNECTION.getMarker(),
+				"`connect` : {} about to connect to {}",
+				platform.getSelfId(),
+				otherId);
 
 		if (!selfId.sameNetwork(otherId)) {
 			throw new IllegalArgumentException("Must connect to node on the same network!");
 		}
 		AddressBook addressBook;
 		if (selfId.isMain()) {
-			addressBook = platform.getHashgraph().getAddressBook();
+			addressBook = platform.getAddressBook();
 		} else {
 			throw new RuntimeException("Not yet implemented!");
 		}
@@ -228,8 +232,8 @@ public class SyncConnection {
 		SyncInputStream dis = null;
 
 		try {
-			clientSocket = platform.getCrypto().newClientSocketConnect(ipAddress,
-					port);
+			clientSocket = platform.getCrypto().newClientSocketConnect(ipAddress, port);
+
 			dos = SyncOutputStream.createSyncOutputStream(clientSocket.getOutputStream(), Settings.bufferSize);
 			dis = SyncInputStream.createSyncInputStream(clientSocket.getInputStream(), Settings.bufferSize);
 
@@ -238,20 +242,25 @@ public class SyncConnection {
 			dos.flush();
 
 			int ack = dis.readInt(); // read the ACK for creating the connection
-			if (ack != SyncConstants.commConnect) {  // this is an ACK for creating the connection
+			if (ack != SyncConstants.COMM_CONNECT) {  // this is an ACK for creating the connection
 				clientSocket.close();
 				dos.close();
 				dis.close();
-				throw new Exception("ack is not " + SyncConstants.commConnect
+				throw new ConnectException("ack is not " + SyncConstants.COMM_CONNECT
 						+ ", it is " + ack);
 			}
 
 			if (clientSocket != null && dis != null) { // set all 3 or none at all
-				log.debug(SYNC_START.getMarker(), "{} connected to {}",
-						platform.getSelfId(), otherId);
+				log.debug(SYNC_CONNECTION.getMarker(),
+						"`connect` : finished, {} connected to {}",
+						platform.getSelfId(),
+						otherId);
+
 				SyncConnection sc = new SyncConnection();
 				sc.set(platform, selfId, otherId, clientSocket, dis, dos);
+
 				return sc;
+
 			} else {
 				log.debug(TCP_CONNECT_EXCEPTIONS.getMarker(),
 						"{} failed to connect to {} but with no error",
@@ -274,6 +283,12 @@ public class SyncConnection {
 			log.debug(EXCEPTION.getMarker(),
 					"{} SyncCaller.sync failed to connect to {} with error:", platform.getSelfId(), otherId, e);
 		}
+
+		log.debug(SYNC_CONNECTION.getMarker(),
+				"`connect` : finished, {} did not connect to {}",
+				platform.getSelfId(),
+				otherId);
+
 		return null;
 	}
 
@@ -323,15 +338,15 @@ public class SyncConnection {
 
 			otherKey = dis.readUTF();
 
-			otherId = new NodeId(false, platform.getHashgraph().getAddressBook().getId(otherKey));
+			otherId = new NodeId(false, platform.getAddressBook().getId(otherKey));
 
 			dos.writeInt(conId);// send a connection ID number (chosen randomly)
-			dos.writeInt(SyncConstants.commConnect);// send an ACK for creating connection
+			dos.writeInt(SyncConstants.COMM_CONNECT);// send an ACK for creating connection
 			dos.flush();
 
 			// ignore invalid IDs, but store the streams for valid ones
 			if (otherId.getId() >= 0
-					&& otherId.getId() < platform.getHashgraph().getAddressBook().getSize()
+					&& otherId.getId() < platform.getAddressBook().getSize()
 					&& platform.getConnectionGraph()
 					.isAdjacent(platform.getSelfId().getIdAsInt(), otherId.getIdAsInt())) {
 				log.debug(SYNC_START.getMarker(),
@@ -345,10 +360,11 @@ public class SyncConnection {
 				return null;
 			}
 		} catch (SocketTimeoutException expectedWithNonZeroSOTimeout) {
+			// Suppressed intentionally
 		} catch (Exception e) {
 			log.error(EXCEPTION.getMarker(),
 					"SyncConnection.acceptConnection() error, remote IP: {}\nTime from accept to exception: {} ms\n",
-					clientSocket.getInetAddress().toString(),
+					((clientSocket != null) ? clientSocket.getInetAddress().toString() : "unknown"),
 					acceptTime == 0 ? "N/A" : (System.currentTimeMillis() - acceptTime), e);
 			log.error(SYNC.getMarker(), "Listener {} hearing {} had general Exception:",
 					platform.getSelfId(), otherId, e);
@@ -360,16 +376,22 @@ public class SyncConnection {
 	private static void close1(DataInputStream dis, DataOutputStream dos,
 			Socket clientSocket) {
 		try {
-			dis.close();
-		} catch (Exception e) {
+			if (dis != null) {
+				dis.close();
+			}
+		} catch (Exception ignored) {
 		}
 		try {
-			dos.close();
-		} catch (Exception e) {
+			if (dos != null) {
+				dos.close();
+			}
+		} catch (Exception ignored) {
 		}
 		try {
-			clientSocket.close();
-		} catch (Exception e) {
+			if (clientSocket != null) {
+				clientSocket.close();
+			}
+		} catch (Exception ignored) {
 		}
 	}
 
@@ -378,7 +400,7 @@ public class SyncConnection {
 	 *
 	 * @return are we connected?
 	 */
-	boolean connected() {
+	public boolean connected() {
 		try {
 			if (socket != null && !socket.isClosed() && socket.isBound()
 					&& socket.isConnected() && dis != null && dos != null) {

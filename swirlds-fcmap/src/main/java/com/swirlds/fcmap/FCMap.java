@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,36 +15,28 @@
 package com.swirlds.fcmap;
 
 import com.swirlds.common.Archivable;
-import com.swirlds.common.FCMKey;
-import com.swirlds.common.FCMValue;
 import com.swirlds.common.FastCopyable;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.crypto.SerializableHashable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializedObjectProvider;
-import com.swirlds.common.merkle.MerkleInternal;
-import com.swirlds.common.merkle.utility.AbstractMerkleInternal;
+import com.swirlds.common.merkle.MerkleNode;
+import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
 import com.swirlds.fchashmap.FCHashMap;
 import com.swirlds.fcmap.internal.FCMLeaf;
 import com.swirlds.fcmap.internal.FCMTree;
+import org.apache.commons.lang3.time.StopWatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.Marker;
-import org.apache.logging.log4j.MarkerManager;
 
-import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.StampedLock;
 import java.util.stream.Collectors;
 
-import static com.swirlds.common.merkle.MerkleUtils.invalidateTree;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 
 /**
@@ -70,21 +62,18 @@ import static com.swirlds.logging.LogMarker.RECONNECT;
  * @param <V>
  * 		Value that implements {@link FastCopyable}
  */
-public class FCMap<K extends FCMKey, V extends FCMValue>
-		extends AbstractMerkleInternal
-		implements Archivable,
-		Map<K, V>,
-		MerkleInternal,
-		FCMValue {
+public class FCMap<K extends MerkleNode, V extends MerkleNode>
+		extends AbstractBinaryMerkleInternal
+		implements Archivable, Map<K, V> {
 
 	public static final long CLASS_ID = 0x941550bf023ad8f6L;
 
-	/** This version number should be used to handle compatibility issues that may arise from any future changes */
+	/**
+	 * This version number should be used to handle compatibility issues that may arise from any future changes
+	 */
 	private static class ClassVersion {
 		public static final int ORIGINAL = 1;
 	}
-
-	private static final Marker COPY_FROM = MarkerManager.getMarker("FCM_COPY_FROM");
 
 	/**
 	 * use this for all logging, as controlled by the optional data/log4j2.xml file
@@ -113,74 +102,91 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * If you attempt to enter methods in this class with a debugger then it can cause deadlock.
+	 * Set this to {@code true} to disable locks for testing.
+	 *
+	 * IMPORTANT: never commit this file without reverting the value of this variable to {@code false}.
 	 */
-	@Override
-	public int getNumberOfChildren() {
-		return ChildIndices.CHILD_COUNT;
+	private static final boolean LOCKS_DISABLED_FOR_DEBUGGING = false; // this MUST be false at commit time
+
+	/**
+	 * Acquire a read lock. Released by {@link #releaseReadLock(long)}.
+	 *
+	 * @return the stamp that must be used when calling {@link #releaseReadLock(long)}
+	 */
+	private long readLock() {
+		if (LOCKS_DISABLED_FOR_DEBUGGING) {
+			return 0;
+		} else {
+			return lock.readLock();
+		}
+	}
+
+	/**
+	 * Release a read lock acquired by {@link #readLock()}.
+	 *
+	 * @param stamp
+	 * 		the value returned by the previous call to {@link #readLock()}
+	 */
+	private void releaseReadLock(final long stamp) {
+		if (!LOCKS_DISABLED_FOR_DEBUGGING) {
+			lock.unlockRead(stamp);
+		}
+	}
+
+	/**
+	 * Acquire a write lock. Released by {@link #releaseWriteLock(long)}.
+	 *
+	 * @return the stamp that must be used when calling {@link #releaseWriteLock(long)}
+	 */
+	private long writeLock() {
+		if (LOCKS_DISABLED_FOR_DEBUGGING) {
+			return 0;
+		} else {
+			return lock.writeLock();
+		}
+	}
+
+	/**
+	 * Release a write lock acquired by {@link #writeLock()}.
+	 *
+	 * Note: if you attempt to enter this class with a debugger then it can cause deadlock.
+	 * Temporarily disable these locks if you wish to visit this class with a debugger.
+	 *
+	 * @param stamp
+	 * 		the value returned by the previous call to {@link #writeLock()}
+	 */
+	private void releaseWriteLock(final long stamp) {
+		if (!LOCKS_DISABLED_FOR_DEBUGGING) {
+			lock.unlockWrite(stamp);
+		}
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public int getMinimumChildCount(int version) {
-		return ChildIndices.CHILD_COUNT;
-	}
+	public boolean childHasExpectedType(final int index, final long childClassId, final int version) {
+		if (index == ChildIndices.TREE) {
+			return childClassId == FCMTree.CLASS_ID;
+		}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getMaximumChildCount(int version) {
-		return ChildIndices.CHILD_COUNT;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean childHasExpectedType(int index, long childClassId, int version) {
-		return childClassId == FCMTree.CLASS_ID;
+		return true;
 	}
 
 	protected FCMTree<K, V> getTree() {
 		return getChild(ChildIndices.TREE);
 	}
 
-	private void setTree(FCMTree<K, V> tree) {
+	private void setTree(final FCMTree<K, V> tree) {
 		setChild(ChildIndices.TREE, tree);
 	}
 
 	/**
 	 * Creates an instance of {@link FCMap}
-	 *
-	 * @param keyProvider
-	 * 		Key deserializer
-	 * @param valueProvider
-	 * 		Value deserializer
 	 */
-	public FCMap(final SerializedObjectProvider keyProvider, final SerializedObjectProvider valueProvider) {
-		this(DEFAULT_INITIAL_MAP_CAPACITY, keyProvider, valueProvider);
-	}
-
-	/**
-	 * Creates an instance of {@link FCMap}
-	 *
-	 * @param initialCapacity
-	 * 		Initial capacity of internal hash map
-	 * @param keyProvider
-	 * 		Key deserializer
-	 * @param valueProvider
-	 * 		Value deserializer
-	 */
-	public FCMap(final int initialCapacity,
-			final SerializedObjectProvider keyProvider,
-			final SerializedObjectProvider valueProvider) {
-		this.internalMap = new FCHashMap<>(initialCapacity);
-		setTree(new FCMTree<>(keyProvider, valueProvider));
-		setImmutable(false);
-		lock = new StampedLock();
+	public FCMap() {
+		this(DEFAULT_INITIAL_MAP_CAPACITY);
 	}
 
 	/**
@@ -190,16 +196,10 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 * 		Initial capacity of internal hash map
 	 */
 	public FCMap(final int initialCapacity) {
-		this(initialCapacity, null, null);
-	}
-
-	/**
-	 * Creates an instance of {@link FCMap} that mustn't need the
-	 * Key's and Value's SerializedObjectProviders.
-	 * {@link SerializableHashable}
-	 */
-	public FCMap() {
-		this(DEFAULT_INITIAL_MAP_CAPACITY, null, null);
+		this.internalMap = new FCHashMap<>(initialCapacity);
+		setTree(new FCMTree<>());
+		setImmutable(false);
+		lock = new StampedLock();
 	}
 
 	/**
@@ -209,7 +209,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 * 		An FCMap
 	 */
 	protected FCMap(final FCMap<K, V> map) {
-		super();
+		super(map);
 		setTree(map.getTree().copy());
 		// The internal map will never be deleted from a mutable copy
 		this.internalMap = map.internalMap.copy();
@@ -231,17 +231,17 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 * @return the number of key-value mappings in this map
 	 */
 	public long getSize() {
-		final long stamp = lock.readLock();
+		final long stamp = readLock();
 		try {
 			return getTree().size();
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Creates an immutable fast copy of this FCMap.
 	 *
 	 * @return A fast copied FCMap
@@ -250,77 +250,16 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	public FCMap<K, V> copy() {
 		throwIfImmutable();
 		throwIfReleased();
-		final long stamp = lock.readLock();
+		final long stamp = readLock();
 		try {
 			return new FCMap<>(this);
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
 		}
 	}
 
-	/**
-	 * {@inheritDoc}
-	 *
-	 * Deserializes an FCMap into the current object, from the provided DataInputStream.
-	 *
-	 * @param inStream
-	 * 		the stream to read from
-	 * @throws IOException
-	 *        {@inheritDoc}
-	 */
-	@Override
-	public void copyFrom(SerializableDataInputStream inStream) throws IOException {
-		final long stamp = lock.writeLock();
-		try {
-			getTree().copyFrom(inStream);
-		} finally {
-			lock.unlockWrite(stamp);
-		}
-	}
-
-	/**
-	 * {@inheritDoc}
-	 *
-	 * @param inStream
-	 * 		the stream to read from
-	 * @throws IOException
-	 *        {@inheritDoc}
-	 */
-	@Override
-	public void copyFromExtra(SerializableDataInputStream inStream) throws IOException {
-		final long stamp = lock.writeLock();
-		try {
-			final long startTime = System.nanoTime();
-			final int beginMarker = inStream.readInt();
-			if (FCMTree.BEGIN_MARKER_VALUE != beginMarker) {
-				throw new IOException("The stream is not at the beginning of a serialized FCMap");
-			}
-
-			// Discard the version number
-			inStream.readLong();
-
-			final byte[] rootHash = FCMTree.deserializeRootHash(inStream);
-			final List<FCMLeaf<K, V>> leaves = getTree().copyTreeFrom(inStream);
-			final int endMarker = inStream.readInt();
-			if (FCMTree.END_MARKER_VALUE != endMarker) {
-				throw new IOException("The serialized FCMap stream ends unexpectedly");
-			}
-
-			if (this.internalMap != null) {
-				this.internalMap.release();
-			}
-			this.internalMap = new FCHashMap<>(leaves.size());
-			for (FCMLeaf<K, V> leaf : leaves) {
-				this.internalMap.put(leaf.getKey(), leaf);
-			}
-
-			final long endTime = System.nanoTime();
-			final long totalExecutionTime = (endTime - startTime) / 1_000_000;
-			LOG.trace(COPY_FROM, "copyFrom took {} milliseconds for a tree of size {}", () -> totalExecutionTime,
-					leaves::size);
-		} finally {
-			lock.unlockWrite(stamp);
-		}
+	private void updateCache(final FCMLeaf<K, V> leaf) {
+		internalMap.put(leaf.getKey(), leaf);
 	}
 
 	@Override
@@ -331,16 +270,16 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	/**
 	 * After calling this function, read operations against this FCMap will be performed in O(n) time
 	 * instead of O(m) time (where m is the number of recent mutations on a key).
-	 *
+	 * <p>
 	 * Calling this method allows for the garbage collector to prune the size of the data structure.
 	 * It also allows for newer copies to perform read operations more quickly by reducing the number
 	 * of recent modifications.
-	 *
+	 * <p>
 	 * An FCMap copy is not required to call this method before being deleted.
 	 */
 	@Override
 	public void archive() {
-		final long stamp = lock.writeLock();
+		final long stamp = writeLock();
 		try {
 			if (!isImmutable()) {
 				throw new IllegalStateException("A mutable FCMap may not have fast read access revoked.");
@@ -349,13 +288,13 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 				this.internalMap.release();
 			}
 		} finally {
-			lock.unlockWrite(stamp);
+			releaseWriteLock(stamp);
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Removes the mapping for the specified key from this map if present.
 	 * <p>
 	 * This operation takes O(lg n) time
@@ -371,7 +310,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	@Override
 	public V remove(final Object key) {
 		throwIfImmutable();
-		final long stamp = lock.writeLock();
+		final long stamp = writeLock();
 		try {
 			final FCMLeaf<K, V> leaf = this.internalMap.remove(key);
 			if (leaf == null) {
@@ -379,17 +318,17 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 			}
 
 			final V value = leaf.getValue();
-			getTree().delete(leaf);
+			getTree().delete(leaf, this::updateCache);
 			this.invalidateHash();
 			return value;
 		} finally {
-			lock.unlockWrite(stamp);
+			releaseWriteLock(stamp);
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Returns the value to which the specified key is mapped,
 	 * or {@code null} if this map contains no mapping for the key.
 	 *
@@ -407,18 +346,29 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 * distinguish these two cases.
 	 * </p>
 	 * <p>
-	 * This operation takes O(1) time if it is the original instance. The
-	 * copies of an FCMap take O(n) to search for an element.
+	 * This operation takes O(1) time for both the mutable copy and for all immutable copies.
+	 * <p>
+	 * The value returned by this method should not be directly modified. If a value requires modification,
+	 * call {@link #getForModify(MerkleNode)} and modify the value returned by that method instead.
 	 * </p>
 	 * <p>
-	 * Reading a value while a another transaction is modifying it is allowed,
-	 * but some fields might have the old values and other fields might
-	 * have the new values.
+	 * Technically speaking, it is ok to modify the value returned by this method if the value has already been
+	 * fast copied in this version or if the value is not referenced in any other version. But it is highly,
+	 * highly recommended to simply use {@link #getForModify(MerkleNode)}, as merkle copy semantics are nuanced and
+	 * easy use incorrectly.
 	 * </p>
 	 */
+	@SuppressWarnings("unchecked")
 	@Override
 	public V get(final Object key) {
-		final long stamp = lock.readLock();
+		StopWatch watch = null;
+
+		if (FCMapStatistics.isRegistered()) {
+			watch = new StopWatch();
+			watch.start();
+		}
+
+		final long stamp = readLock();
 		try {
 			final FCMLeaf<K, V> leaf;
 			if (this.internalMap.isReleased()) {
@@ -429,28 +379,61 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 
 			return leaf == null ? null : leaf.getValue();
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
+
+			if (watch != null) {
+				watch.stop();
+				FCMapStatistics.fcmGetMicroSec.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+			}
 		}
 	}
 
-	public V getForModify(final Object key) {
+	/**
+	 * Get the value associated with a given key. Value is safe to directly modify.
+	 * <p>
+	 * In a prior implementation of this method it was necessary to re-insert the modified value back into the tree
+	 * via the replace() method. In the current implementation this is no longer required.
+	 * Replacing a value returned by this method has no negative side effects, although it will have minor
+	 * performance overhead and should be avoided if possible.
+	 * </p>
+	 *
+	 * @param key
+	 * 		the key that will be used to look up the value
+	 * @return an object that is safe to directly modify
+	 */
+	public V getForModify(final K key) {
 		throwIfImmutable();
-		final long stamp = lock.readLock();
+
+		StopWatch watch = null;
+
+		if (FCMapStatistics.isRegistered()) {
+			watch = new StopWatch();
+			watch.start();
+		}
+
+		final long stamp = readLock();
 		try {
-			final FCMLeaf<K, V> leaf = this.internalMap.get(key);
-			if (leaf == null) {
+			final FCMLeaf<K, V> originalLeaf = internalMap.get(key);
+			if (originalLeaf == null) {
 				return null;
 			}
 
-			return leaf.getValueForModify();
+			FCMLeaf<K, V> newLeaf = getTree().getForModify(originalLeaf, this::updateCache);
+
+			return newLeaf.getValue();
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
+
+			if (watch != null) {
+				watch.stop();
+				FCMapStatistics.fcmGfmMicroSec.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+			}
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Associates the specified value with the specified key in this map.
 	 * If the map previously contained a mapping for the key, the old
 	 * value is replaced.
@@ -472,25 +455,52 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	@Override
 	public V put(final K key, final V value) {
 		throwIfImmutable();
-		final long stamp = lock.writeLock();
+		StopWatch watch = null;
+
+		if (FCMapStatistics.isRegistered()) {
+			watch = new StopWatch();
+			watch.start();
+		}
+
+		final V val = putInternal(key, value);
+		if (watch != null) {
+			watch.stop();
+			FCMapStatistics.fcmPutMicroSec.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+		}
+
+		return val;
+	}
+
+	private V putInternal(K key, V value) {
+		final long stamp = writeLock();
+
 		try {
-			if (this.internalMap.containsKey(key)) {
-				return this.replaceInternal(key, value);
+			if (internalMap.containsKey(key)) {
+				return replaceInternal(key, value);
 			} else {
+
+				if (key.getReferenceCount() != 0) {
+					throw new IllegalArgumentException("Key is in another tree, can not insert");
+				}
+
+				if (value != null && value.getReferenceCount() != 0) {
+					throw new IllegalArgumentException("Value is in another tree, can not insert");
+				}
+
 				final FCMLeaf<K, V> leaf = new FCMLeaf<>(key, value);
-				getTree().insert(leaf);
-				this.internalMap.put(key, leaf);
-				this.invalidateHash();
+				getTree().insert(leaf, this::updateCache);
+				internalMap.put(key, leaf);
+				invalidateHash();
 				return null;
 			}
 		} finally {
-			lock.unlockWrite(stamp);
+			releaseWriteLock(stamp);
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Returns the number of key-value mappings in this map.
 	 *
 	 * <p>
@@ -506,7 +516,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Returns {@code true} if this map contains a mapping for the
 	 * specified key.
 	 *
@@ -521,13 +531,13 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 * 		key.
 	 */
 	@Override
-	public boolean containsKey(Object key) {
+	public boolean containsKey(final Object key) {
 		return this.internalMap.containsKey(key);
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Returns {@code true} if this map contains no key-value mappings.
 	 *
 	 * <p>
@@ -538,11 +548,11 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 */
 	@Override
 	public boolean isEmpty() {
-		final long stamp = lock.readLock();
+		final long stamp = readLock();
 		try {
 			return getTree().isEmpty();
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
 		}
 	}
 
@@ -550,28 +560,39 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 * The implementation of replace without locks. This allows for the replace operation to be performed
 	 * while a lock is already held by the outer context.
 	 */
-	private V replaceInternal(K key, V value) {
+	private V replaceInternal(final K key, final V value) {
 		final FCMLeaf<K, V> oldLeaf = this.internalMap.get(key);
 		if (oldLeaf == null) {
-			return null;
+			throw new IllegalStateException("Can not replace value that is not in the map");
 		}
 
-		// Invalidate the hash of value since the value may have changed.
-		// Fail-safe if app developer does not clear the value hash when updating (not guaranteed to work in all cases).
-		if (value != null) {
-			invalidateTree(value);
-		}
+		final K oldKey = oldLeaf.getKey();
+		final V oldValue = oldLeaf.getValue();
 
-		this.invalidateHash();
 		if (oldLeaf.getValue() == value) {
-			oldLeaf.nullifyHashPath();
-			getTree().invalidateHash();
+			// Value is already in this exact position, no work needed.
 			return value;
 		}
 
-		final FCMLeaf<K, V> newLeaf = new FCMLeaf<>(key, value);
+		if (value != null && value.getReferenceCount() != 0) {
+			throw new IllegalArgumentException("Value is already in a tree, can not insert into map");
+		}
+
+		// Once fast copies are managed by a utility, these manual hash invalidations will no longer be necessary.
+		this.invalidateHash();
+		getTree().invalidateHash();
+		getTree().getRoot().invalidateHash();
+
+		final FCMLeaf<K, V> newLeaf = new FCMLeaf<>();
+
+		// For the sake of efficiency, it is critically important that routes are not recreated unnecessarily.
+		// Recycle the existing routes from oldLeaf.
+		newLeaf.setRoute(oldLeaf.getRoute());
+		newLeaf.emplaceChildren(key, oldKey.getRoute(), value, oldValue == null ? null : oldValue.getRoute());
+
 		getTree().update(oldLeaf, newLeaf);
 		this.internalMap.put(key, newLeaf);
+
 		return oldLeaf.getValue();
 	}
 
@@ -595,37 +616,49 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 * 		for which case no association was performed.
 	 */
 	@Override
-	public V replace(K key, V value) {
+	public V replace(final K key, final V value) {
 		throwIfImmutable();
-		final long stamp = lock.writeLock();
+		StopWatch watch = null;
+
+		if (FCMapStatistics.isRegistered()) {
+			watch = new StopWatch();
+			watch.start();
+		}
+
+		final long stamp = writeLock();
 		try {
 			return replaceInternal(key, value);
 		} finally {
-			lock.unlockWrite(stamp);
+			releaseWriteLock(stamp);
+
+			if (watch != null) {
+				watch.stop();
+				FCMapStatistics.fcmReplaceMicroSec.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+			}
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Removes all of the mappings from this map.
 	 * The map will be empty after this call returns.
 	 */
 	@Override
 	public void clear() {
 		throwIfImmutable();
-		final long stamp = lock.writeLock();
+		final long stamp = writeLock();
 		try {
 			clearWithoutLocking();
 		} finally {
-			lock.unlockWrite(stamp);
+			releaseWriteLock(stamp);
 		}
 	}
 
 	/**
 	 * Equivalent to calling clear() but without first acquiring a write lock. Expects that the caller will have already
 	 * locked this data structure.
-	 *
+	 * <p>
 	 * This is needed since FCMap's locks are not reentrant (due to performance constraints).
 	 */
 	public void clearWithoutLocking() {
@@ -636,7 +669,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Returns a mutable Set view of the keys contained in this map at the moment the method is called.
 	 * <p>
 	 * If the map is modified later on, this set remains invariant to those changes.
@@ -646,7 +679,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 */
 	@Override
 	public Set<K> keySet() {
-		final long stamp = lock.readLock();
+		final long stamp = readLock();
 		try {
 			if (this.internalMap.size() > 0) {
 				return new HashSet<>(this.internalMap.keySet());
@@ -661,13 +694,13 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 
 			return keys;
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Returns a mutable Collection view of the values contained in this map at the moment the
 	 * method is called.
 	 * <p>
@@ -678,7 +711,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 */
 	@Override
 	public Collection<V> values() {
-		final long stamp = lock.readLock();
+		final long stamp = readLock();
 		try {
 			if (this.internalMap.size() > 0) {
 				return this.internalMap.values().stream().map(FCMLeaf::getValue).collect(Collectors.toList());
@@ -693,7 +726,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 
 			return values;
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
 		}
 	}
 
@@ -708,7 +741,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 */
 	@Override
 	public Set<Entry<K, V>> entrySet() {
-		final long stamp = lock.readLock();
+		final long stamp = readLock();
 		try {
 			if (this.internalMap.size() > 0) {
 				return this.internalMap.entrySet()
@@ -727,13 +760,13 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 
 			return entrySet;
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Returns {@code true} if this map maps one or more xkeys to the
 	 * specified value.
 	 *
@@ -744,7 +777,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 */
 	@Override
 	public boolean containsValue(Object value) {
-		final long stamp = lock.readLock();
+		final long stamp = readLock();
 		try {
 			if (this.internalMap.size() > 0) {
 				return this.values().stream().anyMatch(v -> Objects.equals(v, value));
@@ -760,13 +793,13 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 
 			return false;
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
+	 * <p>
 	 * Copies all of the mappings from the specified map to this map.
 	 * These mappings will replace any mappings that this map had for
 	 * any of the keys currently in the specified map.
@@ -778,7 +811,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 */
 	@Override
 	public void putAll(Map<? extends K, ? extends V> m) {
-		for (Entry<? extends K, ? extends V> entry : m.entrySet()) {
+		for (final Entry<? extends K, ? extends V> entry : m.entrySet()) {
 			this.put(entry.getKey(), entry.getValue());
 		}
 	}
@@ -791,7 +824,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 * @return {@inheritDoc}
 	 */
 	@Override
-	public boolean equals(Object o) {
+	public boolean equals(final Object o) {
 		if (this == o) {
 			return true;
 		}
@@ -812,7 +845,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 */
 	@Override
 	public int hashCode() {
-		final long stamp = lock.readLock();
+		final long stamp = readLock();
 		try {
 			final Hash hash = getTree().getHash();
 			if (hash == null) {
@@ -821,7 +854,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 
 			return hash.hashCode();
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
 		}
 	}
 
@@ -829,19 +862,21 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 * @return The root hash value
 	 */
 	public Hash getRootHash() {
-		final long stamp = lock.readLock();
+		final long stamp = readLock();
 		try {
 			return getRootHashWithoutLocking();
 		} finally {
-			lock.unlockRead(stamp);
+			releaseReadLock(stamp);
 		}
 	}
 
 	/**
 	 * Equivalent to calling getRootHash() but without first acquiring a read lock.
 	 * Expects that the caller will have already locked this data structure.
-	 *
+	 * <p>
 	 * This is needed since FCMap's locks are not reentrant (due to performance constraints).
+	 *
+	 * @return The root hash
 	 */
 	public Hash getRootHashWithoutLocking() {
 		return this.getTree().getHash();
@@ -884,7 +919,7 @@ public class FCMap<K extends FCMKey, V extends FCMValue>
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void initialize(final MerkleInternal oldNode) {
+	public void initialize() {
 		final Iterator<FCMLeaf<K, V>> leafIterator = getTree().leafIterator();
 		while (leafIterator.hasNext()) {
 			final FCMLeaf<K, V> nextLeaf = leafIterator.next();

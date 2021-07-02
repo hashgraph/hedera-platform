@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,7 +14,6 @@
 
 package com.swirlds.common.crypto;
 
-import com.swirlds.common.Transaction;
 import com.swirlds.logging.LogMarker;
 
 import java.security.MessageDigest;
@@ -158,30 +157,6 @@ public class HashBuilder {
 		return this;
 	}
 
-
-	/**
-	 * hash the given array of transactions
-	 *
-	 * @param t
-	 * 		the array of Transactions to be hashed
-	 * @return the HashBuilder object after digesting this array
-	 */
-	public HashBuilder update(Transaction[] t) {
-		if (t == null) {
-			update(0);
-		} else {
-			update(t.length);
-			for (Transaction a : t) {
-				if (a == null) {
-					update(0);
-				} else {
-					a.computeDigest(digest);
-				}
-			}
-		}
-
-		return this;
-	}
 
 	/**
 	 * Temporary method until we change how we hash all objects

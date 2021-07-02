@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -29,6 +29,8 @@ public class SettingsCommon {
 	// used by Transaction, Platform
 	/** maximum number of bytes allowed in a transaction */
 	public static int transactionMaxBytes;
+	/** the maximum number of address allowed in a address book, the same as the maximum allowed network size */
+	public static int maxAddressSizeAllowed;
 
 	// used by CommonUtils
 	public static boolean logStack;
@@ -40,4 +42,8 @@ public class SettingsCommon {
 
 	// used by SignedStateManager
 	public static boolean enableBetaMirror;
+	/** should a transaction be sent after each state signature transaction, giving all avgPingMilliseconds[] stats? */
+	public static boolean enablePingTrans = true;
+	/** should a transaction be sent after each state signature transaction, giving all avgBytePerSecSent[] stats? */
+	public static boolean enableBpsTrans = true;
 }

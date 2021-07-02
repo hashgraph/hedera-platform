@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,12 +15,12 @@ package com.swirlds.platform;
 
 import com.swirlds.common.Transaction;
 import com.swirlds.platform.event.NoEvent;
-import com.swirlds.platform.event.TransactionConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.LinkedList;
 
+import static com.swirlds.common.TransactionType.SYS_TRANS_STATE_SIG_FREEZE;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.FREEZE;
 
@@ -42,51 +42,6 @@ import static com.swirlds.logging.LogMarker.FREEZE;
 class TransLists {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
-
-	/**
-	 * A single transaction, consisting of a sequence of bytes, and a boolean. All code (including the
-	 * caller) must treat this object as immutable, and not modify the contents of the array.
-	 */
-	// public class Transaction {
-	// public final byte[] trans;
-	// public final boolean sys;
-	//
-	// /**
-	// * Store trans and sys and don't let them change.
-	// *
-	// * @param trans
-	// * sequence of bytes defining the transaction
-	// * @param sys
-	// * is this a system transaction?
-	// */
-	// public Transaction(byte[] trans, boolean sys) {
-	// this.trans = trans;
-	// this.sys = sys;
-	// }
-	// }
-
-	/**
-	 * Two arrays derived from a Transaction list. This is returned by pollTransForEvent(). All code
-	 * (including the caller) should treat this as immutable, and not change the elements of the arrays.
-	 */
-	// public class TransArrayPair {
-	// public final byte[][] trans;
-	// public final boolean[] sys;
-	//
-	// /** convert the transList to two arrays, and clear transList so it is empty */
-	// public TransArrayPair(LinkedList<Transaction> transList) {
-	// int size = transList.size();
-	// trans = new byte[size][];
-	// sys = new boolean[size];
-	// int i = 0;
-	// for (Transaction t : transList) {
-	// trans[i] = t.getContentsDirect();
-	// sys[i] = t.isSystem();
-	// i++;
-	// }
-	// transList.clear();
-	// }
-	// }
 
 	/** a non-event sometimes added to the forCurr queue to unblock threadCurr */
 	public final EventImpl noEvent = new NoEvent();
@@ -122,8 +77,6 @@ class TransLists {
 	public synchronized Transaction[] pollTransForEvent() {
 		// Early return due to no transactions waiting
 		if (transEvent.size() == 0) {
-// log.debug(Settings.LOGM_REGRESSION_TESTS,
-// "Regression: Early pollTransForEvent() exit");
 			return new Transaction[0];
 		}
 
@@ -136,30 +89,27 @@ class TransLists {
 			if (trans != null) {
 				// This event already contains transactions
 				// The next transaction is larger than the remaining space in the event
-				if (trans.size() > (Settings.maxTransactionBytesPerEvent - currEventSize)) {
-// log.debug(Settings.LOGM_REGRESSION_TESTS,
-// "Regression: Transaction size ({}) larger than remaining event space ({})",
-// trans.size(),
-// (Settings.maxTransactionBytesPerEvent - currEventSize));
+				if (trans.getSerializedLength() > (Settings.maxTransactionBytesPerEvent - currEventSize)) {
 					break;
 				}
 
-				currEventSize += trans.size();
+				currEventSize += trans.getSerializedLength();
 				selectedTrans.offer(transEvent.poll());
 				if (!trans.isSystem()) {
 					numUserTransEvent--;
 				} else {
-					if (trans.getContents(0) == TransactionConstants.SYS_TRANS_STATE_SIG_FREEZE) {
+					if (trans.getTransactionType() == SYS_TRANS_STATE_SIG_FREEZE) {
 						numFreezeTransEvent--;
 						log.info(FREEZE.getMarker(),
 								"A Freeze system transaction has been put into selectedTrans. numFreezeTransEvent: {}",
 								numFreezeTransEvent);
 					}
 				}
+
 			}
 		}
 
-		return selectedTrans.toArray(new Transaction[selectedTrans.size()]);
+		return selectedTrans.toArray(new Transaction[0]);
 	}
 
 	/**
@@ -181,7 +131,7 @@ class TransLists {
 	 * 		The transaction. It must have been created by self.
 	 * @return true if successful
 	 */
-	public synchronized boolean offer(Transaction trans) {
+	public synchronized boolean offer(final Transaction trans) {
 		// Check if we should ignore this transaction and return false because the queue is full.
 		// Always accept system transactions, but stop accepting others when the queue for the next event is
 		// full.
@@ -202,7 +152,7 @@ class TransLists {
 			if (!trans.isSystem()) {
 				numUserTransEvent++;
 			} else {
-				if (trans.getContents(0) == TransactionConstants.SYS_TRANS_STATE_SIG_FREEZE) {
+				if (trans.getTransactionType() == SYS_TRANS_STATE_SIG_FREEZE) {
 					numFreezeTransEvent++;
 					log.info(FREEZE.getMarker(),
 							"Freeze system transaction has been put into transEvent. numFreezeTransEvent: {}",
@@ -240,7 +190,7 @@ class TransLists {
 	 * 		true if this is a system transaction
 	 * @return did the insertion succeed?
 	 */
-	public synchronized boolean offer(Transaction trans, boolean system) {
+	public synchronized boolean offer(final Transaction trans, final boolean system) {
 		return offer(trans);
 	}
 

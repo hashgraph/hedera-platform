@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ (c) 2016-2020 Swirlds, Inc.
+  ~ (c) 2016-2021 Swirlds, Inc.
   ~
   ~ This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
   ~ intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -24,7 +24,7 @@
 	<parent>
 		<groupId>com.swirlds</groupId>
 		<artifactId>swirlds-platform</artifactId>
-		<version>0.8.0-orvw.1</version>
+		<version>0.15.1-orvw.1</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -49,13 +49,13 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-common</artifactId>
-			<version>0.8.0-orvw.1</version>
+			<version>0.15.1-orvw.1</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-logging</artifactId>
-			<version>0.8.0-orvw.1</version>
+			<version>0.15.1-orvw.1</version>
 		</dependency>
 
 		
@@ -150,6 +150,18 @@
 		<dependency>
 			<groupId>com.fasterxml.jackson.datatype</groupId>
 			<artifactId>jackson-datatype-jsr310</artifactId>
+		</dependency>
+
+		<!-- Mockito, can be removed once all tests migrate to test module -->
+		<dependency>
+			<groupId>org.mockito</groupId>
+			<artifactId>mockito-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.swirlds</groupId>
+			<artifactId>swirlds-fchashmap</artifactId>
+			<version>0.15.1-orvw.1</version>
 		</dependency>
 	</dependencies>
 
@@ -252,11 +264,13 @@
 							<argLine>@{argLine} --add-opens com.swirlds.platform/com.swirlds.platform=ALL-UNNAMED
 								--add-opens
 								com.swirlds.platform/com.swirlds.blob.internal.db.migration.common=ALL-UNNAMED
+								--add-opens com.swirlds.platform/com.swirlds.platform.sync=ALL-UNNAMED
+								--add-opens
+								com.swirlds.platform/com.swirlds.platform.state=ALL-UNNAMED
 							</argLine>
 							<forkCount>1</forkCount>
 							<reuseForks>false</reuseForks>
 							<excludes>
-								<exclude>**/IsInFreezePeriodTest.java</exclude>
 								<exclude>**/FCFSTimingTests.java</exclude>
 								<exclude>**/SerializerTests.java</exclude>
 								<exclude>**/ChunkManagerTests.java</exclude>

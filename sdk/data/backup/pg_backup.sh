@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 #### Script Info ####
-SCRIPT_NAME="`basename "${BASH_SOURCE[0]}"`"
-SCRIPT_PATH="$( cd "$(dirname "${BASH_SOURCE[0]}")" && pwd )"
-SAVED_STATE_PATH="$( cd "${SCRIPT_PATH}/../saved" && pwd )"
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SAVED_STATE_PATH="$(cd "${SCRIPT_PATH}/../saved" && pwd)"
 
 #### Configuration ####
 
@@ -20,30 +20,26 @@ CFG_STORE_WITH_STATE=1
 # If set to 1 then the backup is written but then subsequently removed
 CFG_REGRESSION_MODE=0
 
-
 #### Standard Exit Codes ####
 # These have been taken from sysexits.h
 
-EX_OK=0				# successful termination
-EX_USAGE=64			# command line usage error
-EX_DATAERR=65 		# data format error
+EX_OK=0           # successful termination
+EX_USAGE=64       # command line usage error
+EX_DATAERR=65     # data format error
 
-EX_NOINPUT=66		# cannot open input
-EX_NOUSER=67		# addressee unknown
-EX_NOHOST=68		# host name unknown
-EX_UNAVAILABLE=69 	# service unavailable
-EX_SOFTWARE=70		# internal software error
-EX_OSERR=71			# system error (e.g., can't fork)
-EX_OSFILE=72		# critical OS file missing
-EX_CANTCREAT=73		# can't create (user) output file
-EX_IOERR=74			# input/output error
-EX_TEMPFAIL=75		# temp failure; user is invited to retry
-EX_PROTOCOL=76		# remote error in protocol
-EX_NOPERM=77		# permission denied
-EX_CONFIG=78		# configuration error
-
-
-
+EX_NOINPUT=66     # cannot open input
+EX_NOUSER=67      # addressee unknown
+EX_NOHOST=68      # host name unknown
+EX_UNAVAILABLE=69 # service unavailable
+EX_SOFTWARE=70    # internal software error
+EX_OSERR=71       # system error (e.g., can't fork)
+EX_OSFILE=72      # critical OS file missing
+EX_CANTCREAT=73   # can't create (user) output file
+EX_IOERR=74       # input/output error
+EX_TEMPFAIL=75    # temp failure; user is invited to retry
+EX_PROTOCOL=76    # remote error in protocol
+EX_NOPERM=77      # permission denied
+EX_CONFIG=78      # configuration error
 
 #### Arguments & Variables ####
 #
@@ -57,7 +53,6 @@ EX_CONFIG=78		# configuration error
 #	$8 - Swirlds World ID
 #	$9 - Saved State Node Number
 #	$10 - Saved State Round Number
-
 
 ARG_DB_HOSTNAME="$1"
 ARG_DB_PORT="$2"
@@ -73,27 +68,25 @@ ARG_SS_ROUND="${10}"
 #### Usage ####
 
 usage() {
-	echo "Usage: ${SCRIPT_NAME} <db_host_name> <db_port> <db_user> <db_password> <db_catalog> <snapshot_id> <application> <world_id> <node_number> <round_number>"
-	exit $EX_USAGE
-};
+  echo "Usage: ${SCRIPT_NAME} <db_host_name> <db_port> <db_user> <db_password> <db_catalog> <snapshot_id> <application> <world_id> <node_number> <round_number>"
+  exit $EX_USAGE
+}
 
 if [[ "$#" -ne 10 ]]; then
-	usage
+  usage
 fi
 
-if [[ -z "${ARG_DB_HOSTNAME}" || -z "${ARG_DB_PORT}" ||  -z "${ARG_DB_USERNAME}" ||  -z "${ARG_DB_PASSWORD}" || -z "${ARG_DB_CATALOG}" ]]; then
-	usage
+if [[ -z "${ARG_DB_HOSTNAME}" || -z "${ARG_DB_PORT}" || -z "${ARG_DB_USERNAME}" || -z "${ARG_DB_PASSWORD}" || -z "${ARG_DB_CATALOG}" ]]; then
+  usage
 fi
 
 if [[ -z "${ARG_SNAPSHOT_ID}" || -z "${ARG_SS_APP}" || -z "${ARG_SS_WORLD}" || -z "${ARG_SS_NODE}" || -z "${ARG_SS_ROUND}" ]]; then
-	usage
+  usage
 fi
-
 
 #### Command Alias Definitions ####
 # Uses /usr/bin/env to resolve the path to the programs
 
-SUDO_CMD="/usr/bin/env sudo"
 PG_DUMP_CMD="/usr/bin/env pg_dump"
 
 CP_CMD="/usr/bin/env cp"
@@ -101,12 +94,18 @@ RSYNC_CMD="/usr/bin/env rsync"
 GZIP_CMD="/usr/bin/env gzip"
 RM_CMD="/usr/bin/env rm"
 
-
+#### Sudo-less Environment Support ####
+SUDO_CMD=""
+if [[ "$(id -u)" -ne 0 ]]; then
+  if sudo echo >/dev/null 2>&1; then
+    SUDO_CMD="sudo"
+  fi
+fi
 
 #### Program Execution
 
 if [[ ${CFG_STORE_WITH_STATE} -eq 1 ]]; then
-	CFG_STORAGE_PATH="$( cd "${SAVED_STATE_PATH}/${ARG_SS_APP}/${ARG_SS_NODE}/${ARG_SS_WORLD}/${ARG_SS_ROUND}" && pwd )"
+  CFG_STORAGE_PATH="$(cd "${SAVED_STATE_PATH}/${ARG_SS_APP}/${ARG_SS_NODE}/${ARG_SS_WORLD}/${ARG_SS_ROUND}" && pwd)"
 fi
 
 echo "Storage Path: ${CFG_STORAGE_PATH}"
@@ -118,23 +117,21 @@ $PG_DUMP_CMD -F t -f "${BACKUP_FILE}" --snapshot="${ARG_SNAPSHOT_ID}" -d "postgr
 PG_DUMP_EX_CODE=$?
 
 if [[ "${PG_DUMP_EX_CODE}" -ne $EX_OK ]]; then
-	echo "Backup (pg_dump) exited with error code: ${PG_DUMP_EX_CODE}"
-	exit $PG_DUMP_EX_CODE
+  echo "Backup (pg_dump) exited with error code: ${PG_DUMP_EX_CODE}"
+  exit $PG_DUMP_EX_CODE
 fi
 
 $GZIP_CMD "${BACKUP_FILE}"
 GZIP_EX_CODE=$?
 
 if [[ "${GZIP_EX_CODE}" -ne $EX_OK ]]; then
-	echo "GZip exited with error code: ${GZIP_EX_CODE}"
-	exit $GZIP_EX_CODE
+  echo "GZip exited with error code: ${GZIP_EX_CODE}"
+  exit $GZIP_EX_CODE
 fi
 
-
 if [[ ${CFG_REGRESSION_MODE} -eq 1 ]]; then
-	echo "Regression Mode"
-	if [[ -f "${GZ_BACKUP_FILE}" ]]; then
-
-		$RM_CMD "${GZ_BACKUP_FILE}"
-	fi
+  echo "Regression Mode"
+  if [[ -f "${GZ_BACKUP_FILE}" ]]; then
+    $RM_CMD "${GZ_BACKUP_FILE}"
+  fi
 fi

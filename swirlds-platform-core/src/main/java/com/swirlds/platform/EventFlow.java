@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -13,18 +13,26 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.Address;
 import com.swirlds.common.SwirldState;
 import com.swirlds.common.SwirldState.SwirldState2;
-import com.swirlds.common.Transaction;
+import com.swirlds.common.SwirldTransaction;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
-import com.swirlds.common.crypto.TransactionSignature;
+import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.logging.LogMarker;
-import com.swirlds.common.merkle.hash.FutureMerkleHash;
+import com.swirlds.common.crypto.ImmutableHash;
+import com.swirlds.common.crypto.RunningHash;
+import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.merkle.hash.MerkleHashChecker;
+import com.swirlds.common.stream.EventStreamManager;
+import com.swirlds.common.threading.StoppableThread;
+import com.swirlds.common.threading.StoppableThreadConfiguration;
+import com.swirlds.common.Transaction;
+import com.swirlds.logging.LogMarker;
+import com.swirlds.platform.eventhandling.MinGenQueue;
+import com.swirlds.platform.eventhandling.SignedStateEventStorage;
 import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateInfo;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
@@ -32,16 +40,15 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Deque;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -49,6 +56,10 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.swirlds.common.Units.NANOSECONDS_TO_MICROSECONDS;
+import static com.swirlds.common.Units.NANOSECONDS_TO_MILLISECONDS;
+import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
+import static com.swirlds.common.TransactionType.APPLICATION;
 import static com.swirlds.logging.LogMarker.EVENT_CONTENT;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.QUEUES;
@@ -56,6 +67,7 @@ import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.logging.LogMarker.SIGNED_STATE;
 import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT;
+import static com.swirlds.platform.Settings.minTransTimestampIncrNanos;
 import static com.swirlds.platform.event.EventUtils.toShortString;
 
 /**
@@ -75,10 +87,12 @@ class EventFlow extends AbstractEventFlow {
 	/** Platform that instantiates/uses this */
 	private final AbstractPlatform platform;
 
-	// hashEventsCons is volatile rather than something like AtomicIntArray, because elements of it
-	// never change. The array is always replaced with an entirely new Hash.
-	/** running hash of all consensus events so far with their transactions handled by stateCons */
-	private volatile Hash hashEventsCons = null;
+	/**
+	 * a RunningHash object which calculates running hash of all consensus events so far
+	 * with their transactions handled by stateCons
+	 */
+	private RunningHash eventsConsRunningHash = new RunningHash(
+			new ImmutableHash(new byte[DigestType.SHA_384.digestLength()]));
 
 	/** number of events that have had their transactions handled by stateCons so far. */
 	private final AtomicLong numEventsCons = new AtomicLong(0);
@@ -90,8 +104,11 @@ class EventFlow extends AbstractEventFlow {
 	/** working state that will replace stateCurr once it catches up */
 	private volatile StateInfo stateWork;
 
-	/** keeps the state returned to the user app to ensure that it doesn't get deleted */
-	private volatile SwirldState stateCurrReturned = null;
+	/**
+	 * Keeps the state returned to the user app to ensure that it doesn't get deleted.
+	 * Must only be accessed in synchronized blocks.
+	 */
+	private State stateCurrReturned = null;
 	/** a Semaphore that ensures that only one stateCurr will be passed to the user app at a time */
 	private final Semaphore getStateSemaphore = new Semaphore(1);
 
@@ -103,8 +120,6 @@ class EventFlow extends AbstractEventFlow {
 	private final BlockingQueue<EventImpl> forCurr;
 	/** consensus events to send to stateCons */
 	private final BlockingQueue<EventImpl> forCons;
-	/** old events to delete after signed state */
-	private final BlockingQueue<EventImpl> forSigs;
 	/** events to send to stateWork */
 	private volatile BlockingQueue<EventImpl> forWork;
 	/** queue to swap with forWork when shuffling */
@@ -133,27 +148,41 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	private boolean savedStateInFreeze = false;
 
-	/**
-	 * an array that keeps the last consensus event by each member.
-	 * this variable is only used by threadCons so there is no synchronization needed, it is volatile in case
-	 * stopAndClear() gets called.
-	 */
-	private volatile EventImpl[] lastConsEventByMember;
-	/**
-	 * an array that keeps track of whose last event is in forSigs
-	 * this variable is only used by threadCons so there is no synchronization needed, it is volatile in case
-	 * stopAndClear() gets called.
-	 */
-	private volatile boolean[] lastConsEventInForSigs;
+	/** Filters out consensus events that need to be stored in state */
+	private final SignedStateEventStorage signedStateEvents;
 
 	/** A deque used by doCons to store the minimum generation of famous witnesses per round */
-	private final Deque<Pair<Long, Long>> doConsMinGenFamous = new ConcurrentLinkedDeque<>();
+	private final MinGenQueue minGenQueue = new MinGenQueue();
 
 	/** A queue that holds only 1 object about a state that needs to be hashed and signed. */
 	private final BlockingQueue<SignedState> stateToHashSign = new ArrayBlockingQueue<>(1);
 
 	/** how many of {threadCons, threadCurr, threadWork} exist (either 2 or 3) */
 	private final int numThreads;
+
+	/** how many of {threadCons, threadCurr, threadWork} exist in SwirldState2 */
+	private static final int THREAD_NUM_SWIRLD_STATE_TWO = 2;
+
+	/** how many of {threadCons, threadCurr, threadWork} exist in non-SwirldState2 */
+	private static final int THREAD_NUM_SWIRLD_STATE = 3;
+
+	private static final String COMPONENT_NAME = "event-flow";
+
+	/**
+	 * is used for unit testing.
+	 * this 0-arg constructor is required to create a mock instance
+	 */
+	EventFlow() {
+		shuffleBarrier = null;
+		platform = null;
+		transLists = null;
+		forCurr = null;
+		forCons = null;
+		cryptography = null;
+		swirldState2 = true;
+		numThreads = THREAD_NUM_SWIRLD_STATE_TWO;
+		signedStateEvents = null;
+	}
 
 	/**
 	 * Instantiate, but don't start any threads yet. The Platform should first instantiate the EventFlow,
@@ -167,9 +196,9 @@ class EventFlow extends AbstractEventFlow {
 	 * 		of the states stored here. This initial state will be used by EventFlow internally, so it
 	 * 		should not be used after being passed to it
 	 */
-	EventFlow(AbstractPlatform platform, SwirldState initialState) {
+	EventFlow(AbstractPlatform platform, State initialState) {
 		this.platform = platform;
-		this.swirldState2 = (initialState instanceof SwirldState2);
+		this.swirldState2 = (initialState.getSwirldState() instanceof SwirldState2);
 		this.transLists = new TransLists(this);
 		lastShuffle = Instant.now(); // wait a while before first shuffle, so maybe queues aren't empty
 
@@ -189,8 +218,6 @@ class EventFlow extends AbstractEventFlow {
 				? new LinkedBlockingQueue<>()
 				: new ArrayBlockingQueue<>(Settings.maxEventQueueForCons);
 
-		forSigs = new LinkedBlockingQueue<>();
-
 		if (!swirldState2) {
 			forWork = new PriorityBlockingQueue<>(100, cmp);
 			forNext = new PriorityBlockingQueue<>(100, cmp);
@@ -198,9 +225,9 @@ class EventFlow extends AbstractEventFlow {
 
 		if (!swirldState2) {
 			// in this case, there would be one thread more than swirldState2 for running doWork
-			numThreads = 3;
+			numThreads = THREAD_NUM_SWIRLD_STATE;
 		} else {
-			numThreads = 2;
+			numThreads = THREAD_NUM_SWIRLD_STATE_TWO;
 		}
 		shuffleBarrier = new CyclicBarrier(numThreads, () -> {
 			try {
@@ -211,8 +238,7 @@ class EventFlow extends AbstractEventFlow {
 			}
 		});
 
-		lastConsEventByMember = new EventImpl[platform.getNumMembers()];
-		lastConsEventInForSigs = new boolean[platform.getNumMembers()];
+		signedStateEvents = new SignedStateEventStorage(platform.getNumMembers());
 
 		cryptography = CryptoFactory.getInstance();
 	}
@@ -230,12 +256,13 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	SwirldState getCurrStateAndKeep() {
 		if (swirldState2) {
-			return stateCurr.getState();
+			return stateCurr.getState().getSwirldState();
 		}
 
 		try {
 			getStateSemaphore.acquire();
 		} catch (InterruptedException e1) {
+			Thread.currentThread().interrupt();
 			return null;
 		}
 		synchronized (this) {
@@ -244,9 +271,8 @@ class EventFlow extends AbstractEventFlow {
 			}
 			// stateCurrReturned becomes the current one
 			stateCurrReturned = stateCurr.getState();
+			return stateCurrReturned.getSwirldState();
 		}
-
-		return stateCurrReturned;
 	}
 
 	/**
@@ -280,10 +306,10 @@ class EventFlow extends AbstractEventFlow {
 		if (stateCurrReturned != stateCurr.getState()) {
 			// if they are not the same, we can delete this one
 			try {
-				stateCurr.getState().release();
+				stateCurr.release();
 			} catch (Exception e) {
 				// defensive: catch exceptions from a bad app
-				log.error(EXCEPTION.getMarker(), "exception in app during delete:", e);
+				log.error(EXCEPTION.getMarker(), "exception in app during release of state:", e);
 			}
 		}
 
@@ -294,8 +320,8 @@ class EventFlow extends AbstractEventFlow {
 	 * {@inheritDoc}
 	 */
 	@Override
-	SwirldState getConsensusState() {
-		return this.stateCons.getState();
+	State getConsensusState() {
+		return stateCons.getState();
 	}
 
 	/**
@@ -319,7 +345,7 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	@Override
 	int getForSigsSize() {
-		return forSigs.size();
+		return signedStateEvents.getQueueSize();
 	}
 
 	/**
@@ -334,7 +360,31 @@ class EventFlow extends AbstractEventFlow {
 	 * {@inheritDoc}
 	 */
 	@Override
+	int getStateToHashSignSize() {
+		return stateToHashSign.size();
+	}
+
+	@Override
+	public void preConsensusEvent(EventImpl event) {
+		// Expand signatures for events received from sync operations
+		// Additionally, we should enqueue any signatures for verification
+		// Signature expansion should be the last thing that is done. It can be fairly time consuming, so we don't
+		// want to delay the verification of an event for it because other events depend on this one being valid.
+		// Furthermore, we don't want to validate signatures contained in an event that is invalid.
+		expandSignatures(event.getTransactions());
+		forCurrPut(event);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
 	void forCurrPut(EventImpl event) {
+		if (!event.isEmpty() && !isCreatedBySelf(event)) {
+			// stateCurr / stateWork don't need the empty events.
+			// and they don't need events by self (since those transactions are in transLists)
+			return;
+		}
 		try {
 			event.estimateTime(platform.getSelfId(), platform.getStats().avgSelfCreatedTimestamp.getWeightedMean(),
 					platform.getStats().avgOtherReceivedTimestamp.getWeightedMean());
@@ -342,7 +392,15 @@ class EventFlow extends AbstractEventFlow {
 			forCurr.put(event);
 		} catch (InterruptedException e) {
 			log.error(EXCEPTION.getMarker(), "error:{} event:{}", e, event);
+			Thread.currentThread().interrupt();
 		}
+	}
+
+	/**
+	 * check whether this event is created by current node
+	 */
+	private boolean isCreatedBySelf(final EventImpl event) {
+		return platform.getSelfId().equalsMain(event.getCreatorId());
 	}
 
 	/**
@@ -359,15 +417,29 @@ class EventFlow extends AbstractEventFlow {
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * Add the given event (which just became consensus) to the forCons queue, to later be sent to
+	 * stateCons.
+	 * <p>
+	 * When Hashgraph first finds consensus for an event, it puts the event into {@link EventStreamManager}'s queue,
+	 * which will then call this method. If the queue is full, then this will block until it isn't full,
+	 * which will block whatever thread called Hashgraph.consRecordEvent.
+	 * <p>
+	 * Thread interruptions are ignored.
+	 *
+	 * @param event
+	 * 		the new event to record
 	 */
 	@Override
-	void forConsPut(EventImpl event) {
+	public void consensusEvent(EventImpl event) {
 		try {
+			// adds this consensus event to eventStreamHelper,
+			// which will put it into a queue for calculating runningHash, and a queue for event streaming when enabled
+			platform.getEventStreamManager().addEvent(event);
 			// this may block until the queue isn't full
 			forCons.put(event);
 		} catch (InterruptedException e) {
 			log.error(RECONNECT.getMarker(), "forConsPut interrupted");
+			Thread.currentThread().interrupt();
 		}
 	}
 
@@ -380,27 +452,29 @@ class EventFlow extends AbstractEventFlow {
 		// the reconnect, that's why it will not be cleared.
 
 		// tell the threads they should stop
+		log.info(RECONNECT.getMarker(), "stopAndClear: stopping threadStateHashSign");
 		threadStateHashSign.stop();
+		log.info(RECONNECT.getMarker(), "stopAndClear: stopping threadCons");
 		threadCons.stop();
+		log.info(RECONNECT.getMarker(), "stopAndClear: stopping threadCurr");
 		threadCurr.stop();
 
 		if (!swirldState2) {
+			log.info(RECONNECT.getMarker(), "stopAndClear: stopping threadWork");
 			threadWork.stop();
 		}
 
+		log.info(RECONNECT.getMarker(), "stopAndClear: releasing states");
+
 		// delete the states
-		try {
-			//if (stateCons != null) {
-			//	stateCons.state.noMoreTransactions();
-			//	stateCons.state.delete();
-			//}
+		try { 
 			if (!swirldState2) {
 				if (stateWork != null) {
-					stateWork.getState().noMoreTransactions();
+					stateWork.getState().getSwirldState().noMoreTransactions();
 					stateWork.getState().release();
 				}
 				if (stateCurr != null) {
-					stateCurr.getState().noMoreTransactions();
+					stateCurr.getState().getSwirldState().noMoreTransactions();
 					stateCurr.getState().release();
 				}
 			}
@@ -414,26 +488,33 @@ class EventFlow extends AbstractEventFlow {
 
 
 		// clear all the queues
+		log.info(RECONNECT.getMarker(), "stopAndClear: clearing stateToHashSign");
 		stateToHashSign.clear();
+		log.info(RECONNECT.getMarker(), "stopAndClear: clearing forCurr");
 		forCurr.clear();
+		log.info(RECONNECT.getMarker(), "stopAndClear: clearing forCons");
 		forCons.clear();
-		forSigs.clear();
 		if (!swirldState2) {
+			log.info(RECONNECT.getMarker(), "stopAndClear: clearing forWork");
 			forWork.clear();
+			log.info(RECONNECT.getMarker(), "stopAndClear: clearing forNext");
 			forNext.clear();
 		}
 
 		// clear the transactions
+		log.info(RECONNECT.getMarker(), "stopAndClear: clearing transLists");
 		transLists.clear();
 
-		// clear running transaction info
-		hashEventsCons = null;
+		// clear running Hash info
+		eventsConsRunningHash = new RunningHash(
+				new ImmutableHash(new byte[DigestType.SHA_384.digestLength()]));
 		numEventsCons.set(0);
 
 		// used by doCons
-		lastConsEventByMember = new EventImpl[platform.getNumMembers()];
-		lastConsEventInForSigs = new boolean[platform.getNumMembers()];
-		doConsMinGenFamous.clear();
+		signedStateEvents.clear();
+		minGenQueue.clear();
+
+		log.info(RECONNECT.getMarker(), "stopAndClear: event flow is now cleared");
 	}
 
 	/**
@@ -441,49 +522,35 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	@Override
 	void loadDataFromSignedState(SignedState signedState, boolean isReconnect) {
-		EventImpl[] lastConsEventByMember = new EventImpl[platform.getNumMembers()];
-		boolean[] lastConsEventInForSigs = new boolean[platform.getNumMembers()];
+		minGenQueue.addAll(signedState.getMinGenInfo());
+		final long minGenNonAncient = minGenQueue.getRoundGeneration(
+				signedState.getLastRoundReceived() - Settings.state.roundsStale);
+		signedStateEvents.loadDataFromSignedState(signedState.getEvents(), minGenNonAncient);
 
-		for (int i = 0; i < signedState.getEvents().length; i++) {
-			EventImpl event = signedState.getEvents()[i];
-			boolean added = forSigs.offer(event);
+		// set initialHash of the RunningHash to be the hash loaded from signed state
+		eventsConsRunningHash = new RunningHash(signedState.getHashEventsCons());
 
-			if (!added) {// this should never happen
-				log.error(EXCEPTION.getMarker(),
-						"forSigs full! EventFlow.forSigsPut()");
-				break;
-			}
-
-			// keep track of the last event created by each member
-			lastConsEventByMember[(int) event.getCreatorId()] = event;
-			lastConsEventInForSigs[(int) event.getCreatorId()] = true;
-		}
-
-		this.lastConsEventByMember = lastConsEventByMember;
-		this.lastConsEventInForSigs = lastConsEventInForSigs;
-
-		hashEventsCons = signedState.getHashEventsCons();
 		numEventsCons.set(signedState.getNumEventsCons());
 
-		doConsMinGenFamous.addAll(signedState.getMinGenInfo());
+
 		log.info(STARTUP.getMarker(), " doConsMinGenFamous after startup {}",
 				Arrays.toString(signedState.getMinGenInfo().toArray()));
 
-		// get initialRunningHash from signedState
+		// get startRunningHash from signedState
 		Hash initialHash = new Hash(signedState.getHashEventsCons());
-		platform.getRunningHashCalculator().setInitialHash(initialHash);
+		platform.getEventStreamManager().setInitialHash(initialHash);
 
 		log.info(STARTUP.getMarker(), " initialHash after startup {}", () -> initialHash);
-		if (Settings.enableEventStreaming) {
-			platform.getRunningHashCalculator().setStartWriteAtCompleteWindow(isReconnect);
-		}
+		platform.getEventStreamManager().setStartWriteAtCompleteWindow(isReconnect);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	void setState(SwirldState state) {
+	void setState(State state) {
+		state.throwIfReleased("state must not be released");
+		state.throwIfImmutable("state must be mutable");
 		if (stateCons != null) {
 			stateCons.release();
 		}
@@ -504,10 +571,12 @@ class EventFlow extends AbstractEventFlow {
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * remove the list of transactions from the transLists, so they can be put into a new Event
+	 *
+	 * @return
 	 */
 	@Override
-	Transaction[] pollTransListsForEvent() {
+	public Transaction[] getTransactions() {
 		return transLists.pollTransForEvent();
 	}
 
@@ -515,12 +584,12 @@ class EventFlow extends AbstractEventFlow {
 	 * {@inheritDoc}
 	 */
 	@Override
-	int numUserTransForEvent() {
+	public int numUserTransForEvent() {
 		return transLists.numUserTransForEvent();
 	}
 
 	@Override
-	int numFreezeTransEvent() {
+	public int numFreezeTransEvent() {
 		return transLists.numFreezeTransEvent();
 	}
 
@@ -544,25 +613,27 @@ class EventFlow extends AbstractEventFlow {
 	 * and will return false. Also, if it is larger than Settings.transactionMaxBytes it will do nothing and
 	 * return false.
 	 *
-	 * @param system
-	 * 		is this a system transaction which should NOT be sent to the app?
 	 * @param transaction
 	 * 		the new transaction being created locally (optionally passed as several parts to
 	 * 		concatenate)
 	 * @return true if successful
 	 */
-	boolean createTransaction(boolean system, Transaction transaction) {
+	boolean createTransaction(final Transaction transaction) {
 		// Refuse to create any type of transaction if the beta mirror is enabled and this node has zero stake
 		if (Settings.enableBetaMirror && platform.isZeroStakeNode()) {
 			return false;
 		}
 
-		if (transaction == null
-				|| transaction.getLength() > Settings.transactionMaxBytes) {
+		if (transaction == null) {
 			return false;
 		}
 
-		return transLists.offer(transaction, system);
+		// check if system transaction serialized size is above the required threshold
+		if (transaction.getSize() > Settings.transactionMaxBytes) {
+			return false;
+		}
+
+		return transLists.offer(transaction, transaction.isSystem());
 	}
 
 	/**
@@ -570,16 +641,32 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	@Override
 	void startAll() {
-		threadStateHashSign = new StoppableThread("stateHash",
-				this::stateHashSign, platform.getSelfId());
-		threadCons = new StoppableThread("threadCons",
-				this::doCons, platform.getSelfId());
-		threadCurr = new StoppableThread("threadCurr",
-				this::doCurr, platform.getSelfId());
+		threadStateHashSign = new StoppableThreadConfiguration()
+				.setNodeId(platform.getSelfId().getId())
+				.setComponent(COMPONENT_NAME)
+				.setThreadName("state-hash")
+				.setWork(this::stateHashSign)
+				.build();
+		threadCons = new StoppableThreadConfiguration()
+				.setNodeId(platform.getSelfId().getId())
+				.setComponent(COMPONENT_NAME)
+				.setThreadName("thread-cons")
+				.setWork(this::doCons)
+				.build();
+		threadCurr = new StoppableThreadConfiguration()
+				.setNodeId(platform.getSelfId().getId())
+				.setComponent(COMPONENT_NAME)
+				.setThreadName("thread-curr")
+				.setWork(this::doCurr)
+				.build();
 
 		if (!swirldState2) {
-			threadWork = new StoppableThread("threadWork",
-					this::doWork, platform.getSelfId());
+			threadWork = new StoppableThreadConfiguration()
+					.setNodeId(platform.getSelfId().getId())
+					.setComponent(COMPONENT_NAME)
+					.setThreadName("thread-work")
+					.setWork(this::doWork)
+					.build();
 		}
 
 		lastShuffle = Instant.now();
@@ -596,7 +683,7 @@ class EventFlow extends AbstractEventFlow {
 				forCons == null ? null : forCons.size(),
 				forCurr == null ? null : forCurr.size(),
 				forNext == null ? null : forNext.size(),
-				forSigs == null ? null : forSigs.size(),
+				signedStateEvents.getQueueSize(),
 				forWork == null ? null : forWork.size());
 	}
 
@@ -606,19 +693,6 @@ class EventFlow extends AbstractEventFlow {
 	@Override
 	BlockingQueue<EventImpl> getForCurr() {
 		return forCurr;
-	}
-
-	/**
-	 * For debugging, return a string giving the current number of elements in each of the 5 queues, in the
-	 * order forCurr, forWork, forNext, forCons, forSigs
-	 *
-	 * @return
-	 */
-	String getQueueSizes() {
-		return String.format(
-				"%4d=forCurr %4d=forWork %4d=forNext %4d=forCons %8d=forSigs",
-				forCurr.size(), forWork.size(), forNext.size(), forCons.size(),
-				forSigs.size());
 	}
 
 	//////////////////////////////////////////////////////////
@@ -648,18 +722,15 @@ class EventFlow extends AbstractEventFlow {
 	 * 		event
 	 * @param trans
 	 * 		the single transaction to handle (which will be one element of event.transactions).
-	 * @param address
-	 * 		address of person to add as a new member in the address book, or null if none
 	 * @param baseTime
 	 * 		timestamp (consensus or estimated) of the event, before adding timeInc.
 	 * @param timeInc
 	 * 		number of nanoseconds to add to baseTime, before passing it to the user as the estimated
 	 * 		or actual timestamp
 	 */
-	private void handleTransaction(AbstractPlatform platform, boolean ignoreSystem,
+	private static void handleTransaction(AbstractPlatform platform, boolean ignoreSystem,
 			boolean isSystem, StateInfo state, boolean isConsensus, EventImpl event,
-			Transaction trans, Address address, Instant baseTime,
-			long timeInc) {
+			Transaction trans, Instant baseTime, long timeInc) {
 		if (ignoreSystem && isSystem) { // don't handle system transactions if they should be ignored
 			return;
 		}
@@ -683,24 +754,25 @@ class EventFlow extends AbstractEventFlow {
 			/**
 			 * Estimate of what will be this transaction's consensus timestamp. The first transaction in an
 			 * event gets the event's timestamp, and then each successive transaction in that event has a
-			 * timestamp 1 nanosecond later. If the event already has consensus, the estimate is exact.
+			 * timestamp {@link Settings#minTransTimestampIncrNanos} nanosecond later. If the event already has
+			 * consensus, the estimate is exact.
 			 */
 			Instant estConsTime = baseTime.plusNanos(timeInc);
 
 			if (isSystem) {// send system transactions to Platform (they come from doCons)
-				platform.handleSystemTransaction(creator, isConsensus,
-						timeCreated, estConsTime, trans, address);
+				platform.getSystemTransactionHandler().handleSystemTransaction(creator, isConsensus,
+						timeCreated, estConsTime, trans);
 				if (event != null && event.getReachedConsTimestamp() != null) {
 					// we only add this stat for transactions that have reached consensus
 					platform.getStats().avgConsHandleTime.recordValue(
 							event.getReachedConsTimestamp().until(Instant.now(),
-									ChronoUnit.NANOS) / 1_000_000_000.0);
+									ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 				}
 			} else { // send user transactions to SwirldState
-
+				SwirldTransaction swirldTransaction = (SwirldTransaction) trans;
 				// If we have consensus, validate any signatures present and wait if necessary
 				if (isConsensus) {
-					for (TransactionSignature sig : trans.getSignatures()) {
+					for (TransactionSignature sig : swirldTransaction.getSignatures()) {
 						Future<Void> future = sig.waitForFuture();
 
 						// Block & Ignore the Void return
@@ -709,21 +781,21 @@ class EventFlow extends AbstractEventFlow {
 				}
 				long startTime = System.nanoTime();
 
-				state.getState().handleTransaction(creator, isConsensus, timeCreated,
-						estConsTime, trans, address);
+				state.getState().getSwirldState().handleTransaction(creator, isConsensus, timeCreated,
+						estConsTime, swirldTransaction, state.getState().getSwirldDualState());
 
 				// we only add these stats for transactions that have reached consensus
 				if (event != null && event.getReachedConsTimestamp() != null) {
 					platform.getStats().avgSecTransHandled.recordValue(
-							(System.nanoTime() - startTime) / 1_000_000_000.0);
+							(System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
 					platform.getStats().transHandledPerSecond.cycle();
 					platform.getStats().avgConsHandleTime.recordValue(
 							event.getReachedConsTimestamp().until(Instant.now(),
-									ChronoUnit.NANOS) / 1_000_000_000.0);
+									ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 				}
 			}
 		} catch (InterruptedException ex) {
-			log.debug(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(),
+			log.error(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(),
 					"EventFlow::handleTransaction Interrupted [ nodeId = {} ]", platform.getSelfId().getId(), ex);
 			Thread.currentThread().interrupt();
 		} catch (Exception ex) {
@@ -736,13 +808,13 @@ class EventFlow extends AbstractEventFlow {
 
 			log.error(EVENT_CONTENT.getMarker(),
 					"error calculating parameters while calling it using a context \nwith event: {}\nwith trans: {}",
-					() -> event, trans::getContentsDirect);
+					() -> event, trans::toString);
 		}
 	}
 
 	@Override
 	void addMinGenInfo(long round, long minGeneration) {
-		doConsMinGenFamous.add(Pair.of(round, minGeneration));
+		minGenQueue.add(round, minGeneration);
 	}
 
 	/**
@@ -776,31 +848,46 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	private void doCons() throws InterruptedException {
 		EventImpl event;
-		event = takeHandlePut(true, forCons, stateCons, forSigs);
+
+		final long startTakeHandle = System.nanoTime();
+		event = takeHandlePut(true, forCons, stateCons, null);
+
 		if (event == null) {
 			return;
 		}
+
+		platform.getStats().avgConsShuffleMicros.recordValue(
+				(System.nanoTime() - startTakeHandle) * NANOSECONDS_TO_MICROSECONDS);
+
+		final long startSignedState = System.nanoTime();
+
 		if (!event.isConsensus()) {
 			log.error(EXCEPTION.getMarker(), "EventFlow forCons had nonconensus event {}", event);
 		}
 
-		// keep track of the last event created by each member
-		lastConsEventByMember[(int) event.getCreatorId()] = event;
-		lastConsEventInForSigs[(int) event.getCreatorId()] = true;
+		signedStateEvents.add(event);
 
 		// count events that have had all their transactions handled by stateCons
 		numEventsCons.incrementAndGet();
 
-		// set the running hash of all hashes of consensus events so far
-		hashEventsCons = event.getRunningHash();
+		final long startEventHash = System.nanoTime();
+
+		if (event.getHash() == null) {
+			CryptoFactory.getInstance().digestSync(event);
+		}
+		// update the running hash object
+		eventsConsRunningHash = event.getRunningHash();
+
+		platform.getStats().avgConsEventHashMicros.recordValue(
+				(System.nanoTime() - startEventHash) * NANOSECONDS_TO_MICROSECONDS);
 
 		if (event.isLastOneBeforeShutdown() || // if eventstream is shuting down
 				event.isLastInRoundReceived()  // if we have a new shared state to sign
-				&& Settings.state.getSignedStateKeep() > 0 // we are keeping states
-				&& Settings.signedStateFreq > 0 // and we are signing states
-				&& (event.getRoundReceived() == 1 // the first round should be signed
-				// and every Nth should be signed, where N is signedStateFreq
-				|| event.getRoundReceived() % Settings.signedStateFreq == 0)) {
+						&& Settings.state.getSignedStateKeep() > 0 // we are keeping states
+						&& Settings.signedStateFreq > 0 // and we are signing states
+						&& (event.getRoundReceived() == 1 // the first round should be signed
+						// and every Nth should be signed, where N is signedStateFreq
+						|| event.getRoundReceived() % Settings.signedStateFreq == 0)) {
 
 			// the consensus timestamp for the signed state should be the timestamp of the last transaction
 			// in the last event. if the last event has no transactions, then it will be the timestamp of
@@ -809,11 +896,15 @@ class EventFlow extends AbstractEventFlow {
 
 			boolean signThisState = true;
 
-			if (FreezeManager.isInFreezePeriod(ssConsTime)) {
+			if (isInFreezePeriod(ssConsTime)) {
 				if (!savedStateInFreeze) {
 					// we are saving the first state in the freeze period
 					signThisState = true;
 					savedStateInFreeze = true;
+					synchronized (stateCons) {
+						// set current DualState's lastFrozenTime to be current freezeTime
+						stateCons.getState().getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
+					}
 				} else {
 					signThisState = false;
 				}
@@ -827,7 +918,8 @@ class EventFlow extends AbstractEventFlow {
 				// create a new signed state, sign it, and send out a new transaction with the signature
 				// the signed state keeps a copy that never changes.
 				final long startCopy = System.nanoTime();
-				final SwirldState immutableStateCons;
+				final State immutableStateCons;
+
 				synchronized (stateCons) {
 					immutableStateCons = stateCons.getState();
 					// we increment the refCount so the state doesn't get deleted until we put it into a signed state
@@ -835,37 +927,21 @@ class EventFlow extends AbstractEventFlow {
 					stateCons.setState(stateCons.getState().copy());
 				}
 
-				platform.getStats().avgSecStateCopy.recordValue((System.nanoTime() - startCopy) / 1_000_000_000.0);
+				platform.getStats().avgStateCopyMicros.recordValue(
+						(System.nanoTime() - startCopy) * NANOSECONDS_TO_MICROSECONDS);
 				// this state will be saved, so there will be no more transactions sent to it
 				try {
-					immutableStateCons.noMoreTransactions();
+					immutableStateCons.getSwirldState().noMoreTransactions();
 				} catch (Exception e) {
 					// defensive: catch exceptions from a bad app
 					log.error(EXCEPTION.getMarker(), "exception in app during noMoreTransactions:", e);
 				}
 
-				// the saved state should contain at least one event by each member. if the member doesnt have an
-				// event in the forSigs, we need to add an older event in the signed state
-				final List<EventImpl> ssEventList = new ArrayList<>(forSigs.size() + lastConsEventByMember.length);
-				for (int i = 0; i < lastConsEventInForSigs.length; i++) {
-					if (!lastConsEventInForSigs[i] && lastConsEventByMember[i] != null) {
-						ssEventList.add(lastConsEventByMember[i]);
-					}
-				}
-
-				ssEventList.addAll(forSigs);
-				EventImpl[] events = ssEventList.toArray(new EventImpl[] { });
+				EventImpl[] events = signedStateEvents.getEventsForLatestRound();
 
 				log.info(SIGNED_STATE.getMarker(), "finished adding events, about to create a minGen list");
 				// create a minGen list with only the rounds up until this round received
-				final List<Pair<Long, Long>> minGen = new ArrayList<>();
-				for (Pair<Long, Long> next : doConsMinGenFamous) {
-					if (next.getKey() <= event.getRoundReceived()) {
-						minGen.add(next);
-					} else {
-						break;
-					}
-				}
+				final List<Pair<Long, Long>> minGen = minGenQueue.getList(event.getRoundReceived());
 
 				// The doCons thread will not wait for a state to be signed, it will put it into this queue to be done
 				// in the background. If the hashing cannot be done before the next state needs to be signed, doCons
@@ -875,24 +951,42 @@ class EventFlow extends AbstractEventFlow {
 						event.getRoundReceived(),
 						toShortString(event));
 
-				stateToHashSign.put(
-						new SignedState(
-								immutableStateCons,
-								event.getRoundReceived(),
-								numEventsCons.get(),
-								hashEventsCons,
-								platform.getHashgraph().getAddressBook().copy(),
-								events,
-								ssConsTime,
-								savedStateInFreeze,
-								minGen
-						)
+				final long startRunningHash = System.nanoTime();
+
+				final Hash runningHash = eventsConsRunningHash.getFutureHash().get();
+
+				platform.getStats().avgConsRunningHashMicros.recordValue(
+						(System.nanoTime() - startRunningHash) * NANOSECONDS_TO_MICROSECONDS);
+
+				final SignedState signedState = new SignedState(
+						immutableStateCons,
+						event.getRoundReceived(),
+						numEventsCons.get(),
+						runningHash,
+						platform.getAddressBook().copy(),
+						events,
+						ssConsTime,
+						savedStateInFreeze,
+						minGen
 				);
+
+				final long startStateHashAdmit = System.nanoTime();
+
+				stateToHashSign.put(signedState);
+
+				platform.getStats().avgConsStateSignAdmitMicros.recordValue(
+						(System.nanoTime() - startStateHashAdmit) * NANOSECONDS_TO_MICROSECONDS);
+
+
 				immutableStateCons.decrementReferenceCount();
 			}
 		}
 
-		// the next part removes events from forSigs that are not needed
+		platform.getStats().avgConsBuildStateMicros.recordValue(
+				(System.nanoTime() - startSignedState) * NANOSECONDS_TO_MICROSECONDS);
+
+		final long startForSigClean = System.nanoTime();
+		// the next part removes events from forSigs that are not neede
 
 		// the latest round received
 		long roundReceived = event.getRoundReceived();
@@ -903,36 +997,15 @@ class EventFlow extends AbstractEventFlow {
 		if (staleRound < 1) {
 			return;
 		}
-		Pair<Long, Long> minGenInfo = doConsMinGenFamous.peekFirst();
-		// it should not be null
-		if (minGenInfo == null) {
-			log.error(EXCEPTION.getMarker(), "Missing min gen info for round {}. Queue is empty", staleRound);
-			return;
-		}
-		// remove old min gen info we no longer need
-		while (minGenInfo.getKey() < staleRound) {
-			doConsMinGenFamous.pollFirst();
-			minGenInfo = doConsMinGenFamous.peekFirst();
-		}
-		// a round should not be missing, if it is, log an error
-		if (minGenInfo.getKey() != staleRound) {
-			log.error(EXCEPTION.getMarker(), "Missing min gen info for round {}. Oldest round stored {}",
-					staleRound, minGenInfo.getKey());
-			return;
-		}
 
-		long minGen = minGenInfo.getValue();
+		// we need to keep all events that are non-ancient
+		final long minGenerationNonAncient = minGenQueue.getRoundGeneration(staleRound);
+		signedStateEvents.expireEvents(minGenerationNonAncient);
+		// we also need a round generation for each round that the events stored are created in
+		minGenQueue.expire(signedStateEvents.getMinRoundCreatedInQueue());
 
-		EventImpl e = forSigs.peek();
-		while (e != null && e.getGeneration() < minGen) {
-			if (e == lastConsEventByMember[(int) e.getCreatorId()]) {
-				// if we are deleting the last event created by this member, we must keep track of it so we add it to
-				// the saved state
-				lastConsEventInForSigs[(int) e.getCreatorId()] = false;
-			}
-			forSigs.poll(); // e is not needed, so remove and discard it
-			e = forSigs.peek(); // look at the next e, but don't remove or discard yet
-		}
+		platform.getStats().avgConsForSigCleanMicros.recordValue(
+				(System.nanoTime() - startForSigClean) * NANOSECONDS_TO_MICROSECONDS);
 	}
 
 	private void stateHashSign() throws InterruptedException {
@@ -947,12 +1020,16 @@ class EventFlow extends AbstractEventFlow {
 		log.info(LogMarker.MERKLE_HASHING.getMarker(), "Starting hashing of SignedState");
 
 		// Use digestTreeAsync because it is significantly (10x+) faster for large trees
-		final FutureMerkleHash hashFuture = cryptography.digestTreeAsync(signedState);
+		final Future<Hash> hashFuture = cryptography.digestTreeAsync(signedState.getState());
 		// wait for the hash to be computed
-		hashFuture.get();
+		try {
+			hashFuture.get();
+		} catch (ExecutionException ex) {
+			log.warn(LogMarker.MERKLE_HASHING.getMarker(), "Exception Occurred during SignedState hashing", ex);
+		}
 
 		if (Settings.checkSignedStateHashes) {
-			MerkleHashChecker.checkSync(cryptography, signedState, node ->
+			MerkleHashChecker.checkSync(cryptography, signedState.getState(), node ->
 					log.info(LogMarker.ERROR.getMarker(),
 							"Invalid hash detected for node type: {}",
 							node.getClass().getName()));
@@ -966,7 +1043,7 @@ class EventFlow extends AbstractEventFlow {
 				signedState
 		);
 		log.info(LogMarker.MERKLE_HASHING.getMarker(), "Done newSelfSigned");
-		platform.getStats().avgSecNewSignedState.recordValue((System.nanoTime() - startTime) / 1_000_000_000.0);
+		platform.getStats().avgSecNewSignedState.recordValue((System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
 	}
 
 	/**
@@ -992,7 +1069,7 @@ class EventFlow extends AbstractEventFlow {
 		try {
 			// freeze stateCurr, then discard it so it will be garbage collected
 			stateCurr.setFrozen(true);
-			stateCurr.getState().noMoreTransactions();
+			stateCurr.getState().getSwirldState().noMoreTransactions();
 		} catch (Exception e) {
 			// defensive: catch exceptions from a bad app
 			log.error(EXCEPTION.getMarker(), "exception in app during noMoreTransactions:", e);
@@ -1004,7 +1081,7 @@ class EventFlow extends AbstractEventFlow {
 		stateWork = stateCons.copy();
 		transLists.shuffle(); // move and copy the lists of transactions, too
 		log.debug(QUEUES.getMarker(), "SHUFFLE stateWork:{}",
-				stateWork.getState());
+				stateWork.getState().getSwirldState());
 		BlockingQueue<EventImpl> t = forWork;
 		forWork = forNext;
 		forNext = t;
@@ -1039,8 +1116,8 @@ class EventFlow extends AbstractEventFlow {
 	 * 		the queue to put the event in after handling the transactions
 	 * @return the event taken from fromQueue, or null if it was empty or timed out or had a noEvent
 	 */
-	EventImpl takeHandlePut(boolean allowShuffle, BlockingQueue<EventImpl> fromQueue, StateInfo stateInfo,
-			BlockingQueue<EventImpl> toQueue) {
+	EventImpl takeHandlePut(final boolean allowShuffle, final BlockingQueue<EventImpl> fromQueue,
+			final StateInfo stateInfo, final BlockingQueue<EventImpl> toQueue) {
 		Transaction[] transactions;
 		Instant baseTime;
 		EventImpl event = null;
@@ -1049,7 +1126,7 @@ class EventFlow extends AbstractEventFlow {
 		long wait = Settings.delayShuffle
 				- lastShuffle.until(Instant.now(), ChronoUnit.MILLIS);
 
-		if (stateInfo.getState() instanceof SwirldState2) {
+		if (stateInfo.getState().getSwirldState() instanceof SwirldState2) {
 			// wait forever if we will never shuffle
 			// (actually it wakes up then goes back to waiting, once every 15 seconds)
 			wait = 15000;
@@ -1067,6 +1144,7 @@ class EventFlow extends AbstractEventFlow {
 				log.error(EXCEPTION.getMarker(),
 						"shuffleBarrier interrupted or broken for state {}",
 						() -> stateInfo);
+				Thread.currentThread().interrupt();
 			}
 			return null;
 		}
@@ -1077,8 +1155,9 @@ class EventFlow extends AbstractEventFlow {
 				event = fromQueue.poll(wait, TimeUnit.MILLISECONDS);
 			} catch (InterruptedException e) {
 				event = null;
-				log.error(RECONNECT.getMarker(),
+				log.info(RECONNECT.getMarker(),
 						"takeHandlePut() fromQueue.poll() interrupted");
+				Thread.currentThread().interrupt();
 				return null;
 			}
 		}
@@ -1118,9 +1197,9 @@ class EventFlow extends AbstractEventFlow {
 						false, // isConsensus: this isn't in any event, so isn't yet consensus
 						null, // event: this transaction isn't in an event (so timeCreated will be now)
 						trans, // trans: the transaction to handle
-						null, // address: the address to possibly add to addressBook
 						baseTime, // baseTime: the timestamp (consensus or estimated) of the event
-						i); // timeInc: number of nanoseconds to add to baseTime to get consensus or est time
+						i * minTransTimestampIncrNanos); // timeInc: number of nanoseconds to add to baseTime to get
+				// consensus or est time
 			}
 		}
 
@@ -1133,47 +1212,39 @@ class EventFlow extends AbstractEventFlow {
 		// If we are handling consensus events, we should not handle any events after the freeze state, and before the
 		// end of the freeze period
 		if (fromQueue == forCons && savedStateInFreeze) {
-			toQueue.offer(event);
 			return event;
 		}
 
-		// estimate the timestamp that this event will have
-		event.estimateTime(platform.getSelfId(), platform.getStats().avgSelfCreatedTimestamp.getWeightedMean(),
-				platform.getStats().avgOtherReceivedTimestamp.getWeightedMean());
-		baseTime = event.getConsensusTimestamp();
+		boolean isConsensusEvent = event.isConsensus();//remember isConsensus, in case a thread changes it during this
+
+		if (isConsensusEvent) {
+			baseTime = event.getConsensusTimestamp();
+		} else {
+			// estimate the timestamp that this event will have
+			event.estimateTime(platform.getSelfId(), platform.getStats().avgSelfCreatedTimestamp.getWeightedMean(),
+					platform.getStats().avgOtherReceivedTimestamp.getWeightedMean());
+			baseTime = event.getEstimatedTime();
+		}
 
 		transactions = event.getTransactions();
-		// sys = event.getSysTransaction();
 
 		// Discard events with no transactions.
 		if (transactions == null
 				|| transactions.length == 0
-				|| (!isSwirldState2() && event.isConsensus()
+				|| (!isSwirldState2() && isConsensusEvent
 				&& stateInfo.getLastCons() != null
 				&& event.getConsensusOrder() <= stateInfo.getLastCons()
 				.getConsensusOrder())) {
-			if (toQueue == forSigs) {
-				// we need to save all the events to forSigs
-				event.estimateTime(platform.getSelfId(), platform.getStats().avgSelfCreatedTimestamp.getWeightedMean(),
-						platform.getStats().avgOtherReceivedTimestamp.getWeightedMean());
-				// update the estimate now, so the queue can sort on it
-				if (!toQueue.offer(event)) {
-					// this should never happen, because the queue passed
-					// in should always be unlimited capacity.
-					log.error(EXCEPTION.getMarker(),
-							"queue.offer returned false for queue forSigs");
-				}
-			}
 			return event;
 		}
-		if (event.isConsensus()) {
+		if (isConsensusEvent) {
 			stateInfo.setLastCons(event);// not used for SwirldsState2
 		}
 
 		// for SwirldState2, we say events from states other than stateCons are
 		// not consensus, even if they are, to keep the contract that every
 		// transaction is handled twice, once marked as consensus and once not.
-		boolean allowIsConsensusTrue = !(stateInfo.getState() instanceof SwirldState2)
+		boolean allowIsConsensusTrue = !(stateInfo.getState().getSwirldState() instanceof SwirldState2)
 				|| (fromQueue == forCons);
 		// if doCons just handled a self-transaction, then remove it from the
 		// list of transactions that will be sent to the new stateWork to handle
@@ -1182,7 +1253,7 @@ class EventFlow extends AbstractEventFlow {
 				&& platform.getSelfId().equalsMain(event.getCreatorId());
 		synchronized (stateInfo) {
 			for (int i = 0; i < transactions.length; i++) {
-				boolean isConsensus = event.isConsensus() && allowIsConsensusTrue;
+				boolean isConsensus = isConsensusEvent && allowIsConsensusTrue;
 
 				// this is the only place where handleTransaction is called on system
 				// transactions with ignoreSystem == false
@@ -1197,9 +1268,9 @@ class EventFlow extends AbstractEventFlow {
 						isConsensus, // isConsensus: does this event have a consensus order?
 						event, // event: the event containing the transaction (whose time gives timeCreated)
 						transactions[i], // trans: the transaction to handle
-						null, // address: the address to possibly add to addressBook
 						baseTime, // baseTime: the timestamp (consensus or estimated) of the event
-						i); // timeInc: number of nanoseconds to add to baseTime to get consensus or est time
+						i * minTransTimestampIncrNanos); // timeInc: number of nanoseconds to add to baseTime to get
+				// consensus or est time
 
 				if (selfConsTrans || isSwirldState2()) {
 					transLists.pollCons();
@@ -1219,5 +1290,47 @@ class EventFlow extends AbstractEventFlow {
 			}
 		}
 		return event;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void expandSignatures(final Transaction[] transactions) {
+		// Expand signatures for the given transactions
+		// Additionally, we should enqueue any signatures for verification
+		final long startTime = System.nanoTime();
+		final List<TransactionSignature> signatures = new LinkedList<>();
+
+		double expandTime = 0;
+
+		for (Transaction t : transactions) {
+			try {
+				if (!t.isSystem()) {
+					SwirldTransaction swirldTransaction = (SwirldTransaction) t;
+					final long expandStart = System.nanoTime();
+					if (getConsensusState() != null) {
+						getConsensusState().getSwirldState().expandSignatures(swirldTransaction);
+					}
+					final long expandEnd = (System.nanoTime() - expandStart);
+					expandTime += expandEnd * NANOSECONDS_TO_MILLISECONDS;
+
+					// expand signatures for application transaction
+					List<TransactionSignature> sigs = swirldTransaction.getSignatures();
+
+					if (sigs != null && !sigs.isEmpty()) {
+						signatures.addAll(sigs);
+					}
+				}
+			} catch (Exception ex) {
+				log.error(EXCEPTION.getMarker(),
+						"expandSignatures threw an unhandled exception", ex);
+			}
+		}
+
+		CryptoFactory.getInstance().verifyAsync(signatures);
+
+		final double elapsedTime = (System.nanoTime() - startTime) * NANOSECONDS_TO_MILLISECONDS;
+		CryptoStatistics.getInstance().setPlatformSigIntakeValues(elapsedTime, expandTime);
 	}
 }

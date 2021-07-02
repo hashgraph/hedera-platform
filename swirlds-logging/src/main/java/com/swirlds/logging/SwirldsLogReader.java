@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -112,6 +112,8 @@ public abstract class SwirldsLogReader<T> {
 	 * Get the next entry in the log.
 	 *
 	 * @return the next entry or null if the end of the log is reached
+	 * @throws IOException
+	 * 		thrown if any IO problems occur
 	 */
 	public T nextEntry() throws IOException {
 		return nextEntry(null);
@@ -124,6 +126,8 @@ public abstract class SwirldsLogReader<T> {
 	 * 		the filter to use to select the next entry to return. If the predicate returns true then the entry is
 	 * 		allowed to pass, otherwise it is rejected. If null then allow all entries to pass.
 	 * @return the next entry that passes or null if the end of the log is reached
+	 * @throws IOException
+	 * 		thrown if any IO problems occur
 	 */
 	public T nextEntry(final Predicate<T> filter) throws IOException {
 		while (true) {
@@ -148,6 +152,9 @@ public abstract class SwirldsLogReader<T> {
 	 * Read all entries from the log, adding them to the appropriate lists (as specified by
 	 * {@link SwirldsLogReader#collect(Predicate)} and calling the appropriate callbacks (as specified by
 	 * {@link SwirldsLogReader#addAction(Predicate, Consumer)}.
+	 *
+	 * @throws IOException
+	 * 		thrown if any IO problems occur
 	 */
 	public void readFully() throws IOException {
 		T entry;

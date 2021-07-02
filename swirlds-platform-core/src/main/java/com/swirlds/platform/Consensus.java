@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -16,6 +16,7 @@ package com.swirlds.platform;
 
 import com.swirlds.common.AddressBook;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.platform.components.OldEventChecker;
 import com.swirlds.platform.internal.CreatorSeqPair;
 
 import java.util.List;
@@ -24,7 +25,7 @@ import java.util.Queue;
 /**
  * An interface for classes that calculate consensus of events
  */
-public interface Consensus {
+public interface Consensus extends OldEventChecker {
 	/**
 	 * Adds an event to the consensus object. This should be the only public method that modifies the state of the
 	 * object.
@@ -36,6 +37,29 @@ public interface Consensus {
 	 * @return A list of consensus events, or null if no consensus was reached
 	 */
 	List<EventImpl> addEvent(EventImpl event, AddressBook addressBook);
+
+	/**
+	 * Get the minimum judge generation number in the most recent round for which the fame of all witnesses
+	 * has been decided, if such a round exists.
+	 *
+	 * If no such round exists, return the minimum judge generation number of the most recent
+	 * round-created.
+	 *
+	 * If there are no events yet, return {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}.
+	 *
+	 * @return the generation number
+	 */
+	long getMaxRoundGeneration();
+
+	/**
+	 * Get the minimum generation number of the witnesses in the minimum non-expired round.
+	 *
+	 * If there are no events yet, return {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}.
+	 *
+	 * @return the generation number
+	 */
+	long getMinRoundGeneration();
+
 
 	/**
 	 * return the round number of the latest round for which the fame of all witnesses has been decided for
@@ -60,6 +84,13 @@ public interface Consensus {
 	long getMinRound();
 
 	/**
+	 * Return the highest round number that has been deleted (or at least will be deleted soon).
+	 *
+	 * @return the round number that will be deleted (along with all earlier rounds)
+	 */
+	long getDeleteRound();
+
+	/**
 	 * Return the minimum generation of all the famous witnesses that are not in ancient rounds.
 	 *
 	 * <p>Define gen(R) to be the minimum generation of all the events that were famous witnesses in round R.
@@ -78,6 +109,19 @@ public interface Consensus {
 	 */
 	long getMinGenerationNonAncient();
 
+	/**
+	 * Return the minimum generation of all the famous witnesses that are not in expired rounds.
+	 *
+	 * @return the minimum (oldest, least recent) generation which is not yet expired
+	 */
+	long getMinGenerationNonExpired();
+
+	/**
+	 * Return the minimum round number from rounds that have not yet expired.
+	 *
+	 * @return the minimum (oldest, least recent) round which is not yet expired
+	 */
+	long getMinRoundNonExpired();
 
 	/**
 	 * @return the number of events in the hashgraph

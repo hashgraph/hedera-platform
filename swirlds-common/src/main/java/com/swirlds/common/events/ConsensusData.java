@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -27,20 +27,19 @@ import java.time.Instant;
  * A class used to store consensus data about an event.
  * <p>
  * This data is available for an event only after consensus has been determined for it. When an event is initially
- * created, there is no consensus data for it. It does not affect the hash that is signed.
+ * created, there is no consensus data for it.
  */
 public class ConsensusData implements SelfSerializable {
 	private static final long CLASS_ID = 0xddf20b7ce114a711L;
-	private static final int CLASS_VERSION = 1;
+	private static final int CLASS_VERSION_ORIGINAL = 1;
+	private static final int CLASS_VERSION_REMOVED_WITNESS_FAMOUS = 2;
+	private static final int CLASS_VERSION = CLASS_VERSION_REMOVED_WITNESS_FAMOUS;
 
-	/** generation (which is 1 plus max of parents' generations) */
+	/** @deprecated generation (which is 1 plus max of parents' generations) */
+	@Deprecated(forRemoval = true) // there is no need to store the events generation inside consensusData
 	private long generation;
 	/** the created round of this event (max of parents', plus either 0 or 1. 0 if not parents. -1 if neg infinity) */
 	private long roundCreated;
-	/** is this a witness? (is round > selfParent's round, or there is no self parent?) */
-	private boolean isWitness;
-	/** is this both a witness and the fame election is over? */
-	private boolean isFamous;
 	/** is there a consensus that this event is stale (no order, transactions ignored) */
 	private boolean stale;
 	/** the community's consensus timestamp for this event (or an estimate, if isConsensus==false) */
@@ -63,8 +62,6 @@ public class ConsensusData implements SelfSerializable {
 	public void serialize(SerializableDataOutputStream out) throws IOException {
 		out.writeLong(generation);
 		out.writeLong(roundCreated);
-		out.writeBoolean(isWitness);
-		out.writeBoolean(isFamous);
 		out.writeBoolean(stale);
 		out.writeBoolean(lastInRoundReceived);
 		out.writeInstant(consensusTimestamp);
@@ -76,8 +73,11 @@ public class ConsensusData implements SelfSerializable {
 	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
 		generation = in.readLong();
 		roundCreated = in.readLong();
-		isWitness = in.readBoolean();
-		isFamous = in.readBoolean();
+		if (version == CLASS_VERSION_ORIGINAL) {
+			// read isWitness & isFamous
+			in.readBoolean();
+			in.readBoolean();
+		}
 		stale = in.readBoolean();
 		lastInRoundReceived = in.readBoolean();
 		consensusTimestamp = in.readInstant();
@@ -96,8 +96,6 @@ public class ConsensusData implements SelfSerializable {
 		return new EqualsBuilder()
 				.append(generation, that.generation)
 				.append(roundCreated, that.roundCreated)
-				.append(isWitness, that.isWitness)
-				.append(isFamous, that.isFamous)
 				.append(stale, that.stale)
 				.append(roundReceived, that.roundReceived)
 				.append(consensusOrder, that.consensusOrder)
@@ -110,8 +108,6 @@ public class ConsensusData implements SelfSerializable {
 		return new HashCodeBuilder(17, 37)
 				.append(generation)
 				.append(roundCreated)
-				.append(isWitness)
-				.append(isFamous)
 				.append(stale)
 				.append(roundReceived)
 				.append(consensusOrder)
@@ -124,8 +120,6 @@ public class ConsensusData implements SelfSerializable {
 		return "ConsensusEventData{" +
 				"generation=" + generation +
 				", roundCreated=" + roundCreated +
-				", isWitness=" + isWitness +
-				", isFamous=" + isFamous +
 				", stale=" + stale +
 				", consensusTimestamp=" + consensusTimestamp +
 				", roundReceived=" + roundReceived +
@@ -134,10 +128,12 @@ public class ConsensusData implements SelfSerializable {
 				'}';
 	}
 
-	public long getGeneration() {
-		return generation;
-	}
-
+	/**
+	 * @deprecated
+	 *
+	 * @param generation the generation of the event
+	 */
+	@Deprecated(forRemoval = true) // there is no need to store the events generation inside consensusData
 	public void setGeneration(long generation) {
 		this.generation = generation;
 	}
@@ -148,22 +144,6 @@ public class ConsensusData implements SelfSerializable {
 
 	public void setRoundCreated(long roundCreated) {
 		this.roundCreated = roundCreated;
-	}
-
-	public boolean isWitness() {
-		return isWitness;
-	}
-
-	public void setWitness(boolean witness) {
-		isWitness = witness;
-	}
-
-	public boolean isFamous() {
-		return isFamous;
-	}
-
-	public void setFamous(boolean famous) {
-		isFamous = famous;
 	}
 
 	public boolean isStale() {

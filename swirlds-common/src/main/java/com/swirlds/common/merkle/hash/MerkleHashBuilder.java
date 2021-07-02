@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -19,8 +19,6 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.engine.CryptoEngine;
 import com.swirlds.common.crypto.engine.CryptoThreadFactory;
 import com.swirlds.common.crypto.engine.ThreadExceptionHandler;
-import com.swirlds.common.merkle.MerkleInternal;
-import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildHashException;
 import com.swirlds.common.merkle.iterators.MerkleHashIterator;
@@ -45,13 +43,15 @@ public class MerkleHashBuilder {
 
 	private final int cpuThreadCount;
 
-	private Cryptography cryptography;
+	private final Cryptography cryptography;
 
 	/**
 	 * Construct an object which calculates the hash of a merkle tree.
 	 *
 	 * @param cryptography
 	 * 		the {@link Cryptography} implementation to use
+	 * @param cpuThreadCount
+	 * 		the number of threads to be used for computing hash
 	 */
 	public MerkleHashBuilder(final Cryptography cryptography, final int cpuThreadCount) {
 		this.cryptography = cryptography;
@@ -93,6 +93,10 @@ public class MerkleHashBuilder {
 
 	/**
 	 * Compute the hash of the merkle tree on multiple worker threads.
+	 *
+	 * @param root
+	 * 		the root of the tree to hash
+	 * @return a Future which encapsulates the hash of the merkle tree
 	 */
 	public FutureMerkleHash digestTreeAsync(MerkleNode root) {
 		final StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
@@ -128,7 +132,7 @@ public class MerkleHashBuilder {
 			final MerkleNode root,
 			final StackTraceElement[] stackTrace) {
 
-		Runnable runnable = () -> {
+		return () -> {
 
 			Iterator<MerkleNode> it;
 			if (threadId == 0) {
@@ -154,8 +158,6 @@ public class MerkleHashBuilder {
 				throw new IllegalChildHashException(ex);
 			}
 		};
-
-		return new Thread(runnable);
 	}
 
 	/**
@@ -184,9 +186,9 @@ public class MerkleHashBuilder {
 				}
 
 				if (node.isLeaf()) {
-					cryptography.digestSync((MerkleLeaf) node, MERKLE_DIGEST_TYPE);
+					cryptography.digestSync(node.asLeaf(), MERKLE_DIGEST_TYPE);
 				} else {
-					cryptography.digestSync((MerkleInternal) node, MERKLE_DIGEST_TYPE);
+					cryptography.digestSync(node.asInternal(), MERKLE_DIGEST_TYPE);
 				}
 			}
 		}

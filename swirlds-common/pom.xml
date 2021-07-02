@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ (c) 2016-2020 Swirlds, Inc.
+  ~ (c) 2016-2021 Swirlds, Inc.
   ~
   ~ This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
   ~ intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -23,7 +23,7 @@
 	<parent>
 		<groupId>com.swirlds</groupId>
 		<artifactId>swirlds-platform</artifactId>
-		<version>0.8.0-orvw.1</version>
+		<version>0.15.1-orvw.1</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -49,23 +49,18 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-logging</artifactId>
-			<version>0.8.0-orvw.1</version>
+			<version>0.15.1-orvw.1</version>
 		</dependency>
 
 		<!-- LazySodium -->
 		<dependency>
-			<groupId>com.goterl.lazycode</groupId>
+			<groupId>com.goterl</groupId>
 			<artifactId>lazysodium-java</artifactId>
 		</dependency>
 
 		<dependency>
 			<groupId>net.java.dev.jna</groupId>
 			<artifactId>jna</artifactId>
-		</dependency>
-
-		<dependency>
-			<groupId>co.libly</groupId>
-			<artifactId>resource-loader</artifactId>
 		</dependency>
 
 		<!-- JOCL -->

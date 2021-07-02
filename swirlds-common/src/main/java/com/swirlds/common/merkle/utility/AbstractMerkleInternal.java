@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,111 +14,183 @@
 
 package com.swirlds.common.merkle.utility;
 
+import com.swirlds.common.MutabilityException;
+import com.swirlds.common.ReferenceCountException;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
+import com.swirlds.common.merkle.exceptions.IllegalChildBoundsException;
 import com.swirlds.common.merkle.exceptions.IllegalChildTypeException;
+import com.swirlds.common.merkle.route.MerkleRoute;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static com.swirlds.common.io.SerializableStreamConstants.NULL_CLASS_ID;
+import static com.swirlds.common.merkle.utility.MerkleUtils.merkleDebugString;
 
 /**
- * This abstract class implements boiler plate functionality for a {@link MerkleInternal}. Classes that implement
- * {@link MerkleInternal} are not required to extend this class, but absent a reason it is recommended to avoid
- * re-implementation of this code.
+ * This abstract class implements boiler plate functionality for a binary {@link MerkleInternal} (i.e. an internal
+ * node with 2 or fewer children). Classes that implement (@link MerkleInternal} are not required to extend an
+ * abstract class such as this or {@link AbstractNaryMerkleInternal}, but absent a reason it is recommended to do so
+ * in order to avoid re-implementation of this code.
  */
 public abstract class AbstractMerkleInternal extends AbstractMerkleNode implements MerkleInternal {
 
-	private ArrayList<MerkleNode> children;
-
-	public AbstractMerkleInternal() {
-		children = new ArrayList<>(getMinimumChildCount(getVersion()) == 0 ? 2 : getMinimumChildCount(getVersion()));
-	}
-
 	/**
-	 * Classes that inherit from AbstractMerkleLeaf are required to call super() in their constructors.
-	 */
-	public AbstractMerkleInternal(int initialSize) {
-		children = new ArrayList<>(initialSize);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getNumberOfChildren() {
-		return children.size();
-	}
-
-	/**
-	 * {@inheritDoc}
+	 * Constructor for AbstractMerkleInternal.  Optional bounds testing.
 	 *
-	 * If the child at the requested index is within the allowed bounds as specified by getMaximumChildCount
-	 * but a child has never been inserted at that index, return null. If the requested index is
-	 * less than 0 or not less than the maximum child count then return an IllegalChildIndexException.
+	 * @param checkChildConstraints
+	 * 		true = test min/max bounds for the number of children,
+	 * 		false = don't (skip the performance hit in the BinaryMerkle case)
 	 */
-	@Override
-	@SuppressWarnings("unchecked")
-	public final <T extends MerkleNode> T getChild(int index) {
-		if (children.size() <= index || index < 0) {
-			checkChildIndexIsValid(index);
-			return null;
+	protected AbstractMerkleInternal(final boolean checkChildConstraints) {
+		if (checkChildConstraints) {
+			final int version = getVersion();
+			final int min = getMinimumChildCount(version);
+			final int max = getMaximumChildCount(version);
+
+			if (!((min >= MIN_CHILD_COUNT)
+					&& (max >= MAX_CHILD_COUNT_LBOUND)
+					&& (max >= min)
+					&& (max <= MAX_CHILD_COUNT_UBOUND))) {
+				throw new IllegalChildBoundsException(MIN_CHILD_COUNT, MAX_CHILD_COUNT_UBOUND);
+			}
 		}
-		return (T) children.get(index);
+	}
+
+	/**
+	 * Copy constructor. Initializes internal variables and copies the route. Does not copy children or other metadata.
+	 */
+	protected AbstractMerkleInternal(final AbstractMerkleInternal that) {
+		super(that);
+	}
+
+	/**
+	 * This is an implementation specific version of setChild.
+	 *
+	 * @param index
+	 * 		which child position is going to be updated
+	 * @param child
+	 * 		new node to attach
+	 */
+	protected abstract void setChildInternal(final int index, final MerkleNode child);
+
+	/**
+	 * Allow N-Ary and Binary Merkle classes to make space as appropriate.
+	 *
+	 * @param index
+	 * 		in the N-Ary case, expand the array to accommodate this many children
+	 * 		in the Binary case, this is a NOP
+	 */
+	protected abstract void allocateSpaceForChild(final int index);
+
+	/**
+	 * Check whether the requested index is in valid range [0, maximum child count).
+	 * In the Binary case, this is a NOP as the error testing happens in getChild(index).
+	 *
+	 * @param index
+	 * 		- child position to verify is legal
+	 */
+	protected abstract void checkChildIndexIsValid(final int index);
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public final void setChild(final int index, final MerkleNode child) {
+		setChild(index, child, null);
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
-	 * Note: this method is not final to allow the FCMap to track parents. Eventually this method will become final.
 	 */
 	@Override
-	public void setChild(int index, MerkleNode child) {
+	public final void setChild(final int index, final MerkleNode child, final MerkleRoute childRoute) {
+		if (isImmutable()) {
+			throw new MutabilityException("Can not set child on immutable parent. " + merkleDebugString(this));
+		}
+		if (isReleased()) {
+			throw new ReferenceCountException("Can not set child on released parent. " + merkleDebugString(this));
+		}
+
 		checkChildIndexIsValid(index);
 
 		long classId = NULL_CLASS_ID;
+
 		if (child != null) {
 			classId = child.getClassId();
+
+			if (child.isImmutable()) {
+				throw new MutabilityException("Immutable child can not be added to parent. parent = "
+						+ merkleDebugString(this) + ", child = " + merkleDebugString(child));
+			}
 		}
 
 		if (!childHasExpectedType(index, classId, getVersion())) {
 			throw new IllegalChildTypeException(index, classId, getVersion(), getClassId());
 		}
 
-		// When children change the hash needs to be invalidated
-		invalidateHash();
+		allocateSpaceForChild(index);
 
-		for (int i = children.size(); i <= index; i++) {
-			children.add(null);
-		}
-
-		MerkleNode oldChild = children.get(index);
+		final MerkleNode oldChild = getChild(index);
 		if (oldChild == child) {
 			return;
 		}
+		// When children change the hash needs to be invalidated
+		invalidateHash();
 
 		// Decrement the reference count of the original child
 		if (oldChild != null) {
 			oldChild.decrementReferenceCount();
 		}
 
-		// Increment the reference count of the new child
 		if (child != null) {
+			// Increment the reference count of the new child
 			child.incrementReferenceCount();
+
+			if (childRoute == null) {
+				child.setRoute(computeRouteForChild(index));
+			} else {
+				child.setRoute(childRoute);
+			}
 		}
 
-		children.set(index, child);
+		setChildInternal(index, child);
+	}
+
+	/**
+	 * Compute and construct a new route for a child at a given position.
+	 * Recycles the route of the existing child if possible.
+	 *
+	 * @param index
+	 * 		the index of the child
+	 */
+	private MerkleRoute computeRouteForChild(final int index) {
+		MerkleRoute childRoute = null;
+		if (getNumberOfChildren() > index) {
+			final MerkleNode oldChild = getChild(index);
+			if (oldChild != null) {
+				childRoute = oldChild.getRoute();
+			}
+		}
+		if (childRoute == null) {
+			childRoute = getRoute().extendRoute(index);
+		}
+		return childRoute;
 	}
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * Deserialize from a list of children
+	 *
+	 * @param children
+	 * 		A list of children.
+	 * @param version
+	 * 		Version (e.g. format) of the deserialized data.
 	 */
 	@Override
-	public void addDeserializedChildren(List<MerkleNode> children, final int version) {
-		this.children = new ArrayList<>(children.size());
+	public void addDeserializedChildren(final List<MerkleNode> children, final int version) {
 		for (int childIndex = 0; childIndex < children.size(); childIndex++) {
 			setChild(childIndex, children.get(childIndex));
 		}
@@ -128,17 +200,12 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized final void release() {
-		if (getReferenceCount() > 0) {
-			throw new IllegalStateException("Nodes can only be deleted when the reference count equals 0.");
-		}
-		if (!isReleased()) {
-			onRelease();
-			markAsReleased();
-			for (MerkleNode child: children) {
-				if (child != null) {
-					child.decrementReferenceCount();
-				}
+	protected void releaseInternal() {
+		onRelease();
+		for (int index = 0; index < getNumberOfChildren(); index++) {
+			final MerkleNode child = getChild(index);
+			if (child != null) {
+				child.decrementReferenceCount();
 			}
 		}
 	}
@@ -160,16 +227,28 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 	}
 
 	/**
-	 * check whether the requested index is in valid range [0, maximum child count),
-	 * if not throw an {@link IllegalChildIndexException}
+	 * {@inheritDoc}
 	 *
-	 * @param index
-	 * 		requested index of a child
+	 * WARNING: setting the route on an internal node with children requires a full iteration of the subtree.
+	 * For large trees this may be very expensive.
 	 */
-	private void checkChildIndexIsValid(final int index) {
-		int maxSize = Math.min(getMaximumChildCount(getVersion()), MerkleInternal.MAX_CHILD_COUNT);
-		if (index < 0 || index >= maxSize) {
-			throw new IllegalChildIndexException(0, maxSize - 1, index);
+	@Override
+	public final void setRoute(final MerkleRoute route) {
+		if (!getRoute().equals(route)) {
+			super.setRoute(route);
+			// If there are children, fix the routes of the children.
+			for (int index = 0; index < getNumberOfChildren(); index++) {
+				final MerkleNode child = getChild(index);
+				if (child != null) {
+					child.setRoute(getRoute().extendRoute(index));
+				}
+			}
 		}
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public abstract AbstractMerkleInternal copy();
 }

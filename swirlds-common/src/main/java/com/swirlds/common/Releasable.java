@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -42,10 +42,25 @@ public interface Releasable {
 
 	/**
 	 * Throws an exception if {@link #isReleased()}} returns {@code true}
+	 *
+	 * @throws ReferenceCountException
+	 * 		if this object is released
 	 */
 	default void throwIfReleased() {
+		throwIfReleased("This operation is not permitted on a released object.");
+	}
+
+	/**
+	 * Throws an exception if {@link #isReleased()}} returns {@code true}
+	 *
+	 * @param errorMessage
+	 * 		an error message for the exception
+	 * @throws ReferenceCountException
+	 * 		if this object is released
+	 */
+	default void throwIfReleased(final String errorMessage) {
 		if (this.isReleased()) {
-			throw new IllegalStateException("This operation is not permitted on a released object.");
+			throw new ReferenceCountException(errorMessage);
 		}
 	}
 

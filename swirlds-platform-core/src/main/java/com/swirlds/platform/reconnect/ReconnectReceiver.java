@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -19,11 +19,12 @@ import com.swirlds.common.NodeId;
 import com.swirlds.common.io.BadIOException;
 import com.swirlds.common.io.extendable.CountingStreamExtension;
 import com.swirlds.common.io.extendable.ExtendableInputStream;
-import com.swirlds.common.merkle.MerkleUtils;
 import com.swirlds.common.merkle.io.MerkleDataInputStream;
 import com.swirlds.common.merkle.io.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.ReceivingSynchronizer;
+import com.swirlds.common.merkle.utility.MerkleUtils;
 import com.swirlds.logging.payloads.ReconnectDataUsagePayload;
+import com.swirlds.logging.payloads.ReconnectFailurePayload;
 import com.swirlds.platform.AbstractPlatform;
 import com.swirlds.platform.Crypto;
 import com.swirlds.platform.SyncConnection;
@@ -32,6 +33,7 @@ import com.swirlds.platform.Utilities;
 import com.swirlds.platform.state.SigInfo;
 import com.swirlds.platform.state.SigSet;
 import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.State;
 import com.swirlds.platform.sync.SyncInputStream;
 import com.swirlds.platform.sync.SyncOutputStream;
 import org.apache.logging.log4j.LogManager;
@@ -44,7 +46,6 @@ import java.util.concurrent.Future;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
-import static com.swirlds.platform.reconnect.ReconnectSender.SOCKET_TIMEOUT_MILLISECONDS;
 
 /**
  * This class encapsulates reconnect logic for the out of date node which is
@@ -55,11 +56,13 @@ public class ReconnectReceiver {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
 
-	private SyncConnection connection;
-	private AddressBook addressBook;
-	private Crypto crypto;
+	private final SyncConnection connection;
+	private final AddressBook addressBook;
+	private final Crypto crypto;
 
-	private SignedState currentState;
+	private State currentState;
+	private final int reconnectSocketTimeout;
+
 	private SignedState signedState;
 
 	/**
@@ -67,24 +70,48 @@ public class ReconnectReceiver {
 	 */
 	private int originalSocketTimeout;
 
-	public ReconnectReceiver(SyncConnection connection, AddressBook addressBook, SignedState currentState,
-			Crypto crypto) {
+	public ReconnectReceiver(
+			final SyncConnection connection,
+			final AddressBook addressBook,
+			final State currentState,
+			final Crypto crypto,
+			final int reconnectSocketTimeout) {
+
+		currentState.throwIfImmutable("Can not perform reconnect with immutable state");
+		currentState.throwIfReleased("Can not perform reconnect with released state");
+
 		this.connection = connection;
 		this.addressBook = addressBook;
 		this.currentState = currentState;
 		this.crypto = crypto;
+		this.reconnectSocketTimeout = reconnectSocketTimeout;
 	}
 
+	/**
+	 * @throws ReconnectException
+	 * 		thrown when there is an error in the underlying protocol
+	 */
 	private void increaseSocketTimeout() throws ReconnectException {
 		try {
 			originalSocketTimeout = connection.getSocket().getSoTimeout();
-			connection.getSocket().setSoTimeout(SOCKET_TIMEOUT_MILLISECONDS);
+			connection.getSocket().setSoTimeout(reconnectSocketTimeout);
 		} catch (SocketException e) {
 			throw new ReconnectException(e);
 		}
 	}
 
+	/**
+	 * @throws ReconnectException
+	 * 		thrown when there is an error in the underlying protocol
+	 */
 	private void resetSocketTimeout() throws ReconnectException {
+		if (!connection.connected()) {
+			log.debug(RECONNECT.getMarker(),
+					"{} connection to {} is no longer connected. Returning.",
+					connection.getSelfId(), connection.getOtherId());
+			return;
+		}
+
 		try {
 			connection.getSocket().setSoTimeout(originalSocketTimeout);
 		} catch (SocketException e) {
@@ -94,14 +121,33 @@ public class ReconnectReceiver {
 
 	/**
 	 * Perform the reconnect operation.
+	 *
+	 * @return true if the other node is willing to assist with reconnect, otherwise false
+	 * @throws ReconnectException
+	 * 		thrown if I/O related errors occur, or when there is an error in the underlying protocol
 	 */
-	public void execute() throws ReconnectException {
+	public boolean execute() throws ReconnectException {
+		// If the connection object to be used here has been disconnected on another thread, we can
+		// not reconnect with this connection.
+		if (!connection.connected()) {
+			log.debug(RECONNECT.getMarker(),
+					"{} connection to {} is no longer connected. Returning.",
+					connection.getSelfId(), connection.getOtherId());
+			return false;
+		}
+
 		increaseSocketTimeout();
 		try {
-			assertNodeIsReadyForReconnect();
+			if (!isNodeReadyForReconnect()) {
+				return false;
+			}
 			reconnect();
 
-			MerkleUtils.rehashTree(signedState);
+			// This was put in place to compensate for a bug that caused incorrect
+			// clearing of the hash in the tree. This should be removed once fast
+			// copies are handled by a merkle utility (as this will not be add-hoc
+			// and prone to this type of bug).
+			MerkleUtils.rehashTree(signedState.getState());
 
 			receiveSignatures();
 			validate();
@@ -112,37 +158,52 @@ public class ReconnectReceiver {
 		} finally {
 			resetSocketTimeout();
 		}
+		return true;
 	}
 
 	/**
 	 * Validate that the other node is willing to reconnect with us.
+	 *
+	 * @return true if the other node is willing to assist with reconnect
+	 * @throws IOException
+	 * 		thrown when any I/O related errors occur
+	 * @throws ReconnectException
+	 * 		thrown when the other node is unwilling to reconnect right now
 	 */
-	private void assertNodeIsReadyForReconnect() throws IOException, ReconnectException {
+	private boolean isNodeReadyForReconnect() throws IOException, ReconnectException {
 		NodeId otherId = connection.getOtherId();
-		NodeId selfId = connection.getSelfId();
 		SyncInputStream dis = connection.getDis();
 		SyncOutputStream dos = connection.getDos();
 		AbstractPlatform platform = connection.getPlatform();
 
 		// send the request
-		dos.write(SyncConstants.commStateRequest);
+		dos.write(SyncConstants.COMM_STATE_REQUEST);
 		dos.flush();
-		log.debug(RECONNECT.getMarker(), "{} sent commStateRequest to {}", selfId, otherId);
+		log.info(RECONNECT.getMarker(), "Requesting to reconnect with node {}.", otherId);
 
 		// read the response
 		byte stateResponse = dis.readByte();
-		if (stateResponse == SyncConstants.commStateAck) {
-			log.debug(RECONNECT.getMarker(), "{} got commStateAck from {}", platform.getSelfId(), otherId);
-		} else if (stateResponse == SyncConstants.commStateNack) {
-			throw new ReconnectException("Node is unwilling to reconnect right now.");
+		if (stateResponse == SyncConstants.COMM_STATE_ACK) {
+			log.info(RECONNECT.getMarker(),
+					"Node {} is willing to help this node to reconnect.", otherId);
+			return true;
+		} else if (stateResponse == SyncConstants.COMM_STATE_NACK) {
+			log.info(RECONNECT.getMarker(),
+					new ReconnectFailurePayload("Node " + otherId
+							+ " is unwilling to help this node to reconnect.",
+							ReconnectFailurePayload.CauseOfFailure.REJECTION));
+			return false;
 		} else {
-			throw new BadIOException("commStateRequest was sent but reply was " + stateResponse +
-					" instead of commStateAck or commStateNack");
+			throw new BadIOException("COMM_STATE_REQUEST was sent but reply was " + stateResponse +
+					" instead of COMM_STATE_ACK or COMM_STATE_NACK");
 		}
 	}
 
 	/**
 	 * Get a copy of the state from the other node.
+	 *
+	 * @throws InterruptedException
+	 * 		if the current thread is interrupted
 	 */
 	private void reconnect() throws InterruptedException {
 		ExtendableInputStream<CountingStreamExtension> countingStream =
@@ -153,7 +214,8 @@ public class ReconnectReceiver {
 		ReceivingSynchronizer synchronizer = new ReceivingSynchronizer(in, out,
 				currentState, log, RECONNECT.getMarker());
 
-		signedState = (SignedState) synchronizer.synchronize();
+		final State state = (State) synchronizer.synchronize();
+		signedState = new SignedState(state);
 
 		double mbReceived = countingStream.getExtension().getCount() / 1024.0 / 1024.0;
 		log.info(RECONNECT.getMarker(), () -> new ReconnectDataUsagePayload(
@@ -163,11 +225,14 @@ public class ReconnectReceiver {
 
 	/**
 	 * Validate that the state matches the signatures.
+	 *
+	 * @throws ReconnectException
+	 * 		thrown when received signed state does not have enough valid signatures
 	 */
 	private void validate() throws ReconnectException {
 
 		// validate the signatures from the received state
-		log.debug(RECONNECT.getMarker(), "Validating signatures of the received state");
+		log.info(RECONNECT.getMarker(), "Validating signatures of the received state");
 		int numSigs = signedState.getSigSet().getNumMembers();
 		Future<Boolean>[] validFutures = new Future[numSigs];
 		for (int i = 0; i < numSigs; i++) {
@@ -177,7 +242,7 @@ public class ReconnectReceiver {
 				continue;
 			}
 			validFutures[i] = crypto.verifySignatureParallel(
-					signedState.getHashBytes(),
+					signedState.getStateHashBytes(),
 					sigInfo.getSig(),
 					key,
 					(Boolean b) -> {
@@ -199,9 +264,9 @@ public class ReconnectReceiver {
 			}
 		}
 
-		log.debug(RECONNECT.getMarker(), "Signed State valid Stake :{} ", validStake);
-		log.debug(RECONNECT.getMarker(), "AddressBook Stake :{} ", addressBook.getTotalStake());
-		log.debug(RECONNECT.getMarker(), "StrongMinority status: {}",
+		log.info(RECONNECT.getMarker(), "Signed State valid Stake :{} ", validStake);
+		log.info(RECONNECT.getMarker(), "AddressBook Stake :{} ", addressBook.getTotalStake());
+		log.info(RECONNECT.getMarker(), "StrongMinority status: {}",
 				Utilities.isStrongMinority(validStake, addressBook.getTotalStake()));
 		if (!Utilities.isStrongMinority(validStake, addressBook.getTotalStake())) {
 			throw new ReconnectException(String.format(
@@ -210,14 +275,17 @@ public class ReconnectReceiver {
 					validCount, addressBook.getSize(), validStake, addressBook.getTotalStake()));
 		}
 
-		log.debug(RECONNECT.getMarker(), "State is valid");
+		log.info(RECONNECT.getMarker(), "State is valid");
 	}
 
 	/**
 	 * Copy the signatures for the state from the other node.
+	 *
+	 * @throws IOException
+	 * 		if any I/O related errors occur
 	 */
 	private void receiveSignatures() throws IOException {
-		log.debug(RECONNECT.getMarker(), "Receiving signed state signatures");
+		log.info(RECONNECT.getMarker(), "Receiving signed state signatures");
 		SigSet sigSet = new SigSet(addressBook);
 		sigSet.deserialize(connection.getDis(), sigSet.getVersion());
 		signedState.setSigSet(sigSet);

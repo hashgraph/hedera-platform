@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,19 +15,10 @@ package com.swirlds.platform.state;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swirlds.common.AddressBook;
-import com.swirlds.common.FastCopyable;
+import com.swirlds.common.Releasable;
 import com.swirlds.common.SwirldState;
-import com.swirlds.common.crypto.CryptoFactory;
-import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.merkle.MerkleInternal;
-import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
-import com.swirlds.common.merkle.utility.AbstractMerkleInternal;
 import com.swirlds.platform.EventImpl;
-import com.swirlds.platform.Utilities;
-import com.swirlds.platform.event.AbbreviatedStateEvent;
-import com.swirlds.platform.internal.CreatorSeqPair;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -36,10 +27,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
@@ -59,29 +47,12 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
  * The signed state is also saved to disk, and is given to a new member joining the network, or to an old
  * member rejoining after a long absence.
  */
-public class SignedState extends AbstractMerkleInternal implements FastCopyable<SignedState>, SignedStateInfo,
-		MerkleInternal {
+public class SignedState implements Releasable, SignedStateInfo {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
-	/** the maximum number of events allowed when de-serializing a state */
-	static final int MAX_EVENTS_IN_STATE = 1000000;
-
-	private static final long CLASS_ID = 0x2971b4ba7dd84402L;
-
-	private static class ClassVersion {
-		public static final int ORIGINAL = 1;
-		public static final int ADD_MIN_GEN = 2;
-		public static final int EVENT_REFACTOR = 3;
-		public static final int MIGRATE_TO_SERIALIZABLE = 4;
-	}
 
 	/** the signatures collected so far (including from self) */
 	private SigSet sigSet;
-
-	// /** the hash of the SwirldsState of SwirldState2 object being saved */
-	// private byte[] swirldStateHash = null;
-	// /** the hash of the AddressBook being saved */
-	// private byte[] addressBookHash = null;
 
 	/** specifies whether this state should be saved to disk */
 	private boolean shouldSaveToDisk;
@@ -108,12 +79,29 @@ public class SignedState extends AbstractMerkleInternal implements FastCopyable<
 	private int weakReservations = 0;
 
 	/**
+	 * True if the signed state has been deleted.
+	 */
+	private boolean released;
+
+	/**
 	 * Indicates whether this {@link SignedState} has been written to disk
 	 */
 	private boolean savedToDisk = false;
 
 	/** Data that is stored to local storage and is not hashed */
 	private LocalStateEvents localStateEvents;
+
+	private State state;
+
+	/**
+	 * A cached copy of the address book.
+	 */
+	private AddressBook addressBook;
+
+	@Override
+	public long getLastRoundReceived() {
+		return state.getPlatformState().getRound();
+	}
 
 	/**
 	 * {@inheritDoc}
@@ -124,78 +112,15 @@ public class SignedState extends AbstractMerkleInternal implements FastCopyable<
 		return sigSet;
 	}
 
-	private StateSettings stateSettings;
-
-	private static class ChildIndices {
-		/**
-		 * A fast copy of the state resulting from all transactions in consensus order from all events with
-		 * received rounds up through the round this SignedState represents.
-		 */
-		public static final int STATE = 0;
-		/**
-		 * Contains all other signed state data. In the future, this may be broken up into multiple smaller leaves.
-		 */
-		public static final int SIGNED_STATE_LEAF = 1;
-
-		public static final int CHILD_COUNT = 2;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
 	@Override
-	public int getNumberOfChildren() {
-		return ChildIndices.CHILD_COUNT;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getMinimumChildCount(int version) {
-		return ChildIndices.CHILD_COUNT;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getMaximumChildCount(int version) {
-		return ChildIndices.CHILD_COUNT;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean childHasExpectedType(int index, long childClassId, int version) {
-		switch (index) {
-			case ChildIndices.STATE:
-				return true;
-			case ChildIndices.SIGNED_STATE_LEAF:
-				return childClassId == SignedStateLeaf.CLASS_ID;
-			default:
-				throw new IllegalChildIndexException(getMinimumChildCount(getVersion()),
-						getMaximumChildCount(getVersion()), index);
+	public AddressBook getAddressBook() {
+		if (addressBook == null) {
+			addressBook = getSwirldState().getAddressBookCopy();
 		}
+		return addressBook;
 	}
 
-	@JsonIgnore
-	public SwirldState getState() {
-		return getChild(ChildIndices.STATE);
-	}
-
-	public void setState(SwirldState state) {
-		setChild(ChildIndices.STATE, state);
-	}
-
-	public SignedStateLeaf getLeaf() {
-		return getChild(ChildIndices.SIGNED_STATE_LEAF);
-	}
-
-	private void setLeaf(SignedStateLeaf leaf) {
-		setChild(ChildIndices.SIGNED_STATE_LEAF, leaf);
-	}
+	private StateSettings stateSettings;
 
 	/**
 	 * Instantiate a signed state, storing the information passed as parameters in it. Also calculate and
@@ -228,42 +153,35 @@ public class SignedState extends AbstractMerkleInternal implements FastCopyable<
 	 * @param minGenInfo
 	 * 		the minimum generation of famous witnesses per round
 	 */
-	public SignedState(SwirldState state, long lastRoundReceived, long numEventsCons,
-			Hash hashEventsCons, AddressBook addressBook, EventImpl[] events,
-			Instant consensusTimestamp, boolean freezeState,
-			List<Pair<Long, Long>> minGenInfo) {
-		super();
-		setState(state);
-		setLeaf(new SignedStateLeaf());
-		getLeaf().setRound(lastRoundReceived);
-		getLeaf().setNumEventsCons(numEventsCons);
-		getLeaf().setHashEventsCons(hashEventsCons);
-		getLeaf().setAddressBook(addressBook);
-		getLeaf().setEvents(events);
-		getLeaf().setConsensusTimestamp(consensusTimestamp);
-		this.freezeState = freezeState;
-		getLeaf().setMinGenInfo(minGenInfo);
-		getLeaf().setLastTransactionTimestampFromEvents();
+	public SignedState(
+			final State state,
+			final long lastRoundReceived,
+			final long numEventsCons,
+			final Hash hashEventsCons,
+			final AddressBook addressBook,
+			final EventImpl[] events,
+			final Instant consensusTimestamp,
+			final boolean freezeState,
+			final List<Pair<Long, Long>> minGenInfo) {
 
+		this.state = state;
+		state.incrementReferenceCount();
+
+		state.setPlatformState(new PlatformState());
+		state.getPlatformState().setRound(lastRoundReceived);
+		state.getPlatformState().setNumEventsCons(numEventsCons);
+		state.getPlatformState().setHashEventsCons(hashEventsCons);
+		state.getPlatformState().setAddressBook(addressBook);
+		state.getPlatformState().setEvents(events);
+		state.getPlatformState().setConsensusTimestamp(consensusTimestamp);
+		state.getPlatformState().setMinGenInfo(minGenInfo);
+		state.getPlatformState().setLastTransactionTimestampFromEvents();
+
+		this.freezeState = freezeState;
 		sigSet = new SigSet(addressBook);
 
 		// create a snapshot of the leaf to compare it later and see if its modified
-		getLeaf().createSnapshot();
-	}
-
-	private SignedState(final SignedState sourceState) {
-		super();
-		setState(sourceState.getState());
-		setLeaf(new SignedStateLeaf());
-		getLeaf().setRound(sourceState.getLastRoundReceived());
-		getLeaf().setNumEventsCons(sourceState.getNumEventsCons());
-		getLeaf().setHashEventsCons(sourceState.getHashEventsCons());
-		getLeaf().setAddressBook(sourceState.getAddressBook().copy());
-		getLeaf().setEvents(sourceState.getEvents());
-		getLeaf().setConsensusTimestamp(sourceState.getConsensusTimestamp());
-		getLeaf().setMinGenInfo(sourceState.getMinGenInfo());
-		this.freezeState = sourceState.freezeState;
-		this.sigSet = sourceState.getSigSet().copy();
+		state.getPlatformState().createSnapshot();
 	}
 
 	/**
@@ -273,196 +191,41 @@ public class SignedState extends AbstractMerkleInternal implements FastCopyable<
 		super();
 	}
 
+	public SignedState(State state) {
+		state.incrementReferenceCount();
+		this.state = state;
+	}
+
 	/**
-	 * This constructor is used for loading the SignedState from a byte stream. It needs an initial
-	 * SwirldState to call its copyFrom method to load that state.
+	 * Get the root of the state. This object should not be held beyond the scope of this SignedState
+	 * or else there is risk that the state may be deleted/archived unexpectedly.
 	 *
-	 * @param state
-	 * 		a blank state of the class that is stored in the byte stream
+	 * @return the state contained in the signed state
 	 */
-	public SignedState(SwirldState state) {
-		super();
-		setState(state);
-		setLeaf(new SignedStateLeaf());
+	public State getState() {
+		return state;
 	}
 
 	/**
-	 * Get the hash of the signed state. This was actually calculated in the constructor.
-	 *
-	 * @return the hash
+	 * @return whether this signed state should be saved to disk
 	 */
-	@Deprecated
-	public byte[] getHashBytes() {
-		return getHash().getValue();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public long getLastRoundReceived() {
-		return getLeaf().getRound();
-	}
-
-	/**
-	 * Get the events for the round that is being signed and the preceding rounds
-	 *
-	 * @return Event array, can be null
-	 */
-	public EventImpl[] getEvents() {
-		return getLeaf().getEvents();
-	}
-
-	/**
-	 * Get the number of consensus events processed by the state that is being signed
-	 *
-	 * @return the number of consensus events processed
-	 */
-	public long getNumEventsCons() {
-		return getLeaf().getNumEventsCons();
-	}
-
-	/**
-	 * Get the running hash of all events processed by the state that is being signed
-	 *
-	 * @return the running hash of all events processed
-	 */
-	public Hash getHashEventsCons() {
-		return getLeaf().getHashEventsCons();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public AddressBook getAddressBook() {
-		return getLeaf().getAddressBook();
-	}
-
-	public Instant getConsensusTimestamp() {
-		return getLeaf().getConsensusTimestamp();
-	}
-
-	public void setAddressBook(AddressBook addressBook) {
-		getLeaf().setAddressBook(addressBook);
-	}
-
 	boolean shouldSaveToDisk() {
 		return shouldSaveToDisk;
 	}
 
+	/**
+	 * @param shouldSaveToDisk
+	 * 		whether this signed state should be saved to disk
+	 */
 	public void setShouldSaveToDisk(boolean shouldSaveToDisk) {
 		this.shouldSaveToDisk = shouldSaveToDisk;
 	}
 
+	/**
+	 * @return is this the last state saved before the freeze period
+	 */
 	public boolean isFreezeState() {
 		return freezeState;
-	}
-
-	byte[] getSwirldStateHash() {
-		return getState().getHash().getValue();
-	}
-
-	public Hash getStateHash() {
-		return getState().getHash();
-	}
-
-	public List<Pair<Long, Long>> getMinGenInfo() {
-		return getLeaf().getMinGenInfo();
-	}
-
-	public Instant getLastTransactionTimestamp() {
-		return getLeaf().getLastTransactionTimestamp();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public SignedState copy() {
-		throwIfImmutable();
-		return null;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void copyFrom(SerializableDataInputStream inStream) throws IOException {
-		Cryptography crypto = CryptoFactory.getInstance();
-
-		long instanceVersion = inStream.readLong();// classVersion
-		byte[] hashBytes = Utilities.readByteArray(inStream);
-		setHash(new Hash(hashBytes));
-		getState().copyFrom(inStream);
-		getLeaf().setRound(inStream.readLong());
-		getLeaf().setNumEventsCons(inStream.readLong());
-		getLeaf().setAddressBook(new AddressBook());
-		getLeaf().getAddressBook().copyFrom(inStream);
-		crypto.digestSync(getLeaf().getAddressBook());
-		getLeaf().setHashEventsCons(new Hash(Utilities.readByteArray(inStream)));
-		getLeaf().setConsensusTimestamp(Utilities.readInstant(inStream));
-		shouldSaveToDisk = inStream.readBoolean();
-
-		// before version 3, we used to store events differently
-		if (instanceVersion < ClassVersion.EVENT_REFACTOR) {
-			HashMap<CreatorSeqPair, EventImpl> eventsByCreatorSeq = new HashMap<>();
-
-			int numEvents = inStream.readInt();
-			getLeaf().setEvents(new EventImpl[numEvents]);
-			for (int i = 0; i < getLeaf().getEvents().length; i++) {
-				getLeaf().getEvents()[i] = AbbreviatedStateEvent.readAbbreviatedConsensusEvent(inStream,
-						eventsByCreatorSeq);
-				eventsByCreatorSeq.put(getLeaf().getEvents()[i].getCreatorSeqPair(), getLeaf().getEvents()[i]);
-			}
-		} else {
-			getLeaf().setEvents(inStream.readSerializableList(
-					MAX_EVENTS_IN_STATE,
-					false,
-					EventImpl::new).toArray(new EventImpl[0]));
-			hashEvents(getLeaf().getEvents());
-			linkParents(getLeaf().getEvents());
-		}
-		// We do not have lastTransactionTimestamp written in this version, so we base it on the timestamp of the
-		// signed state. This is not an issue since we will not use copyFrom to do a reconnect, only on a restart
-		getLeaf().setLastTransactionTimestamp(getLeaf().getConsensusTimestamp());
-
-		getLeaf().setMinGenInfo(Utilities.readList(inStream, LinkedList::new, (stream) -> {
-			long key = stream.readLong();
-			long value = stream.readLong();
-			return Pair.of(key, value);
-		}));
-
-		sigSet = new SigSet(getLeaf().getAddressBook());
-		sigSet.copyFrom(inStream);
-	}
-
-	static void hashEvents(EventImpl[] events) {
-		Cryptography crypto = CryptoFactory.getInstance();
-		for (EventImpl event : events) {
-			crypto.digestSync(event.getBaseEventHashedData());
-		}
-	}
-
-	public static void linkParents(EventImpl[] events) {
-		HashMap<CreatorSeqPair, EventImpl> eventsByCreatorSeq = new HashMap<>();
-		for (EventImpl event : events) {
-			eventsByCreatorSeq.put(event.getCreatorSeqPair(), event);
-			event.setSelfParent(
-					eventsByCreatorSeq.get(
-							new CreatorSeqPair(
-									event.getCreatorId(),
-									event.getCreatorSeq() - 1
-							))
-			);
-			event.setOtherParent(
-					eventsByCreatorSeq.get(
-							new CreatorSeqPair(
-									event.getOtherId(),
-									event.getOtherSeq()
-							))
-			);
-		}
 	}
 
 	/**
@@ -538,7 +301,7 @@ public class SignedState extends AbstractMerkleInternal implements FastCopyable<
 		}
 		if (reservations == 0) {
 			try {
-				getState().archive();
+				state.getSwirldState().archive();
 			} catch (Exception e) {
 				log.error(EXCEPTION.getMarker(),
 						"Exception while archiving saved state:", e);
@@ -592,38 +355,6 @@ public class SignedState extends AbstractMerkleInternal implements FastCopyable<
 		weakReservations--;
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void copyFromExtra(SerializableDataInputStream inStream) throws IOException {
-		getState().copyFromExtra(inStream);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public long getClassId() {
-		return CLASS_ID;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getVersion() {
-		return ClassVersion.MIGRATE_TO_SERIALIZABLE;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getMinimumSupportedVersion() {
-		return ClassVersion.ADD_MIN_GEN;
-	}
-
 	public LocalStateEvents getLocalStateEvents() {
 		return localStateEvents;
 	}
@@ -637,16 +368,19 @@ public class SignedState extends AbstractMerkleInternal implements FastCopyable<
 	 */
 	@Override
 	public boolean equals(Object o) {
-		if (this == o) return true;
+		if (this == o) {
+			return true;
+		}
 
-		if (o == null || getClass() != o.getClass()) return false;
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
 
 		SignedState that = (SignedState) o;
 
 		return new EqualsBuilder()
 				.append(sigSet, that.sigSet)
-				.append(getLeaf(), that.getLeaf())
-				.append(getState(), that.getState())
+				.append(state, that.state)
 				.isEquals();
 	}
 
@@ -657,8 +391,7 @@ public class SignedState extends AbstractMerkleInternal implements FastCopyable<
 	public int hashCode() {
 		return new HashCodeBuilder(17, 37)
 				.append(sigSet)
-				.append(getLeaf())
-				.append(getState())
+				.append(state)
 				.toHashCode();
 	}
 
@@ -669,15 +402,128 @@ public class SignedState extends AbstractMerkleInternal implements FastCopyable<
 	public String toString() {
 		return new ToStringBuilder(this, ToStringStyle.MULTI_LINE_STYLE)
 				.append("sigSet", sigSet)
-				.append("leaf", getLeaf())
-				.append("state", getState())
+				.append("state", state)
 				.toString();
 	}
 
 	/**
 	 * Attach signatures to this state.
+	 *
+	 * @param sigSet
+	 * 		the signatures to be attached to this signed state
 	 */
 	public void setSigSet(SigSet sigSet) {
 		this.sigSet = sigSet;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isReleased() {
+		return released;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void release() {
+		released = true;
+		state.decrementReferenceCount();
+	}
+
+	/**
+	 * Get the consensus timestamp for this signed state
+	 *
+	 * @return the consensus timestamp for this signed state.
+	 */
+	public Instant getConsensusTimestamp() {
+		return state.getPlatformState().getConsensusTimestamp();
+	}
+
+	/**
+	 * Get the root node of the application's state
+	 *
+	 * @return the root node of the application's state.
+	 */
+	public SwirldState getSwirldState() {
+		return state.getSwirldState();
+	}
+
+	/**
+	 * Get the hash of the state's merkle tree
+	 *
+	 * @return the hash of the state's merkle tree.
+	 */
+	public final Hash getStateHash() {
+		return state.getHash();
+	}
+
+	/**
+	 * Get the hash of the state.
+	 *
+	 * @return the hash
+	 * @deprecated we should not be directly touching the bytes of a hash
+	 */
+	@Deprecated
+	public byte[] getStateHashBytes() {
+		return state.getHash().getValue();
+	}
+
+	/**
+	 * Get the hash of the swirld state.
+	 *
+	 * @return the hash
+	 * @deprecated we should not be directly touching the bytes of a hash
+	 */
+	@Deprecated
+	public byte[] getSwirldStateHashBytes() {
+		return state.getSwirldState().getHash().getValue();
+	}
+
+	/**
+	 * Get events in the platformState.
+	 *
+	 * @return events in the platformState
+	 */
+	public EventImpl[] getEvents() {
+		return state.getPlatformState().getEvents();
+	}
+
+	/**
+	 * Get the hash of the consensus events in this state.
+	 *
+	 * @return the hash of the consensus events in this state
+	 */
+	public Hash getHashEventsCons() {
+		return state.getPlatformState().getHashEventsCons();
+	}
+
+	/**
+	 * Get the number of consensus events in this state.
+	 *
+	 * @return the number of consensus events in this state
+	 */
+	public long getNumEventsCons() {
+		return state.getPlatformState().getNumEventsCons();
+	}
+
+	/**
+	 * Get information about the minimum generation in this round.
+	 *
+	 * @return the minimum generation of famous witnesses per round
+	 */
+	public List<Pair<Long, Long>> getMinGenInfo() {
+		return state.getPlatformState().getMinGenInfo();
+	}
+
+	/**
+	 * Get the timestamp of the last transaction added to this state.
+	 *
+	 * @return the timestamp of the last transaction added to this state
+	 */
+	public Instant getLastTransactionTimestamp() {
+		return state.getPlatformState().getLastTransactionTimestamp();
 	}
 }

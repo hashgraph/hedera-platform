@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,8 +14,8 @@
 
 package com.swirlds.blob.internal.db;
 
-import com.swirlds.platform.Marshal;
 import com.swirlds.common.NodeId;
+import com.swirlds.platform.Marshal;
 import com.swirlds.platform.internal.DatabaseBackupSettings;
 import com.swirlds.platform.internal.DatabaseRestoreSettings;
 import com.swirlds.platform.internal.DatabaseSettings;
@@ -23,7 +23,6 @@ import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.io.File;
-import java.io.IOException;
 import java.sql.Connection;
 import java.time.Instant;
 
@@ -53,17 +52,18 @@ public class SnapshotTask {
 	 * Constructor for SnapshotTask
 	 *
 	 * @param taskType
-	 *        either BACKUP or RESTORE
+	 * 		either BACKUP or RESTORE
 	 * @param applicationName
-	 *        class name of the application
+	 * 		class name of the application
 	 * @param worldId
-	 *        world number
+	 * 		world number
 	 * @param nodeId
-	 *        node for which the save was / will be generated
+	 * 		node for which the save was / will be generated
 	 * @param roundNumber
-	 *        round for state to save / recover from
+	 * 		round for state to save / recover from
 	 */
-	public SnapshotTask(final SnapshotTaskType taskType, final String applicationName, final String worldId, final NodeId nodeId, final long roundNumber) {
+	public SnapshotTask(final SnapshotTaskType taskType, final String applicationName, final String worldId,
+			final NodeId nodeId, final long roundNumber) {
 		this(
 				taskType,
 				Marshal.getDataDirPath().getAbsolutePath(),
@@ -78,21 +78,22 @@ public class SnapshotTask {
 	 * Constructor with modifiable dataDir and saveDir
 	 *
 	 * @param taskType
-	 *        either BACKUP or RESTORE
+	 * 		either BACKUP or RESTORE
 	 * @param dataDir
-	 *        path to folder containing backup/pg_(backup/restore).sh
+	 * 		path to folder containing backup/pg_(backup/restore).sh
 	 * @param savedDir
-	 *        path to folder where snapshot will be saved
+	 * 		path to folder where snapshot will be saved
 	 * @param applicationName
-	 *        class name of the application
+	 * 		class name of the application
 	 * @param worldId
-	 *        world number
+	 * 		world number
 	 * @param nodeId
-	 *        node for which the save was / will be generated
+	 * 		node for which the save was / will be generated
 	 * @param roundNumber
-	 *        round for state to save / recover from
+	 * 		round for state to save / recover from
 	 */
-	public SnapshotTask(final SnapshotTaskType taskType, final String dataDir, final File savedDir, final String applicationName, final String worldId, final NodeId nodeId, final long roundNumber) {
+	public SnapshotTask(final SnapshotTaskType taskType, final String dataDir, final File savedDir,
+			final String applicationName, final String worldId, final NodeId nodeId, final long roundNumber) {
 		this.taskType = taskType;
 		this.applicationName = applicationName;
 		this.worldId = worldId;
@@ -105,7 +106,7 @@ public class SnapshotTask {
 
 		if (taskType == SnapshotTaskType.BACKUP) {
 			final DatabaseBackupSettings settings = Marshal.getDatabaseBackupSettings();
-			this.executable = new SnapshotExecutable(settings.getProgram(),settings.getArguments());
+			this.executable = new SnapshotExecutable(settings.getProgram(), settings.getArguments());
 		} else {
 			final DatabaseRestoreSettings settings = Marshal.getDatabaseRestoreSettings();
 			this.executable = new SnapshotExecutable(settings.getProgram(), settings.getArguments());
@@ -196,7 +197,7 @@ public class SnapshotTask {
 		this.timeCompleted = timeCompleted;
 	}
 
-	public boolean isComplete() {
+	public synchronized boolean isComplete() {
 		return complete;
 	}
 
@@ -241,14 +242,18 @@ public class SnapshotTask {
 
 	@Override
 	public boolean equals(final Object o) {
-		if (this == o) return true;
+		if (this == o) {
+			return true;
+		}
 
-		if (!(o instanceof SnapshotTask)) return false;
+		if (!(o instanceof SnapshotTask)) {
+			return false;
+		}
 
 		final SnapshotTask that = (SnapshotTask) o;
 
 		return new EqualsBuilder()
-				.append(taskType,that.taskType)
+				.append(taskType, that.taskType)
 				.append(nodeId, that.nodeId)
 				.append(roundNumber, that.roundNumber)
 				.append(snapshotId, that.snapshotId)

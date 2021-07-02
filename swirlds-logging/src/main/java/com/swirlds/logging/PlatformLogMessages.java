@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -38,13 +38,8 @@ public abstract class PlatformLogMessages {
 	public static final String FALL_BEHIND_DO_NOT_RECONNECT = "has fallen behind, will die";
 
 	@Deprecated
-	public static final String PTD_SUCCESS = "TEST SUCCESS";
-	@Deprecated
-	public static final String PTD_FINISH = "TRANSACTIONS FINISHED";
-
-	@Deprecated
 	public static final String SYNC_STALE_COMPENSATION_SUCCESS = "Compensating for stale events during gossip";
 	@Deprecated
 	public static final String SYNC_STALE_COMPENSATION_FAILURE = "Failed to compensate for stale events during gossip" +
-			 " due to delta exceeding threshold";
+			" due to delta exceeding threshold";
 }

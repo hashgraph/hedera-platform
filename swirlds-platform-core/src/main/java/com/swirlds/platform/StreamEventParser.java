@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,93 +14,74 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.NodeId;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.ConsensusEvent;
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.stream.ObjectStreamUtilities;
-import com.swirlds.platform.event.EventUtils;
+import com.swirlds.logging.payloads.StreamParseErrorPayload;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 
-import static com.swirlds.blob.internal.Utilities.hex;
-import static com.swirlds.common.stream.ObjectStreamUtilities.isStreamFile;
-import static com.swirlds.common.stream.TimestampStreamFileWriter.OBJECT_STREAM_FILE_EXTENSION;
+import static com.swirlds.common.stream.EventStreamType.EVENT;
+import static com.swirlds.common.stream.LinkedObjectStreamUtilities.getTimeStampFromFileName;
+import static com.swirlds.common.stream.LinkedObjectStreamUtilities.parseStreamFile;
+import static com.swirlds.common.stream.LinkedObjectStreamUtilities.readFirstIntFromFile;
 import static com.swirlds.logging.LogMarker.EVENT_PARSER;
+import static com.swirlds.logging.LogMarker.EVENT_STREAM;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
-import static com.swirlds.platform.StreamUtilities.parseEventStream;
 
 /**
+ * This class is used for state recovery.
  * Parse event stream files and playback event on given SwirldState object
  *
  * Running a different thread, parsing event files from given directory.
  * Searching event whose consensus timestamp following in the range of
  * start timestamp (exclusive) and end timestamp (inclusive), i.e., (startTimestamp, endTimestamp]
  */
-class StreamEventParser extends Thread {
-	public static final String OLD_EVENT_STREAM_FILE_EXTENSION = ".evts";
+public class StreamEventParser extends Thread {
+	private static final Logger LOGGER = LogManager.getLogger();
 
-	private static final Logger log = LogManager.getLogger();
-
-	private LinkedBlockingQueue<EventImpl> events = new LinkedBlockingQueue<>();
+	private final LinkedBlockingQueue<EventImpl> events = new LinkedBlockingQueue<>();
 
 	private boolean isParsingDone = false;
 
-	private final static int POLL_WAIT = 5000;
-	static final String MD_ALGORITHM = "SHA-384";
+	private static final int POLL_WAIT = 5000;
 
-	private String fileDir;
-	private Instant startTimestamp;
-	private Instant endTimestamp;
+	private final String fileDir;
+	private final Instant startTimestamp;
+	private final Instant endTimestamp;
 	private long eventsCounter;
-	private byte[] prevFileHash;
 	private EventImpl prevParsedEvent;
 
-	private StreamUtilities.EventSeqChecker eventSeqChecker;
+	private final EventSeqChecker eventSeqChecker;
 
-	private MessageDigest md;
+	/**
+	 * current event stream version
+	 */
+	public static final int EVENT_STREAM_FILE_VERSION = 5;
 
-	/** the round number of last recover state with valid new user transactions */
-	private volatile long lastRecoverRoundWithNewUserTran;
-
-	StreamEventParser(String fileDir, Instant startTimestamp, Instant endTimestamp,
-			long roundOfLoadedSignedState, NodeId nodeId) {
+	StreamEventParser(String fileDir, Instant startTimestamp, Instant endTimestamp) {
 		this.fileDir = fileDir;
 		this.startTimestamp = startTimestamp;
 		this.endTimestamp = endTimestamp;
-		this.lastRecoverRoundWithNewUserTran = roundOfLoadedSignedState;
-
-		try {
-			md = MessageDigest.getInstance(MD_ALGORITHM);
-		} catch (NoSuchAlgorithmException e) {
-			log.error(EXCEPTION.getMarker(), "Got error in StreamEventParser {}", e);
-		}
-		eventSeqChecker = new StreamUtilities.EventSeqChecker();
+		eventSeqChecker = new EventSeqChecker();
 	}
 
 	public EventImpl getNextEvent() {
 		try {
 			return events.poll(POLL_WAIT, TimeUnit.MILLISECONDS);
 		} catch (InterruptedException e) {
-			log.info(EXCEPTION.getMarker(), "Unexpected", e);
+			LOGGER.info(EXCEPTION.getMarker(), "Unexpected", e);
+			Thread.currentThread().interrupt();
 			return null;
 		}
 	}
@@ -109,9 +90,13 @@ class StreamEventParser extends Thread {
 		return eventsCounter;
 	}
 
-	/** whether we got all event */
+	/**
+	 * whether we got all events
+	 *
+	 * @return whether the parser has processed all events
+	 */
 	public boolean noMoreEvents() {
-		return isParsingDone && events.size() == 0;
+		return isParsingDone && events.isEmpty();
 	}
 
 	/**
@@ -122,7 +107,7 @@ class StreamEventParser extends Thread {
 		parseEventFolder(this.fileDir, this::handleEvent);
 		handleEvent(null); //push the last prevParsedEvent to queue
 		isParsingDone = true;
-		log.info(EVENT_PARSER.getMarker(), "Recovered {} event from stream file",
+		LOGGER.info(EVENT_PARSER.getMarker(), "Recovered {} event from stream file",
 				() -> eventsCounter);
 	}
 
@@ -135,151 +120,81 @@ class StreamEventParser extends Thread {
 	 * 		call back function for handling parsed event object
 	 */
 	private void parseEventFolder(String fileDir,
-			Function<EventImpl, Boolean> eventHandler) {
+			EventConsumer eventHandler) {
 		if (fileDir != null) {
-			log.info(EVENT_PARSER.getMarker(), "Loading event file from path {} ",
+			LOGGER.info(EVENT_PARSER.getMarker(), "Loading event file from path {} ",
 					() -> fileDir);
 
-			// Only get .soc or .evts files from the directory
+			// Only get .evts files from the directory
 			File folder = new File(fileDir);
-			File[] files = folder.listFiles((dir, name) ->
-					isStreamFile(name) || isOldEventStreamFile(name));
-			log.info(EVENT_PARSER.getMarker(), "Files before sorting {}",
+			File[] files = folder.listFiles((dir, name) -> EVENT.isStreamFile(name));
+			LOGGER.info(EVENT_PARSER.getMarker(), "Files before sorting {}",
 					() -> Arrays.toString(files));
 			//sort file by its name and timestamp order
 			Arrays.sort(files);
 
-			boolean parseResult = true;
 			for (int i = 0; i < files.length; i++) {
 				String fullPathName = files[i].getAbsolutePath();
+				Instant currTimestamp = getTimeStampFromFileName(files[i].getName());
 
-				Instant firstTimestamp = eventFileName2Instant(files[i].getName());
-
-				if (firstTimestamp.compareTo(endTimestamp) > 0) {
-					log.info(EVENT_PARSER.getMarker(),
+				if (currTimestamp.compareTo(endTimestamp) > 0) {
+					LOGGER.info(EVENT_PARSER.getMarker(),
 							"Search event file ended because file timestamp {} is after endTimestamp {}",
-							() -> firstTimestamp, () -> endTimestamp);
-					break;
-				}
-				if (i < files.length - 1) {
-					//if this is not the last file, we can compare timestamp from two file
-					Instant secondTimestamp = eventFileName2Instant(files[i + 1].getName());
-
-					// if  startTimestamp < secondTimestamp
-					if (startTimestamp.compareTo(secondTimestamp) < 0) {
-						parseResult = parseEventFile(fullPathName, eventHandler);
-					} else {
-						log.info(EVENT_PARSER.getMarker(), " Skip file {}: first {}  start {} second {}",
-								() -> fullPathName,
-								() -> firstTimestamp,
-								() -> startTimestamp,
-								() -> secondTimestamp);
-					}
-				} else {
-					// last file will always be opened and parsed since we could not know
-					// what is the timestamp of the last event within the file
-					parseResult = parseEventFile(fullPathName, eventHandler);
+							() -> currTimestamp, () -> endTimestamp);
+					return;
 				}
 
-				if (!parseResult) {
-					log.error(EXCEPTION.getMarker(), "Experienced error during parsing file {}", fullPathName);
-					break;
+				if (!processEventFile(files, i, eventHandler)) {
+					LOGGER.error(EXCEPTION.getMarker(),
+							() -> new StreamParseErrorPayload(
+									"Experienced error during parsing file " + fullPathName));
+					return;
 				}
-			}//for
+			}
 		}
 	}
 
 	/**
-	 * Parse event stream file (.soc or .evts)
-	 * and only callback if the timestamp of the event which is greater than start search time stamp
+	 * Processes a file in the file array:
+	 * for a file which is not the last file, we check whether we should skip it or not, and parse the file when needed;
+	 * for the last file, we always parse it.
 	 *
-	 * If startTimestamp is null then return all parsed events
-	 *
-	 * @param fileName
-	 * 		event stream file name
+	 * @param files
+	 * 		a file array
+	 * @param index
+	 * 		index of the file to be parsed
 	 * @param eventHandler
 	 * 		call back function for handling parsed event object
-	 * @return return false if experienced any error otherwise return true
+	 * @return whether there is error when parsing the file
 	 */
-	boolean parseEventFile(String fileName, Function<EventImpl, Boolean> eventHandler) {
-		File file = new File(fileName);
-		if (!file.exists()) {
-			log.info(EXCEPTION.getMarker(), "File {} does not exist: ", fileName);
-			return false;
-		}
-		log.info(EVENT_PARSER.getMarker(), "Processing file {}", () -> fileName);
+	private boolean processEventFile(final File[] files, final int index,
+			final EventConsumer eventHandler) {
+		boolean result = true;
+		if (index < files.length - 1) {
+			//if this is not the last file, we can compare timestamp from the next file with startTimestamp
+			Instant nextTimestamp = getTimeStampFromFileName(files[index + 1].getName());
 
-		boolean isObjectStreamFile = isStreamFile(file);
-		if (!isObjectStreamFile) {
-			if (!isOldEventStreamFile(fileName)) {
-				log.error(EXCEPTION.getMarker(), "parseEventFile fails :: {} is not an event stream file", fileName);
-				return false;
+			// if  startTimestamp < nextTimestamp, we should parse this file
+			if (startTimestamp.compareTo(nextTimestamp) < 0) {
+				result = parseEventFile(files[index], eventHandler);
+			} else {
+				// else we can skip this file
+				LOGGER.info(EVENT_PARSER.getMarker(), " Skip file {}: startTimestamp {} nextTimestamp {}",
+						files[index]::getName,
+						() -> startTimestamp,
+						() -> nextTimestamp);
 			}
-			// if this is an old event stream file, we read prevFileHash
-			return parseOldEventFile(file, eventHandler);
+		} else {
+			// last file will always be opened and parsed since we could not know
+			// what is the timestamp of the last event within the file
+			result = parseEventFile(files[index], eventHandler);
 		}
-
-		// if this is an object stream file, parse it with ObjectStreamUtilities
-		return parseObjectStreamFile(file, eventHandler);
+		return result;
 	}
 
 	/**
-	 * Parse event object stream file (.soc)
-	 * and only callback if the timestamp of the event which is greater than start search time stamp
-	 *
-	 * If startTimestamp is null then return all parsed events
-	 *
-	 * @param file
-	 * 		event object stream file
-	 * @param eventHandler
-	 * 		call back function for handling parsed event object
-	 * @return return false if experienced any error otherwise return true
-	 */
-	private boolean parseObjectStreamFile(File file, Function<EventImpl, Boolean> eventHandler) {
-		Iterator<SelfSerializable> iterator = ObjectStreamUtilities.parseStreamFile(file);
-		boolean readFirstObject = false;
-		while (iterator.hasNext()) {
-			SelfSerializable object = iterator.next();
-			if (!readFirstObject) {
-				readFirstObject = true;
-				log.info(EVENT_PARSER.getMarker(), "read initialRunningHash {}", () -> object);
-				continue;
-			}
-			if (object instanceof Hash) {
-				log.info(EVENT_PARSER.getMarker(), "read lastRunningHash {}", () -> object);
-				if (iterator.hasNext()) {
-					log.error(EXCEPTION.getMarker(), "The file still has objects after reading lastRunningHash {}",
-							iterator.next());
-					return false;
-				}
-				return true;
-			}
-			if (object == null) {
-				log.error(EXCEPTION.getMarker(), "read null from {}", file.getName());
-				return false;
-			}
-			// EventImpl serializes itself as a ConsensusEvent object
-			// thus the object read from stream is a ConsensusEvent object
-			EventImpl event = new EventImpl((ConsensusEvent) object);
-			if (event.hasUserTransactions() && startTimestamp.isBefore(event.getConsensusTimestamp())
-					&& !event.getConsensusTimestamp().isAfter(endTimestamp)) {
-				// for event to be recovered
-				// update lastRecoverRoundWithNewUserTran, so that state recover would not stop
-				// before recovering the last signed state
-				lastRecoverRoundWithNewUserTran = event.getRoundReceived();
-			}
-			// calculate Hash for this event
-			CryptoFactory.getInstance().digestSync(event.getBaseEventHashedData());
-			//log.info(EVENT_PARSER, "Hash: {}", () -> event.getHash());
-			event.setConsensus(true);
-			eventHandler.apply(event);
-		}
-		return true;
-	}
-
-	/**
-	 * Parse old event stream file (.evts)
-	 * and only callback if the timestamp of the event which is equal or greater than search time stamp
+	 * Parse event stream file (.evts) version 5
+	 * and put parsed event objects into eventHandler
 	 *
 	 * If startTimestamp is null then return all parsed events
 	 *
@@ -289,73 +204,101 @@ class StreamEventParser extends Thread {
 	 * 		call back function for handling parsed event object
 	 * @return return false if experienced any error otherwise return true
 	 */
-	private boolean parseOldEventFile(File file, Function<EventImpl, Boolean> eventHandler) {
+	private static boolean parseEventFile(final File file, EventConsumer eventHandler) {
+		if (!file.exists()) {
+			LOGGER.error(EXCEPTION.getMarker(), "File {} does not exist: ", file::getName);
+			return false;
+		}
+		LOGGER.info(EVENT_PARSER.getMarker(), "Processing file {}", file::getName);
 
-		prevFileHash = StreamUtilities.getPrevFileHashFromEventFile(file);
-		log.info(EVENT_PARSER.getMarker(), "From file {} read prevFileHash = {}",
-				() -> file.getName(),
-				() -> hex(prevFileHash));
+		if (!EVENT.isStreamFile(file)) {
+			LOGGER.error(EXCEPTION.getMarker(), "parseEventFile fails :: {} is not an event stream file",
+					file::getName);
+			return false;
+		}
 
-		try (FileInputStream stream = new FileInputStream(file);
-			 SerializableDataInputStream dis = new SerializableDataInputStream(new DigestInputStream(stream, md))) {
+		return parseEventStreamFile(file, eventHandler, false);
+	}
 
-			long eventCounterBeforeParse = eventsCounter;
-			parseEventStream(dis, eventHandler, this::resetContentMD);
+	/**
+	 * Parse event stream file (.evts) version 5
+	 * and put parsed event objects into eventHandler
+	 *
+	 * @param file
+	 * 		event stream file
+	 * @param eventHandler
+	 * 		call back function for handling parsed event object
+	 * @param populateSettingsCommon
+	 * 		should be true when this method is called from a utility program which may not read the settings.txt file
+	 * 		and
+	 * 		follow the normal initialization routines in the Browser class
+	 * @return return false if experienced any error otherwise return true
+	 */
+	public static boolean parseEventStreamFile(final File file, final EventConsumer eventHandler,
+			final boolean populateSettingsCommon) {
+		if (populateSettingsCommon) {
+			// Populate the SettingsCommon object with the defaults or configured values from the Settings class.
+			// This is necessary because this method may be called from a utility program which may or may not
+			// read the settings.txt file and follow the normal initialization routines in the Browser class.
+			Browser.populateSettingsCommon();
+		}
+		try {
+			final int fileVersion = readFirstIntFromFile(file);
+			if (fileVersion == EVENT_STREAM_FILE_VERSION) {
+				//should return false if any parsing error happened
+				//so the whole parsing process can stop
+				return parseEventStreamV5(file, eventHandler);
+			} else {
+				LOGGER.info(EVENT_PARSER.getMarker(), "failed to parse file {} whose version is {}",
+						file::getName,
+						() -> fileVersion);
 
-			if (eventCounterBeforeParse == 0 && eventsCounter > 0) {
-				// this is the first file that contains the first recovered event
-				// checking running hash is the same as original one
-				byte[] contentHash = md.digest();
-				log.info(EVENT_PARSER.getMarker(), "contentHash from digest {}",
-						() -> hex(contentHash));
-
-				byte[] readBackContentHash = getEventFileContentHash(file.getName());
-				log.info(EVENT_PARSER.getMarker(), "contentHash from file read {}",
-						() -> hex(readBackContentHash));
-
-				if (!Arrays.equals(contentHash, readBackContentHash)) {
-					log.error(EXCEPTION.getMarker(), "Calculated running has is different as expected");
-					return false;
-				}
+				return false;
 			}
 		} catch (IOException e) {
-			log.info(EXCEPTION.getMarker(), "Unexpected", e);
+			LOGGER.info(EXCEPTION.getMarker(), "Unexpected", e);
 			return false;
-		} // try
-		return true;
-	}
-
-
-	private static byte[] getEventFileContentHash(String fileName) {
-		byte[] contentHash = null;
-		try {
-			MessageDigest localMD = MessageDigest.getInstance(MD_ALGORITHM);
-			localMD.reset();
-			byte[] fileBytes = Files.readAllBytes(Paths.get(fileName));
-
-			int preContentLength = 4 + 1 + 48;
-			localMD.update(fileBytes, preContentLength, fileBytes.length - preContentLength);
-			contentHash = localMD.digest();
-
-		} catch (NoSuchAlgorithmException e) {
-			log.error(EXCEPTION.getMarker(), "Experienced error in StreamEventParser {}", e);
-		} catch (IOException e) {
-			log.error(EXCEPTION.getMarker(), "Exception {}", e);
 		}
-		return contentHash;
 	}
 
-	//Event file hash calculating should not contain file header, this call back handler
-	//making sure parser has finished reading file header
-	private void resetContentMD(byte[] prevFileHash) {
-		this.md.reset();
+	/**
+	 * Parse event stream file (.evts) version 5
+	 * and put parsed event objects into eventHandler
+	 *
+	 * @param file
+	 * 		event stream file
+	 * @param eventHandler
+	 * 		call back function for handling parsed event object
+	 */
+	private static boolean parseEventStreamV5(final File file, final EventConsumer eventHandler) {
+		Iterator<SelfSerializable> iterator = parseStreamFile(file, EVENT);
+		boolean isStartRunningHash = true;
+		while (iterator.hasNext()) {
+			SelfSerializable object = iterator.next();
+			if (object == null) { // iterator.next() returns null if any error occurred
+				return false;
+			}
+			if (isStartRunningHash) {
+				LOGGER.info(EVENT_PARSER.getMarker(), "From file {} read startRunningHash = {}",
+						file::getName,
+						() -> object);
+				isStartRunningHash = false;
+			} else if (object instanceof Hash) {
+				LOGGER.info(EVENT_PARSER.getMarker(), "From file {} read endRunningHash = {}",
+						file::getName,
+						() -> object);
+			} else {
+				EventImpl event = new EventImpl((ConsensusEvent) object);
+				// set event's baseHash
+				CryptoFactory.getInstance().digestSync(event.getBaseEventHashedData());
+				eventHandler.consume(event);
+			}
+		}
+		return true;
 	}
 
 	private void addToQueue(EventImpl event) {
 		if (event != null) {
-			if (event.hasUserTransactions()) {
-				lastRecoverRoundWithNewUserTran = event.getRoundReceived();
-			}
 			events.offer(event);
 			eventsCounter++;
 		}
@@ -366,16 +309,20 @@ class StreamEventParser extends Thread {
 	 * 		Event to be handled
 	 * @return indicate whether should continue parse event from input stream
 	 */
-	private Boolean handleEvent(EventImpl event) {
+	private boolean handleEvent(EventImpl event) {
 		if (event == null) {
-			log.info(EVENT_PARSER.getMarker(), "Finished parsing events");
+			LOGGER.info(EVENT_PARSER.getMarker(), "Finished parsing events");
 			if (prevParsedEvent != null) {
-				log.info(EVENT_PARSER.getMarker(), "Last recovered event consensus timestamp {}, round {}",
+				LOGGER.info(EVENT_PARSER.getMarker(), "Last recovered event consensus timestamp {}, round {}",
 						prevParsedEvent.getConsensusTimestamp(), prevParsedEvent.getRoundReceived());
 				addToQueue(prevParsedEvent);
 			}
 			return false;
 		}
+		// events saved in stream file are consensus events
+		// we need to setConsensus to be true, otherwise we will got `EventFlow forCons had nonconensus event`
+		// error in EventFlow.doCons() when handling this event during state recovery
+		event.setConsensus(true);
 
 		Instant consensusTimestamp = event.getConsensusTimestamp();
 
@@ -383,57 +330,34 @@ class StreamEventParser extends Thread {
 			return false;
 		}
 
+		boolean shouldContinue;
 		// Search criteria :
 		// 		startTimestamp < consensusTimestamp <= endTimestamp
 		//
 		// startTimestamp < consensusTimestamp ->  startTimestamp isBefore consensusTimestamp
 		// consensusTimestamp <= endTimestamp ->   consensusTimestamp is NOT after endTimestamp
+		//
+		// for event whose consensusTimestamp is before or equal to startTimestamp, we ignore such event,
+		// because this event should not be played back in swirdsState
+		// we cannot write such events to event stream files, because we only have eventsRunningHash loaded from signed
+		// state. we must start to update eventsRunningHash for events whose consensus timestamp is after the
+		// loaded signed state, and then start to write event stream file at the first complete window
 		if (startTimestamp.isBefore(consensusTimestamp) && !consensusTimestamp.isAfter(endTimestamp)) {
 			if (prevParsedEvent != null) {
 				//this is not the first parsed event, push prevParsedEvent to queue
 				addToQueue(prevParsedEvent);
 			}
 			prevParsedEvent = event;
+			shouldContinue = true;
 		} else if (consensusTimestamp.isAfter(endTimestamp)) {
-			log.info(EVENT_PARSER.getMarker(),
+			LOGGER.info(EVENT_PARSER.getMarker(),
 					"Search finished due to consensusTimestamp is after endTimestamp");
-			return false;
-			// if consensusTimestamp is before or equal to startTimestamp, we ignore such event, because this event
-			// should not play back in swirdsState;
-			// we cannot write this event to event stream, because we only have eventsRunningHash loaded from signed
-			// state. we must start to update eventsRunningHash for events whose consensus timestamp is after the
-			// loaded signed state, and then start to write event stream file at the first complete window
-		}
-		return true;
-	}
+			shouldContinue = false;
 
-	/**
-	 * Extract timestamp from event file name and convert to Instant type
-	 *
-	 * Event file name in the format of "2019-09-30T16:19:59.710944Z.soc(or .evts)"
-	 *
-	 * And Instant toString() generate string in the format of "2019:09:30T16:19:59.710944Z"
-	 *
-	 * @param fileName
-	 * 		file name to be converted
-	 * @return converted instant object or Instant.MAX
-	 */
-	static private Instant eventFileName2Instant(String fileName) {
-		String revertedName;
-		if (isOldEventStreamFile(fileName)) {
-			revertedName = fileName.replace(OLD_EVENT_STREAM_FILE_EXTENSION, "").replace("_", ":");
-		} else if (isStreamFile(fileName)) {
-			revertedName = fileName.replace(OBJECT_STREAM_FILE_EXTENSION, "").replace("_", ":");
 		} else {
-			log.error(EXCEPTION.getMarker(), "{} is not an event stream file", fileName);
-			return Instant.MAX;
+			shouldContinue = true;
 		}
-		try {
-			return Instant.parse(revertedName);
-		} catch (DateTimeParseException e) {
-			log.error(EXCEPTION.getMarker(), "Parsing instant string {} cause exception", revertedName, e);
-			return Instant.MAX;
-		}
+		return shouldContinue;
 	}
 
 	@Override
@@ -441,11 +365,38 @@ class StreamEventParser extends Thread {
 		eventPlayback();
 	}
 
-	static boolean isOldEventStreamFile(String fileName) {
-		return fileName.endsWith(OLD_EVENT_STREAM_FILE_EXTENSION);
-	}
+	/**
+	 * A check instance to event sequence numbers of multiple node
+	 */
+	static class EventSeqChecker {
+		private HashMap<Long, Long> writeSeqMap = new HashMap<>();
 
-	long getLastRecoverRoundWithNewUserTran() {
-		return lastRecoverRoundWithNewUserTran;
+		/**
+		 * Check whether the sequence number of a stream of events is in strictly increasing order
+		 *
+		 * @param event
+		 * 		Event object to be checked
+		 * @return return true of no out or order was detected
+		 */
+		boolean checkEventSeq(EventImpl event) {
+			final long creatorId = event.getCreatorId();
+			final long eventSeq = event.getSeq();
+			if (writeSeqMap.containsKey(creatorId)) {
+				final long lastSeq = writeSeqMap.get(creatorId);
+				final long expectSeq = lastSeq + 1;
+				if (eventSeq <= lastSeq || eventSeq != expectSeq) {
+					//it's possible that some stale events could be dropped
+					LOGGER.info(EVENT_STREAM.getMarker(),
+							"Writing out of order, expect creatorId {} seq {}, but " +
+									"actual seq: {} lastseq {}, possible due to dropped stale events",
+							() -> creatorId,
+							() -> expectSeq,
+							() -> eventSeq,
+							() -> lastSeq);
+				}
+			}
+			writeSeqMap.put(creatorId, eventSeq);
+			return true;
+		}
 	}
 }

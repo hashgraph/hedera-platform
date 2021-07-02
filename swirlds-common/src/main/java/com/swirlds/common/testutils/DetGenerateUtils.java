@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,12 +14,14 @@
 
 package com.swirlds.common.testutils;
 
+import com.swirlds.common.SwirldTransaction;
 import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.BaseEventHashedData;
 import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.common.events.ConsensusData;
+import com.swirlds.common.transaction.internal.StateSignatureTransaction;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -36,19 +38,6 @@ public abstract class DetGenerateUtils {
 	private static final int DEFAULT_TRANSACTION_MAX_SIZE = 100;
 	private static final int DEFAULT_SIGNATURE_SIZE = 384;
 	private static final int DEFAULT_ROUND_MAX_DIFF = 10;
-
-//	public static BaseEventHashedData generateBaseEventHashedData(Random random, long selfParentGeneration, long
-//	otherParentGeneration) {
-//		return new BaseEventHashedData(
-//				nextLong(random, 0), // creatorId, must be positive
-//				selfParentGeneration, // selfParentGen, must be positive
-//				otherParentGeneration, // otherParentGen, must be positive
-//				generateRandomHash(random, DEFAULT_HASH_TYPE), // selfParentHash
-//				generateRandomHash(random, DEFAULT_HASH_TYPE), // otherParentHash
-//				generateRandomInstant(random, DEFAULT_MAX_EPOCH), // timeCreated
-//				generateTransactions(DEFAULT_TRANSACTION_NUMBER, DEFAULT_TRANSACTION_MAX_SIZE, random)
-//						.toArray(new Transaction[0])); // transactions
-//	}
 
 	public static BaseEventHashedData generateBaseEventHashedData(Random random) {
 		return new BaseEventHashedData(
@@ -73,10 +62,13 @@ public abstract class DetGenerateUtils {
 	public static ConsensusData generateConsensusEventData(Random random) {
 		ConsensusData data = new ConsensusData();
 
-		data.setGeneration(nextLong(random, 0));
 		data.setRoundCreated(nextLong(random, 0));
-		data.setWitness(random.nextBoolean());
-		data.setFamous(random.nextBoolean());
+
+		// isWitness & isFamous are no longer part of ConsensusEvent. random.nextBoolean() have been left here so that
+		// an event would be the same given the same seed.
+		random.nextBoolean();
+		random.nextBoolean();
+
 		data.setStale(random.nextBoolean());
 		data.setConsensusTimestamp(generateRandomInstant(random, DEFAULT_MAX_EPOCH));
 		data.setRoundReceived(nextLong(random,
@@ -87,14 +79,31 @@ public abstract class DetGenerateUtils {
 		return data;
 	}
 
-	public static List<Transaction> generateTransactions(int number, int maxSize, Random random) {
-		List<Transaction> list = new ArrayList<>(number);
+	/**
+	 * Randomly generate a list of transaction object
+	 *
+	 * @param number
+	 * 		how many transaction to generate
+	 * @param maxSize
+	 * 		maxiumyum payload size a transaction could have
+	 * @param random
+	 * 		random seed generator
+	 * @return a list of transaction objects
+	 */
+	public static List<Transaction> generateTransactions(final int number, final int maxSize, final Random random) {
+		final List<Transaction> list = new ArrayList<>(number);
 		for (int i = 0; i < number; i++) {
 			int size = Math.max(1, random.nextInt(maxSize));
 			byte[] bytes = new byte[size];
 			random.nextBytes(bytes);
 			boolean system = random.nextBoolean();
-			list.add(new Transaction(bytes, system));
+			if (system) {
+				byte[] sigature = new byte[DEFAULT_SIGNATURE_SIZE];
+				random.nextBytes(sigature);
+				list.add(new StateSignatureTransaction(random.nextBoolean(), random.nextLong(), sigature));
+			} else {
+				list.add(new SwirldTransaction(bytes));
+			}
 		}
 		return list;
 	}

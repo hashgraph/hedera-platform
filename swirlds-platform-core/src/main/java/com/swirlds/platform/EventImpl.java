@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -21,6 +21,8 @@ import com.swirlds.common.Transaction;
 import com.swirlds.common.constructable.ConstructableIgnored;
 import com.swirlds.common.crypto.AbstractSerializableHashable;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.crypto.RunningHash;
+import com.swirlds.common.crypto.SerializableRunningHashable;
 import com.swirlds.common.events.BaseEventHashedData;
 import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.common.events.ConsensusData;
@@ -33,7 +35,6 @@ import com.swirlds.common.io.SerializableDataOutputStream;
 import com.swirlds.common.stream.Timestamped;
 import com.swirlds.platform.event.EventCounter;
 import com.swirlds.platform.event.InternalEventData;
-import com.swirlds.platform.internal.CreatorSeqPair;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
@@ -48,19 +49,29 @@ import java.util.ArrayList;
  */
 @ConstructableIgnored
 public class EventImpl extends AbstractSerializableHashable implements Comparable<EventImpl>, Event,
-		OptionalSelfSerializable<EventSerializationOptions>, Timestamped {
-	/** The part of a base event that affects the hash that is signed */
+		OptionalSelfSerializable<EventSerializationOptions>, Timestamped, SerializableRunningHashable {
+	/** the sequence number used to represent that there is no event */
+	public static final long NO_EVENT_SEQ = -1;
+	/** the generation number used to represent that there is no event */
+	public static final long NO_EVENT_GEN = -1;
+	/** the ID number used to represent that there is no event */
+	public static final long NO_EVENT_ID = -1;
+
+	/** The hashed part of a base event */
 	private BaseEventHashedData baseEventHashedData;
-	/** The part of a base event which doesn't affect the hash that is signed */
+	/** The part of a base event which is not hashed */
 	private BaseEventUnhashedData baseEventUnhashedData;
-	/** Consensus data calculated for an event (doesn't affect the hash that is signed) */
+	/** Consensus data calculated for an event */
 	private ConsensusData consensusData;
-	/** Internal data used for calculating consensus (doesn't affect the hash that is signed) */
+	/** Internal data used for calculating consensus */
 	private InternalEventData internalEventData;
-	/** does this event contain only some of the information? (doesn't affect the hash that is signed) */
-	private boolean abbreviatedStateEvent;
-	/** a pair of values used to identify this event (doesn't affect the hash that is signed) */
-	private CreatorSeqPair creatorSeqPair;
+
+	private RunningHash runningHash;
+
+	/**
+	 * Tracks if this event was read out of a signed state.
+	 */
+	private boolean fromSignedState;
 
 	public EventImpl() {
 	}
@@ -68,7 +79,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	public EventImpl(final BaseEventHashedData baseEventHashedData,
 			final BaseEventUnhashedData baseEventUnhashedData) {
 		this(baseEventHashedData, baseEventUnhashedData, new ConsensusData(), null, null);
-		calculateGeneration();
+		updateConsensusDataGeneration();
 	}
 
 	public EventImpl(final BaseEventHashedData baseEventHashedData,
@@ -82,7 +93,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 			final EventImpl selfParent,
 			final EventImpl otherParent) {
 		this(baseEventHashedData, baseEventUnhashedData, new ConsensusData(), selfParent, otherParent);
-		calculateGeneration();
+		updateConsensusDataGeneration();
 	}
 
 	/**
@@ -108,33 +119,32 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		this.consensusData = consensusData;
 		this.internalEventData = new InternalEventData(selfParent, otherParent);
 
-		abbreviatedStateEvent = false;
 		EventCounter.eventCreated();
 
 		setDefaultValues();
 	}
 
 	/**
-	 * Set the creatorSeqPair to be the pair of the creator ID and the creator sequence number.
+	 * initialize RunningHash instance
 	 */
 	private void setDefaultValues() {
-		creatorSeqPair = new CreatorSeqPair(baseEventHashedData.getCreatorId(), baseEventUnhashedData.getCreatorSeq());
+		runningHash = new RunningHash();
 	}
 
 	/**
 	 * Set this event's generation to be 1 more than the max of its parents.
+	 *
+	 * @deprecated
 	 */
-	public void calculateGeneration() {
-		consensusData.setGeneration(
-				1 + Math.max(
-						baseEventHashedData.getSelfParentGen(),
-						baseEventHashedData.getOtherParentGen()));
+	@Deprecated(forRemoval = true) // there is no need to store the events generation inside consensusData
+	public void updateConsensusDataGeneration() {
+		consensusData.setGeneration(baseEventHashedData.getGeneration());
 	}
 
 	/**
 	 * Calls {@link InternalEventData#clear()}
 	 */
-	void clear() {
+	public void clear() {
 		internalEventData.clear();
 	}
 
@@ -174,7 +184,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 
 		sec = 0; // this will be changed to give a better estimate than 0 or those above
 
-		setConsensusTimestamp(t.plus((long) (sec * 1_000_000_000.0), ChronoUnit.NANOS));
+		setEstimatedTime(t.plus((long) (sec * 1_000_000_000.0), ChronoUnit.NANOS));
 	}
 
 	/**
@@ -195,7 +205,13 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		return getTransactionTime(getTransactions().length - 1);
 	}
 
-
+	/**
+	 * Returns the timestamp of the transaction with given index in this event
+	 *
+	 * @param transactionIndex
+	 * 		index of the transaction in this event
+	 * @return timestamp of the given index transaction
+	 */
 	public Instant getTransactionTime(int transactionIndex) {
 		if (getConsensusTimestamp() == null || getTransactions() == null) {
 			return null;
@@ -203,7 +219,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		if (transactionIndex >= getTransactions().length) {
 			throw new IllegalArgumentException("Event does not have a transaction with index:" + transactionIndex);
 		}
-		return getConsensusTimestamp().plusNanos(transactionIndex);
+		return getConsensusTimestamp().plusNanos(transactionIndex * Settings.minTransTimestampIncrNanos);
 	}
 
 	/**
@@ -218,7 +234,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		final EventImpl event = (EventImpl) o;
 
 		return new EqualsBuilder()
-				.append(abbreviatedStateEvent, event.abbreviatedStateEvent)
 				.append(baseEventHashedData, event.baseEventHashedData)
 				.append(baseEventUnhashedData, event.baseEventUnhashedData)
 				.append(consensusData, event.consensusData)
@@ -231,7 +246,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	@Override
 	public int hashCode() {
 		return new HashCodeBuilder(17, 37)
-				.append(abbreviatedStateEvent)
 				.append(baseEventHashedData)
 				.append(baseEventUnhashedData)
 				.append(consensusData)
@@ -249,20 +263,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	@Override
 	public synchronized int compareTo(EventImpl other) {
 		return Long.compare(getGeneration(), other.getGeneration());
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public String toString() {
-		return "eventImpl{" +
-				"baseEventHashedData=" + baseEventHashedData +
-				", baseEventUnhashedData=" + baseEventUnhashedData +
-				", consensusData=" + consensusData +
-				", internalEventData=" + internalEventData +
-				", abbreviatedStateEvent=" + abbreviatedStateEvent +
-				'}';
 	}
 
 	//////////////////////////////////////////
@@ -366,28 +366,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		return internalEventData;
 	}
 
-	/**
-	 * @return does this event contain only some of the information?
-	 */
-	public boolean isAbbreviatedStateEvent() {
-		return abbreviatedStateEvent;
-	}
-
-	/**
-	 * @param abbreviatedStateEvent
-	 * 		does this event contain only some of the information?
-	 */
-	public void setAbbreviatedStateEvent(boolean abbreviatedStateEvent) {
-		this.abbreviatedStateEvent = abbreviatedStateEvent;
-	}
-
-	/**
-	 * @return a pair of values used to identify this event
-	 */
-	public CreatorSeqPair getCreatorSeqPair() {
-		return creatorSeqPair;
-	}
-
 	//////////////////////////////////////////
 	// Convenience methods for nested objects
 	//////////////////////////////////////////
@@ -416,17 +394,32 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		return baseEventHashedData.getOtherParentHash();
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public Hash getBaseHash() {
 		return baseEventHashedData.getHash();
 	}
 
+	/**
+	 * @return array of transactions inside this event instance
+	 */
 	@JsonIgnore
 	public Transaction[] getTransactions() {
 		return baseEventHashedData.getTransactions();
+	}
+
+	public int getNumTransactions() {
+		if (baseEventHashedData.getTransactions() == null) {
+			return 0;
+		} else {
+			return baseEventHashedData.getTransactions().length;
+		}
+	}
+
+	public boolean isCreatedBy(NodeId id) {
+		return getCreatorId() == id.getId();
+	}
+
+	public boolean isCreatedBy(long id) {
+		return getCreatorId() == id;
 	}
 
 	public boolean hasUserTransactions() {
@@ -445,20 +438,16 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	// ConsensusData
 	//////////////////////////////////////////
 
-	public void setGeneration(long generation) {
-		consensusData.setGeneration(generation);
-	}
-
 	public void setRoundCreated(long roundCreated) {
 		consensusData.setRoundCreated(roundCreated);
 	}
 
 	public void setWitness(boolean witness) {
-		consensusData.setWitness(witness);
+		internalEventData.setWitness(witness);
 	}
 
 	public void setFamous(boolean famous) {
-		consensusData.setFamous(famous);
+		internalEventData.setFamous(famous);
 	}
 
 	public boolean isStale() {
@@ -481,6 +470,11 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		consensusData.setConsensusOrder(consensusOrder);
 	}
 
+	/**
+	 * is this event the last in consensus order of all those with the same received round
+	 *
+	 * @return is this event the last in consensus order of all those with the same received round
+	 */
 	public boolean isLastInRoundReceived() {
 		return consensusData.isLastInRoundReceived();
 	}
@@ -539,6 +533,21 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	public void setTimeReceived(Instant timeReceived) {
 		internalEventData.setTimeReceived(timeReceived);
+	}
+
+	/**
+	 * @return an estimate of what the consensus timestamp will be (could be a very bad guess)
+	 */
+	public Instant getEstimatedTime() {
+		return internalEventData.getEstimatedTime();
+	}
+
+	/**
+	 * @param estimatedTime
+	 * 		an estimate of what the consensus timestamp will be (could be a very bad guess)
+	 */
+	public void setEstimatedTime(Instant estimatedTime) {
+		internalEventData.setEstimatedTime(estimatedTime);
 	}
 
 	/**
@@ -759,34 +768,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		internalEventData.setLastEventBeforeShutdown(isLastEventBeforeShutdown);
 	}
 
-	/**
-	 * @return the running hash of all consensus events in history, up through this event
-	 */
-	public Hash getRunningHash() {
-		return internalEventData.getRunningHash();
-	}
-
-	/**
-	 * @param runningHash
-	 * 		the running hash of all consensus events in history, up through this event
-	 */
-	public void setRunningHash(Hash runningHash) {
-		internalEventData.setRunningHash(runningHash);
-	}
-
-	/**
-	 * @return n-1 for the nth witness added to a round (-1 if not a witness. Can be different on different computers)
-	 */
-	public int getWitnessSeq() {
-		return internalEventData.getWitnessSeq();
-	}
-
-	/**
-	 * @param witnessSeq
-	 * 		n-1 for the nth witness added to a round (-1 if not a witness. Can be different on different computers)
-	 */
-	public void setWitnessSeq(int witnessSeq) { internalEventData.setWitnessSeq(witnessSeq); }
-
 	//////////////////////////////////////////
 	//	Event interface methods
 	//////////////////////////////////////////
@@ -796,7 +777,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	@Override
 	public boolean isWitness() {
-		return consensusData.isWitness();
+		return internalEventData.isWitness();
 	}
 
 	/**
@@ -812,7 +793,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	@Override
 	public boolean isFamous() {
-		return consensusData.isFamous();
+		return internalEventData.isFamous();
 	}
 
 	/**
@@ -878,7 +859,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	@Override
 	public long getGeneration() {
-		return consensusData.getGeneration();
+		return baseEventHashedData.getGeneration();
 	}
 
 	/**
@@ -929,8 +910,75 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		return consensusData.getConsensusOrder();
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public Instant getTimestamp() {
 		return getConsensusTimestamp();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public RunningHash getRunningHash() {
+		return runningHash;
+	}
+
+	/**
+	 * check whether this event doesn't contain any transactions
+	 *
+	 * @return true iff this event has no transactions
+	 */
+	public boolean isEmpty() {
+		return getTransactions() == null || getTransactions().length == 0;
+	}
+
+	/**
+	 * Check if this event was read from a signed state.
+	 *
+	 * @return true iff this event was loaded from a signed state
+	 */
+	public boolean isFromSignedState() {
+		return fromSignedState;
+	}
+
+	/**
+	 * Mark this as an event that was read from a signed state.
+	 */
+	public void markAsSignedStateEvent() {
+		this.fromSignedState = true;
+	}
+
+	//
+	// String methods
+	//
+
+	/**
+	 * @see EventStrings#toShortString(EventImpl)
+	 */
+	public String toShortString() {
+		return EventStrings.toShortString(this);
+	}
+
+	/**
+	 * @see EventStrings#toMediumString(EventImpl)
+	 */
+	public String toMediumString() {
+		return EventStrings.toMediumString(this);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public String toString() {
+		return "eventImpl{" +
+				"baseEventHashedData=" + baseEventHashedData +
+				", baseEventUnhashedData=" + baseEventUnhashedData +
+				", consensusData=" + consensusData +
+				", internalEventData=" + internalEventData +
+				'}';
 	}
 }

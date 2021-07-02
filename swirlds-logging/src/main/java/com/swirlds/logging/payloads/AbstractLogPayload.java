@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -30,12 +30,11 @@ public abstract class AbstractLogPayload implements LogPayload {
 	/**
 	 * Reuse this object, but do not share between threads.
 	 */
-	private static final ThreadLocal<ObjectMapper> mapper = ThreadLocal.withInitial(AbstractLogPayload::buildMapper);
+	private static final ObjectMapper mapper;
 
-	private static ObjectMapper buildMapper() {
-		ObjectMapper mapper = new ObjectMapper();
+	static {
+		mapper = new ObjectMapper();
 		mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-		return mapper;
 	}
 
 	public AbstractLogPayload() {
@@ -73,7 +72,7 @@ public abstract class AbstractLogPayload implements LogPayload {
 	 */
 	private String serializeData() {
 		try {
-			return mapper.get().writeValueAsString(this);
+			return mapper.writeValueAsString(this);
 		} catch (JsonProcessingException e) {
 			throw new IllegalStateException(e);
 		}
@@ -85,7 +84,17 @@ public abstract class AbstractLogPayload implements LogPayload {
 	@JsonIgnore
 	@Override
 	public final String toString() {
-		return message + " " + serializeData() + " [" + getClass().getName() + "]";
+		return message + " " + serializeData() + " " + getMessageIdentifier(this.getClass());
+	}
+
+	/**
+	 * @param c
+	 * 		the class of the payload
+	 * @return the unique string that is used to identify this message
+	 */
+	@JsonIgnore
+	public static String getMessageIdentifier(Class<? extends AbstractLogPayload> c) {
+		return "[" + c.getName() + "]";
 	}
 
 	/**
@@ -121,7 +130,7 @@ public abstract class AbstractLogPayload implements LogPayload {
 			final int startIndex = data.indexOf('{');
 			final int endIndex = data.lastIndexOf('}') + 1;
 			final String jsonString = data.substring(startIndex, endIndex);
-			return mapper.get().readTree(jsonString);
+			return mapper.readTree(jsonString);
 		} catch (IndexOutOfBoundsException | JsonProcessingException e) {
 			throw new PayloadParsingException(e);
 		}
@@ -152,14 +161,16 @@ public abstract class AbstractLogPayload implements LogPayload {
 	 * 		attempting to parse.
 	 * @param data
 	 * 		a payload in serialized form
+	 * @param <T>
+	 * 		the implementation of the {@link LogPayload}
 	 * @return the parsed payload
 	 */
 	public static <T extends LogPayload> T parsePayload(final Class<T> type, final String data) {
 		T payload;
 		try {
-			payload = mapper.get().treeToValue(extractJsonData(data), type);
+			payload = mapper.treeToValue(extractJsonData(data), type);
 		} catch (JsonProcessingException e) {
-			throw new PayloadParsingException("Unable to map json data onto object");
+			throw new PayloadParsingException("Unable to map json data onto object", e);
 		}
 
 		payload.setMessage(extractMessage(data));

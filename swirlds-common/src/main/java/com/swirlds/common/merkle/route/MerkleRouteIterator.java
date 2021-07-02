@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,7 +14,9 @@
 
 package com.swirlds.common.merkle.route;
 
+import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
+import com.swirlds.common.merkle.exceptions.MerkleRouteException;
 
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -26,31 +28,43 @@ public class MerkleRouteIterator implements Iterator<MerkleNode> {
 
 	private MerkleNode prev;
 	private MerkleNode next;
+	private boolean hasNext;
 
-	private int[] steps;
-	private int stepIndex;
+	private final Iterator<Integer> stepIterator;
 
-	public MerkleRouteIterator(MerkleNode root, int[] route) {
+	public MerkleRouteIterator(MerkleNode root, MerkleRoute route) {
 		next = root;
-		steps = MerkleRoute.convertToStandardIntArray(route);
-		stepIndex = 0;
+		hasNext = true;
+		stepIterator = route.iterator();
+	}
+
+	private static MerkleNode getChildAtIndex(final MerkleNode parent, final int index) {
+		if (parent == null) {
+			throw new MerkleRouteException("Invalid route, null value prematurely encountered.");
+		}
+		if (parent.isLeaf()) {
+			throw new MerkleRouteException("Invalid route, leaf node prematurely encountered.");
+		}
+		MerkleInternal internal = parent.cast();
+		if (internal.getNumberOfChildren() <= index) {
+			throw new MerkleRouteException("Invalid route, index exceeds child count.");
+		}
+		return internal.getChild(index);
 	}
 
 	private void findNext() {
-		if (next != null) {
+		if (hasNext || !stepIterator.hasNext()) {
 			return;
 		}
-		if (stepIndex < steps.length) {
-			next = MerkleRoute.getChildAtIndex(prev, steps[stepIndex]);
-			stepIndex++;
-		}
 
+		next = getChildAtIndex(prev, stepIterator.next());
+		hasNext = true;
 	}
 
 	@Override
 	public boolean hasNext() {
 		findNext();
-		return next != null;
+		return hasNext;
 	}
 
 	@Override
@@ -59,8 +73,19 @@ public class MerkleRouteIterator implements Iterator<MerkleNode> {
 			throw new NoSuchElementException();
 		}
 		prev = next;
-		next = null;
+		hasNext = false;
 		return prev;
+	}
+
+	/**
+	 * Iterate to the end and return the last element along the route.
+	 */
+	public MerkleNode getLast() {
+		MerkleNode last = next;
+		while (hasNext()) {
+			last = next();
+		}
+		return last;
 	}
 
 }

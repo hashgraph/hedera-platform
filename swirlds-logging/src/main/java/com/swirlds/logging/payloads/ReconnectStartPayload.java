@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -20,8 +20,8 @@ package com.swirlds.logging.payloads;
 public class ReconnectStartPayload extends AbstractLogPayload {
 
 	private boolean receiving;
-	private int nodeId;
-	private int otherNodeId;
+	private long nodeId;
+	private long otherNodeId;
 	private long round;
 
 	public ReconnectStartPayload() {
@@ -44,8 +44,8 @@ public class ReconnectStartPayload extends AbstractLogPayload {
 	public ReconnectStartPayload(
 			final String message,
 			final boolean receiving,
-			final int nodeId,
-			final int otherNodeId,
+			final long nodeId,
+			final long otherNodeId,
 			final long round) {
 		super(message);
 		this.receiving = receiving;
@@ -62,7 +62,7 @@ public class ReconnectStartPayload extends AbstractLogPayload {
 		this.receiving = receiving;
 	}
 
-	public int getNodeId() {
+	public long getNodeId() {
 		return nodeId;
 	}
 
@@ -70,7 +70,7 @@ public class ReconnectStartPayload extends AbstractLogPayload {
 		this.nodeId = nodeId;
 	}
 
-	public int getOtherNodeId() {
+	public long getOtherNodeId() {
 		return otherNodeId;
 	}
 

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -45,20 +45,13 @@ import java.util.HashMap;
 public abstract class CachingOperationProvider<Element, OptionalData, Result, Alg, AlgType extends Enum>
 		extends OperationProvider<Element, OptionalData, Result, Alg, AlgType> {
 
-	private ThreadLocal<HashMap<AlgType, Alg>> context;
+	private final ThreadLocal<HashMap<AlgType, Alg>> context = ThreadLocal.withInitial(HashMap::new);
 
 	/**
 	 * Default Constructor. Initializes the thread local cache.
 	 */
 	public CachingOperationProvider() {
 		super();
-
-		this.context = new ThreadLocal<>() {
-			@Override
-			protected HashMap<AlgType, Alg> initialValue() {
-				return new HashMap<>();
-			}
-		};
 	}
 
 	/**

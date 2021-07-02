@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2020 Swirlds, Inc.
+ * (c) 2016-2021 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -17,7 +17,7 @@ package com.swirlds.platform.reconnect;
 /**
  * This exception is thrown if there is a failure during reconnect.
  */
-public class ReconnectException extends Exception {
+public class ReconnectException extends RuntimeException {
 
 	public ReconnectException(String message) {
 		super(message);
