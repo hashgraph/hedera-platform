@@ -129,7 +129,7 @@
 		<dep.log4j2.version>2.13.2</dep.log4j2.version>
 		<dep.jackson.version>2.11.2</dep.jackson.version>
 		<dep.portmapper.version>2.0.4</dep.portmapper.version>
-		<dep.commons.io.version>2.6</dep.commons.io.version>
+		<dep.commons.io.version>2.7</dep.commons.io.version>
 		<dep.commons.lang3.version>3.11</dep.commons.lang3.version>
 		<dep.commons.collections4.version>4.4</dep.commons.collections4.version>
 		<dep.slf4j.version>1.8.0-beta2</dep.slf4j.version>
