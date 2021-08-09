@@ -55,20 +55,20 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	/**
 	 * Monotonically increasing version number that is incremented every time copy() is called on the mutable copy.
 	 */
-	private long version;
+	private final long version;
 
 	/**
 	 * Is this object a mutable object?
 	 */
 	private boolean immutable;
 
-	private ConcurrentHashMap<K, MutationQueue<V>> data;
+	private final ConcurrentHashMap<K, MutationQueue<V>> data;
 
 	private int size;
 
 	private final CountDownLatch releasedLatch;
 
-	private FCHashMapGarbageCollector<K, V> garbageCollector;
+	private final FCHashMapGarbageCollector<K, V> garbageCollector;
 
 	/**
 	 * Tracks if this particular object has been deleted.
@@ -103,7 +103,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 		this(0);
 	}
 
-	private FCHashMap(FCHashMap<K, V> other) {
+	protected FCHashMap(FCHashMap<K, V> other) {
 		data = other.data;
 		size = other.size;
 		garbageCollector = other.garbageCollector;
@@ -273,6 +273,11 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 			}
 
 			mutations = new MutationQueue<>();
+
+			// We don't need to synchronize on data.
+			// If mutation queue for key is currently null then there is nothing
+			// the garbage collection thread can do to modify the entry.
+			data.put(key, mutations);
 		}
 
 		synchronized (mutations) {
@@ -285,6 +290,11 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 				}
 
 				mutations = new MutationQueue<>();
+				synchronized (data) {
+					// Garbage collection thread may be attempting to modify mutation
+					// queue at key concurrently, synchronization prevents race condition.
+					data.put(key, mutations);
+				}
 			}
 
 			final Mutation<V> newest = mutations.peekLast();
@@ -303,7 +313,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 			final int originalMutationQueueSize = mutations.size();
 
 			// Add the mutation
-			mutations.maybeAddLast(new Mutation<>(version, value, deletion));
+			mutations.maybeAddLast(version, value, deletion);
 			final int newMutationQueueSize = mutations.size();
 
 			// Adjust the size of the map
@@ -311,11 +321,6 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 				size++;
 			} else if (deletion) {
 				size--;
-			}
-
-			// If the current mutation queue is not yet in the map then insert it.
-			if (originalMutationQueueSize == 0) {
-				data.put(key, mutations);
 			}
 
 			// We don't need to schedule garbage collection on queues that don't grow unless there is a deletion
@@ -329,7 +334,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	}
 
 	/**
-	 * Returns the version of the copy. Not thread safe on a mutable copy.
+	 * Returns the version of the copy.
 	 *
 	 * @return the version of the copy
 	 */

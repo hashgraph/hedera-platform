@@ -309,7 +309,7 @@ public class ReceivingSynchronizer {
 			final AsyncInputStream asyncIn,
 			final AsyncOutputStream asyncOut,
 			final MerkleHashValidator validator) {
-		try {
+		try (asyncIn; asyncOut) {
 			asyncIn.addAnticipatedMessage(new Hash());
 			final Hash rootHash = asyncIn.readAnticipatedMessage();
 			sendAck(asyncOut, rootHash.equals(getHash(originalRoot)));
@@ -327,9 +327,6 @@ public class ReceivingSynchronizer {
 			}
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-		} finally {
-			asyncIn.close();
-			asyncOut.close();
 		}
 	}
 

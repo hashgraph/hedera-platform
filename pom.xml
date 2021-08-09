@@ -21,7 +21,7 @@
 	<!-- Project Configuration -->
 	<groupId>com.swirlds</groupId>
 	<artifactId>swirlds-platform</artifactId>
-	<version>0.15.1-orvw.1</version>
+	<version>0.16.0-orvw.1</version>
 
 	<packaging>pom</packaging>
 
@@ -129,9 +129,10 @@
 		<dep.log4j2.version>2.13.2</dep.log4j2.version>
 		<dep.jackson.version>2.11.2</dep.jackson.version>
 		<dep.portmapper.version>2.0.4</dep.portmapper.version>
-		<dep.commons.io.version>2.6</dep.commons.io.version>
+		<dep.commons.io.version>2.9.0</dep.commons.io.version>
 		<dep.commons.lang3.version>3.11</dep.commons.lang3.version>
 		<dep.commons.collections4.version>4.4</dep.commons.collections4.version>
+		<dep.commons.codec.version>1.15</dep.commons.codec.version>
 		<dep.slf4j.version>1.8.0-beta2</dep.slf4j.version>
 		<dep.bouncy.castle.version>1.68</dep.bouncy.castle.version>
 		<dep.hikaricp.version>3.3.1</dep.hikaricp.version>
@@ -145,7 +146,7 @@
 
 		<!-- Test Dependencies -->
 		<dep.junit.jupiter.version>5.5.0-M1</dep.junit.jupiter.version>
-		<dep.mockito.version>3.7.7</dep.mockito.version>
+		<dep.mockito.version>3.11.0</dep.mockito.version>
 
 		<!-- SonarCloud Properties -->
 		<sonar.jacoco.path>target/site/jacoco-aggregate/jacoco.xml</sonar.jacoco.path>
@@ -509,6 +510,12 @@
 				<groupId>org.apache.commons</groupId>
 				<artifactId>commons-collections4</artifactId>
 				<version>${dep.commons.collections4.version}</version>
+			</dependency>
+
+			<dependency>
+				<groupId>commons-codec</groupId>
+				<artifactId>commons-codec</artifactId>
+				<version>${dep.commons.codec.version}</version>
 			</dependency>
 
 			<!-- SLF4J -->

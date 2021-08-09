@@ -45,6 +45,6 @@ public class Mutation<V> {
 	 * Convert this mutation to a human readable string. For debugging purposes.
 	 */
 	public String toString() {
-		return "(" + version + ": " + (deleted ? "DELETED" : value) + ")";
+		return "(version = " + version + ", value = " + (deleted ? "DELETED" : value) + ")";
 	}
 }

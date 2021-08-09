@@ -767,7 +767,7 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 	/**
 	 * {@inheritDoc}
 	 * <p>
-	 * Returns {@code true} if this map maps one or more xkeys to the
+	 * Returns {@code true} if this map maps one or more keys to the
 	 * specified value.
 	 *
 	 * @param value

@@ -131,17 +131,19 @@ public class MerkleHashValidator implements AutoCloseable {
 	 */
 	public void validateAsync(Hash expectedHash, MerkleInternal node, List<Hash> childHashes) {
 		outstandingValidations.getAndIncrement();
-		Runnable runnable = () -> {
+		final Runnable runnable = () -> {
 			if (!isValid) {
 				return;
 			}
 			try {
 				CryptoFactory.getInstance().digestSync(node, childHashes);
-				if (expectedHash.equals(node.getHash())) {
+				final Hash nodeHash = node.getHash();
+				if (expectedHash.equals(nodeHash)) {
 					outstandingValidations.getAndDecrement();
 				} else {
 					isValid = false;
 					log.error(LOGM_EXCEPTION, "Invalid Hash detected for node: {}", node.getClass());
+					log.error(LOGM_EXCEPTION, "Expected hash {}. Computed hash {}", expectedHash, nodeHash);
 				}
 			} catch (Exception e) {
 				this.exception = e;

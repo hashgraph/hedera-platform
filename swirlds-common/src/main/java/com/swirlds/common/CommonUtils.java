@@ -36,6 +36,9 @@ import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.Locale;
 
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.*;
+
 /**
  * Utility class for other operations
  */
@@ -193,18 +196,6 @@ public class CommonUtils {
 	}
 
 	/**
-	 * Converts a single byte to a lowercase hexadecimal string.
-	 *
-	 * @param b
-	 * 		the byte to convert to hexadecimal
-	 * @return a {@link String} containing the lowercase hexadecimal representation of the byte
-	 */
-	public static String hex(byte b) {
-		return String.format("%02x", b);
-	}
-
-
-	/**
 	 * Converts an array of bytes to a lowercase hexadecimal string.
 	 *
 	 * @param bytes
@@ -213,19 +204,12 @@ public class CommonUtils {
 	 * 		the length of the array to convert to hex
 	 * @return a {@link String} containing the lowercase hexadecimal representation of the byte array
 	 */
-	public static String hex(byte[] bytes, int length) {
-		StringBuilder sb = new StringBuilder();
-
-		if (bytes != null) {
-			throwRangeInvalid("length", length, 0, bytes.length);
-			for (int i = 0; i < length; i++) {
-				sb.append(String.format("%02x", bytes[i]));
-			}
-		} else {
-			sb.append("null");
+	public static String hex(final byte[] bytes, final int length) {
+		if (bytes == null) {
+			return "null";
 		}
-
-		return sb.toString();
+		throwRangeInvalid("length", length, 0, bytes.length);
+		return new String(Hex.encodeHex(bytes, 0, length, true));
 	}
 
 	/**
@@ -235,31 +219,26 @@ public class CommonUtils {
 	 * 		an array of bytes
 	 * @return a {@link String} containing the lowercase hexadecimal representation of the byte array
 	 */
-	public static String hex(byte[] bytes) {
+	public static String hex(final byte[] bytes) {
 		return hex(bytes, bytes == null ? 0 : bytes.length);
 	}
 
 	/**
 	 * Converts a hexadecimal string back to the original array of bytes.
 	 *
-	 * @param bytes
+	 * @param string
 	 * 		the hexadecimal string to be converted
 	 * @return an array of bytes
 	 */
-	public static byte[] unhex(CharSequence bytes) {
-
-		if (bytes.length() % 2 != 0) {
-			throw new IllegalArgumentException("bytes");
+	public static byte[] unhex(final String string) {
+		if (string == null) {
+			return null;
 		}
-
-		final int len = bytes.length();
-		final byte[] data = new byte[(len / 2)];
-		for (int i = 0; i < len; i += 2) {
-			data[(i / 2)] = (byte) ((Character.digit(bytes.charAt(i), 16) << 4)
-					+ Character.digit(bytes.charAt(i + 1), 16));
+		try {
+			return Hex.decodeHex(string);
+		} catch (DecoderException e) {
+			throw new IllegalArgumentException(e);
 		}
-
-		return data;
 	}
 
 	/**

@@ -22,7 +22,7 @@
 	<parent>
 		<groupId>com.swirlds</groupId>
 		<artifactId>swirlds-platform</artifactId>
-		<version>0.15.1</version>
+		<version>0.16.0</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -46,7 +46,7 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-platform-core</artifactId>
-			<version>0.15.1</version>
+			<version>0.16.0</version>
 		</dependency>
 	</dependencies>
 

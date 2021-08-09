@@ -172,7 +172,13 @@ public class FCHashMapGarbageCollector<K, V> {
 			// Decide if the queue needs to be removed from the map after being cleaned.
 			if (event.getMutationQueue().size() == 1 && event.getMutationQueue().getFirst().deleted) {
 				event.getMutationQueue().delete();
-				data.remove(event.getKey());
+				synchronized (data) {
+					// If the mutation queue is not present then it has been replaced with a newer queue.
+					// Only remove value at key if the mutation queue to delete has not been replaced.
+					if (data.get(event.getKey()) == event.getMutationQueue()) {
+						data.remove(event.getKey());
+					}
+				}
 			}
 		}
 	}
