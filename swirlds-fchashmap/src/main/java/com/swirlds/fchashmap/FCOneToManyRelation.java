@@ -16,7 +16,8 @@ package com.swirlds.fchashmap;
 
 import com.swirlds.common.FastCopyable;
 import com.swirlds.fchashmap.internal.FCOneToManyRelationIterator;
-import org.apache.commons.lang3.tuple.Pair;
+import com.swirlds.fchashmap.internal.KeyIndexPair;
+import com.swirlds.fchashmap.internal.KeyValuePair;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,7 +42,7 @@ public class FCOneToManyRelation<K, V> implements FastCopyable {
 	/**
 	 * A map of indexed associations.
 	 */
-	private final FCHashMap<Pair<K, Integer>, V> associationMap;
+	private final FCHashMap<KeyIndexPair<K>, V> associationMap;
 
 	/**
 	 * A map containing the number of associations for each key.
@@ -54,7 +55,7 @@ public class FCOneToManyRelation<K, V> implements FastCopyable {
 	 * This data structure is only required for operations that update the mutable copy of the this object
 	 * (i.e. gap filling). When this FCOneToManyRelation is copied and becomes immutable, this map is set to null.
 	 */
-	private Map<Pair<K, V>, Integer> indexMap;
+	private Map<KeyValuePair<K, V>, Integer> indexMap;
 
 	private boolean immutable;
 
@@ -145,14 +146,14 @@ public class FCOneToManyRelation<K, V> implements FastCopyable {
 		throwIfNullKey(key);
 		throwIfNullValue(value);
 
-		final Pair<K, V> association = Pair.of(key, value);
+		final KeyValuePair<K, V> association = new KeyValuePair<>(key, value);
 		if (isAssociated(association)) {
 			// key and value are already associated
 			return false;
 		}
 
 		final int index = associationCountMap.getOrDefault(key, 0);
-		associationMap.put(Pair.of(key, index), value);
+		associationMap.put(new KeyIndexPair<>(key, index), value);
 		associationCountMap.put(key, index + 1);
 		indexMap.put(association, index);
 
@@ -174,7 +175,7 @@ public class FCOneToManyRelation<K, V> implements FastCopyable {
 		throwIfNullKey(key);
 		throwIfNullValue(value);
 
-		final Pair<K, V> associationToDissolve = Pair.of(key, value);
+		final KeyValuePair<K, V> associationToDissolve = new KeyValuePair<>(key, value);
 		if (!isAssociated(associationToDissolve)) {
 			// The value is not associated this key
 			return false;
@@ -183,14 +184,14 @@ public class FCOneToManyRelation<K, V> implements FastCopyable {
 		final int indexToRemove = indexMap.get(associationToDissolve);
 		final int maxIndex = associationCountMap.get(key) - 1;
 
-		final Pair<K, Integer> indexedKeyToRemove = Pair.of(key, indexToRemove);
+		final KeyIndexPair<K> keyIndexPairToRemove = new KeyIndexPair<>(key, indexToRemove);
 		if (indexToRemove == maxIndex) {
-			associationMap.remove(indexedKeyToRemove);
+			associationMap.remove(keyIndexPairToRemove);
 		} else {
 			// We need to fill the gap, indices must be must not skipped
-			final V gapFillingValue = associationMap.remove(Pair.of(key, maxIndex));
-			associationMap.put(indexedKeyToRemove, gapFillingValue);
-			indexMap.put(Pair.of(key, gapFillingValue), indexToRemove);
+			final V gapFillingValue = associationMap.remove(new KeyIndexPair<>(key, maxIndex));
+			associationMap.put(keyIndexPairToRemove, gapFillingValue);
+			indexMap.put(new KeyValuePair<>(key, gapFillingValue), indexToRemove);
 		}
 
 		if (maxIndex == 0) {
@@ -211,7 +212,7 @@ public class FCOneToManyRelation<K, V> implements FastCopyable {
 	 * 		the association in question
 	 * @return true if the association is present in the data structure
 	 */
-	private boolean isAssociated(final Pair<K, V> association) {
+	private boolean isAssociated(final KeyValuePair<K, V> association) {
 		return indexMap.containsKey(association);
 	}
 

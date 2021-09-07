@@ -216,11 +216,7 @@ public class FCQueue<E extends FCQueueElement> extends AbstractMerkleLeaf implem
 		}
 
 		watch.stop();
-		synchronized (this) {
-			// we need to guard this line with lock
-			// because FCQueue#getHash might be called by multiple threads, and StatsBuffer is not thread-safe
-			FCQueueStatistics.fcqHashExecutionMicros.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
-		}
+		FCQueueStatistics.fcqHashExecutionMicros.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
 
 		return new ImmutableHash(hash);
 	}

@@ -253,6 +253,10 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 		// If peer node has not fallen behind, send events to peer.
 		final List<EventImpl> diffEvents = syncShadowGraphManager.finishSendEventList(syncData, syncLogString);
 
+		if (syncData.isTipAbsorptionActive()) {
+			conn.getPlatform().getStats().updateTipAbsorptionOpsPerSec();
+		}
+
 		log.debug(SYNC_SGM.getMarker(), "{}{} events to send", syncLogString, diffEvents.size());
 
 		for (final EventImpl event : diffEvents) {
@@ -505,7 +509,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 	 * 		iff the {@link SyncOutputStream} throws
 	 */
 	protected void writeTipHashes() throws IOException {
-		final List<Hash> tipHashes = syncShadowGraphManager.getSendTipHashes();
+		final List<Hash> tipHashes = syncData.getSendingTipHashes();
 		getOutputStream().writeSerializableList(tipHashes, false, true);
 	}
 

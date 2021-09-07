@@ -386,6 +386,9 @@ public class FileSignTool {
 		SettingsCommon.maxTransactionCountPerEvent = 245760;
 		SettingsCommon.maxTransactionBytesPerEvent = 245760;
 		SettingsCommon.transactionMaxBytes = 6144;
+		//set a relatively large value since the signing tool could not tell the address book size
+		//or the number of nodes in the work
+		SettingsCommon.maxAddressSizeAllowed = 1024;
 	}
 
 	public static void main(String[] args) {

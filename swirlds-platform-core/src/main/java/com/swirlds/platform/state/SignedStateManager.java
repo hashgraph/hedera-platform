@@ -199,7 +199,8 @@ public class SignedStateManager implements StateSignatureRecorder {
 				ss.weakReserveState();
 				// All signed states from earlier rounds can be archived now.
 				for (SignedState state : allStates.values()) {
-					if (!state.isMarkedForArchiving() && state.getLastRoundReceived() < ss.getLastRoundReceived()) {
+					if (!state.isMarkedForArchival() && state.getLastRoundReceived() < ss.getLastRoundReceived()) {
+						state.markForArchival();
 						garbageCollector.archiveBackground(state);
 					}
 				}

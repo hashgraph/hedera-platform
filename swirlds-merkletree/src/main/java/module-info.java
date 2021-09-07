@@ -11,29 +11,17 @@
  * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
+module com.swirlds.merkletree {
+	exports com.swirlds.merkletree;
+	exports com.swirlds.merkletree.internal to com.swirlds.merkletree.test;
 
-package com.swirlds.fchashmap;
+	requires com.swirlds.common;
+	requires com.swirlds.logging;
+	requires com.swirlds.platform;
 
-import java.time.Duration;
+	requires org.apache.logging.log4j;
+	requires org.apache.logging.log4j.core;
+	requires org.apache.commons.lang3;
 
-/**
- * Settings for {@link com.swirlds.fchashmap.FCHashMap}.
- */
-public interface FCHashMapSettings {
-
-	/**
-	 * Get the maximum expected size of the FCHashMapGarbageCollector's queue.
-	 */
-	int getMaximumGCQueueSize();
-
-	/**
-	 * Get the amount of time that must pass between error logs about the FCHashMapGarbageCollector's queue size.
-	 */
-	Duration getGCQueueThresholdPeriod();
-
-	/**
-	 * Is the archival of FCHashMap enabled?
-	 */
-	boolean isArchiveEnabled();
-
+	requires java.sql;
 }

@@ -42,8 +42,9 @@ public class MutationQueue<V> extends ConcurrentLinkedDeque<Mutation<V>> {
 	 * 		the value of the mutation
 	 * @param deleted
 	 * 		true iff the mutation represents a deletion operation
+	 * @return true if a new mutation object was added, false if there was a pre-existing mutation that was updated
 	 */
-	public void maybeAddLast(final long version, final V value, final boolean deleted) {
+	public boolean maybeAddLast(final long version, final V value, final boolean deleted) {
 		Mutation<V> last = peekLast();
 		if (last != null) {
 			if (last.version == version) {
@@ -51,11 +52,12 @@ public class MutationQueue<V> extends ConcurrentLinkedDeque<Mutation<V>> {
 				// we can simply update the existing mutation.
 				last.value = value;
 				last.deleted = deleted;
-				return;
+				return false;
 			}
 		}
 
 		addLast(new Mutation<>(version, value, deleted));
+		return true;
 	}
 
 	public void delete() {

@@ -17,7 +17,9 @@ package com.swirlds.platform.sync;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.EventImpl;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
@@ -27,10 +29,9 @@ import java.util.Set;
  * These fields are assigned by a {@link SyncShadowGraphManager}.
  */
 public final class SyncData {
-
 	/**
 	 * The list of hashgraph events to send.
-	 * NodeSynchronizerBase uses the SyncShadowGraphManager to
+	 * NodeSynchronizerBase uses the ShadowGraphManager to
 	 * assembled this list.
 	 */
 	private final List<EventImpl> sendList = new LinkedList<>();
@@ -42,10 +43,88 @@ public final class SyncData {
 	private final List<Hash> receivedTipHashes = new LinkedList<>();
 
 	/**
-	 * The set of tips used by the shadow graph. At beginning of gossip session,
-	 * this is set equal to the tip set of the shadow graph to be used for that session.
+	 * The set of tips used to determine what we need to send to our peer.
+	 * At beginning of gossip session, this is set equal to the sendingTips.
+	 * These events are eliminated during the course of the gossip session.
+	 * Most of the time, all of these should be eliminated by the time we reach finishSendEventList.
 	 */
 	private final Set<SyncShadowEvent> workingTips = new HashSet<>();
+
+	private final Set<Hash> sendingTips = new HashSet<>();
+
+	private final List<SyncShadowEvent> sendingTipList = new ArrayList<>();
+
+	private long maxTipGeneration = EventImpl.NO_EVENT_GEN;
+
+	private final List<Long> maxTipGenerations = new ArrayList<>();
+
+	private boolean tipAbsorptionActive = false;
+
+	/**
+	 * Get the sending tips as a list
+	 *
+	 * @return the list of sending tips
+	 */
+	public List<SyncShadowEvent> getSendingTipList() {
+		return sendingTipList;
+	}
+
+	/**
+	 * Set the max generation of all of the tips sent to the peer
+	 *
+	 * @param sendingTipList
+	 * 		the list of tip events
+	 */
+	public void setMaxTipGenerations(List<SyncShadowEvent> sendingTipList) {
+		long maxCreatorId = 0;
+		for (SyncShadowEvent tip : sendingTipList) {
+			maxCreatorId = Math.max(maxCreatorId, tip.getEvent().getCreatorId());
+		}
+
+		for (int i = 0; i <= maxCreatorId; ++i) {
+			maxTipGenerations.add(EventImpl.NO_EVENT_GEN);
+		}
+
+		for (SyncShadowEvent tip : sendingTipList) {
+			maxTipGeneration = Math.max(maxTipGeneration, tip.getEvent().getGeneration());
+
+			final int i = (int) tip.getEvent().getCreatorId();
+			final long max = Math.max(maxTipGenerations.get(i), tip.getEvent().getGeneration());
+			maxTipGenerations.set(i, max);
+		}
+	}
+
+	public long getMaxTipGeneration() {
+		return maxTipGeneration;
+	}
+
+	/**
+	 * Get the maximum generation of all of the sending tips
+	 *
+	 * @return the max generation number
+	 */
+	public List<Long> getMaxTipGenerations() {
+		return maxTipGenerations;
+	}
+
+	/**
+	 * @return the tips sent to the peer
+	 */
+	public Set<Hash> getSendingTips() {
+		return sendingTips;
+	}
+
+	/**
+	 * @return the hashes of the tips sent to the peer
+	 */
+	public List<Hash> getSendingTipHashes() {
+		final List<Hash> tipHashes = new ArrayList<>(getSendingTipList().size());
+		for (int i = 0; i < getSendingTipList().size(); ++i) {
+			tipHashes.add(i, getSendingTipList().get(i).getEventBaseHash());
+		}
+
+		return tipHashes;
+	}
 
 	/**
 	 * The set of hashes which are marked "true", for sync.
@@ -166,6 +245,41 @@ public final class SyncData {
 	 */
 	public int getNumMarkedForSearch() {
 		return search.size();
+	}
+
+	protected void notifyTipAbsorptionActivated() {
+		this.tipAbsorptionActive = true;
+	}
+
+	public boolean isTipAbsorptionActive() {
+		return tipAbsorptionActive;
+	}
+
+	/**
+	 * Computes the number of creators that have more than one tip. If a single creator has more than two tips, this
+	 * method will only report once for each such creator.
+	 *
+	 * @return the number of event creators that have more than one tip.
+	 */
+	public int computeMultiTipCount() {
+		final Set<Long> multiTipCreators = new HashSet<>();
+
+		final Iterator<SyncShadowEvent> iter = sendingTipList.iterator();
+		while (iter.hasNext()) {
+			final SyncShadowEvent left = iter.next();
+			final SyncShadowEvent right = (iter.hasNext()) ? iter.next() : null;
+
+			// If right is null then we are at the end of the list so we can break out of the loop
+			if (right == null) {
+				break;
+			}
+
+			if (left.getEvent().getCreatorId() == right.getEvent().getCreatorId()) {
+				multiTipCreators.add(left.getEvent().getCreatorId()); // hash set to deduplicate the values
+			}
+		}
+
+		return multiTipCreators.size(); // total number of unique creators with more than one tip
 	}
 }
 

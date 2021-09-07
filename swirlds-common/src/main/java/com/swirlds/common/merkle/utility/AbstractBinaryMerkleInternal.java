@@ -129,6 +129,22 @@ public abstract class AbstractBinaryMerkleInternal extends AbstractMerkleInterna
 			throw new IllegalChildIndexException(LEFT_CHILD, RIGHT_CHILD, index);
 		}
 	}
+	
+	public <T extends MerkleNode> void setLeftChild(final T newLeftChild) {
+		setChild(LEFT_CHILD, newLeftChild);
+	}
+
+	public <T extends MerkleNode> T getLeftChild() {
+		return getChild(LEFT_CHILD);
+	}
+
+	public <T extends MerkleNode> void setRightChild(T newRightChild) {
+		setChild(RIGHT_CHILD, newRightChild);
+	}
+
+	public <T extends MerkleNode> T getRightChild() {
+		return getChild(RIGHT_CHILD);
+	}
 
 	/**
 	 * {@inheritDoc}

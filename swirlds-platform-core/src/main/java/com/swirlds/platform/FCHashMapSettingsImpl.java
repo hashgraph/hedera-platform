@@ -26,6 +26,7 @@ public class FCHashMapSettingsImpl extends SubSetting implements FCHashMapSettin
 
 	public int maximumGCQueueSize = 100;
 	public Duration gcQueueThresholdPeriod = Duration.ofMinutes(1);
+	public boolean archiveEnabled;
 
 	/**
 	 * {@inheritDoc}
@@ -49,5 +50,20 @@ public class FCHashMapSettingsImpl extends SubSetting implements FCHashMapSettin
 
 	public void setGCQueueThresholdPeriod(final Duration gcQueueThresholdPeriod) {
 		this.gcQueueThresholdPeriod = gcQueueThresholdPeriod;
+	}
+
+	/**
+	 * Check if archival of the FCHashMap is enabled.
+	 */
+	@Override
+	public boolean isArchiveEnabled() {
+		return archiveEnabled;
+	}
+
+	/**
+	 * Set if archival of the FCHashMap is enabled.
+	 */
+	public void setArchiveEnabled(final boolean archiveEnabled) {
+		this.archiveEnabled = archiveEnabled;
 	}
 }

@@ -41,7 +41,6 @@ import static com.swirlds.common.stream.LinkedObjectStreamUtilities.generateStre
 import static com.swirlds.common.stream.LinkedObjectStreamUtilities.getPeriod;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.OBJECT_STREAM;
-import static com.swirlds.logging.LogMarker.OBJECT_STREAM_DETAIL;
 import static com.swirlds.logging.LogMarker.OBJECT_STREAM_FILE;
 
 /**
@@ -153,8 +152,6 @@ public class TimestampStreamFileWriter<T extends Timestamped & SerializableRunni
 		try {
 			dos.writeSerializable(object, true);
 			dos.flush();
-			log.info(OBJECT_STREAM_DETAIL.getMarker(), "consume :: write object {}",
-					() -> object);
 		} catch (IOException e) {
 			log.warn(EXCEPTION.getMarker(), "IOException when serializing {}", object, e);
 		}

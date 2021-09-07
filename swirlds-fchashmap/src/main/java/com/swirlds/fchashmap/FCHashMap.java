@@ -309,12 +309,10 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 				insertion = originalDeletionStatus;
 			}
 
-			// originalMutationQueueSize will never be 0 unless the queue was just created
-			final int originalMutationQueueSize = mutations.size();
+			final boolean originallyEmpty = mutations.isEmpty();
 
 			// Add the mutation
-			mutations.maybeAddLast(version, value, deletion);
-			final int newMutationQueueSize = mutations.size();
+			final boolean mutationAdded = mutations.maybeAddLast(version, value, deletion);
 
 			// Adjust the size of the map
 			if (insertion) {
@@ -325,7 +323,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 
 			// We don't need to schedule garbage collection on queues that don't grow unless there is a deletion
 			// We don't need to schedule garbage collection on queues of size 1
-			if ((newMutationQueueSize > originalMutationQueueSize && originalMutationQueueSize > 0) || deletion) {
+			if ((mutationAdded && !originallyEmpty) || deletion) {
 				garbageCollector.registerGarbageCollectionEvent(key, mutations, version);
 			}
 

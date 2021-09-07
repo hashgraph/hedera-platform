@@ -523,8 +523,13 @@ class EventFlow extends AbstractEventFlow {
 	@Override
 	void loadDataFromSignedState(SignedState signedState, boolean isReconnect) {
 		minGenQueue.addAll(signedState.getMinGenInfo());
-		final long minGenNonAncient = minGenQueue.getRoundGeneration(
-				signedState.getLastRoundReceived() - Settings.state.roundsStale);
+
+		final long staleRound = signedState.getLastRoundReceived() - Settings.state.roundsStale;
+		// if we dont have stale rounds yet, there is nothing to expire
+		long minGenNonAncient = RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
+		if (staleRound >= 1) {
+			minGenNonAncient = minGenQueue.getRoundGeneration(staleRound);
+		}
 		signedStateEvents.loadDataFromSignedState(signedState.getEvents(), minGenNonAncient);
 
 		// set initialHash of the RunningHash to be the hash loaded from signed state
@@ -795,8 +800,10 @@ class EventFlow extends AbstractEventFlow {
 				}
 			}
 		} catch (InterruptedException ex) {
-			log.error(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(),
-					"EventFlow::handleTransaction Interrupted [ nodeId = {} ]", platform.getSelfId().getId(), ex);
+			log.info(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(),
+					"EventFlow::handleTransaction Interrupted [ nodeId = {} ]. " +
+							"This should happen only during a reconnect",
+					platform.getSelfId().getId());
 			Thread.currentThread().interrupt();
 		} catch (Exception ex) {
 			log.error(EXCEPTION.getMarker(),

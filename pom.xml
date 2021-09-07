@@ -21,7 +21,7 @@
 	<!-- Project Configuration -->
 	<groupId>com.swirlds</groupId>
 	<artifactId>swirlds-platform</artifactId>
-	<version>0.16.0-orvw.1</version>
+	<version>0.17.4-orvw.1</version>
 
 	<packaging>pom</packaging>
 
@@ -97,7 +97,7 @@
 		<plugin.jacoco.version>0.8.6</plugin.jacoco.version>
 
 		<!-- VCS Information Plugins -->
-		<plugin.git.commitid.version>4.0.2</plugin.git.commitid.version>
+		<plugin.git.commitid.version>4.0.5</plugin.git.commitid.version>
 
 		<!-- Core Maven Plugins -->
 		<plugin.maven.clean.version>3.1.0</plugin.maven.clean.version>
@@ -112,6 +112,7 @@
 		<plugin.maven.javadoc.version>3.2.0</plugin.maven.javadoc.version>
 		<plugin.maven.dependency.version>3.1.2</plugin.maven.dependency.version>
 		<plugin.maven.release.version>2.5.3</plugin.maven.release.version>
+		<plugin.maven.shade.version>3.2.4</plugin.maven.shade.version>
 		<plugin.maven.gpg.version>1.6</plugin.maven.gpg.version>
 
 
@@ -133,6 +134,7 @@
 		<dep.commons.lang3.version>3.11</dep.commons.lang3.version>
 		<dep.commons.collections4.version>4.4</dep.commons.collections4.version>
 		<dep.commons.codec.version>1.15</dep.commons.codec.version>
+		<dep.commons.compress.version>1.21</dep.commons.compress.version>
 		<dep.slf4j.version>1.8.0-beta2</dep.slf4j.version>
 		<dep.bouncy.castle.version>1.68</dep.bouncy.castle.version>
 		<dep.hikaricp.version>3.3.1</dep.hikaricp.version>
@@ -143,32 +145,13 @@
 		<dep.jna.version>5.8.0</dep.jna.version>
 		<dep.jocl.version>2.0.2</dep.jocl.version>
 		<dep.classgraph.version>4.8.65</dep.classgraph.version>
+		<dep.picocli.version>4.6.1</dep.picocli.version>
 
 		<!-- Test Dependencies -->
 		<dep.junit.jupiter.version>5.5.0-M1</dep.junit.jupiter.version>
 		<dep.mockito.version>3.11.0</dep.mockito.version>
 
-		<!-- SonarCloud Properties -->
-		<sonar.jacoco.path>target/site/jacoco-aggregate/jacoco.xml</sonar.jacoco.path>
-		<sonar.jacoco.alt.path>target/site/jacoco/jacoco.xml</sonar.jacoco.alt.path>
-		<sonar.organization>swirlds</sonar.organization>
-		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
-		<sonar.language>java</sonar.language>
-		<sonar.java.coveragePlugin>jacoco</sonar.java.coveragePlugin>
-
-		<sonar.coverage.jacoco.xmlReportPaths>
-			${sonar.jacoco.path},
-			${project.basedir}/../regression/${sonar.jacoco.path},
-			${project.basedir}/../platform-apps/tests/PlatformTestingTool/${sonar.jacoco.path},
-			${project.basedir}/../swirlds-platform-core/${sonar.jacoco.path},
-			${project.basedir}/../swirlds-fchashmap/${sonar.jacoco.path},
-			${project.basedir}/../swirlds-unit-tests/common/swirlds-common-test/${sonar.jacoco.path},
-			${project.basedir}/../swirlds-unit-tests/common/swirlds-logging-test/${sonar.jacoco.path},
-			${project.basedir}/../swirlds-unit-tests/core/swirlds-platform-test/${sonar.jacoco.path},
-			${project.basedir}/../swirlds-unit-tests/core/swirlds-platform-test/${sonar.jacoco.alt.path},
-			${project.basedir}/../swirlds-unit-tests/structures/swirlds-fcmap-test/${sonar.jacoco.path},
-			${project.basedir}/../swirlds-unit-tests/structures/swirlds-fcqueue-test/${sonar.jacoco.path}
-		</sonar.coverage.jacoco.xmlReportPaths>
+		
 	</properties>
 
 	<!-- Profiles -->
@@ -441,6 +424,7 @@
 		<module>swirlds-fcmap</module>
 		<module>swirlds-fcqueue</module>
 		<module>swirlds-fchashmap</module>
+		<module>swirlds-merkletree</module>
 	</modules>
 
 	<!-- Dependency Management -->
@@ -516,6 +500,11 @@
 				<groupId>commons-codec</groupId>
 				<artifactId>commons-codec</artifactId>
 				<version>${dep.commons.codec.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.commons</groupId>
+				<artifactId>commons-compress</artifactId>
+				<version>${dep.commons.compress.version}</version>
 			</dependency>
 
 			<!-- SLF4J -->
@@ -651,6 +640,13 @@
 				<scope>test</scope>
 			</dependency>
 
+			<!-- PicoCLI -->
+			<dependency>
+				<groupId>info.picocli</groupId>
+				<artifactId>picocli</artifactId>
+				<version>${dep.picocli.version}</version>
+			</dependency>
+
 		</dependencies>
 	</dependencyManagement>
 
@@ -764,6 +760,11 @@
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-release-plugin</artifactId>
 					<version>${plugin.maven.release.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-shade-plugin</artifactId>
+					<version>${plugin.maven.shade.version}</version>
 				</plugin>
 
 

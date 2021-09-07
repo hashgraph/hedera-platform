@@ -12,28 +12,14 @@
  * OR NON-INFRINGEMENT.
  */
 
-package com.swirlds.fchashmap;
+package com.swirlds.platform.stats;
 
-import java.time.Duration;
+public interface ShadowGraphStats extends DefaultStats {
 
-/**
- * Settings for {@link com.swirlds.fchashmap.FCHashMap}.
- */
-public interface FCHashMapSettings {
+	void updateMultiTipsPerSync(final int multiTipCount);
 
-	/**
-	 * Get the maximum expected size of the FCHashMapGarbageCollector's queue.
-	 */
-	int getMaximumGCQueueSize();
-
-	/**
-	 * Get the amount of time that must pass between error logs about the FCHashMapGarbageCollector's queue size.
-	 */
-	Duration getGCQueueThresholdPeriod();
-
-	/**
-	 * Is the archival of FCHashMap enabled?
-	 */
-	boolean isArchiveEnabled();
+	void updateTipsPerSync(final int tipCount);
+	
+	void updateTipAbsorptionOpsPerSec();
 
 }

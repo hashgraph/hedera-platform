@@ -14,8 +14,6 @@
 
 package com.swirlds.fchashmap.internal;
 
-import org.apache.commons.lang3.tuple.Pair;
-
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -30,7 +28,7 @@ import java.util.NoSuchElementException;
  */
 public class FCOneToManyRelationIterator<K, V> implements Iterator<V> {
 
-	private final Map<Pair<K, Integer>, V> associationMap;
+	private final Map<KeyIndexPair<K>, V> associationMap;
 	private final K key;
 	private final int endIndex;
 
@@ -49,7 +47,7 @@ public class FCOneToManyRelationIterator<K, V> implements Iterator<V> {
 	 * 		the index where iteration ends (exclusive)
 	 */
 	public FCOneToManyRelationIterator(
-			final Map<Pair<K, Integer>, V> associationMap,
+			final Map<KeyIndexPair<K>, V> associationMap,
 			final K key,
 			final int startIndex,
 			final int endIndex) {
@@ -79,7 +77,7 @@ public class FCOneToManyRelationIterator<K, V> implements Iterator<V> {
 		final int index = nextIndex;
 		nextIndex++;
 
-		final V next = associationMap.get(Pair.of(key, index));
+		final V next = associationMap.get(new KeyIndexPair<>(key, index));
 		if (next == null) {
 			throw new IllegalStateException("end index exceeds number of available values");
 		}

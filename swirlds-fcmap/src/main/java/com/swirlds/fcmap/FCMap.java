@@ -20,8 +20,9 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
 import com.swirlds.fchashmap.FCHashMap;
-import com.swirlds.fcmap.internal.FCMLeaf;
-import com.swirlds.fcmap.internal.FCMTree;
+import com.swirlds.fchashmap.FCHashMapSettingsFactory;
+import com.swirlds.merkletree.MerkleBinaryTree;
+import com.swirlds.merkletree.MerklePair;
 import org.apache.commons.lang3.time.StopWatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -37,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.StampedLock;
 import java.util.stream.Collectors;
 
+import static com.swirlds.common.merkle.copy.MerklePathReplacement.replacePath;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 
 /**
@@ -85,7 +87,7 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 	/**
 	 * Internal map to guarantee O(1) access
 	 */
-	protected FCHashMap<K, FCMLeaf<K, V>> internalMap;
+	protected FCHashMap<K, MerklePair<K, V>> internalMap;
 
 	/**
 	 * Used to prevent concurrent reads, writes, copies, and archives.
@@ -168,17 +170,17 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 	@Override
 	public boolean childHasExpectedType(final int index, final long childClassId, final int version) {
 		if (index == ChildIndices.TREE) {
-			return childClassId == FCMTree.CLASS_ID;
+			return childClassId == MerkleBinaryTree.CLASS_ID;
 		}
 
 		return true;
 	}
 
-	protected FCMTree<K, V> getTree() {
+	protected MerkleBinaryTree<MerklePair<K, V>> getTree() {
 		return getChild(ChildIndices.TREE);
 	}
 
-	private void setTree(final FCMTree<K, V> tree) {
+	private void setTree(final MerkleBinaryTree<MerklePair<K, V>> tree) {
 		setChild(ChildIndices.TREE, tree);
 	}
 
@@ -197,7 +199,7 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 	 */
 	public FCMap(final int initialCapacity) {
 		this.internalMap = new FCHashMap<>(initialCapacity);
-		setTree(new FCMTree<>());
+		setTree(new MerkleBinaryTree<>());
 		setImmutable(false);
 		lock = new StampedLock();
 	}
@@ -258,7 +260,7 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 		}
 	}
 
-	private void updateCache(final FCMLeaf<K, V> leaf) {
+	private void updateCache(final MerklePair<K, V> leaf) {
 		internalMap.put(leaf.getKey(), leaf);
 	}
 
@@ -279,16 +281,18 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 	 */
 	@Override
 	public void archive() {
-		final long stamp = writeLock();
-		try {
-			if (!isImmutable()) {
-				throw new IllegalStateException("A mutable FCMap may not have fast read access revoked.");
+		if (FCHashMapSettingsFactory.get().isArchiveEnabled()) {
+			final long stamp = writeLock();
+			try {
+				if (!isImmutable()) {
+					throw new IllegalStateException("A mutable FCMap may not have fast read access revoked.");
+				}
+				if (!internalMap.isReleased()) {
+					this.internalMap.release();
+				}
+			} finally {
+				releaseWriteLock(stamp);
 			}
-			if (!internalMap.isReleased()) {
-				this.internalMap.release();
-			}
-		} finally {
-			releaseWriteLock(stamp);
 		}
 	}
 
@@ -312,7 +316,7 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 		throwIfImmutable();
 		final long stamp = writeLock();
 		try {
-			final FCMLeaf<K, V> leaf = this.internalMap.remove(key);
+			final MerklePair<K, V> leaf = this.internalMap.remove(key);
 			if (leaf == null) {
 				return null;
 			}
@@ -370,9 +374,10 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 
 		final long stamp = readLock();
 		try {
-			final FCMLeaf<K, V> leaf;
+			final MerklePair<K, V> leaf;
 			if (this.internalMap.isReleased()) {
-				leaf = getTree().findLeafByKey((K) key);
+				final MerklePair<K, V> partialPair = new MerklePair<>((K) key, null);
+				leaf = getTree().findValue(partialPair::isMatchedKey);
 			} else {
 				leaf = this.internalMap.get(key);
 			}
@@ -413,12 +418,21 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 
 		final long stamp = readLock();
 		try {
-			final FCMLeaf<K, V> originalLeaf = internalMap.get(key);
+			final MerklePair<K, V> originalLeaf = internalMap.get(key);
 			if (originalLeaf == null) {
 				return null;
 			}
 
-			FCMLeaf<K, V> newLeaf = getTree().getForModify(originalLeaf, this::updateCache);
+			// Replace path down to the leaf
+			final MerkleNode[] path = replacePath(getTree(), originalLeaf.getRoute());
+			final MerklePair<K, V> newLeaf = path[path.length - 1].cast();
+			updateCache(newLeaf);
+			getTree().registerCopy(originalLeaf, newLeaf);
+
+			final V currentValue = newLeaf.getValue();
+			if (currentValue.getReferenceCount() > 1) {
+				newLeaf.setChild(MerklePair.ChildIndices.VALUE, currentValue.copy(), currentValue.getRoute());
+			}
 
 			return newLeaf.getValue();
 		} finally {
@@ -487,7 +501,7 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 					throw new IllegalArgumentException("Value is in another tree, can not insert");
 				}
 
-				final FCMLeaf<K, V> leaf = new FCMLeaf<>(key, value);
+				final MerklePair<K, V> leaf = new MerklePair<>(key, value);
 				getTree().insert(leaf, this::updateCache);
 				internalMap.put(key, leaf);
 				invalidateHash();
@@ -561,7 +575,7 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 	 * while a lock is already held by the outer context.
 	 */
 	private V replaceInternal(final K key, final V value) {
-		final FCMLeaf<K, V> oldLeaf = this.internalMap.get(key);
+		final MerklePair<K, V> oldLeaf = this.internalMap.get(key);
 		if (oldLeaf == null) {
 			throw new IllegalStateException("Can not replace value that is not in the map");
 		}
@@ -583,7 +597,7 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 		getTree().invalidateHash();
 		getTree().getRoot().invalidateHash();
 
-		final FCMLeaf<K, V> newLeaf = new FCMLeaf<>();
+		final MerklePair<K, V> newLeaf = new MerklePair<>();
 
 		// For the sake of efficiency, it is critically important that routes are not recreated unnecessarily.
 		// Recycle the existing routes from oldLeaf.
@@ -685,10 +699,10 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 				return new HashSet<>(this.internalMap.keySet());
 			}
 
-			final Iterator<FCMLeaf<K, V>> leafIterator = getTree().leafIterator();
+			final Iterator<MerklePair<K, V>> leafIterator = getTree().leafIterator();
 			final Set<K> keys = new HashSet<>();
 			while (leafIterator.hasNext()) {
-				final FCMLeaf<K, V> leaf = leafIterator.next();
+				final MerklePair<K, V> leaf = leafIterator.next();
 				keys.add(leaf.getKey());
 			}
 
@@ -714,13 +728,13 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 		final long stamp = readLock();
 		try {
 			if (this.internalMap.size() > 0) {
-				return this.internalMap.values().stream().map(FCMLeaf::getValue).collect(Collectors.toList());
+				return this.internalMap.values().stream().map(MerklePair::getValue).collect(Collectors.toList());
 			}
 
-			final Iterator<FCMLeaf<K, V>> leafIterator = getTree().leafIterator();
+			final Iterator<MerklePair<K, V>> leafIterator = getTree().leafIterator();
 			final Set<V> values = new HashSet<>();
 			while (leafIterator.hasNext()) {
-				final FCMLeaf<K, V> leaf = leafIterator.next();
+				final MerklePair<K, V> leaf = leafIterator.next();
 				values.add(leaf.getValue());
 			}
 
@@ -753,7 +767,7 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 			}
 
 			final Set<Entry<K, V>> entrySet = new HashSet<>();
-			final Iterator<FCMLeaf<K, V>> leafIterator = getTree().leafIterator();
+			final Iterator<MerklePair<K, V>> leafIterator = getTree().leafIterator();
 			while (leafIterator.hasNext()) {
 				entrySet.add(leafIterator.next().getEntry());
 			}
@@ -783,9 +797,9 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 				return this.values().stream().anyMatch(v -> Objects.equals(v, value));
 			}
 
-			final Iterator<FCMLeaf<K, V>> leafIterator = getTree().leafIterator();
+			final Iterator<MerklePair<K, V>> leafIterator = getTree().leafIterator();
 			while (leafIterator.hasNext()) {
-				final FCMLeaf<K, V> leaf = leafIterator.next();
+				final MerklePair<K, V> leaf = leafIterator.next();
 				if (leaf.getValue().equals(value)) {
 					return true;
 				}
@@ -895,7 +909,7 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 	/**
 	 * Utility method for unit tests. Return the internal map used for fast lookup operations.
 	 */
-	protected FCHashMap<K, FCMLeaf<K, V>> getInternalMap() {
+	protected FCHashMap<K, MerklePair<K, V>> getInternalMap() {
 		return internalMap;
 	}
 
@@ -920,9 +934,9 @@ public class FCMap<K extends MerkleNode, V extends MerkleNode>
 	 */
 	@Override
 	public void initialize() {
-		final Iterator<FCMLeaf<K, V>> leafIterator = getTree().leafIterator();
+		final Iterator<MerklePair<K, V>> leafIterator = getTree().leafIterator();
 		while (leafIterator.hasNext()) {
-			final FCMLeaf<K, V> nextLeaf = leafIterator.next();
+			final MerklePair<K, V> nextLeaf = leafIterator.next();
 			this.internalMap.put(nextLeaf.getKey(), nextLeaf);
 		}
 

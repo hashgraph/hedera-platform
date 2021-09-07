@@ -16,7 +16,6 @@
  */
 open module com.swirlds.fcmap {
 	exports com.swirlds.fcmap;
-	exports com.swirlds.fcmap.internal;
 
 	requires com.swirlds.common;
 	requires com.swirlds.logging;
@@ -29,4 +28,5 @@ open module com.swirlds.fcmap {
 	requires org.apache.commons.lang3;
 
 	requires java.sql;
+	requires com.swirlds.merkletree;
 }

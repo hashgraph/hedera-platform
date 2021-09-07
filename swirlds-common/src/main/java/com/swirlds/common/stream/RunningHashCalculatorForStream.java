@@ -23,7 +23,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import static com.swirlds.logging.LogMarker.OBJECT_STREAM;
-import static com.swirlds.logging.LogMarker.OBJECT_STREAM_DETAIL;
 
 /**
  * Accepts a SerializableRunningHashable object each time, calculates and sets its runningHash
@@ -84,11 +83,6 @@ public class RunningHashCalculatorForStream<T extends SerializableRunningHashabl
 		// calculates and updates runningHash
 		runningHash = cryptography.calcRunningHash(runningHash, newHashToAdd, DigestType.SHA_384);
 		t.getRunningHash().setHash(runningHash);
-		LOGGER.info(OBJECT_STREAM_DETAIL.getMarker(),
-				"RunningHashCalculatorForStream :: after consume object {}, hash: {}, updated runningHash: {}",
-				() -> t,
-				() -> newHashToAdd,
-				() -> runningHash);
 		super.addObject(t);
 	}
 

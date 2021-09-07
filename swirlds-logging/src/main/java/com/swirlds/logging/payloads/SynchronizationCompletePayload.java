@@ -20,6 +20,7 @@ package com.swirlds.logging.payloads;
 public class SynchronizationCompletePayload extends AbstractLogPayload {
 
 	private double timeInSeconds;
+	private double hashTimeInSeconds;
 	private double initializationTimeInSeconds;
 	private int totalNodes;
 	private int leafNodes;
@@ -34,93 +35,161 @@ public class SynchronizationCompletePayload extends AbstractLogPayload {
 	/**
 	 * @param message
 	 * 		the human readable message
-	 * @param timeInSeconds
-	 * 		the amount of time that synchronization of the merkle tree required
-	 * @param initializationTimeInSeconds
-	 * 		the amount of time required to initialize the merkle tree
-	 * @param totalNodes
-	 * 		the total number of nodes that were sent over the network
-	 * @param leafNodes
-	 * 		the total number of leaf nodes that were sent over the network
-	 * @param redundantLeafNodes
-	 * 		the total number of leaf nodes that were redundantly sent
-	 * @param internalNodes
-	 * 		the total number of internal nodes that were sent over the network
-	 * @param redundantInternalNodes
-	 * 		the total number of internal nodes that were redundantly sent over the network
 	 */
-	public SynchronizationCompletePayload(
-			final String message,
-			final double timeInSeconds,
-			final double initializationTimeInSeconds,
-			final int totalNodes,
-			final int leafNodes,
-			final int redundantLeafNodes,
-			final int internalNodes,
-			final int redundantInternalNodes) {
+	public SynchronizationCompletePayload(final String message) {
 		super(message);
-		this.timeInSeconds = timeInSeconds;
-		this.initializationTimeInSeconds = initializationTimeInSeconds;
-		this.totalNodes = totalNodes;
-		this.leafNodes = leafNodes;
-		this.redundantLeafNodes = redundantLeafNodes;
-		this.internalNodes = internalNodes;
-		this.redundantInternalNodes = redundantInternalNodes;
 	}
 
+	/**
+	 * Get the time required to transmit the state over the network, measured in seconds.
+	 */
 	public double getTimeInSeconds() {
 		return timeInSeconds;
 	}
 
-	public void setTimeInSeconds(double timeInSeconds) {
+	/**
+	 * Set the time required to transmit the state over the network, measured in seconds.
+	 *
+	 * @param timeInSeconds
+	 * 		the time required to transmit the state
+	 * @return this object
+	 */
+	public SynchronizationCompletePayload setTimeInSeconds(double timeInSeconds) {
 		this.timeInSeconds = timeInSeconds;
+		return this;
 	}
 
+	/**
+	 * Get the time required to required to hash the state, in seconds.
+	 */
+	public double getHashTimeInSeconds() {
+		return hashTimeInSeconds;
+	}
+
+	/**
+	 * Set the time required to required to hash the state, in seconds.
+	 *
+	 * @param hashTimeInSeconds
+	 * 		the time required to hash the state
+	 * @return this object
+	 */
+	public SynchronizationCompletePayload setHashTimeInSeconds(final double hashTimeInSeconds) {
+		this.hashTimeInSeconds = hashTimeInSeconds;
+		return this;
+	}
+
+	/**
+	 * Get the time required to required to initialize the state, in seconds.
+	 */
 	public double getInitializationTimeInSeconds() {
 		return initializationTimeInSeconds;
 	}
 
-	public void setInitializationTimeInSeconds(double initializationTimeInSeconds) {
+	/**
+	 * Set the time required to required to initialize the state, in seconds.
+	 *
+	 * @param initializationTimeInSeconds
+	 * 		the time required to initialize the state
+	 * @return this object
+	 */
+	public SynchronizationCompletePayload setInitializationTimeInSeconds(double initializationTimeInSeconds) {
 		this.initializationTimeInSeconds = initializationTimeInSeconds;
+		return this;
 	}
 
+	/**
+	 * Get the total number of merkel nodes that were sent during synchronization.
+	 */
 	public int getTotalNodes() {
 		return totalNodes;
 	}
 
-	public void setTotalNodes(int totalNodes) {
+	/**
+	 * Set the total number of merkel nodes that were sent during synchronization.
+	 *
+	 * @param totalNodes
+	 * 		the number of nodes sent during synchronization
+	 * @return this object
+	 */
+	public SynchronizationCompletePayload setTotalNodes(int totalNodes) {
 		this.totalNodes = totalNodes;
+		return this;
 	}
 
+	/**
+	 * Get the total number of merkel leaf nodes that were sent during synchronization.
+	 */
 	public int getLeafNodes() {
 		return leafNodes;
 	}
 
-	public void setLeafNodes(int leafNodes) {
+	/**
+	 * Set the total number of merkel leaf nodes that were sent during synchronization.
+	 *
+	 * @param leafNodes
+	 * 		the number of leaf nodes sent during synchronization
+	 * @return this object
+	 */
+	public SynchronizationCompletePayload setLeafNodes(int leafNodes) {
 		this.leafNodes = leafNodes;
+		return this;
 	}
 
+	/**
+	 * Get the total number of merkel leaf nodes that were sent unnecessarily during synchronization.
+	 */
 	public int getRedundantLeafNodes() {
 		return redundantLeafNodes;
 	}
 
-	public void setRedundantLeafNodes(int redundantLeafNodes) {
+	/**
+	 * Set the total number of merkel leaf nodes that were sent unnecessarily during synchronization.
+	 *
+	 * @param redundantLeafNodes
+	 * 		the number of redundant leaf nodes sent
+	 * @return this object
+	 */
+	public SynchronizationCompletePayload setRedundantLeafNodes(int redundantLeafNodes) {
 		this.redundantLeafNodes = redundantLeafNodes;
+		return this;
 	}
 
+	/**
+	 * Get the total number of internal merkle nodes that were sent during synchronization.
+	 */
 	public int getInternalNodes() {
 		return internalNodes;
 	}
 
-	public void setInternalNodes(int internalNodes) {
+	/**
+	 * Set the total number of internal merkle nodes that were sent during synchronization.
+	 *
+	 * @param internalNodes
+	 * 		the number of internal nodes sent
+	 * @return this object
+	 */
+	public SynchronizationCompletePayload setInternalNodes(int internalNodes) {
 		this.internalNodes = internalNodes;
+		return this;
 	}
 
+
+	/**
+	 * Get the total number of internal merkle nodes that were sent unnecessarily during synchronization.
+	 */
 	public int getRedundantInternalNodes() {
 		return redundantInternalNodes;
 	}
 
-	public void setRedundantInternalNodes(int redundantInternalNodes) {
+	/**
+	 * Set the total number of internal merkle nodes that were sent unnecessarily during synchronization.
+	 *
+	 * @param redundantInternalNodes
+	 * 		the number of redundant internal nodes
+	 * @return this object
+	 */
+	public SynchronizationCompletePayload setRedundantInternalNodes(int redundantInternalNodes) {
 		this.redundantInternalNodes = redundantInternalNodes;
+		return this;
 	}
 }

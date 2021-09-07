@@ -710,6 +710,10 @@ public class SwirldsPlatform extends AbstractPlatform {
 					addForConsEventsCount);
 		}
 
+		// update dual state status to clear any possible inconsistency between freezeTime and lastFrozenTime
+		eventFlow.getConsensusState().getPlatformDualState().setFreezeTime(null);
+		eventFlow.getConsensusState().getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
+
 		log.info(EVENT_PARSER.getMarker(), "Inserted {} event to forCons queue", addForConsEventsCount);
 		log.info(EVENT_PARSER.getMarker(), "forConsQueueCount {}", forConsQueueCount);
 		log.info(EVENT_PARSER.getMarker(), "lastRecoverRoundWithNewUserTran {}", lastRecoverRoundWithNewUserTran);

@@ -14,6 +14,11 @@
 
 package com.swirlds.platform.sync;
 
+import com.swirlds.common.crypto.Hash;
+
+import java.util.List;
+import java.util.Set;
+
 /**
  * A graph view facade for the descendants of a given event in a shadow graph.
  */
@@ -22,6 +27,11 @@ class SyncShadowGraphDescendantView implements Iterable<SyncShadowEvent> {
 	 * The shadow event from which iterator begins
 	 */
 	private final SyncShadowEvent start;
+	private final Set<Hash> sendingTips;
+	private final Set<SyncShadowEvent> visited;
+	private final List<Long> maxTipGenerations;
+	private final boolean includeOtherChildren;
+
 
 	/**
 	 * Construct a DFS graph descendant view for a given starting event
@@ -29,8 +39,17 @@ class SyncShadowGraphDescendantView implements Iterable<SyncShadowEvent> {
 	 * @param start
 	 * 		the starting event
 	 */
-	public SyncShadowGraphDescendantView(final SyncShadowEvent start) {
+	public SyncShadowGraphDescendantView(
+			final SyncShadowEvent start,
+			final Set<Hash> sendingTips,
+			final Set<SyncShadowEvent> visited,
+			final List<Long> maxTipGenerations,
+			final boolean includeOtherChildren) {
 		this.start = start;
+		this.sendingTips = sendingTips;
+		this.visited = visited;
+		this.maxTipGenerations = maxTipGenerations;
+		this.includeOtherChildren = includeOtherChildren;
 	}
 
 	/**
@@ -38,6 +57,7 @@ class SyncShadowGraphDescendantView implements Iterable<SyncShadowEvent> {
 	 */
 	@Override
 	public SyncShadowGraphDescendantDFSIterator iterator() {
-		return new SyncShadowGraphDescendantDFSIterator(start);
+		return new SyncShadowGraphDescendantDFSIterator(start, sendingTips, visited, maxTipGenerations,
+				includeOtherChildren);
 	}
 }

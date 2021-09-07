@@ -246,6 +246,11 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 		timing.setTimePoint(1);
 
 		// STEP 2: READ and WRITE the ACK/NACK, and tip hashes, tip booleans, and generation numbers
+
+		getSyncShadowGraphManager().setInitialTips(getSyncData());
+		conn.getPlatform().getStats().updateTipsPerSync(getSyncData().getSendingTipList().size());
+		conn.getPlatform().getStats().updateMultiTipsPerSync(getSyncData().computeMultiTipCount());
+
 		syncStep2(canAcceptSync, reconnected);
 		timing.setTimePoint(2);
 

@@ -46,5 +46,11 @@ public abstract class PlatformStatNames {
 	public static final String PING_DELAY = "ping";
 	/** Total number of stale event */
 	public static final String STALE_EVENT_TOTAL = "staleEvTot";
+	/** the number of creators that have more than one tip at the start of each sync */
+	public static final String MULTI_TIPS_PER_SYNC = "multiTips/sync";
+	/** the number of tips per sync at the start of each sync */
+	public static final String TIPS_PER_SYNC = "tips/sync";
+	/** the number of calls to the multiTip absorption logic per second */
+	public static final String SYNC_PHASE_3_CALLS_PER_SEC = "tipAbsorptionOps/sec";
 
 }

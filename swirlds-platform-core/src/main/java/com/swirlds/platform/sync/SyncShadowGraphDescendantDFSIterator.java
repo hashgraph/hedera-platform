@@ -14,11 +14,14 @@
 
 package com.swirlds.platform.sync;
 
+import com.swirlds.common.crypto.Hash;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 /**
  * A bottom-up DFS iterator for all descendants of a given shadow event in a shadow graph. Here, "bottom-up" means that
@@ -31,13 +34,26 @@ import java.util.NoSuchElementException;
  * theta(linear) in the number of events, which, for a finite graph, is equivalent to saying it is theta(linear)
  * in the number of descendants of the starting event.
  */
-class SyncShadowGraphDescendantDFSIterator implements Iterator<SyncShadowEvent> {
+public class SyncShadowGraphDescendantDFSIterator implements Iterator<SyncShadowEvent> {
+	private final Set<Hash> sendingTips;
+	private final Set<SyncShadowEvent> visited;
 	private final Deque<SyncShadowEvent> stack = new ArrayDeque<>();
-	private final HashSet<SyncShadowEvent> visited = new HashSet<>();
+	private final List<Long> maxTipGenerations;
+	private final boolean includeOtherChildren;
 	private SyncShadowEvent cur;
 
-	public SyncShadowGraphDescendantDFSIterator(final SyncShadowEvent start) {
+	public SyncShadowGraphDescendantDFSIterator(
+			final SyncShadowEvent start,
+			Set<Hash> sendingTips,
+			Set<SyncShadowEvent> visited,
+			List<Long> maxTipGenerations,
+			boolean includeOtherChildren) {
 		this.cur = start;
+		this.sendingTips = sendingTips;
+		this.visited = visited;
+		this.maxTipGenerations = maxTipGenerations;
+		this.includeOtherChildren = includeOtherChildren;
+
 		stack.push(cur);
 	}
 
@@ -47,13 +63,8 @@ class SyncShadowGraphDescendantDFSIterator implements Iterator<SyncShadowEvent> 
 	}
 
 	public SyncShadowEvent next() {
-		while (!stack.isEmpty()) {
+		if (!stack.isEmpty()) {
 			cur = stack.pop();
-
-			if (visited.contains(cur)) {
-				continue;
-			}
-
 			visited.add(cur);
 			pushNext();
 			return cur;
@@ -63,15 +74,28 @@ class SyncShadowGraphDescendantDFSIterator implements Iterator<SyncShadowEvent> 
 	}
 
 	private void pushNext() {
-		cur.getOtherChildren().forEach(shadowEvent -> {
-			if (!visited.contains(shadowEvent)) {
-				stack.push(shadowEvent);
-			}
-		});
+		// If we have reached a sending tip, do not process descendants.
+		if (sendingTips.contains(cur.getEvent().getBaseHash())) {
+			return;
+		}
 
-		cur.getSelfChildren().forEach(shadowEvent -> {
-			if (!visited.contains(shadowEvent)) {
-				stack.push(shadowEvent);
+		if (includeOtherChildren) {
+			cur.getOtherChildren().forEach(otherChild -> {
+				if (!visited.contains(otherChild)) {
+					if (otherChild.getEvent().getGeneration() <= maxTipGenerations.get(
+							(int) otherChild.getEvent().getCreatorId())) {
+						stack.push(otherChild);
+					}
+				}
+			});
+		}
+
+		cur.getSelfChildren().forEach(selfChild -> {
+			if (!visited.contains(selfChild)) {
+				if (selfChild.getEvent().getGeneration() <= maxTipGenerations.get(
+						(int) selfChild.getEvent().getCreatorId())) {
+					stack.push(selfChild);
+				}
 			}
 		});
 	}

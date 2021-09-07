@@ -15,6 +15,8 @@ package com.swirlds.platform.sync;
 
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.Event;
+import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.EventStrings;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +26,7 @@ import java.util.List;
  * This is the elemental type of a {@link SyncShadowGraph}. Connection to and disconnection from
  * other events in a shadow graph is implemented here.
  */
-class SyncShadowEvent {
+public class SyncShadowEvent {
 	/**
 	 * the real event
 	 */
@@ -95,15 +97,13 @@ class SyncShadowEvent {
 	 * @param s
 	 * 		the self-parent
 	 */
-	protected void setSelfParent(final SyncShadowEvent s) {
+	private void setSelfParent(final SyncShadowEvent s) {
 		if (s != null) {
 			selfParent = s;
 
 			if (!s.selfChildren.contains(this)) {
 				s.selfChildren.add(this);
 			}
-		} else {
-			removeSelfParent();
 		}
 	}
 
@@ -122,15 +122,13 @@ class SyncShadowEvent {
 	 * @param s
 	 * 		the other-parent of {@code this} shadow event
 	 */
-	protected void setOtherParent(final SyncShadowEvent s) {
+	private void setOtherParent(final SyncShadowEvent s) {
 		if (s != null) {
 			otherParent = s;
 
 			if (!s.otherChildren.contains(this)) {
 				s.otherChildren.add(this);
 			}
-		} else {
-			removeOtherParent();
 		}
 	}
 
@@ -177,6 +175,10 @@ class SyncShadowEvent {
 	 */
 	public Event getEvent() {
 		return event;
+	}
+
+	public EventImpl getEventImpl() {
+		return (EventImpl) event;
 	}
 
 	/**
@@ -286,4 +288,22 @@ class SyncShadowEvent {
 		return getEventBaseHash().hashCode();
 	}
 
+	@Override
+	public String toString() {
+		String str = "{";
+
+		str += EventStrings.toMediumString((EventImpl) getEvent()) + ", sc:[";
+		for (SyncShadowEvent sc : getSelfChildren()) {
+			str += EventStrings.toShortString((EventImpl) sc.getEvent()) + ", ";
+		}
+
+		str += "], oc:[";
+		for (SyncShadowEvent oc : getOtherChildren()) {
+			str += EventStrings.toShortString((EventImpl) oc.getEvent()) + ", ";
+		}
+		str += ']';
+		str += '}';
+
+		return str;
+	}
 }

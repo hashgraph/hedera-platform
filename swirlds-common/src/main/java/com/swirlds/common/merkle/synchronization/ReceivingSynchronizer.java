@@ -17,9 +17,7 @@ package com.swirlds.common.merkle.synchronization;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.MerkleInternal;
-import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.hash.MerkleHashValidator;
 import com.swirlds.common.merkle.io.MerkleDataInputStream;
 import com.swirlds.common.merkle.io.MerkleDataOutputStream;
 import com.swirlds.common.threading.StandardWorkGroup;
@@ -32,10 +30,10 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 
+import static com.swirlds.common.Units.MILLISECONDS_TO_SECONDS;
 import static com.swirlds.common.merkle.synchronization.MerkleSynchronizationUtils.getChild;
 import static com.swirlds.common.merkle.synchronization.MerkleSynchronizationUtils.getChildHash;
 import static com.swirlds.common.merkle.synchronization.MerkleSynchronizationUtils.getHash;
-import static com.swirlds.common.merkle.utility.MerkleConstants.MERKLE_DIGEST_TYPE;
 
 /**
  * Merkle tree synchronization is a process by which two potentially overlapping merkle trees are made into
@@ -94,6 +92,7 @@ public class ReceivingSynchronizer {
 	private int redundantInternalNodes;
 
 	private long synchronizationTimeMilliseconds;
+	private long hashTimeMilliseconds;
 	private long initializationTimeMilliseconds;
 
 	/**
@@ -123,15 +122,15 @@ public class ReceivingSynchronizer {
 	}
 
 	private void logStatistics() {
-		log.info(marker, () -> new SynchronizationCompletePayload(
-				"Finished synchronization",
-				synchronizationTimeMilliseconds / 1000.0,
-				initializationTimeMilliseconds / 1000.0,
-				leafNodesReceived + internalNodesReceived,
-				leafNodesReceived,
-				redundantLeafNodes,
-				internalNodesReceived,
-				redundantInternalNodes).toString());
+		log.info(marker, () -> new SynchronizationCompletePayload("Finished synchronization")
+				.setTimeInSeconds(synchronizationTimeMilliseconds * MILLISECONDS_TO_SECONDS)
+				.setHashTimeInSeconds(hashTimeMilliseconds * MILLISECONDS_TO_SECONDS)
+				.setInitializationTimeInSeconds(initializationTimeMilliseconds * MILLISECONDS_TO_SECONDS)
+				.setTotalNodes(leafNodesReceived + internalNodesReceived)
+				.setLeafNodes(leafNodesReceived)
+				.setRedundantLeafNodes(redundantLeafNodes)
+				.setInternalNodes(internalNodesReceived)
+				.setRedundantInternalNodes(redundantInternalNodes).toString());
 	}
 
 	/**
@@ -158,29 +157,27 @@ public class ReceivingSynchronizer {
 
 		final AsyncInputStream asyncIn = new AsyncInputStream(in, workGroup);
 		final AsyncOutputStream asyncOut = getAsyncOutputStream(out, workGroup);
-		try (final MerkleHashValidator validator = new MerkleHashValidator(
-				ReconnectSettingsFactory.get().getHashValidationThreadPoolSize())) {
 
-			workGroup.execute("receiving-thread", () -> execute(asyncIn, asyncOut, validator));
+		workGroup.execute("receiving-thread", () -> execute(asyncIn, asyncOut));
 
-			workGroup.waitForTermination();
+		workGroup.waitForTermination();
 
-			if (workGroup.hasExceptions()) {
-				cleanupFailedSynchronization(asyncIn);
-				workGroup.logAllExceptions(log, marker, Level.ERROR);
-				throw new MerkleSynchronizationException("Synchronization failed with exceptions");
-			}
-
-			try {
-				if (!validator.isValid()) {
-					throw new MerkleSynchronizationException("Invalid hash detected, aborting synchronization");
-				}
-			} catch (ExecutionException e) {
-				throw new MerkleSynchronizationException(e);
-			}
+		if (workGroup.hasExceptions()) {
+			cleanupFailedSynchronization(asyncIn);
+			workGroup.logAllExceptions(log, marker, Level.ERROR);
+			throw new MerkleSynchronizationException("Synchronization failed with exceptions");
 		}
 
-		synchronizationTimeMilliseconds = System.currentTimeMillis() - synchronizationStartTime;
+		final long hashStartTime = System.currentTimeMillis();
+		synchronizationTimeMilliseconds = hashStartTime - synchronizationStartTime;
+
+		try {
+			CryptoFactory.getInstance().digestTreeAsync(newRoot).get();
+		} catch (final ExecutionException ex) {
+			throw new MerkleSynchronizationException(ex);
+		}
+
+		hashTimeMilliseconds = System.currentTimeMillis() - hashStartTime;
 
 		logStatistics();
 
@@ -211,22 +208,11 @@ public class ReceivingSynchronizer {
 	}
 
 	/**
-	 * Handle data containing a leaf node.
-	 */
-	private void handleLeafData(
-			final ExpectedNodeData expectedData,
-			final NodeDataMessage data,
-			final MerkleHashValidator validator) {
-		validator.validateAsync(expectedData.getHash(), (MerkleLeaf) data.getNode());
-	}
-
-	/**
 	 * Handle data containing an internal node.
 	 */
 	private void handleInternalData(
 			final ExpectedNodeData expectedData,
 			final NodeDataMessage data,
-			final MerkleHashValidator validator,
 			final AsyncInputStream asyncIn,
 			final AsyncOutputStream asyncOut) throws InterruptedException {
 
@@ -234,7 +220,6 @@ public class ReceivingSynchronizer {
 		final MerkleNode originalNode = expectedData.getOriginalNode();
 		markForInitialization(node);
 
-		validator.validateAsync(expectedData.getHash(), node, data.getChildHashes());
 		for (int childIndex = 0; childIndex < data.getNumberOfChildren(); childIndex++) {
 			if (data.getChildHashes().get(childIndex).equals(getChildHash(originalNode, childIndex))) {
 				sendAck(asyncOut, true);
@@ -245,17 +230,6 @@ public class ReceivingSynchronizer {
 			final Hash childHash = data.getChildHashes().get(childIndex);
 			prepareForNodeData(asyncIn, childHash, node, childIndex, getChild(originalNode, childIndex));
 		}
-	}
-
-	private void validateLocalData(final MerkleHashValidator validator, final ExpectedNodeData expectedNodeData) {
-		Hash hash;
-		if (expectedNodeData.getOriginalNode() == null) {
-			hash = CryptoFactory.getInstance().getNullHash(MERKLE_DIGEST_TYPE);
-		} else {
-			hash = expectedNodeData.getOriginalNode().getHash();
-		}
-
-		validator.validate(expectedNodeData.getHash(), hash);
 	}
 
 	private void addToNodeCount(final ExpectedNodeData expectedData, final NodeDataMessage data) {
@@ -280,22 +254,18 @@ public class ReceivingSynchronizer {
 	private void handleData(
 			final ExpectedNodeData expectedData,
 			final NodeDataMessage data,
-			final MerkleHashValidator validator,
 			final AsyncInputStream asyncIn,
 			final AsyncOutputStream asyncOut) throws InterruptedException {
 
 		MerkleNode node;
 		if (data.currentNodeIsUpToDate()) {
 			node = expectedData.getOriginalNode();
-			validateLocalData(validator, expectedData);
 		} else {
 
 			addToNodeCount(expectedData, data);
 			node = data.getNode();
-			if (data.isLeaf()) {
-				handleLeafData(expectedData, data, validator);
-			} else {
-				handleInternalData(expectedData, data, validator, asyncIn, asyncOut);
+			if (!data.isLeaf()) {
+				handleInternalData(expectedData, data, asyncIn, asyncOut);
 			}
 		}
 
@@ -305,24 +275,20 @@ public class ReceivingSynchronizer {
 	/**
 	 * Perform the synchronization algorithm in the role of the receiver.
 	 */
-	private void execute(
-			final AsyncInputStream asyncIn,
-			final AsyncOutputStream asyncOut,
-			final MerkleHashValidator validator) {
+	private void execute(final AsyncInputStream asyncIn, final AsyncOutputStream asyncOut) {
 		try (asyncIn; asyncOut) {
 			asyncIn.addAnticipatedMessage(new Hash());
 			final Hash rootHash = asyncIn.readAnticipatedMessage();
 			sendAck(asyncOut, rootHash.equals(getHash(originalRoot)));
 			prepareForNodeData(asyncIn, rootHash, null, 0, originalRoot);
 
-			while ((expectedNodeData.size() > 0 && validator.isValidSoFar())
-					&& !Thread.currentThread().isInterrupted()) {
+			while (!expectedNodeData.isEmpty() && !Thread.currentThread().isInterrupted()) {
 				final ExpectedNodeData expectedData = expectedNodeData.remove();
 				final NodeDataMessage data = asyncIn.readAnticipatedMessage();
-				handleData(expectedData, data, validator, asyncIn, asyncOut);
+				handleData(expectedData, data, asyncIn, asyncOut);
 			}
 
-			if (validator.isValidSoFar() && !Thread.currentThread().isInterrupted()) {
+			if (!Thread.currentThread().isInterrupted()) {
 				initialize();
 			}
 		} catch (InterruptedException e) {
@@ -373,7 +339,8 @@ public class ReceivingSynchronizer {
 	}
 
 	/**
-	 * Returns the root of the tree after synchronization. Only valid when synchronization has finished.
+	 * Returns the root of the tree after synchronization. This tree should not be trusted until the root
+	 * hash has been shown to have been signed by signatures representing 1/3 or more of the network stake.
 	 */
 	public MerkleNode getRoot() {
 		return newRoot;

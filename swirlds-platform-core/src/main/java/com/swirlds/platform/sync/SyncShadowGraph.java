@@ -24,6 +24,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -38,7 +39,7 @@ import static com.swirlds.logging.LogMarker.EXPIRE_EVENT;
  * <p>
  * Use of this type in production code is through the {@link SyncShadowGraphManager} type.
  */
-class SyncShadowGraph implements Iterable<SyncShadowEvent> {
+public class SyncShadowGraph implements Iterable<SyncShadowEvent> {
 	private static final Logger LOG = LogManager.getLogger();
 
 	/**
@@ -116,7 +117,7 @@ class SyncShadowGraph implements Iterable<SyncShadowEvent> {
 	 *
 	 * @return a reference to the hash map of cryptographic hash to shadow event
 	 */
-	protected Map<Hash, SyncShadowEvent> getHashToShadowEvent() {
+	public Map<Hash, SyncShadowEvent> getHashToShadowEvent() {
 		return hashToShadowEvent;
 	}
 
@@ -228,7 +229,7 @@ class SyncShadowGraph implements Iterable<SyncShadowEvent> {
 	 * 		The selection predicate for ancestral events
 	 * @return The number of removed events
 	 */
-	protected int removeAncestry(final SyncShadowEvent s, final Predicate<SyncShadowEvent> p) {
+	public int removeAncestry(final SyncShadowEvent s, final Predicate<SyncShadowEvent> p) {
 		if (s == null) {
 			return 0;
 		}
@@ -243,17 +244,6 @@ class SyncShadowGraph implements Iterable<SyncShadowEvent> {
 		}
 
 		return count;
-	}
-
-	/**
-	 * Remove from this graph every ancestor of a given shadow event. This includes the given event.
-	 *
-	 * @param s
-	 * 		The shadow event whose ancestors are to be removed
-	 * @return The number of removed events
-	 */
-	protected int removeAncestry(final SyncShadowEvent s) {
-		return removeAncestry(s, x -> true);
 	}
 
 	/**
@@ -290,8 +280,13 @@ class SyncShadowGraph implements Iterable<SyncShadowEvent> {
 	 * 		the start event
 	 * @return a view instance for this iterator
 	 */
-	public SyncShadowGraphDescendantView graphDescendants(final SyncShadowEvent start) {
-		return new SyncShadowGraphDescendantView(start);
+	public SyncShadowGraphDescendantView graphDescendants(
+			final SyncShadowEvent start,
+			final Set<Hash> sendingTips,
+			final Set<SyncShadowEvent> visited,
+			final List<Long> maxTipGenerations,
+			final boolean includeOtherChildren) {
+		return new SyncShadowGraphDescendantView(start, sendingTips, visited, maxTipGenerations, includeOtherChildren);
 	}
 
 	/**

@@ -63,17 +63,22 @@ public class FCHashMapGarbageCollector<K, V> {
 		final int maximumQueueSize = FCHashMapSettingsFactory.get().getMaximumGCQueueSize();
 		final Duration thresholdPeriod = FCHashMapSettingsFactory.get().getGCQueueThresholdPeriod();
 
-		this.workQueue = new QueueThreadConfiguration<FCHashMap<K, V>>()
-				.setComponent("FCHashMap")
-				.setThreadName("garbage-collector")
-				.setHandler(this::handler)
-				.setMaxBufferSize(QUEUE_BUFFER_SIZE)
-				.setUnlimitedCapacity()
-				.addThreshold(
-						size -> size > maximumQueueSize,
-						size -> log.error(EXCEPTION.getMarker(), new GarbageCollectionQueuePayload(size)),
-						thresholdPeriod)
-				.build();
+		final QueueThreadConfiguration<FCHashMap<K, V>> workQueueConfiguration =
+				new QueueThreadConfiguration<FCHashMap<K, V>>()
+						.setComponent("FCHashMap")
+						.setThreadName("garbage-collector")
+						.setHandler(this::handler)
+						.setMaxBufferSize(QUEUE_BUFFER_SIZE)
+						.setUnlimitedCapacity();
+
+		if (FCHashMapSettingsFactory.get().isArchiveEnabled()) {
+			workQueueConfiguration.addThreshold(
+					size -> size > maximumQueueSize,
+					size -> log.error(EXCEPTION.getMarker(), new GarbageCollectionQueuePayload(size)),
+					thresholdPeriod);
+		}
+
+		this.workQueue = workQueueConfiguration.build();
 	}
 
 	/**

@@ -36,9 +36,11 @@ import static com.swirlds.common.io.SerializableStreamConstants.NULL_CLASS_ID;
  */
 public class NodeDataMessage implements Releasable, SelfSerializable {
 
-	private final int version = 1;
+	private static final long CLASS_ID = 0x98bc0d340d9bca1dL;
 
-	private final long classId = 0x98bc0d340d9bca1dL;
+	private static class ClassVersion {
+		public static final int ORIGINAL = 1;
+	}
 
 	private boolean currentNodeIsUpToDate;
 
@@ -164,7 +166,7 @@ public class NodeDataMessage implements Releasable, SelfSerializable {
 	 */
 	@Override
 	public long getClassId() {
-		return classId;
+		return CLASS_ID;
 	}
 
 	/**
@@ -172,7 +174,7 @@ public class NodeDataMessage implements Releasable, SelfSerializable {
 	 */
 	@Override
 	public int getVersion() {
-		return version;
+		return ClassVersion.ORIGINAL;
 	}
 
 	public boolean currentNodeIsUpToDate() {
@@ -187,6 +189,7 @@ public class NodeDataMessage implements Releasable, SelfSerializable {
 		return node == null || node.isLeaf();
 	}
 
+	@Override
 	public String toString() {
 		if (currentNodeIsUpToDate) {
 			return "(current node is up to date)";

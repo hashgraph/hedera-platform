@@ -23,30 +23,73 @@ import com.swirlds.common.merkle.MerkleNode;
  */
 public class ExpectedNodeData {
 
-	private Hash hash;
-	private MerkleInternal parent;
-	private int positionInParent;
-	private MerkleNode originalNode;
+	/**
+	 * The hash that this node is expected to have.
+	 */
+	private final Hash hash;
 
-	public ExpectedNodeData(Hash hash, MerkleInternal parent, int positionInParent, MerkleNode originalNode) {
+	/**
+	 * The node that will be the parent of this node.
+	 */
+	private final MerkleInternal parent;
+
+	/**
+	 * This node's eventual position within its parent.
+	 */
+	private final int positionInParent;
+
+	/**
+	 * The node that was originally in this position within the tree.
+	 */
+	private final MerkleNode originalNode;
+
+	/**
+	 * Create a record for a node for which we are expecting data.
+	 *
+	 * @param hash
+	 * 		the expected hash of the node
+	 * @param parent
+	 * 		the eventual parent of the node
+	 * @param positionInParent
+	 * 		the eventual position of the node within its parent
+	 * @param originalNode
+	 * 		the node that was originally in this location in the tree
+	 */
+	public ExpectedNodeData(
+			final Hash hash,
+			final MerkleInternal parent,
+			final int positionInParent,
+			final MerkleNode originalNode) {
 		this.hash = hash;
 		this.parent = parent;
 		this.positionInParent = positionInParent;
 		this.originalNode = originalNode;
 	}
 
+	/**
+	 * Get the expected hash of the node.
+	 */
 	public Hash getHash() {
 		return hash;
 	}
 
+	/**
+	 * Get the eventual parent of the node.
+	 */
 	public MerkleInternal getParent() {
 		return parent;
 	}
 
+	/**
+	 * Get the eventual position of the node within its parent.
+	 */
 	public int getPositionInParent() {
 		return positionInParent;
 	}
 
+	/**
+	 * Get the original node in this position.
+	 */
 	public MerkleNode getOriginalNode() {
 		return originalNode;
 	}

@@ -58,6 +58,11 @@ public final class FCHashMapSettingsFactory {
 			public Duration getGCQueueThresholdPeriod() {
 				return Duration.ofMinutes(1);
 			}
+
+			@Override
+			public boolean isArchiveEnabled() {
+				return false;
+			}
 		};
 	}
 }

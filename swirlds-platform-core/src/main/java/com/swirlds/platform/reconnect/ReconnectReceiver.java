@@ -22,7 +22,6 @@ import com.swirlds.common.io.extendable.ExtendableInputStream;
 import com.swirlds.common.merkle.io.MerkleDataInputStream;
 import com.swirlds.common.merkle.io.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.ReceivingSynchronizer;
-import com.swirlds.common.merkle.utility.MerkleUtils;
 import com.swirlds.logging.payloads.ReconnectDataUsagePayload;
 import com.swirlds.logging.payloads.ReconnectFailurePayload;
 import com.swirlds.platform.AbstractPlatform;
@@ -141,16 +140,11 @@ public class ReconnectReceiver {
 			if (!isNodeReadyForReconnect()) {
 				return false;
 			}
+
 			reconnect();
-
-			// This was put in place to compensate for a bug that caused incorrect
-			// clearing of the hash in the tree. This should be removed once fast
-			// copies are handled by a merkle utility (as this will not be add-hoc
-			// and prone to this type of bug).
-			MerkleUtils.rehashTree(signedState.getState());
-
 			receiveSignatures();
 			validate();
+
 		} catch (IOException e) {
 			throw new ReconnectException(e);
 		} catch (InterruptedException e) {

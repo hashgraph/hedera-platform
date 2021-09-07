@@ -98,7 +98,7 @@ class Settings {
 	///////////////////////////////////////////
 	// settings from settings.txt file
 
-	static String about = "Swirlds browser v. 0.16.0\n"
+	static String about = "Swirlds browser v. 0.17.4\n"
 			+ "(c)2016-2021 Swirlds Inc\n" + "This is an early alpha version. \n"
 			+ "The Swirlds™ software is covered by one or more patents \n"
 			+ "(see www.swirlds.com/ip). The browser is free to download, \n"
@@ -158,7 +158,7 @@ class Settings {
 	 * on startup, only Alice can create an event with no otherParent, and all other members will refrain
 	 * from creating an event until they have received at least one event
 	 */
-	static boolean waitAtStartup = true;
+	static boolean waitAtStartup = false;
 	/**
 	 * should we slow down when not behind? One of N members is "falling behind" when it receives at least
 	 * (N + throttle7threshold) events during a sync.

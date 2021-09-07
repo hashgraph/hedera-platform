@@ -64,7 +64,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 	private boolean archived = false;
 
 	/** Indicates whether the state has been staged for archival yet */
-	private boolean markedForArchiving = false;
+	private boolean markedForArchival = false;
 
 	/**
 	 * Counts the number of reservations for use.
@@ -273,15 +273,18 @@ public class SignedState implements Releasable, SignedStateInfo {
 	}
 
 	/**
-	 * Method used to guarantee that a SignedState is not put in the archival queue more than once.
-	 *
-	 * @return false the first time called, true afterwards.
+	 * Check if this state has been marked for archival.
 	 */
 	@JsonIgnore
-	public boolean isMarkedForArchiving() {
-		boolean ret = markedForArchiving;
-		markedForArchiving = true;
-		return ret;
+	public boolean isMarkedForArchival() {
+		return markedForArchival;
+	}
+
+	/**
+	 * Mark this state as having been added to the archival queue.
+	 */
+	public void markForArchival() {
+		markedForArchival = true;
 	}
 
 	/**

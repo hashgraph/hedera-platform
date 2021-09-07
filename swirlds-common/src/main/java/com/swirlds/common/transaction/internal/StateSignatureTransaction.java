@@ -15,7 +15,6 @@
 package com.swirlds.common.transaction.internal;
 
 import com.swirlds.common.TransactionType;
-import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.ExtendedDataOutputStream;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
@@ -127,7 +126,7 @@ public class StateSignatureTransaction implements Transaction {
 	@Override
 	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
 		this.isFreeze = in.readBoolean();
-		this.stateSignature = in.readByteArray(SettingsCommon.maxAddressSizeAllowed);
+		this.stateSignature = in.readByteArray(MAX_SIGNATURE_BYTES);
 		this.lastRoundReceived = in.readLong();
 	}
 

@@ -25,6 +25,7 @@ import com.swirlds.platform.state.StateInfo;
 import com.swirlds.platform.stats.ConsensusStats;
 import com.swirlds.platform.stats.HashgraphStats;
 import com.swirlds.platform.stats.PlatformStatistics;
+import com.swirlds.platform.stats.ShadowGraphStats;
 import com.swirlds.platform.stats.SignedStateStats;
 
 import java.io.File;
@@ -106,8 +107,7 @@ import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
  * </ul>
  */
 public class Statistics extends AbstractStatistics implements ConsensusStats, SignedStateStats, HashgraphStats,
-		EventAddedObserver,
-		PlatformStatistics {
+		EventAddedObserver, PlatformStatistics, ShadowGraphStats {
 
 	/** which Platform to watch */
 	protected AbstractPlatform platform;
@@ -301,6 +301,13 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 	AtomicLong staleEventsTotal = new AtomicLong(0);
 	/** number of events generated per second to rescue childless events so they don't become stale */
 	StatsSpeedometer rescuedEventsPerSecond;
+
+	/** The number of creators that have more than one tip at the start of each sync. */
+	StatsSpeedometer multiTipsPerSync;
+	/** The average number of tips per sync at the start of each sync. */
+	StatsRunningAverage tipsPerSync;
+	/** The number of calls to the multiTip absorption logic per second. */
+	StatsSpeedometer tipAbsorptionOpsPerSec;
 
 	/**
 	 * average time spent in
@@ -1843,7 +1850,43 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 							return stateDeletionTimeAvg;
 						},
 						null,
-						() -> stateDeletionTimeAvg.getWeightedMean())
+						() -> stateDeletionTimeAvg.getWeightedMean()),
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						PlatformStatNames.MULTI_TIPS_PER_SYNC,//
+						"the number of creators that have more than one tip at the start of each sync",//
+						FLOAT_FORMAT_15_3,//
+						multiTipsPerSync,//
+						(h) -> {
+							multiTipsPerSync = new StatsSpeedometer(h);
+							return multiTipsPerSync;
+						},//
+						null,//
+						() -> multiTipsPerSync.getCyclesPerSecond()),//
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						PlatformStatNames.TIPS_PER_SYNC,//
+						"the average number of tips per sync at the start of each sync",//
+						FLOAT_FORMAT_15_3,//
+						tipsPerSync,//
+						(h) -> {
+							tipsPerSync = new StatsRunningAverage(h);
+							return tipsPerSync;
+						},//
+						null,//
+						() -> tipsPerSync.getWeightedMean()),//
+				new StatEntry(//
+						INTERNAL_CATEGORY,//
+						PlatformStatNames.SYNC_PHASE_3_CALLS_PER_SEC,//
+						"tipAbsorptionOps",//
+						FLOAT_FORMAT_15_3,//
+						tipAbsorptionOpsPerSec,//
+						(h) -> {
+							tipAbsorptionOpsPerSec = new StatsSpeedometer(h);
+							return tipAbsorptionOpsPerSec;
+						},//
+						null,//
+						() -> tipAbsorptionOpsPerSec.getCyclesPerSecond()),//
 		};
 		List<StatEntry> entryList = new ArrayList<>(Arrays.asList(statEntries));
 
@@ -2080,5 +2123,20 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 	@Override
 	public void updateDeletionTime(double time) {
 		stateDeletionTimeAvg.recordValue(time);
+	}
+
+	@Override
+	public void updateMultiTipsPerSync(final int multiTipCount) {
+		multiTipsPerSync.update(multiTipCount);
+	}
+
+	@Override
+	public void updateTipsPerSync(final int tipCount) {
+		tipsPerSync.recordValue(tipCount);
+	}
+
+	@Override
+	public void updateTipAbsorptionOpsPerSec() {
+		tipAbsorptionOpsPerSec.cycle();
 	}
 }

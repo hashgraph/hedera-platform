@@ -19,13 +19,15 @@ import com.swirlds.platform.EventImpl;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import static com.swirlds.logging.LogMarker.EXPIRE_EVENT;
 import static com.swirlds.logging.LogMarker.RECONNECT;
@@ -106,12 +108,24 @@ public final class SyncShadowGraphManager {
 	}
 
 	/**
-	 * Phase 1 (send): Get a list of tip hashes to send for the hashgraph running on this node
+	 * Sets the working tips and the sending tips in syncData
 	 *
-	 * @return list of tip hashes
+	 * @param syncData
+	 * 		the object to modify
 	 */
-	public synchronized List<Hash> getSendTipHashes() {
-		return tips.stream().map(SyncShadowEvent::getEventBaseHash).collect(Collectors.toList());
+	public synchronized void setInitialTips(final SyncData syncData) {
+		syncData.getSendingTipList().clear();
+		syncData.getSendingTipList().addAll(this.tips);
+		syncData.getSendingTipList().sort(Comparator.comparingLong(s0 -> s0.getEvent().getCreatorId()));
+		syncData.getWorkingTips().clear();
+		syncData.getWorkingTips().addAll(syncData.getSendingTipList());
+		syncData.getSendingTips().clear();
+
+		for (SyncShadowEvent tip : syncData.getSendingTipList()) {
+			syncData.getSendingTips().add(tip.getEventBaseHash());
+		}
+
+		syncData.setMaxTipGenerations(syncData.getSendingTipList());
 	}
 
 	/**
@@ -136,15 +150,30 @@ public final class SyncShadowGraphManager {
 	 * 		The instance that holds the received tip hashes.
 	 */
 	public synchronized void setReceivedTipHashes(final SyncData syncData) {
-		syncData.getWorkingTips().clear();
-		syncData.getWorkingTips().addAll(this.tips);
+
+		final HashSet<SyncShadowEvent> visited = new HashSet<>();
 
 		syncData.getReceivedTipHashes().forEach((Hash h) -> {
 			final SyncShadowEvent receivedTip = shadowGraph.shadow(h);
 			if (receivedTip != null) {
 				syncData.markForSync(receivedTip);
 				syncData.getWorkingTips().remove(receivedTip);
-				processStrictSelfDescendants(syncData.getSendList(), syncData.getWorkingTips(), receivedTip);
+//				processStrictSelfDescendants(syncData.getSendList(), syncData.getWorkingTips(), receivedTip);
+
+				for (SyncShadowEvent sendingTip : syncData.getSendingTipList()) {
+					if (sendingTip.getEvent().getCreatorId() == receivedTip.getEvent().getCreatorId()) {
+						if (sendingTip.getEvent().getGeneration() > receivedTip.getEvent().getGeneration()) {
+							processStrictSelfDescendants(
+									syncData.getSendList(),
+									syncData.getWorkingTips(),
+									syncData.getSendingTips(),
+									syncData.getMaxTipGenerations(),
+									syncData.getMaxTipGeneration(),
+									visited,
+									receivedTip);
+						}
+					}
+				}
 			}
 		});
 	}
@@ -198,7 +227,8 @@ public final class SyncShadowGraphManager {
 	 */
 	public synchronized void setReceivedTipBooleans(final SyncData syncData, final List<Boolean> receivedTipBooleans,
 			String syncLogString) {
-		final List<Hash> tipHashes = getSendTipHashes();
+		final List<Hash> tipHashes = syncData.getSendingTipHashes();
+//		final List<Hash> tipHashes = new ArrayList<>(syncData.getSendingTips());
 
 		for (int i = 0; i < receivedTipBooleans.size(); ++i) {
 			final boolean b = receivedTipBooleans.get(i);
@@ -237,14 +267,29 @@ public final class SyncShadowGraphManager {
 	 * 		The instance that holds the tip mark fields set by this routine.
 	 */
 	public synchronized void finishSendEventList(final SyncData syncData) {
+
 		final Set<SyncShadowEvent> workingTips = syncData.getWorkingTips();
 		final List<EventImpl> sendList = syncData.getSendList();
+		final Set<EventImpl> sendSet = new HashSet<>();
+
+		// Linear traversal: Remember visited events across multiple instantiations of the
+		// graph iterator in the internal for-loop below. Previously visited events will not be re-visited
+		// from parents. They may be re-visited from children.
+		final Set<SyncShadowEvent> visited = new HashSet<>();
+
 		for (final SyncShadowEvent workingTip : workingTips) {
+			syncData.notifyTipAbsorptionActivated();
 			SyncShadowEvent y = workingTip;
 
 			while (y != null) {
 
-				for (final SyncShadowEvent z : shadowGraph.graphDescendants(y)) {
+				for (final SyncShadowEvent z : shadowGraph.graphDescendants(
+						y,
+						syncData.getSendingTips(),
+						visited,
+						syncData.getMaxTipGenerations(),
+						true)) {
+
 					if (syncData.markedForSync(z)) {
 						syncData.markForSearch(y);
 						break;
@@ -252,7 +297,7 @@ public final class SyncShadowGraphManager {
 				}
 
 				if (!syncData.markedForSearch(y)) {
-					sendList.add((EventImpl) y.getEvent());
+					sendSet.add((EventImpl) y.getEvent());
 				} else {
 					break;
 				}
@@ -260,6 +305,8 @@ public final class SyncShadowGraphManager {
 				y = y.getSelfParent();
 			}
 		}
+
+		sendList.addAll(sendSet);
 
 		sort(sendList);
 	}
@@ -457,9 +504,9 @@ public final class SyncShadowGraphManager {
 	 */
 	private void identifyTips() {
 		tips.clear();
-		for (final SyncShadowEvent shadowEvent : shadowGraph.getShadowEvents()) {
-			if (shadowEvent.isTip()) {
-				tips.add(shadowEvent);
+		for (final SyncShadowEvent SyncShadowEvent : shadowGraph.getShadowEvents()) {
+			if (SyncShadowEvent.isTip()) {
+				tips.add(SyncShadowEvent);
 			}
 		}
 	}
@@ -496,15 +543,19 @@ public final class SyncShadowGraphManager {
 	 * 		the list of events to be sent (may be complete after this function executes)
 	 * @param workingTips
 	 * 		the set of working tips fo the shadow graph at time of call
-	 * @param x
+	 * @param receivedTip
 	 * 		the shadow event from which to start
 	 */
-	private static void processStrictSelfDescendants(
+	private void processStrictSelfDescendants(
 			final List<EventImpl> sendList,
 			final Set<SyncShadowEvent> workingTips,
-			final SyncShadowEvent x) {
-		for (final SyncShadowEvent y : x.getSelfChildren()) {
-			processSelfDescendants(sendList, workingTips, y);
+			final Set<Hash> sendingTips,
+			final List<Long> maxTipGenerations,
+			final long maxTipGeneration,
+			final HashSet<SyncShadowEvent> visited,
+			final SyncShadowEvent receivedTip) {
+		for (final SyncShadowEvent y : receivedTip.getSelfChildren()) {
+			processSelfDescendants(sendList, workingTips, sendingTips, maxTipGenerations, maxTipGeneration, visited, y);
 		}
 	}
 
@@ -519,19 +570,38 @@ public final class SyncShadowGraphManager {
 	 * @param y
 	 * 		the shadow event from which to start
 	 */
-	private static void processSelfDescendants(
+	private void processSelfDescendants(
 			final List<EventImpl> sendList,
 			final Set<SyncShadowEvent> workingTips,
+			final Set<Hash> sendingTips,
+			final List<Long> maxTipGenerations,
+			final long maxTipGeneration,
+			final HashSet<SyncShadowEvent> visited,
 			final SyncShadowEvent y) {
-		if (y == null) {
+
+		if (visited.contains(y))
 			return;
-		}
 
-		sendList.add((EventImpl) y.getEvent());
-		workingTips.remove(y);
+		Deque<SyncShadowEvent> stack = new ArrayDeque<>();
 
-		for (final SyncShadowEvent y0 : y.getSelfChildren()) {
-			processSelfDescendants(sendList, workingTips, y0);
+		stack.push(y);
+		while (!stack.isEmpty()) {
+			SyncShadowEvent cur = stack.pop();
+			visited.add(cur);
+
+			// push next
+			if (!sendingTips.contains(cur.getEvent().getBaseHash())) {
+				for (SyncShadowEvent selfChild : cur.getSelfChildren()) {
+					if (selfChild.getEvent().getGeneration() <= maxTipGeneration) {
+						if (!visited.contains(selfChild)) {
+							stack.push(selfChild);
+						}
+					}
+				}
+			}
+
+			sendList.add((EventImpl) cur.getEvent());
+			workingTips.remove(cur);
 		}
 	}
 
