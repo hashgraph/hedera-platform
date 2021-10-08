@@ -88,6 +88,11 @@ public class SignedState implements Releasable, SignedStateInfo {
 	 */
 	private boolean savedToDisk = false;
 
+	/**
+	 * True if this state has gathered sufficient signatures, otherwise false.
+	 */
+	private boolean complete;
+
 	/** Data that is stored to local storage and is not hashed */
 	private LocalStateEvents localStateEvents;
 
@@ -528,5 +533,19 @@ public class SignedState implements Releasable, SignedStateInfo {
 	 */
 	public Instant getLastTransactionTimestamp() {
 		return state.getPlatformState().getLastTransactionTimestamp();
+	}
+
+	/**
+	 * Return true if this state has gathered enough signatures.
+	 */
+	public boolean isComplete() {
+		return complete;
+	}
+
+	/**
+	 * Specify if this state has gathered enough signatures.
+	 */
+	public void markAsComplete() {
+		this.complete = true;
 	}
 }

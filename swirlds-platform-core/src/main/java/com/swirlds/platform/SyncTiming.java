@@ -99,6 +99,7 @@ class SyncTiming {
 
 		final double syncDurationSec = (t[5] - t[0]) * Units.NANOSECONDS_TO_SECONDS;
 		stats.avgSyncDuration.recordValue(syncDurationSec);
+		stats.maxSyncTimeSec.accumulate(syncDurationSec);
 		final double speed =
 				Math.max(conn.getDis().getSyncByteCounter().getCount(), conn.getDos().getSyncByteCounter().getCount())
 						/ syncDurationSec;

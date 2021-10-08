@@ -25,6 +25,10 @@ import java.util.List;
 import java.util.concurrent.Future;
 
 public interface Cryptography {
+	/** The default value for the setHash argument */
+	boolean DEFAULT_SET_HASH = true;
+	/** The default digest type */
+	DigestType DEFAULT_DIGEST_TYPE = DigestType.SHA_384;
 
 	/**
 	 * Computes a cryptographic hash (message digest) for the given message. The resulting hash value will be returned
@@ -61,7 +65,7 @@ public interface Cryptography {
 	 * @return a {@link Future} containing the cryptographic hash for the given message contents when resolved
 	 */
 	default Future<Hash> digestAsync(final byte[] message) {
-		return digestAsync(message, DigestType.SHA_384);
+		return digestAsync(message, DEFAULT_DIGEST_TYPE);
 	}
 
 	/**
@@ -113,7 +117,7 @@ public interface Cryptography {
 	 * 		if an unrecoverable error occurs while computing the digest
 	 */
 	default Hash digestSync(final byte[] message) {
-		return digestSync(message, DigestType.SHA_384);
+		return digestSync(message, DEFAULT_DIGEST_TYPE);
 	}
 
 	/**
@@ -137,7 +141,7 @@ public interface Cryptography {
 	 * @return the cryptographic hash for the {@link SelfSerializable} object
 	 */
 	default Hash digestSync(final SelfSerializable serializable) {
-		return digestSync(serializable, DigestType.SHA_384);
+		return digestSync(serializable, DEFAULT_DIGEST_TYPE);
 	}
 
 	/**
@@ -160,34 +164,32 @@ public interface Cryptography {
 	 * @param serializableHashable
 	 * 		the object to be hashed
 	 */
-	default void digestSync(final SerializableHashable serializableHashable) {
-		digestSync(serializableHashable, DigestType.SHA_384);
+	default Hash digestSync(final SerializableHashable serializableHashable) {
+		return digestSync(serializableHashable, DEFAULT_DIGEST_TYPE);
+	}
+
+	/**
+	 * Same as {@link #digestSync(SerializableHashable, DigestType, boolean)} with setHash set to true
+	 */
+	default Hash digestSync(final SerializableHashable serializableHashable, final DigestType digestType) {
+		return digestSync(serializableHashable, digestType, DEFAULT_SET_HASH);
 	}
 
 	/**
 	 * Computes a cryptographic hash for the {@link SerializableHashable} instance by serializing it and hashing the
-	 * bytes. The hash is then passed to the object by calling {@link Hashable#setHash(Hash)}.
+	 * bytes. The hash is then passed to the object by calling {@link Hashable#setHash(Hash)} if setHash is true.
 	 *
 	 * @param serializableHashable
 	 * 		the object to be hashed
 	 * @param digestType
 	 * 		the type of digest used to compute the hash
+	 * @param setHash
+	 * 		should be set to true if the calculated should be assigned to the serializableHashable object
+	 * @return the cryptographic hash for the {@link SelfSerializable} object
 	 * @throws CryptographyException
 	 * 		if an unrecoverable error occurs while computing the digest
 	 */
-	void digestSync(final SerializableHashable serializableHashable, final DigestType digestType);
-
-	/**
-	 * Computes a cryptographic hash for the {@link MerkleInternal} instance. Requires a list of child hashes,
-	 * as it is possible that the MerkleInternal has not yet been given its children. The hash is passed to the object
-	 * by calling {@link Hashable#setHash(Hash)}.
-	 *
-	 * @param node
-	 * 		the MerkleInternal to hash
-	 * @param childHashes
-	 * 		a list of the hashes of this node's children
-	 */
-	void digestSync(final MerkleInternal node, final List<Hash> childHashes);
+	Hash digestSync(final SerializableHashable serializableHashable, final DigestType digestType, boolean setHash);
 
 	/**
 	 * Computes a cryptographic hash for the {@link MerkleInternal} instance. The hash is passed to the object
@@ -199,22 +201,32 @@ public interface Cryptography {
 	 * @throws CryptographyException
 	 * 		if an unrecoverable error occurs while computing the digest
 	 */
-	default void digestSync(final MerkleInternal node) {
-		digestSync(node, DigestType.SHA_384);
+	default Hash digestSync(final MerkleInternal node) {
+		return digestSync(node, DEFAULT_DIGEST_TYPE);
+	}
+
+	/**
+	 * Same as {@link #digestSync(SerializableHashable, DigestType, boolean)} with setHash set to true
+	 */
+	default Hash digestSync(final MerkleInternal node, final DigestType digestType) {
+		return digestSync(node, digestType, DEFAULT_SET_HASH);
 	}
 
 	/**
 	 * Computes a cryptographic hash for the {@link MerkleInternal} instance. The hash is passed to the object
-	 * by calling {@link Hashable#setHash(Hash)}.
+	 * by calling {@link Hashable#setHash(Hash)} if setHash is true.
 	 *
 	 * @param node
 	 * 		the MerkleInternal to hash
 	 * @param digestType
 	 * 		the type of digest used to compute the hash
+	 * @param setHash
+	 * 		should be set to true if the calculated should be assigned to the node
+	 * @return the cryptographic hash for the {@link MerkleInternal} object
 	 * @throws CryptographyException
 	 * 		if an unrecoverable error occurs while computing the digest
 	 */
-	default void digestSync(final MerkleInternal node, final DigestType digestType) {
+	default Hash digestSync(final MerkleInternal node, final DigestType digestType, boolean setHash) {
 		List<Hash> childHashes = new ArrayList<>(node.getNumberOfChildren());
 		for (int childIndex = 0; childIndex < node.getNumberOfChildren(); childIndex++) {
 			MerkleNode child = node.getChild(childIndex);
@@ -224,8 +236,30 @@ public interface Cryptography {
 				childHashes.add(child.getHash());
 			}
 		}
-		digestSync(node, childHashes);
+		return digestSync(node, childHashes, setHash);
 	}
+
+	/**
+	 * Same as {@link #digestSync(SerializableHashable, DigestType, boolean)} with setHash set to true
+	 */
+	default Hash digestSync(final MerkleInternal node, final List<Hash> childHashes) {
+		return digestSync(node, childHashes, DEFAULT_SET_HASH);
+	}
+
+	/**
+	 * Computes a cryptographic hash for the {@link MerkleInternal} instance. Requires a list of child hashes,
+	 * as it is possible that the MerkleInternal has not yet been given its children. The hash is passed to the object
+	 * by calling {@link Hashable#setHash(Hash)} if setHash is true.
+	 *
+	 * @param node
+	 * 		the MerkleInternal to hash
+	 * @param childHashes
+	 * 		a list of the hashes of this node's children
+	 * @param setHash
+	 * 		should be set to true if the calculated should be assigned to the node
+	 * @return the cryptographic hash for the {@link MerkleInternal} object
+	 */
+	Hash digestSync(final MerkleInternal node, final List<Hash> childHashes, boolean setHash);
 
 	/**
 	 * Computes a cryptographic hash for the {@link MerkleLeaf} instance. The hash is passed to the object
@@ -238,8 +272,8 @@ public interface Cryptography {
 	 * @throws CryptographyException
 	 * 		if an unrecoverable error occurs while computing the digest
 	 */
-	default void digestSync(MerkleLeaf leaf, DigestType digestType) {
-		digestSync((SerializableHashable) leaf, digestType);
+	default Hash digestSync(MerkleLeaf leaf, DigestType digestType) {
+		return digestSync((SerializableHashable) leaf, digestType);
 	}
 
 	/**
@@ -253,12 +287,12 @@ public interface Cryptography {
 	 * @throws CryptographyException
 	 * 		if an unrecoverable error occurs while computing the digest
 	 */
-	default void digestSync(MerkleNode node, DigestType digestType) {
+	default Hash digestSync(MerkleNode node, DigestType digestType) {
 		if (node.isLeaf()) {
-			digestSync(node.asLeaf(), digestType);
-		} else {
-			digestSync(node.asInternal(), digestType);
+			return digestSync(node.asLeaf(), digestType);
 		}
+
+		return digestSync(node.asInternal(), digestType);
 	}
 
 	/**
@@ -280,7 +314,7 @@ public interface Cryptography {
 	 * @return the cryptographic hash for the {@link MerkleNode} object
 	 */
 	default Hash digestTreeSync(final MerkleNode root) {
-		return digestTreeSync(root, DigestType.SHA_384);
+		return digestTreeSync(root, DEFAULT_DIGEST_TYPE);
 	}
 
 	/**
@@ -302,14 +336,14 @@ public interface Cryptography {
 	 * @return the {@link FutureMerkleHash} for the {@link MerkleNode} object
 	 */
 	default Future<Hash> digestTreeAsync(final MerkleNode root) {
-		return digestTreeAsync(root, DigestType.SHA_384);
+		return digestTreeAsync(root, DEFAULT_DIGEST_TYPE);
 	}
 
 	/**
 	 * @return the hash for a null value. Uses SHA_384.
 	 */
 	default Hash getNullHash() {
-		return getNullHash(DigestType.SHA_384);
+		return getNullHash(DEFAULT_DIGEST_TYPE);
 	}
 
 	/**

@@ -24,9 +24,9 @@ import java.time.Duration;
  */
 public class FCHashMapSettingsImpl extends SubSetting implements FCHashMapSettings {
 
-	public int maximumGCQueueSize = 100;
+	public int maximumGCQueueSize = 200;
 	public Duration gcQueueThresholdPeriod = Duration.ofMinutes(1);
-	public boolean archiveEnabled;
+	public boolean archiveEnabled = true;
 
 	/**
 	 * {@inheritDoc}

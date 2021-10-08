@@ -21,6 +21,9 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import java.io.IOException;
 import java.util.Objects;
 
+/**
+ * A utility node that contains a long value.
+ */
 public class MerkleLong extends AbstractMerkleLeaf {
 
 	public static final long CLASS_ID = 0x46cd791173861c4cL;
@@ -36,20 +39,17 @@ public class MerkleLong extends AbstractMerkleLeaf {
 		this.value = value;
 	}
 
-	private MerkleLong(final MerkleLong sourceValue) {
-		super(sourceValue);
-		this.value = sourceValue.getValue();
-		setImmutable(false);
-		sourceValue.setImmutable(true);
+	protected MerkleLong(final MerkleLong that) {
+		super(that);
+		value = that.value;
+		that.setImmutable(true);
 	}
 
 	/**
 	 * get the long value in {@link MerkleLong}
-	 *
-	 * @return
 	 */
 	public long getValue() {
-		return this.value;
+		return value;
 	}
 
 	/**
@@ -57,7 +57,7 @@ public class MerkleLong extends AbstractMerkleLeaf {
 	 */
 	public void increment() {
 		throwIfImmutable();
-		this.value++;
+		value++;
 		invalidateHash();
 	}
 
@@ -66,7 +66,7 @@ public class MerkleLong extends AbstractMerkleLeaf {
 	 */
 	public void decrement() {
 		throwIfImmutable();
-		this.value--;
+		value--;
 		invalidateHash();
 	}
 
@@ -92,7 +92,7 @@ public class MerkleLong extends AbstractMerkleLeaf {
 	 */
 	@Override
 	public void serialize(SerializableDataOutputStream out) throws IOException {
-		out.writeLong(this.value);
+		out.writeLong(value);
 	}
 
 	/**
@@ -100,7 +100,7 @@ public class MerkleLong extends AbstractMerkleLeaf {
 	 */
 	@Override
 	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
-		this.value = in.readLong();
+		value = in.readLong();
 	}
 
 	/**

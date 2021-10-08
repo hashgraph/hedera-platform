@@ -229,14 +229,9 @@ public class FCQueue<E extends FCQueueElement> extends AbstractMerkleLeaf implem
 		throw new UnsupportedOperationException("FCQueue computes its own hash");
 	}
 
-	/**
-	 * This method is intentionally a no-op.
-	 *
-	 * {@inheritDoc}
-	 */
 	@Override
-	public void invalidateHash() {
-		// This method is intentionally a no-op.
+	public boolean isSelfHashing() {
+		return true;
 	}
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////

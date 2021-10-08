@@ -426,7 +426,7 @@ class SyncCaller implements Runnable {
 		platform.getIntakeQueue().clear();
 
 		platform.getEventMapper().clear();
-		platform.getSyncShadowGraphManager().clear();
+		platform.getShadowGraphManager().clear();
 
 		log.info(RECONNECT.getMarker(),
 				"{} has fallen behind, Hashgraph and shadow graph are now cleared",
@@ -545,8 +545,12 @@ class SyncCaller implements Runnable {
 				platform.getSignedStateManager().getLastCompleteRound()).toString());
 
 		ReconnectReceiver reconnect =
-				new ReconnectReceiver(conn, addressBook, initialState, platform.getCrypto(),
-						Settings.reconnect.getAsyncInputStreamTimeoutMilliseconds());
+				new ReconnectReceiver(conn,
+						addressBook,
+						initialState,
+						platform.getCrypto(),
+						Settings.reconnect.getAsyncInputStreamTimeoutMilliseconds(),
+						platform.getStats().getReconnectStats());
 
 		final boolean reconnectWasAttempted = reconnect.execute();
 		if (!reconnectWasAttempted) {

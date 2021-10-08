@@ -65,8 +65,7 @@ public class RunningHashCalculatorForStream<T extends SerializableRunningHashabl
 	public void setRunningHash(final Hash hash) {
 		this.runningHash = hash;
 		super.setRunningHash(hash);
-		LOGGER.info(OBJECT_STREAM.getMarker(), "RunningHashCalculatorForStream :: setRunningHash: {}",
-				() -> hash);
+		LOGGER.info(OBJECT_STREAM.getMarker(), "RunningHashCalculatorForStream :: setRunningHash: {}", hash);
 	}
 
 	/**

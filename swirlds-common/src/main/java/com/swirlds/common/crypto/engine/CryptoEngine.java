@@ -350,9 +350,13 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void digestSync(SerializableHashable serializableHashable, DigestType digestType) {
+	public Hash digestSync(SerializableHashable serializableHashable, DigestType digestType, boolean setHash) {
 		try {
-			serializableHashable.setHash(serializationDigestProvider.compute(serializableHashable, digestType));
+			final Hash hash = serializationDigestProvider.compute(serializableHashable, digestType);
+			if (setHash) {
+				serializableHashable.setHash(hash);
+			}
+			return hash;
 		} catch (NoSuchAlgorithmException ex) {
 			throw new CryptographyException(ex, LogMarker.EXCEPTION);
 		}
@@ -397,9 +401,13 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void digestSync(MerkleInternal node, List<Hash> childHashes) {
+	public Hash digestSync(MerkleInternal node, List<Hash> childHashes, boolean setHash) {
 		try {
-			node.setHash(merkleInternalDigestProvider.compute(node, childHashes, MERKLE_DIGEST_TYPE));
+			final Hash hash = merkleInternalDigestProvider.compute(node, childHashes, MERKLE_DIGEST_TYPE);
+			if (setHash) {
+				node.setHash(hash);
+			}
+			return hash;
 		} catch (NoSuchAlgorithmException e) {
 			throw new CryptographyException(e, LogMarker.EXCEPTION);
 		}

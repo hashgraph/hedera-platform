@@ -19,11 +19,11 @@ import com.swirlds.common.events.BaseEventHashedData;
 import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.common.io.BadIOException;
 import com.swirlds.platform.event.ValidateEventTask;
+import com.swirlds.platform.sync.ShadowGraphManager;
 import com.swirlds.platform.sync.SyncData;
 import com.swirlds.platform.sync.SyncInputStream;
 import com.swirlds.platform.sync.SyncLogging;
 import com.swirlds.platform.sync.SyncOutputStream;
-import com.swirlds.platform.sync.SyncShadowGraphManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
@@ -59,7 +59,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 	private final String logString;
 
 	/** The shadow graph manager to use for this sync */
-	private final SyncShadowGraphManager syncShadowGraphManager;
+	private final ShadowGraphManager shadowGraphManager;
 
 	/** keeps track of the number of events read */
 	private final AtomicInteger eventsRead = new AtomicInteger(0);
@@ -90,8 +90,8 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 	 * @param caller
 	 * 		true iff {@code this} is invoked from a caller thread
 	 * 		false  iff {@code this} is invoked from a listener thread
-	 * @param syncShadowGraphManager
-	 * 		The {@link SyncShadowGraphManager} instance to use for this connection
+	 * @param shadowGraphManager
+	 * 		The {@link ShadowGraphManager} instance to use for this connection
 	 * @param throttle
 	 * 		The {@link SyncThrottle} instance to use for this connection
 	 * @param stats
@@ -108,7 +108,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 	protected AbstractNodeSynchronizer(
 			final SyncConnection conn,
 			final boolean caller,
-			final SyncShadowGraphManager syncShadowGraphManager,
+			final ShadowGraphManager shadowGraphManager,
 			final SyncThrottle throttle,
 			final Statistics stats,
 			final Consumer<ValidateEventTask> addEvent,
@@ -119,7 +119,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 		this.caller = caller;
 		this.conn = conn;
 		this.logString = logString;
-		this.syncShadowGraphManager = syncShadowGraphManager;
+		this.shadowGraphManager = shadowGraphManager;
 		this.throttle = throttle;
 		this.stats = stats;
 		this.addEvent = addEvent;
@@ -158,8 +158,8 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 	 *
 	 * @return a reference to the shadow graph manager used by this gossip session
 	 */
-	protected SyncShadowGraphManager getSyncShadowGraphManager() {
-		return syncShadowGraphManager;
+	protected ShadowGraphManager getShadowGraphManager() {
+		return shadowGraphManager;
 	}
 
 	/**
@@ -251,12 +251,13 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 		}
 
 		// If peer node has not fallen behind, send events to peer.
-		final List<EventImpl> diffEvents = syncShadowGraphManager.finishSendEventList(syncData, syncLogString);
+		final List<EventImpl> diffEvents = getShadowGraphManager().finishSendEventList(syncData, syncLogString);
 
 		if (syncData.isTipAbsorptionActive()) {
 			conn.getPlatform().getStats().updateTipAbsorptionOpsPerSec();
 		}
 
+		
 		log.debug(SYNC_SGM.getMarker(), "{}{} events to send", syncLogString, diffEvents.size());
 
 		for (final EventImpl event : diffEvents) {
@@ -494,7 +495,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 
 		syncData.getReceivedTipHashes().addAll(receivedTipHashes);
 
-		syncShadowGraphManager.setReceivedTipHashes(syncData, syncLogString);
+		getShadowGraphManager().setReceivedTipHashes(syncData, syncLogString);
 
 		log.debug(SYNC_SGM.getMarker(),
 				"{}finished, received {} tip hashes",
@@ -526,11 +527,11 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 
 		final int ntips = Math.max(
 				syncData.getReceivedTipHashes().size(),
-				getSyncShadowGraphManager().getNumTips());
+				getShadowGraphManager().getNumTips());
 
 		final List<Boolean> tipBooleans = getInputStream().readBooleanList(ntips);
 
-		getSyncShadowGraphManager().setReceivedTipBooleans(getSyncData(), tipBooleans, syncLogString);
+		getShadowGraphManager().setReceivedTipBooleans(getSyncData(), tipBooleans);
 
 		log.debug(SYNC_SGM.getMarker(),
 				"{}set {} tip booleans in shadow graph",
@@ -551,7 +552,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 	protected void writeTipBooleans() throws IOException {
 		final String syncLogString = getLogString() + ": `writeTipBooleans`: ";
 
-		final List<Boolean> tipBooleans = getSyncShadowGraphManager().getSendTipBooleans(getSyncData());
+		final List<Boolean> tipBooleans = getShadowGraphManager().getSendTipBooleans(getSyncData());
 
 		getOutputStream().writeBooleanList(tipBooleans);
 

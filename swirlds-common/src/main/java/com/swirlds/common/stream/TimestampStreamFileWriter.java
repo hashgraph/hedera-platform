@@ -168,14 +168,13 @@ public class TimestampStreamFileWriter<T extends Timestamped & SerializableRunni
 		this.fileNameShort = file.getName();
 		try {
 			if (file.exists() && !file.isDirectory()) {
-				log.info(OBJECT_STREAM.getMarker(), "Stream file already exists {}",
-						() -> fileNameShort);
+				log.info(OBJECT_STREAM.getMarker(), "Stream file already exists {}", fileNameShort);
 			} else {
 				stream = new FileOutputStream(file, false);
 				dos = new SerializableDataOutputStream(
 						new BufferedOutputStream(new HashingOutputStream(mdEntire, stream)));
 				dosMeta = new SerializableDataOutputStream(new HashingOutputStream(mdMeta));
-				log.info(OBJECT_STREAM_FILE.getMarker(), "Stream file created {}", () -> fileNameShort);
+				log.info(OBJECT_STREAM_FILE.getMarker(), "Stream file created {}", fileNameShort);
 			}
 		} catch (FileNotFoundException e) {
 			log.error(EXCEPTION.getMarker(), "startNewFile :: FileNotFound: ", e);
@@ -197,13 +196,12 @@ public class TimestampStreamFileWriter<T extends Timestamped & SerializableRunni
 			dos.writeInt(OBJECT_STREAM_VERSION);
 			dosMeta.writeInt(OBJECT_STREAM_VERSION);
 
-			log.info(OBJECT_STREAM_FILE.getMarker(), "begin :: write OBJECT_STREAM_VERSION {}",
-					() -> OBJECT_STREAM_VERSION);
+			log.info(OBJECT_STREAM_FILE.getMarker(), "begin :: write OBJECT_STREAM_VERSION {}", OBJECT_STREAM_VERSION);
 			// write startRunningHash
 			Hash startRunningHash = runningHash.getFutureHash().get();
 			dos.writeSerializable(startRunningHash, true);
 			dosMeta.writeSerializable(startRunningHash, true);
-			log.info(OBJECT_STREAM_FILE.getMarker(), "begin :: write startRunningHash {}", () -> startRunningHash);
+			log.info(OBJECT_STREAM_FILE.getMarker(), "begin :: write startRunningHash {}", startRunningHash);
 		} catch (IOException e) {
 			Thread.currentThread().interrupt();
 			log.error(EXCEPTION.getMarker(), "begin :: Got IOException when writing startRunningHash to {}",
@@ -230,7 +228,7 @@ public class TimestampStreamFileWriter<T extends Timestamped & SerializableRunni
 				dos.writeSerializable(endRunningHash, true);
 				dosMeta.writeSerializable(endRunningHash, true);
 				log.info(OBJECT_STREAM_FILE.getMarker(), "closeCurrentAndSign :: write endRunningHash {}",
-						() -> endRunningHash);
+						endRunningHash);
 			} catch (IOException e) {
 				Thread.currentThread().interrupt();
 				log.error(EXCEPTION.getMarker(),
@@ -447,7 +445,7 @@ public class TimestampStreamFileWriter<T extends Timestamped & SerializableRunni
 	public void setStartWriteAtCompleteWindow(boolean startWriteAtCompleteWindow) {
 		this.startWriteAtCompleteWindow = startWriteAtCompleteWindow;
 		log.info(OBJECT_STREAM.getMarker(),
-				"TimestampStreamFileWriter::setStartWriteAtCompleteWindow: {}", () -> startWriteAtCompleteWindow);
+				"TimestampStreamFileWriter::setStartWriteAtCompleteWindow: {}", startWriteAtCompleteWindow);
 	}
 
 	/**

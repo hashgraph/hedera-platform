@@ -91,7 +91,7 @@ public class BinaryObject extends AbstractMerkleLeaf implements MerkleExternalLe
 	 * @param binaryObject
 	 * 		the object to be copied
 	 */
-	private BinaryObject(final BinaryObject binaryObject) {
+	protected BinaryObject(final BinaryObject binaryObject) {
 		super(binaryObject);
 		this.id = binaryObject.getId();
 		this.hash = new Hash(binaryObject.getHash());
@@ -133,16 +133,6 @@ public class BinaryObject extends AbstractMerkleLeaf implements MerkleExternalLe
 	@Override
 	public void setHash(final Hash hash) {
 		throw new UnsupportedOperationException("Can't mutate hash of BinaryObject");
-	}
-
-	/**
-	 * This method is intentionally a no-op.
-	 *
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void invalidateHash() {
-
 	}
 
 	/**
@@ -281,5 +271,10 @@ public class BinaryObject extends AbstractMerkleLeaf implements MerkleExternalLe
 	@Override
 	protected void onRelease() {
 		BinaryObjectStore.getInstance().delete(this);
+	}
+
+	@Override
+	public boolean isSelfHashing() {
+		return true;
 	}
 }

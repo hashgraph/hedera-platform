@@ -15,6 +15,7 @@
 package com.swirlds.common;
 
 import com.swirlds.common.crypto.TransactionSignature;
+import com.swirlds.common.merkle.Archivable;
 import com.swirlds.common.merkle.MerkleNode;
 
 import java.time.Instant;
@@ -68,6 +69,14 @@ public interface SwirldState extends Archivable, MerkleNode {
 	 * 		the members and info about them
 	 */
 	void init(Platform platform, AddressBook addressBook);
+
+	/**
+	 * Migrate the state from a previous format, if needed. It is the responsibility of the state
+	 * to determine if a migration is required and to perform that migration here when it is required.
+	 */
+	default void migrate() {
+
+	}
 
 	/**
 	 * Return a deep copy of the the current address book.
@@ -153,7 +162,7 @@ public interface SwirldState extends Archivable, MerkleNode {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * WARNING: failure to properly call archive on some types of internal data structures such as FCMaps may
+	 * WARNING: failure to properly call archive on some types of internal data structures such as MerkleMaps may
 	 * result in a much larger memory footprint than necessary.
 	 */
 	@Override

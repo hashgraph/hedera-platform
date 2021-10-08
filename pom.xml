@@ -21,7 +21,7 @@
 	<!-- Project Configuration -->
 	<groupId>com.swirlds</groupId>
 	<artifactId>swirlds-platform</artifactId>
-	<version>0.17.4-orvw.1</version>
+	<version>0.18.1-orvw.1</version>
 
 	<packaging>pom</packaging>
 
@@ -421,10 +421,9 @@
 		<module>swirlds-platform-core</module>
 
 		<!-- Data Structure Packages -->
-		<module>swirlds-fcmap</module>
+		<module>swirlds-merkle</module>
 		<module>swirlds-fcqueue</module>
 		<module>swirlds-fchashmap</module>
-		<module>swirlds-merkletree</module>
 	</modules>
 
 	<!-- Dependency Management -->
@@ -501,6 +500,7 @@
 				<artifactId>commons-codec</artifactId>
 				<version>${dep.commons.codec.version}</version>
 			</dependency>
+
 			<dependency>
 				<groupId>org.apache.commons</groupId>
 				<artifactId>commons-compress</artifactId>
@@ -855,7 +855,7 @@
 					<reportOutputDirectory>${project.basedir}/sdk/docs</reportOutputDirectory>
 					<destDir>javadoc</destDir>
 					<excludePackageNames>
-						com.swirlds.p2p.*:com.swirlds.platform.fc.*:com.swirlds.fcmap.internal:com.swirlds.fcmap.internal.*:com.swirlds.fs.internal:com.swirlds.crypto.internal:com.swirlds.platform.internal:com.swirlds.fcmap.list
+						com.swirlds.p2p.*:com.swirlds.platform.fc.*:com.swirlds.merkle.map.internal:com.swirlds.merkle.map.internal.*:com.swirlds.fs.internal:com.swirlds.crypto.internal:com.swirlds.platform.internal:com.swirlds.merkle.map.list
 					</excludePackageNames>
 					<sourceFileExcludes>
 						<sourceFileExclude>com/swirlds/platform/Marshal**</sourceFileExclude>
@@ -964,7 +964,8 @@
 					<nuspecAnalyzerEnabled>false</nuspecAnalyzerEnabled>
 					<swiftPackageManagerAnalyzerEnabled>false</swiftPackageManagerAnalyzerEnabled>
 					<!-- Temporary Fix for NIST NVD data feed corruption -->
-					<cveUrlModified>https://freedumbytes.gitlab.io/setup/nist-nvd-mirror/nvdcve-1.1-modified.json.gz</cveUrlModified>
+					<cveUrlModified>https://freedumbytes.gitlab.io/setup/nist-nvd-mirror/nvdcve-1.1-modified.json.gz
+					</cveUrlModified>
 					<cveUrlBase>https://freedumbytes.gitlab.io/setup/nist-nvd-mirror/nvdcve-1.1-%d.json.gz</cveUrlBase>
 				</configuration>
 			</plugin>

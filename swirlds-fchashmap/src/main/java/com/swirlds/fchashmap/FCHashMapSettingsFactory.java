@@ -51,7 +51,7 @@ public final class FCHashMapSettingsFactory {
 		return new FCHashMapSettings() {
 			@Override
 			public int getMaximumGCQueueSize() {
-				return 100;
+				return 200;
 			}
 
 			@Override
@@ -61,7 +61,7 @@ public final class FCHashMapSettingsFactory {
 
 			@Override
 			public boolean isArchiveEnabled() {
-				return false;
+				return true;
 			}
 		};
 	}

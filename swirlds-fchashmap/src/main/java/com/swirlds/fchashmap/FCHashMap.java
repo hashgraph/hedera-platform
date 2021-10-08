@@ -257,6 +257,10 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 * 		previously deleted
 	 */
 	private V setValueAtKey(K key, V value, boolean deletion) {
+		if (key == null) {
+			throw new NullPointerException("null keys are not supported");
+		}
+
 		throwIfImmutable();
 		boolean insertion = true;
 		V originalValue = null;
@@ -357,6 +361,9 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * @throws NullPointerException
+	 * 		if the key is null
 	 */
 	@Override
 	public V put(K key, V value) {

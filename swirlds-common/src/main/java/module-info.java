@@ -37,9 +37,9 @@ module com.swirlds.common {
 	exports com.swirlds.common.transaction.internal to com.swirlds.platform, com.swirlds.common.test,
 			com.swirlds.platform.test;
 	exports com.swirlds.common.events;
-	exports com.swirlds.common.internal to com.swirlds.platform, com.swirlds.fcmap, com.swirlds.fcmap.test,
-			com.swirlds.platform.test, com.swirlds.common.test, com.swirlds.regression, com.swirlds.demo.platform;
-	exports com.swirlds.common.list to com.swirlds.platform, com.swirlds.fcmap, com.swirlds.fcqueue;
+	exports com.swirlds.common.internal to com.swirlds.platform, com.swirlds.platform.test,
+			com.swirlds.common.test, com.swirlds.regression, com.swirlds.demo.platform;
+	exports com.swirlds.common.list to com.swirlds.platform, com.swirlds.fcqueue;
 	exports com.swirlds.common.crypto.internal to com.swirlds.platform, com.swirlds.common.test;
 	exports com.swirlds.common.testutils to com.swirlds.platform, com.swirlds.common.test, com.swirlds.platform.test;
 	exports com.swirlds.common.notification.internal to com.swirlds.common.test;

@@ -87,11 +87,11 @@ public final class SyncLogging {
 	 * 		the string prefix for the log entry
 	 */
 	public static void logMarkedEvents(
-			final SyncShadowGraph shadowGraph,
+			final ShadowGraph shadowGraph,
 			final SyncData syncData,
 			final Logger log,
 			final String syncLogString) {
-		for (final SyncShadowEvent s : shadowGraph) {
+		for (final ShadowEvent s : shadowGraph) {
 			if (syncData.markedForSync(s)) {
 				log.debug(SYNC_SGM.getMarker(),
 						"{}  sync-marked event is {}",
@@ -235,7 +235,7 @@ public final class SyncLogging {
 				"{}{} working tip hashes",
 				syncLogString,
 				syncData.getWorkingTips().size());
-		for (final SyncShadowEvent tip : syncData.getWorkingTips()) {
+		for (final ShadowEvent tip : syncData.getWorkingTips()) {
 			log.debug(SYNC_SGM.getMarker(),
 					"{}       working tip hash {}",
 					() -> syncLogString,
@@ -287,7 +287,7 @@ public final class SyncLogging {
 	 * 		the string prefix for the log entry
 	 */
 	public static synchronized void logShadowGraph(
-			final SyncShadowGraphManager sgm,
+			final ShadowGraphManager sgm,
 			final long minGeneration,
 			final Logger log,
 			final String syncLogString) {
@@ -296,12 +296,12 @@ public final class SyncLogging {
 				syncLogString,
 				sgm.getNumShadowEvents(),
 				minGeneration);
-		final Set<SyncShadowEvent> visited = new HashSet<>();
-		final Set<SyncShadowEvent> tips = new HashSet<>(sgm.getTips());
-		for (SyncShadowEvent t : tips) {
+		final Set<ShadowEvent> visited = new HashSet<>();
+		final Set<ShadowEvent> tips = new HashSet<>(sgm.getTips());
+		for (ShadowEvent t : tips) {
 			visited.add(t);
 			if (t.getEvent().getGeneration() >= minGeneration) {
-				final SyncShadowEvent tt = t;
+				final ShadowEvent tt = t;
 				log.debug(SYNC_SGM.getMarker(),
 						"{}++ t {}",
 						() -> syncLogString,
@@ -317,7 +317,7 @@ public final class SyncLogging {
 				visited.add(t);
 
 				if (t.getEvent().getGeneration() >= minGeneration) {
-					final SyncShadowEvent tt = t;
+					final ShadowEvent tt = t;
 					log.debug(SYNC_SGM.getMarker(),
 							"{}++   {}",
 							() -> syncLogString,
@@ -352,7 +352,7 @@ public final class SyncLogging {
 	 * 		the string prefix for the log entry
 	 */
 	public static void log(
-			final SyncShadowGraphManager sgm,
+			final ShadowGraphManager sgm,
 			final Consensus consensus,
 			final EventMapper eventMapper,
 			final Logger log,
@@ -406,14 +406,14 @@ public final class SyncLogging {
 	 * Write a log entry for shadow graph verification result
 	 *
 	 * @param result
-	 * 		the result of executing {@code SyncShadowGraphVerification.verify}
+	 * 		the result of executing {@code ShadowGraphVerification.verify}
 	 * @param log
 	 * 		the Log4j2 logging instance to use
 	 * @param syncLogString
 	 * 		the string prefix for the log entry
 	 */
 	public static void log(
-			final SyncShadowGraphVerificationStatus result,
+			final ShadowGraphVerificationStatus result,
 			final Logger log,
 			final String syncLogString) {
 		switch (result) {
@@ -463,13 +463,13 @@ public final class SyncLogging {
 	 * 		the string prefix for the log entry
 	 */
 	public static void logCurrentTipHashes(
-			final SyncShadowGraphManager sgm,
+			final ShadowGraphManager sgm,
 			final Logger log,
 			final String syncLogString) {
 		log.debug(SYNC_SGM.getMarker(), "{}{} current tip hashes",
 				syncLogString,
 				sgm.getNumTips());
-		for (final SyncShadowEvent t : sgm.getTips()) {
+		for (final ShadowEvent t : sgm.getTips()) {
 			log.debug(SYNC_SGM.getMarker(),
 					"{}   t {}",
 					() -> syncLogString,
@@ -488,14 +488,14 @@ public final class SyncLogging {
 	 * 		the string prefix for the log entry
 	 */
 	public static void logCurrentTips(
-			final SyncShadowGraphManager sgm,
+			final ShadowGraphManager sgm,
 			final Logger log,
 			final String syncLogString) {
 		log.debug(SYNC_SGM.getMarker(),
 				"{}{} current tips",
 				syncLogString,
 				sgm.getNumTips());
-		for (final SyncShadowEvent t : sgm.getTips()) {
+		for (final ShadowEvent t : sgm.getTips()) {
 			log.debug(SYNC_SGM.getMarker(),
 					"{}   t {}",
 					() -> syncLogString,
@@ -510,7 +510,7 @@ public final class SyncLogging {
 	 * 		the shadow
 	 * @return a log string
 	 */
-	private static String getSyncLogString(final SyncShadowEvent s) {
+	private static String getSyncLogString(final ShadowEvent s) {
 		return getSyncLogString(s.getEvent());
 	}
 
@@ -570,7 +570,7 @@ public final class SyncLogging {
 	 * to enforce this.
 	 *
 	 * @param sgm
-	 * 		the {@link SyncShadowGraphManager} instance to use
+	 * 		the {@link ShadowGraphManager} instance to use
 	 * @param syncData
 	 * 		the {@link SyncData} instance to use
 	 * @param log
@@ -579,7 +579,7 @@ public final class SyncLogging {
 	 * 		the string prefix for the log entry
 	 */
 	private static void logAndExit(
-			final SyncShadowGraphManager sgm,
+			final ShadowGraphManager sgm,
 			final SyncData syncData,
 			final Logger log,
 			final String syncLogString) {
@@ -610,7 +610,7 @@ public final class SyncLogging {
 		log.debug(SYNC_SGM.getMarker(),
 				"{}!! Tips are",
 				syncLogString);
-		for (final SyncShadowEvent t : sgm.getTips()) {
+		for (final ShadowEvent t : sgm.getTips()) {
 			log.debug(SYNC_SGM.getMarker(),
 					"{}!! t {}",
 					() -> syncLogString,
@@ -626,9 +626,9 @@ public final class SyncLogging {
 		log.debug(SYNC_SGM.getMarker(),
 				"{} !! Shadow graph is",
 				syncLogString);
-		for (SyncShadowEvent t : sgm.getTips()) {
+		for (ShadowEvent t : sgm.getTips()) {
 			while (t != null) {
-				final SyncShadowEvent tt = t;
+				final ShadowEvent tt = t;
 				log.debug(SYNC_SGM.getMarker(),
 						"{}!!   {}",
 						() -> syncLogString,

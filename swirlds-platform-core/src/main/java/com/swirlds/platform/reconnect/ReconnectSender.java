@@ -19,6 +19,7 @@ import com.swirlds.common.merkle.io.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.SendingSynchronizer;
 import com.swirlds.logging.payloads.ReconnectFinishPayload;
 import com.swirlds.logging.payloads.ReconnectStartPayload;
+import com.swirlds.platform.ReconnectStatistics;
 import com.swirlds.platform.SyncConnection;
 import com.swirlds.platform.SyncConstants;
 import com.swirlds.platform.state.SignedState;
@@ -49,6 +50,8 @@ public class ReconnectSender {
 
 	private final ReconnectThrottle reconnectThrottle;
 
+	private final ReconnectStatistics statistics;
+
 	/**
 	 * After reconnect is finished, restore the socket timeout to the original value.
 	 */
@@ -62,7 +65,8 @@ public class ReconnectSender {
 			final ReconnectThrottle reconnectThrottle,
 			final long selfId,
 			final long otherId,
-			final long lastRoundReceived) {
+			final long lastRoundReceived,
+			final ReconnectStatistics statistics) {
 
 		this.connection = connection;
 		this.signedState = signedState;
@@ -72,6 +76,7 @@ public class ReconnectSender {
 		this.selfId = selfId;
 		this.otherId = otherId;
 		this.lastRoundReceived = lastRoundReceived;
+		this.statistics = statistics;
 	}
 
 	/**
@@ -201,7 +206,7 @@ public class ReconnectSender {
 	 */
 	private void reconnect() throws InterruptedException {
 		log.info(RECONNECT.getMarker(), "Starting synchronization in the role of the sender.");
-
+		statistics.incrementSenderStartTimes();
 		SendingSynchronizer synchronizer = new SendingSynchronizer(
 				new MerkleDataInputStream(connection.getDis(), false),
 				new MerkleDataOutputStream(connection.getDos(), false),
@@ -209,6 +214,7 @@ public class ReconnectSender {
 
 		synchronizer.synchronize();
 
+		statistics.incrementSenderEndTimes();
 		log.info(RECONNECT.getMarker(), "Finished synchronization in the role of the sender.");
 	}
 

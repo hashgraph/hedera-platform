@@ -16,6 +16,7 @@ package com.swirlds.platform;
 import com.swirlds.common.SwirldState;
 import com.swirlds.common.SwirldState.SwirldState2;
 import com.swirlds.common.SwirldTransaction;
+import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.DigestType;
@@ -23,11 +24,9 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
 import com.swirlds.common.crypto.RunningHash;
 import com.swirlds.common.crypto.TransactionSignature;
-import com.swirlds.common.merkle.hash.MerkleHashChecker;
 import com.swirlds.common.stream.EventStreamManager;
 import com.swirlds.common.threading.StoppableThread;
 import com.swirlds.common.threading.StoppableThreadConfiguration;
-import com.swirlds.common.Transaction;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.eventhandling.MinGenQueue;
 import com.swirlds.platform.eventhandling.SignedStateEventStorage;
@@ -59,7 +58,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import static com.swirlds.common.Units.NANOSECONDS_TO_MICROSECONDS;
 import static com.swirlds.common.Units.NANOSECONDS_TO_MILLISECONDS;
 import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
-import static com.swirlds.common.TransactionType.APPLICATION;
 import static com.swirlds.logging.LogMarker.EVENT_CONTENT;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.QUEUES;
@@ -467,7 +465,7 @@ class EventFlow extends AbstractEventFlow {
 		log.info(RECONNECT.getMarker(), "stopAndClear: releasing states");
 
 		// delete the states
-		try { 
+		try {
 			if (!swirldState2) {
 				if (stateWork != null) {
 					stateWork.getState().getSwirldState().noMoreTransactions();
@@ -1034,14 +1032,6 @@ class EventFlow extends AbstractEventFlow {
 		} catch (ExecutionException ex) {
 			log.warn(LogMarker.MERKLE_HASHING.getMarker(), "Exception Occurred during SignedState hashing", ex);
 		}
-
-		if (Settings.checkSignedStateHashes) {
-			MerkleHashChecker.checkSync(cryptography, signedState.getState(), node ->
-					log.info(LogMarker.ERROR.getMarker(),
-							"Invalid hash detected for node type: {}",
-							node.getClass().getName()));
-		}
-
 
 		log.info(LogMarker.MERKLE_HASHING.getMarker(), "Done hashing SignedState, starting newSelfSigned");
 

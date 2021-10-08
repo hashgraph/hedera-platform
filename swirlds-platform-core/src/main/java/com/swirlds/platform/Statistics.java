@@ -41,6 +41,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.DoubleAccumulator;
 
 import static com.swirlds.common.PlatformStatNames.SIGNED_STATE_HASHING_TIME;
 import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
@@ -116,6 +117,8 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 
 	private final SavedFileStatistics savedFileStatistics;
 
+	private final ReconnectStatistics reconnectStatistics;
+
 	/** an object to get thread stats */
 	ThreadMXBean thbean;
 
@@ -156,6 +159,8 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 	StatsRunningAverage avgReceivedConsensusTime;
 	/** time for a member, from knowing consensus to handling that consensus transaction */
 	StatsRunningAverage avgConsHandleTime;
+	/** the maximum sync time since the last write to file */
+	DoubleAccumulator maxSyncTimeSec = new DoubleAccumulator(Double::max, 0);
 	/** average wall clock time from start of a successful sync until it's done */
 	StatsRunningAverage avgSyncDuration;
 	/** average wall clock time for step 1 of a successful sync */
@@ -303,11 +308,11 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 	StatsSpeedometer rescuedEventsPerSecond;
 
 	/** The number of creators that have more than one tip at the start of each sync. */
-	StatsSpeedometer multiTipsPerSync;
+	private StatsSpeedometer multiTipsPerSync;
 	/** The average number of tips per sync at the start of each sync. */
-	StatsRunningAverage tipsPerSync;
+	private StatsRunningAverage tipsPerSync;
 	/** The number of calls to the multiTip absorption logic per second. */
-	StatsSpeedometer tipAbsorptionOpsPerSec;
+	private StatsSpeedometer tipAbsorptionOpsPerSec;
 
 	/**
 	 * average time spent in
@@ -390,12 +395,12 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 
 				// calculate the value for otherStatPing (the average of all, not including self)
 				double sum = 0;
-				double[] times = getPingMilliseconds(); // times are in seconds
-				for (double time : times) {
+				final double[] times = getPingMilliseconds(); // times are in seconds
+				for (final double time : times) {
 					sum += time;
 				}
 				// don't average in the times[selfId]==0, so subtract 1 from the length
-				double pingValue = sum / (times.length - 1);  // pingValue is in milliseconds
+				final double pingValue = sum / (times.length - 1);  // pingValue is in milliseconds
 
 				avgPing.recordValue(pingValue);
 				interruptedCallSyncsPerSecond.update(0);
@@ -445,7 +450,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 				}
 				freeDiskspace = rootDirectory.getFreeSpace();
 			}
-		} catch (Exception e) {
+		} catch (final Exception e) {
 			// ignore exceptions
 		}
 	}
@@ -463,7 +468,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 	/**
 	 * Same as {@link #Statistics(AbstractPlatform, List)} with additionalEntries set to be empty
 	 */
-	public Statistics(AbstractPlatform platform) {
+	public Statistics(final AbstractPlatform platform) {
 		this(platform, Collections.emptyList());
 	}
 
@@ -482,7 +487,9 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 		this.osBean = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
 		this.thbean = ManagementFactory.getThreadMXBean();
 		this.savedFileStatistics = new SavedFileStatistics();
-		int abSize = platform.getAddressBook() == null ? 0 : platform.getAddressBook().getSize(); //0 during unit tests
+		final int abSize = platform.getAddressBook() == null ? 0 : platform.getAddressBook().getSize(); //0 during unit
+		// tests
+		this.reconnectStatistics = new ReconnectStatistics();
 
 		avgPingMilliseconds = new StatsRunningAverage[abSize];
 		avgBytePerSecSent = new StatsSpeedometer[abSize];
@@ -503,10 +510,10 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 	public void resetAllSpeedometers() {
 		super.resetAllSpeedometers();
 
-		for (StatsRunningAverage avgPingSecond : avgPingMilliseconds) {
+		for (final StatsRunningAverage avgPingSecond : avgPingMilliseconds) {
 			avgPingSecond.reset(Settings.halfLife);
 		}
-		for (StatsSpeedometer abpss : avgBytePerSecSent) {
+		for (final StatsSpeedometer abpss : avgBytePerSecSent) {
 			abpss.reset(Settings.halfLife);
 		}
 	}
@@ -519,7 +526,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 	 * @return the average times, for each member, in milliseconds
 	 */
 	public double[] getPingMilliseconds() {
-		double[] times = new double[avgPingMilliseconds.length];
+		final double[] times = new double[avgPingMilliseconds.length];
 		for (int i = 0; i < times.length; i++) {
 			times[i] = avgPingMilliseconds[i].getWeightedMean();
 		}
@@ -618,6 +625,16 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 						},//
 						null,//
 						() -> avgConsHandleTime.getWeightedMean()),//
+				new StatEntry(//
+						CATEGORY,//
+						"maxSyncTimeSec",//
+						"the maximum sync time since the last write to file",//
+						FLOAT_FORMAT_10_3,//
+						null,//
+						null,//
+						(h) -> maxSyncTimeSec.reset(),//
+						() -> maxSyncTimeSec.get(),
+						() -> maxSyncTimeSec.getThenReset()),//
 				new StatEntry(//
 						CATEGORY,//
 						"sec/sync",//
@@ -1857,7 +1874,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 						"the number of creators that have more than one tip at the start of each sync",//
 						FLOAT_FORMAT_15_3,//
 						multiTipsPerSync,//
-						(h) -> {
+						h -> {
 							multiTipsPerSync = new StatsSpeedometer(h);
 							return multiTipsPerSync;
 						},//
@@ -1869,7 +1886,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 						"the average number of tips per sync at the start of each sync",//
 						FLOAT_FORMAT_15_3,//
 						tipsPerSync,//
-						(h) -> {
+						h -> {
 							tipsPerSync = new StatsRunningAverage(h);
 							return tipsPerSync;
 						},//
@@ -1881,14 +1898,14 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 						"tipAbsorptionOps",//
 						FLOAT_FORMAT_15_3,//
 						tipAbsorptionOpsPerSec,//
-						(h) -> {
+						h -> {
 							tipAbsorptionOpsPerSec = new StatsSpeedometer(h);
 							return tipAbsorptionOpsPerSec;
 						},//
 						null,//
 						() -> tipAbsorptionOpsPerSec.getCyclesPerSecond()),//
 		};
-		List<StatEntry> entryList = new ArrayList<>(Arrays.asList(statEntries));
+		final List<StatEntry> entryList = new ArrayList<>(Arrays.asList(statEntries));
 
 		entryList.addAll(additionalEntries);
 
@@ -1923,6 +1940,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 					() -> avgBytePerSecSent[ii].getCyclesPerSecond()));
 		}
 
+		reconnectStatistics.registerStats(entryList);
 		statEntries = entryList.toArray(statEntries);
 	}
 
@@ -1939,12 +1957,15 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 	/** the max round number for which at least one event is known that was created by someone else */
 	private volatile long lastRoundNumber = -1;
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void addedEvent(EventImpl event) {
+	public void addedEvent(final EventImpl event) {
 		// this method is only ever called by 1 thread, so no need for locks
 		if (!platform.getSelfId().equalsMain(event.getCreatorId())
 				&& event.getRoundCreated() > lastRoundNumber) {// if first event in a round
-			Instant now = Instant.now();
+			final Instant now = Instant.now();
 			if (firstEventInLastRoundTime != null) {
 				avgFirstEventInRoundReceivedTime.recordValue(
 						firstEventInLastRoundTime.until(now,
@@ -1955,13 +1976,19 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 		}
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void coinRounds(long numCoinRounds) {
+	public void coinRounds(final long numCoinRounds) {
 		this.numCoinRounds.recordValue(numCoinRounds);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void lastFamousInRound(EventImpl event) {
+	public void lastFamousInRound(final EventImpl event) {
 		if (!platform.getSelfId().equalsMain(event.getCreatorId())) {// record this for events received
 			avgReceivedFamousTime.recordValue(
 					event.getTimeReceived().until(Instant.now(),
@@ -1969,8 +1996,11 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 		}
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void consensusReached(EventImpl event) {
+	public void consensusReached(final EventImpl event) {
 		// Keep a running average of how many seconds from when I first know of an event
 		// until it achieves consensus. Actually, keep two such averages: one for events I
 		// create, and one for events I receive.
@@ -2006,13 +2036,19 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 		}
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public void consensusReachedOnRound() {
 		roundsPerSecond.cycle();
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void dotProductTime(long nanoTime) {
+	public void dotProductTime(final long nanoTime) {
 		timeFracDot.update(((double) nanoTime) * NANOSECONDS_TO_SECONDS);
 	}
 
@@ -2020,48 +2056,72 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 	// HashgraphStats below
 	//
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void staleEvent(EventImpl event) {
+	public void staleEvent(final EventImpl event) {
 		staleEventsTotal.incrementAndGet();
 		staleEventsPerSecond.cycle();
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public void rescuedEvent() {
 		rescuedEventsPerSecond.cycle();
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public void duplicateEvent() {
 		duplicateEventsPerSecond.cycle();
 		avgDuplicatePercent.recordValue(100); // move toward 100%
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public void nonDuplicateEvent() {
 		avgDuplicatePercent.recordValue(0); // move toward 0%
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void receivedEvent(EventImpl event) {
+	public void receivedEvent(final EventImpl event) {
 		avgCreatedReceivedTime.recordValue(
 				event.getTimeCreated().until(event.getTimeReceived(),
 						ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public void invalidEventSignature() {
 		badEventsPerSecond.cycle();
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void processedEventTask(long startTime) {
+	public void processedEventTask(final long startTime) {
 		// nanoseconds spent adding to hashgraph
 		timeFracAdd.update(((double) time() - startTime) * NANOSECONDS_TO_SECONDS);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void eventAdded(EventImpl event) {
+	public void eventAdded(final EventImpl event) {
 		if (event.isCreatedBy(platform.getSelfId())) {
 			eventsCreatedPerSecond.cycle();
 		}
@@ -2070,8 +2130,8 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 		eventsPerSecond.cycle();
 
 		// record stats for all transactions in this event
-		Transaction[] trans = event.getTransactions();
-		int numTransactions = (trans == null ? 0 : trans.length);
+		final Transaction[] trans = event.getTransactions();
+		final int numTransactions = (trans == null ? 0 : trans.length);
 
 		// we have already ensured this isn't a duplicate event, so record all the stats on it:
 
@@ -2105,38 +2165,63 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 		this.numTrans.addAndGet(event.getTransactions().length);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void updateArchivalQueue(int len) {
+	public void updateArchivalQueue(final int len) {
 		stateArchivalQueueAvg.recordValue(len);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void updateArchivalTime(double time) {
+	public void updateArchivalTime(final double time) {
 		stateArchivalTimeAvg.recordValue(time);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void updateDeletionQueue(int len) {
+	public void updateDeletionQueue(final int len) {
 		stateDeletionQueueAvg.recordValue(len);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void updateDeletionTime(double time) {
+	public void updateDeletionTime(final double time) {
 		stateDeletionTimeAvg.recordValue(time);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public void updateMultiTipsPerSync(final int multiTipCount) {
 		multiTipsPerSync.update(multiTipCount);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public void updateTipsPerSync(final int tipCount) {
 		tipsPerSync.recordValue(tipCount);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public void updateTipAbsorptionOpsPerSec() {
 		tipAbsorptionOpsPerSec.cycle();
+	}
+
+	public ReconnectStatistics getReconnectStats() {
+		return reconnectStatistics;
 	}
 }

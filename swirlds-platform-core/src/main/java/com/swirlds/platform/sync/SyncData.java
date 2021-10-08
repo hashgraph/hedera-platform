@@ -18,15 +18,16 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.EventImpl;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * Data used during gossiping. This type is instantiated by {@code NodeSynchronizerImpl}.
- * These fields are assigned by a {@link SyncShadowGraphManager}.
+ * These fields are assigned by a {@link ShadowGraphManager}.
  */
 public final class SyncData {
 	/**
@@ -48,16 +49,35 @@ public final class SyncData {
 	 * These events are eliminated during the course of the gossip session.
 	 * Most of the time, all of these should be eliminated by the time we reach finishSendEventList.
 	 */
-	private final Set<SyncShadowEvent> workingTips = new HashSet<>();
+	private final Set<ShadowEvent> workingTips = new HashSet<>();
 
+	/**
+	 * The set of tip hashes used during phase 1 of the gossip protocol. Due to the non-deterministic iteration of the
+	 * most {@link Set} implementations these must be properly ordered prior to transmission.
+	 */
 	private final Set<Hash> sendingTips = new HashSet<>();
 
-	private final List<SyncShadowEvent> sendingTipList = new ArrayList<>();
+	/**
+	 * The list of tips used during phase 1 and phase 3 of the gossip protocol. This list is initialized and the
+	 * beginning of the sync and is stored in proper order. This list must never be modified after initialization.
+	 */
+	private final List<ShadowEvent> sendingTipList = new ArrayList<>();
 
+	/**
+	 * The maximum generation of all tips in the {@code sendingTipList}. This value is initialized once at the beginning
+	 * of the sync.
+	 */
 	private long maxTipGeneration = EventImpl.NO_EVENT_GEN;
 
+	/**
+	 * The list of the maximum tip generation per creator as derived from the {@code sendingTipList}. The list index
+	 * corresponds to the node/creator index and the value is the maximum generation for all tips from that creator.
+	 */
 	private final List<Long> maxTipGenerations = new ArrayList<>();
 
+	/**
+	 * Indicates whether the phase 3 fork absorption loops were engaged at least once during this synchronization.
+	 */
 	private boolean tipAbsorptionActive = false;
 
 	/**
@@ -65,7 +85,7 @@ public final class SyncData {
 	 *
 	 * @return the list of sending tips
 	 */
-	public List<SyncShadowEvent> getSendingTipList() {
+	public List<ShadowEvent> getSendingTipList() {
 		return sendingTipList;
 	}
 
@@ -75,9 +95,9 @@ public final class SyncData {
 	 * @param sendingTipList
 	 * 		the list of tip events
 	 */
-	public void setMaxTipGenerations(List<SyncShadowEvent> sendingTipList) {
+	public void setMaxTipGenerations(final List<ShadowEvent> sendingTipList) {
 		long maxCreatorId = 0;
-		for (SyncShadowEvent tip : sendingTipList) {
+		for (final ShadowEvent tip : sendingTipList) {
 			maxCreatorId = Math.max(maxCreatorId, tip.getEvent().getCreatorId());
 		}
 
@@ -85,7 +105,7 @@ public final class SyncData {
 			maxTipGenerations.add(EventImpl.NO_EVENT_GEN);
 		}
 
-		for (SyncShadowEvent tip : sendingTipList) {
+		for (final ShadowEvent tip : sendingTipList) {
 			maxTipGeneration = Math.max(maxTipGeneration, tip.getEvent().getGeneration());
 
 			final int i = (int) tip.getEvent().getCreatorId();
@@ -94,20 +114,29 @@ public final class SyncData {
 		}
 	}
 
+	/**
+	 * Gets the maximum generation across all the sending tips.
+	 *
+	 * @return the generation number of the most recent sending tip
+	 */
 	public long getMaxTipGeneration() {
 		return maxTipGeneration;
 	}
 
 	/**
-	 * Get the maximum generation of all of the sending tips
+	 * Gets a list that contains the maximum generation for each creator. The list index is the creator index and the
+	 * value is the maximum generation for that creator.
 	 *
-	 * @return the max generation number
+	 * @return a list containing the maximum generation per creator.
 	 */
 	public List<Long> getMaxTipGenerations() {
 		return maxTipGenerations;
 	}
 
 	/**
+	 * Provides direct access to the unsorted set of tip hashes. This must not be used for transmission of hashes during
+	 * synchronization. Instead the {@link #getSendingTipHashes()} method should be used.
+	 *
 	 * @return the tips sent to the peer
 	 */
 	public Set<Hash> getSendingTips() {
@@ -115,6 +144,8 @@ public final class SyncData {
 	}
 
 	/**
+	 * Sorts the hashes contained in the {@code sendingTips} set into proper transmission order.
+	 *
 	 * @return the hashes of the tips sent to the peer
 	 */
 	public List<Hash> getSendingTipHashes() {
@@ -161,7 +192,7 @@ public final class SyncData {
 	 *
 	 * @return the working tip set
 	 */
-	public Set<SyncShadowEvent> getWorkingTips() {
+	public Set<ShadowEvent> getWorkingTips() {
 		return workingTips;
 	}
 
@@ -171,7 +202,7 @@ public final class SyncData {
 	 * @param s
 	 * 		the shadow event to mark
 	 */
-	public void markForSync(final SyncShadowEvent s) {
+	public void markForSync(final ShadowEvent s) {
 		sync.add(s.getEventBaseHash());
 	}
 
@@ -191,7 +222,7 @@ public final class SyncData {
 	 * @param s
 	 * 		the shadow event to mark
 	 */
-	public void markForSearch(final SyncShadowEvent s) {
+	public void markForSearch(final ShadowEvent s) {
 		search.add(s.getEventBaseHash());
 	}
 
@@ -212,7 +243,7 @@ public final class SyncData {
 	 * 		the shadow event
 	 * @return whether the given shadow event is marked for sync
 	 */
-	public boolean markedForSync(final SyncShadowEvent s) {
+	public boolean markedForSync(final ShadowEvent s) {
 		return sync.contains(s.getEventBaseHash());
 	}
 
@@ -225,7 +256,7 @@ public final class SyncData {
 	 * 		the shadow event
 	 * @return whether the given shadow event is marked for sync
 	 */
-	public boolean markedForSearch(final SyncShadowEvent s) {
+	public boolean markedForSearch(final ShadowEvent s) {
 		return search.contains(s.getEventBaseHash());
 	}
 
@@ -247,39 +278,55 @@ public final class SyncData {
 		return search.size();
 	}
 
+	/**
+	 * Sets the {@link #isTipAbsorptionActive()} to {@code true} after entering the outermost loop of phase 3 gossip.
+	 * This method should only be called from the {@link ShadowGraphManager#finishSendEventList(SyncData)} method.
+	 */
 	protected void notifyTipAbsorptionActivated() {
 		this.tipAbsorptionActive = true;
 	}
 
+	/**
+	 * Tracks whether the phase 3 loops have been engaged at any time during this synchronization. This method is
+	 * used by {@code NodeSynchronizerImpl} to update the platform statistics.
+	 *
+	 * @return {@code true} if the phase 3 loops where engaged at any time during this synchronization.
+	 */
 	public boolean isTipAbsorptionActive() {
 		return tipAbsorptionActive;
 	}
 
 	/**
 	 * Computes the number of creators that have more than one tip. If a single creator has more than two tips, this
-	 * method will only report once for each such creator.
+	 * method will only report once for each such creator. The execution time cost for this method is O(T + N) where
+	 * T is the number of tips including all forks and N is the number of network nodes. There is some memory overhead,
+	 * but it is fairly nominal in favor of the time complexity savings.
 	 *
 	 * @return the number of event creators that have more than one tip.
 	 */
 	public int computeMultiTipCount() {
-		final Set<Long> multiTipCreators = new HashSet<>();
+		// The number of tips per creator encountered when iterating over the sending tips
+		final Map<Long, Integer> tipCountByCreator = new HashMap<>();
 
-		final Iterator<SyncShadowEvent> iter = sendingTipList.iterator();
-		while (iter.hasNext()) {
-			final SyncShadowEvent left = iter.next();
-			final SyncShadowEvent right = (iter.hasNext()) ? iter.next() : null;
+		// Make a single O(N) where N is the number of tips including all forks. Typically, N will be equal to the
+		// number of network nodes.
+		for (final ShadowEvent tip : sendingTipList) {
+			tipCountByCreator.compute(tip.getEvent().getCreatorId(), (k, v) -> (v != null) ? v + 1 : 1);
+		}
 
-			// If right is null then we are at the end of the list so we can break out of the loop
-			if (right == null) {
-				break;
-			}
-
-			if (left.getEvent().getCreatorId() == right.getEvent().getCreatorId()) {
-				multiTipCreators.add(left.getEvent().getCreatorId()); // hash set to deduplicate the values
+		// Walk the entrySet() which is O(N) where N is the number network nodes. This is still more efficient than a
+		// O(N^2) loop.
+		int creatorsWithForks = 0;
+		for (final Map.Entry<Long, Integer> entry : tipCountByCreator.entrySet()) {
+			// If the number of tips for a given creator is greater than 1 then we have a fork.
+			// This map is broken down by creator ID already as the key so this is guaranteed to be a single increment
+			// for each creator with a fork. Therefore, this holds to the method contract.
+			if (entry.getValue() > 1) {
+				creatorsWithForks++;
 			}
 		}
 
-		return multiTipCreators.size(); // total number of unique creators with more than one tip
+		return creatorsWithForks; // total number of unique creators with more than one tip
 	}
 }
 

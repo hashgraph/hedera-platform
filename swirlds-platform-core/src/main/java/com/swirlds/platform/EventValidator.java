@@ -14,6 +14,7 @@
 
 package com.swirlds.platform;
 
+import com.swirlds.common.CommonUtils;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.CryptoFactory;
@@ -25,7 +26,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.security.PublicKey;
-import java.util.Arrays;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -175,10 +175,10 @@ public class EventValidator {
 
 			if (!valid) {
 				final byte[] signatureCopy = event.getSignature();
-				log.error(EXCEPTION.getMarker(),
+				log.error(INVALID_EVENT_ERROR.getMarker(),
 						"failed the signature check {} with sig \n     {} and hash \n     {}",
 						() -> event,
-						() -> Arrays.toString(signatureCopy),
+						() -> CommonUtils.hex(signatureCopy),
 						event::getBaseHash);
 			}
 

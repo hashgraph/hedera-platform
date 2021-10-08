@@ -146,10 +146,12 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 		} else {
 			finishReadingInternal(node.asInternal(), classVersion);
 		}
+
 		if (options.getWriteHashes()) {
-			node.setHash(
-					readSerializable(false, Hash::new)
-			);
+			final Hash hash = readSerializable(false, Hash::new);
+			if (!node.isSelfHashing()) {
+				node.setHash(hash);
+			}
 		}
 	}
 
