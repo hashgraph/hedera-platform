@@ -33,7 +33,7 @@ import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.internal.SignedStateLoadingException;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.SignedStateManager;
-import com.swirlds.platform.sync.SyncShadowGraphManager;
+import com.swirlds.platform.sync.ShadowGraphManager;
 
 public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	/**
@@ -153,9 +153,9 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	/**
 	 * Get the shadow graph and tip Event set used by this platform
 	 *
-	 * @return the SyncShadowGraphManager used by this platform
+	 * @return the ShadowGraphManager used by this platform
 	 */
-	abstract SyncShadowGraphManager getSyncShadowGraphManager();
+	abstract ShadowGraphManager getShadowGraphManager();
 
 	/**
 	 * @return the connection ID for this platform

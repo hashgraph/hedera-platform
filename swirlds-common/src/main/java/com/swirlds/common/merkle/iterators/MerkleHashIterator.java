@@ -31,6 +31,13 @@ public class MerkleHashIterator extends MerkleDepthFirstIterator<MerkleNode, Mer
 	 */
 	@Override
 	public boolean shouldNodeBeVisited(final MerkleNode node) {
+		if (node.isSelfHashing()) {
+			if (node.getHash() == null) {
+				throw new IllegalStateException("A self hashing node " + node + " returned a null hash");
+			}
+			return false;
+		}
+
 		return node.getHash() == null;
 	}
 
@@ -39,6 +46,17 @@ public class MerkleHashIterator extends MerkleDepthFirstIterator<MerkleNode, Mer
 	 */
 	@Override
 	public boolean shouldNodeBeReturned(MerkleNode node) {
-		return node != null && node.getHash() == null;
+		if (node == null) {
+			return false;
+		}
+
+		if (node.isSelfHashing()) {
+			if (node.getHash() == null) {
+				throw new IllegalStateException("A self hashing node " + node + " returned a null hash");
+			}
+			return false;
+		}
+
+		return node.getHash() == null;
 	}
 }

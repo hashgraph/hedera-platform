@@ -46,9 +46,11 @@ public interface FastCopyable extends Releasable {
 	 * It is strongly suggested that each implementing class override the return type of this method to its self
 	 * type. So if class Foo extends FastCopyable then Foo's copy signature should look like "public Foo copy()".
 	 *
+	 * @param <T>
+	 * 		the expected return type, should match the type of the object being copied
 	 * @return the new copy that was made
 	 */
-	FastCopyable copy();
+	<T extends FastCopyable> T copy();
 
 	/**
 	 * Determines if an object/copy is immutable or not.

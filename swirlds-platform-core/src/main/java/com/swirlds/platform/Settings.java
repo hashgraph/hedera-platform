@@ -98,7 +98,7 @@ class Settings {
 	///////////////////////////////////////////
 	// settings from settings.txt file
 
-	static String about = "Swirlds browser v. 0.17.4\n"
+	static String about = "Swirlds browser v. 0.18.1\n"
 			+ "(c)2016-2021 Swirlds Inc\n" + "This is an early alpha version. \n"
 			+ "The Swirlds™ software is covered by one or more patents \n"
 			+ "(see www.swirlds.com/ip). The browser is free to download, \n"
@@ -380,17 +380,6 @@ class Settings {
 
 	/** Run a thread that checks if the JVM pauses for a long time */
 	static boolean runPauseCheckTimer = false;
-
-	/**
-	 * When a hash is calculated for a signed state, it will only calculate the hashes of nodes that do not have a hash
-	 * set in order to avoid hashing the whole tree every time. If a merkle node changes its data and does not
-	 * invalidate its hash, the root hash calculated will be wrong. This setting is used for debugging nodes that have
-	 * changed their data but have not invalidated their hash. It will rehash the whole tree for every signed state and
-	 * check if the hashes are correct. For any incorrect hash it will log an error.
-	 *
-	 * NOTE: This should only be used for debugging, it will have a major impact on performance.
-	 */
-	static boolean checkSignedStateHashes = false;
 
 	///////////////////////////////////////////
 	// Beta Mirror Nodes

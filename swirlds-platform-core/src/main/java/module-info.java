@@ -23,9 +23,9 @@ module com.swirlds.platform {
 
 	/* Targeted Exports to External Libraries */
 	exports com.swirlds.blob.internal to org.apache.logging.log4j, com.swirlds.demo.platform,
-			com.swirlds.demo.fcm.stats, com.swirlds.fcmap;
-	exports com.swirlds.blob.internal.db to org.apache.logging.log4j, com.swirlds.demo.platform, com.swirlds.fcmap,
-			com.swirlds.platform.test, com.swirlds.fcmap.test, com.swirlds.regression, com.swirlds.merkletree.test;
+			com.swirlds.demo.fcm.stats;
+	exports com.swirlds.blob.internal.db to org.apache.logging.log4j, com.swirlds.demo.platform,
+			com.swirlds.platform.test, com.swirlds.merkle.test, com.swirlds.regression;
 	exports com.swirlds.blob.internal.db.migration to org.apache.logging.log4j, com.swirlds.demo.platform;
 	exports com.swirlds.platform.event to com.swirlds.platform.test, com.fasterxml.jackson.core,
 			com.fasterxml.jackson.databind;
@@ -36,6 +36,7 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.components to com.swirlds.platform.test;
 	exports com.swirlds.platform.observers to com.swirlds.platform.test;
 	exports com.swirlds.platform.eventhandling to com.swirlds.platform.test;
+
 	exports com.swirlds.platform.sync to com.swirlds.platform.test;
 
 	/* Swirlds Libraries */

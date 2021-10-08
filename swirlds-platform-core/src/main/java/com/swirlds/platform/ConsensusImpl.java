@@ -23,7 +23,7 @@ import com.swirlds.platform.internal.SignedStateLoadingException;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.stats.ConsensusStats;
 import com.swirlds.platform.sync.SyncLogging;
-import com.swirlds.platform.sync.SyncShadowGraphManager;
+import com.swirlds.platform.sync.ShadowGraphManager;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -326,7 +326,7 @@ public class ConsensusImpl implements Consensus {
 			final NodeId selfId,
 			final AddressBook addressBook,
 			final SignedState signedState,
-			final SyncShadowGraphManager sgm) throws SignedStateLoadingException {
+			final ShadowGraphManager sgm) throws SignedStateLoadingException {
 		this(statsSupplier, minGenConsumer, selfId, addressBook);
 
 		EventImpl[] events = signedState.getEvents();
@@ -560,7 +560,7 @@ public class ConsensusImpl implements Consensus {
 	 * @param event
 	 * 		the hashgraph event (assumed to be non-null)
 	 */
-	private void addShadowEvent(final SyncShadowGraphManager sgm, final EventImpl event) {
+	private void addShadowEvent(final ShadowGraphManager sgm, final EventImpl event) {
 		// (Shadow Graph Manager may be null for testing.)
 		if (sgm == null) {
 			return;

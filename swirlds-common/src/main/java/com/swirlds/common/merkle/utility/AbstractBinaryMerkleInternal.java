@@ -30,9 +30,12 @@ public abstract class AbstractBinaryMerkleInternal extends AbstractMerkleInterna
 	private MerkleNode right;
 
 	private static final int MIN_BINARY_CHILD_COUNT = 0;
-	private static final int LEFT_CHILD = 0;
-	private static final int RIGHT_CHILD = 1;
 	private static final int BINARY_CHILD_COUNT = 2;
+
+	private static class ChildIndices {
+		public static final int LEFT = 0;
+		public static final int RIGHT = 1;
+	}
 
 	/**
 	 * {@inheritDoc}
@@ -100,19 +103,19 @@ public abstract class AbstractBinaryMerkleInternal extends AbstractMerkleInterna
 	@SuppressWarnings("unchecked")
 	@Override
 	public final <T extends MerkleNode> T getChild(final int index) {
-		if (index == LEFT_CHILD) {
+		if (index == ChildIndices.LEFT) {
 			return (T) left;
-		} else if (index == RIGHT_CHILD) {
+		} else if (index == ChildIndices.RIGHT) {
 			return (T) right;
 		} else {
-			throw new IllegalChildIndexException(LEFT_CHILD, RIGHT_CHILD, index);
+			throw new IllegalChildIndexException(ChildIndices.LEFT, ChildIndices.RIGHT, index);
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
 	 *
-	 * Select either the LEFT_CHILD (0) or the RIGHT_CHILD (1) using an index number.
+	 * Select either the ChildIndices.LEFT (0) or the ChildIndices.RIGHT (1) using an index number.
 	 * This will throw an error if a different value is used.*
 	 *
 	 * @param index
@@ -121,29 +124,54 @@ public abstract class AbstractBinaryMerkleInternal extends AbstractMerkleInterna
 	 */
 	@Override
 	protected final void setChildInternal(final int index, final MerkleNode child) {
-		if (index == LEFT_CHILD) {
+		if (index == ChildIndices.LEFT) {
 			left = child;
-		} else if (index == RIGHT_CHILD) {
+		} else if (index == ChildIndices.RIGHT) {
 			right = child;
 		} else { //bad index
-			throw new IllegalChildIndexException(LEFT_CHILD, RIGHT_CHILD, index);
+			throw new IllegalChildIndexException(ChildIndices.LEFT, ChildIndices.RIGHT, index);
 		}
 	}
-	
-	public <T extends MerkleNode> void setLeftChild(final T newLeftChild) {
-		setChild(LEFT_CHILD, newLeftChild);
+
+	/**
+	 * Set the left child.
+	 *
+	 * @param left
+	 * 		a merkle node that will become this node's left child
+	 * @param <T>
+	 * 		the type of the child
+	 */
+	public <T extends MerkleNode> void setLeft(final T left) {
+		setChild(ChildIndices.LEFT, left);
 	}
 
-	public <T extends MerkleNode> T getLeftChild() {
-		return getChild(LEFT_CHILD);
+	/**
+	 * Get the left child.
+	 *
+	 * @param <T>
+	 * 		the type of the left child
+	 * @return the merkle node in the left child position, or null if no such node is present
+	 */
+	@SuppressWarnings("unchecked")
+	public <T extends MerkleNode> T getLeft() {
+		return (T) left;
 	}
 
-	public <T extends MerkleNode> void setRightChild(T newRightChild) {
-		setChild(RIGHT_CHILD, newRightChild);
+	/**
+	 * Set the right child.
+	 *
+	 * @param right
+	 * 		a merkle node that will become this node's right child
+	 * @param <T>
+	 * 		the type of the child
+	 */
+	public <T extends MerkleNode> void setRight(final T right) {
+		setChild(ChildIndices.RIGHT, right);
 	}
 
-	public <T extends MerkleNode> T getRightChild() {
-		return getChild(RIGHT_CHILD);
+	@SuppressWarnings("unchecked")
+	public <T extends MerkleNode> T getRight() {
+		return (T) right;
 	}
 
 	/**
@@ -166,7 +194,7 @@ public abstract class AbstractBinaryMerkleInternal extends AbstractMerkleInterna
 	 *
 	 * In the N-Ary case, this verifies that the index is between 0 and the number of actual children
 	 * (including null children) of the node.  However, in the binary case, there are always two:
-	 * LEFT_CHILD (0) and RIGHT_CHILD (1), and the subsequent call is to getChild(index), above,
+	 * ChildIndices.LEFT (0) and ChildIndices.RIGHT (1), and the subsequent call is to getChild(index), above,
 	 * which also tests the legality of the index.  As a result, there is no need to perform an extra
 	 * bounds test here.  This is effectively a NOP.
 	 *
@@ -174,7 +202,7 @@ public abstract class AbstractBinaryMerkleInternal extends AbstractMerkleInterna
 	 */
 	@Override
 	protected final void checkChildIndexIsValid(final int index) {
-		//the index is actually being tested in getChild(), which will throw if not LEFT_CHILD or RIGHT_CHILD
+		//the index is actually being tested in getChild(), which will throw if not ChildIndices.LEFT or ChildIndices.RIGHT
 	}
 
 	/**

@@ -23,10 +23,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.swirlds.logging.LogMarker.ARCHIVE;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 /**
@@ -48,7 +50,10 @@ public class FCHashMapGarbageCollector<K, V> {
 	/**
 	 * The size of the transfer buffer for the queue thread.
 	 */
-	private static final int QUEUE_BUFFER_SIZE = 10;
+	private static final int QUEUE_BUFFER_SIZE = 1;
+
+	private static final int QUEUE_SIZE_LOG_THRESHOLD = 50;
+	private static final int WAIT_LOG_THRESHOLD_MS = 1_000;
 
 	/**
 	 * Contains a sequence of events that eventually require cleanup
@@ -109,6 +114,12 @@ public class FCHashMapGarbageCollector<K, V> {
 		referenceCount.getAndIncrement();
 		try {
 			workQueue.put(copy);
+
+			final int size = workQueue.size();
+			if (size >= QUEUE_SIZE_LOG_THRESHOLD && size % QUEUE_SIZE_LOG_THRESHOLD == 0) {
+				log.debug(ARCHIVE.getMarker(), "FCHashMapGarbageCollector queue contains {} copies", size);
+			}
+
 		} catch (final InterruptedException ex) {
 			log.error(EXCEPTION.getMarker(), "interrupted while registering FCHashMap copy");
 			Thread.currentThread().interrupt();
@@ -201,7 +212,16 @@ public class FCHashMapGarbageCollector<K, V> {
 	 * This method is called every time there is a version to delete.
 	 */
 	private void handler(final FCHashMap<K, V> versionToDelete) throws InterruptedException {
+
+		final Instant start = Instant.now();
 		versionToDelete.waitUntilReleased();
+		final Instant finish = Instant.now();
+		final Duration timeSpentWaiting = Duration.between(start, finish);
+		if (timeSpentWaiting.toMillis() >= WAIT_LOG_THRESHOLD_MS) {
+			log.debug(ARCHIVE.getMarker(), "spent " + timeSpentWaiting.toMillis() +
+					"ms waiting for FCHashMap to be released");
+		}
+
 		final long version = versionToDelete.version();
 
 		GarbageCollectionEvent<K, V> nextEvent;

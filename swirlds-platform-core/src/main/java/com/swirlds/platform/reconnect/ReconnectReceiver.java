@@ -26,6 +26,7 @@ import com.swirlds.logging.payloads.ReconnectDataUsagePayload;
 import com.swirlds.logging.payloads.ReconnectFailurePayload;
 import com.swirlds.platform.AbstractPlatform;
 import com.swirlds.platform.Crypto;
+import com.swirlds.platform.ReconnectStatistics;
 import com.swirlds.platform.SyncConnection;
 import com.swirlds.platform.SyncConstants;
 import com.swirlds.platform.Utilities;
@@ -64,6 +65,8 @@ public class ReconnectReceiver {
 
 	private SignedState signedState;
 
+	private final ReconnectStatistics statistics;
+
 	/**
 	 * After reconnect is finished, restore the socket timeout to the original value.
 	 */
@@ -74,7 +77,8 @@ public class ReconnectReceiver {
 			final AddressBook addressBook,
 			final State currentState,
 			final Crypto crypto,
-			final int reconnectSocketTimeout) {
+			final int reconnectSocketTimeout,
+			final ReconnectStatistics statistics) {
 
 		currentState.throwIfImmutable("Can not perform reconnect with immutable state");
 		currentState.throwIfReleased("Can not perform reconnect with released state");
@@ -84,6 +88,7 @@ public class ReconnectReceiver {
 		this.currentState = currentState;
 		this.crypto = crypto;
 		this.reconnectSocketTimeout = reconnectSocketTimeout;
+		this.statistics = statistics;
 	}
 
 	/**
@@ -200,6 +205,7 @@ public class ReconnectReceiver {
 	 * 		if the current thread is interrupted
 	 */
 	private void reconnect() throws InterruptedException {
+		statistics.incrementReceiverStartTimes();
 		ExtendableInputStream<CountingStreamExtension> countingStream =
 				new ExtendableInputStream<>(connection.getDis(), new CountingStreamExtension());
 		MerkleDataInputStream in = new MerkleDataInputStream(countingStream, false);
@@ -215,6 +221,7 @@ public class ReconnectReceiver {
 		log.info(RECONNECT.getMarker(), () -> new ReconnectDataUsagePayload(
 				"Reconnect data usage report",
 				mbReceived).toString());
+		statistics.incrementReceiverEndTimes();
 	}
 
 	/**

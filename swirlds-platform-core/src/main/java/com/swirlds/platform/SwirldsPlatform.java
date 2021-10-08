@@ -63,6 +63,7 @@ import com.swirlds.platform.internal.SignedStateLoadingException;
 import com.swirlds.platform.internal.SystemExitReason;
 import com.swirlds.platform.observers.EventObserverDispatcher;
 import com.swirlds.platform.reconnect.ReconnectThrottle;
+import com.swirlds.platform.state.BackgroundHashChecker;
 import com.swirlds.platform.state.DualStateImpl;
 import com.swirlds.platform.state.SavedStateInfo;
 import com.swirlds.platform.state.SignedState;
@@ -70,7 +71,7 @@ import com.swirlds.platform.state.SignedStateManager;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.stats.StatConstructor;
 import com.swirlds.platform.swirldapp.SwirldAppLoader;
-import com.swirlds.platform.sync.SyncShadowGraphManager;
+import com.swirlds.platform.sync.ShadowGraphManager;
 import org.apache.commons.lang3.SystemUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -137,6 +138,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** various signed states in various stages of collecting signatures */
 	private final SignedStateManager signedStateManager;
+
 	/** Handles all system transactions */
 	private final SystemTransactionHandler systemTransactionHandler;
 
@@ -171,7 +173,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * The shadow graph manager. This wraps a shadow graph, which is an Event graph that
 	 * adds child pointers to the Hashgraph Event graph. Used for gossiping.
 	 */
-	private final SyncShadowGraphManager sgm;
+	private final ShadowGraphManager sgm;
 
 	/** tells callers who to sync with and keeps track of whether we have fallen behind */
 	private SyncManager syncManager;
@@ -337,7 +339,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 		// set here, then given to the state in run(). A copy of it is given to hashgraph.
 		this.initialAddressBook = initialAddressBook;
 
-		this.sgm = new SyncShadowGraphManager();
+		this.sgm = new ShadowGraphManager();
 
 		this.eventMapper = new EventMapper(selfId, initialAddressBook.getSize());
 
@@ -377,6 +379,12 @@ public class SwirldsPlatform extends AbstractPlatform {
 		}
 		signedStateManager = new SignedStateManager(this, crypto, signedStateFileManager, Settings.state,
 				Settings.jsonExport);
+
+		if (Settings.state.backgroundHashChecking) {
+			// This object performs background sanity checks on copies of the state.
+			new BackgroundHashChecker(signedStateManager::getLastCompleteSignedState);
+		}
+
 		systemTransactionHandler = new SystemTransactionHandler(selfId, signedStateManager);
 
 		startUpEventFrozenManager = new StartUpEventFrozenManager(this::getStats, Instant::now);
@@ -756,6 +764,11 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * StateLoadedFromDiskNotification} would be dispatched. Eventually, this should be split into more discrete parts.
 	 */
 	synchronized void initializeFirstStep() throws SignedStateLoadingException {
+
+		if (initialState != null) {
+			initialState.getSwirldState().migrate();
+		}
+
 		// if this setting is 0 or less, there is no startup freeze
 		if (Settings.freezeSecondsAfterStartup > 0) {
 			final Instant startUpEventFrozenEndTime = Instant.now()
@@ -820,7 +833,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 				consensusRef::get,
 				initialAddressBook,
 				dispatcher,
-				getSyncShadowGraphManager()
+				getShadowGraphManager()
 		);
 
 		final EventCreator eventCreator = new EventCreator(
@@ -1198,7 +1211,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * {@inheritDoc}
 	 */
 	@Override
-	SyncShadowGraphManager getSyncShadowGraphManager() {
+	ShadowGraphManager getShadowGraphManager() {
 		return sgm;
 	}
 

@@ -228,6 +228,22 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 
 	/**
 	 * {@inheritDoc}
+	 */
+	@Override
+	public final void invalidateHash() {
+		setHash(null);
+	}
+
+	/**
+	 * Merkle internal nodes are never self hashing.
+	 */
+	@Override
+	public final boolean isSelfHashing() {
+		return false;
+	}
+
+	/**
+	 * {@inheritDoc}
 	 *
 	 * WARNING: setting the route on an internal node with children requires a full iteration of the subtree.
 	 * For large trees this may be very expensive.

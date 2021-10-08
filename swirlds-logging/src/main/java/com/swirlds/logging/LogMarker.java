@@ -23,6 +23,11 @@ import org.apache.logging.log4j.MarkerManager;
 public enum LogMarker {
 
 	/**
+	 * Debug information about archiving.
+	 */
+	ARCHIVE(LogMarkerType.INFO),
+
+	/**
 	 * log all exceptions, and serious problems. These should never happen there is a bug in the code. In most cases,
 	 * this should include a full stack trace of the exception.
 	 */
@@ -212,11 +217,6 @@ public enum LogMarker {
 	 * logs events related to event streaming
 	 */
 	EVENT_STREAM(LogMarkerType.INFO),
-
-	/**
-	 * logs detail information related to object streaming
-	 */
-	OBJECT_STREAM_DETAIL(LogMarkerType.INFO),
 
 	OBJECT_STREAM(LogMarkerType.INFO),
 

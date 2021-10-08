@@ -18,10 +18,9 @@ import com.swirlds.common.AddressBook;
 import com.swirlds.common.NodeId;
 import com.swirlds.platform.Consensus;
 import com.swirlds.platform.EventImpl;
-import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.observers.EventObserverDispatcher;
 import com.swirlds.platform.sync.SyncLogging;
-import com.swirlds.platform.sync.SyncShadowGraphManager;
+import com.swirlds.platform.sync.ShadowGraphManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -63,10 +62,10 @@ public class EventIntake {
 	private final EventObserverDispatcher dispatcher;
 
 	/**
-	 * A (@link SyncShadowGraphManager} instance, updated whenever the hashgraph is.
+	 * A (@link ShadowGraphManager} instance, updated whenever the hashgraph is.
 	 * Used for gossiping.
 	 */
-	private final SyncShadowGraphManager sgm;
+	private final ShadowGraphManager sgm;
 
 
 	/**
@@ -86,7 +85,7 @@ public class EventIntake {
 			final Supplier<Consensus> consensusSupplier,
 			final AddressBook addressBook,
 			final EventObserverDispatcher dispatcher,
-			final SyncShadowGraphManager sgm) {
+			final ShadowGraphManager sgm) {
 		this.selfId = selfId;
 		this.consensusSupplier = consensusSupplier;
 		this.addressBook = addressBook;

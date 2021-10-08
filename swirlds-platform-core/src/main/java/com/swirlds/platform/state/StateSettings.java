@@ -88,6 +88,12 @@ public class StateSettings extends SubSetting {
 	 */
 	public static volatile boolean compareSSLeafSnapshots = true;
 
+	/**
+	 * If true then a single background thread is used to do validation of signed state hashes. Validation is on
+	 * a best effort basis. If it takes too long to validate a state then new states will be skipped.
+	 */
+	public static boolean backgroundHashChecking = false;
+
 	public StateSettings() {
 
 	}

@@ -221,10 +221,10 @@ class SyncListener implements Runnable {
 	 * @param syncServer
 	 * 		the SyncServer that stores the current connection to every member
 	 * @return true if a heartbeat or sync request was read and handled
-	 * @throws Exception
+	 * @throws IOException
 	 * 		if there is any exception during sync, or it times out
 	 */
-	boolean handleOneMsgOrException(NodeId otherId, final SyncServer syncServer) throws Exception {
+	boolean handleOneMsgOrException(NodeId otherId, final SyncServer syncServer) throws IOException {
 		final SyncConnection conn;
 		final NodeId selfId;
 		// otherId assumed to be main
@@ -327,7 +327,8 @@ class SyncListener implements Runnable {
 						reconnectThrottle,
 						platform.getSelfId().getId(),
 						otherId.getId(),
-						stateWrapper.get().getLastRoundReceived()).execute();
+						stateWrapper.get().getLastRoundReceived(),
+						platform.getStats().getReconnectStats()).execute();
 			}
 
 			return true;

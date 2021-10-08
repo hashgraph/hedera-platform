@@ -13,6 +13,7 @@
  */
 
 package com.swirlds.platform.state;
+
 import com.swirlds.platform.stats.SignedStateStats;
 import org.apache.commons.lang3.time.StopWatch;
 import org.apache.logging.log4j.LogManager;
@@ -23,6 +24,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
+import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STATE_DELETER;
 import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS;
 
@@ -31,11 +33,12 @@ public class SignedStateGarbageCollector implements Runnable {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
 
-	private static final int QUEUE_SIZE = 20;
+	private static final int DELETION_QUEUE_SIZE = 200;
 
 	private final LinkedBlockingQueue<SignedState> deletionQueue;
 	private final LinkedBlockingQueue<SignedState> archivalQueue;
 	private final Supplier<SignedStateStats> statsSupplier;
+	private final StateSettings settings;
 
 	/**
 	 * The amount of time to sleep after attempting to delete/archive all requested states.
@@ -44,10 +47,13 @@ public class SignedStateGarbageCollector implements Runnable {
 
 	private volatile boolean alive;
 
-	public SignedStateGarbageCollector(Supplier<SignedStateStats> statsSupplier) {
+	public SignedStateGarbageCollector(
+			final Supplier<SignedStateStats> statsSupplier,
+			final StateSettings settings) {
 		this.statsSupplier = statsSupplier;
-		deletionQueue = new LinkedBlockingQueue<>(QUEUE_SIZE);
-		archivalQueue = new LinkedBlockingQueue<>(QUEUE_SIZE);
+		this.settings = settings;
+		deletionQueue = new LinkedBlockingQueue<>(DELETION_QUEUE_SIZE);
+		archivalQueue = new LinkedBlockingQueue<>();
 		alive = true;
 	}
 
@@ -87,24 +93,28 @@ public class SignedStateGarbageCollector implements Runnable {
 	 */
 	@Override
 	public void run() {
-		while (alive) {
+		try {
+			while (alive) {
 
-			boolean deletePerformed = processDeletionQueue();
+				boolean deletePerformed = processDeletionQueue();
 
-			boolean archivePerformed = processArchivalQueue();
+				boolean archivePerformed = processArchivalQueue();
 
-			boolean shouldSleep = !(deletePerformed && deletionQueue.size() > 0) &&
-					!(archivePerformed && archivalQueue.size() > 0);
+				boolean shouldSleep = !(deletePerformed && deletionQueue.size() > 0) &&
+						!(archivePerformed && archivalQueue.size() > 0);
 
-			if (shouldSleep) {
-				try {
-					Thread.sleep(sleepMillis);
-				} catch (InterruptedException e) {
-					log.warn(TESTING_EXCEPTIONS.getMarker(), "Thread Interrupted", e);
-					Thread.currentThread().interrupt();
-					return;
+				if (shouldSleep) {
+					try {
+						Thread.sleep(sleepMillis);
+					} catch (InterruptedException e) {
+						log.warn(TESTING_EXCEPTIONS.getMarker(), "Thread Interrupted", e);
+						Thread.currentThread().interrupt();
+						return;
+					}
 				}
 			}
+		} catch (final Exception ex) {
+			log.error(EXCEPTION.getMarker(), "exception in SignedStateGarbageCollector", ex);
 		}
 	}
 

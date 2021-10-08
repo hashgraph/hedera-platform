@@ -23,11 +23,10 @@ public class GenerateClassId {
 	public static void main(String[] args) {
 		System.out.printf(
 				"Simple program to generate a random long to use as a class ID for RuntimeConstructable.\n\n" +
-						"\tprivate static final long CLASS_ID = 0x%sL;\n" +
-						"\tprivate static final int VERSION_ORIGINAL = 1;\n" +
-						"\tprivate static final int VERSION_MIGRATE_TO_SERIALIZABLE = 2;\n" +
-						"\tprivate static final int CLASS_VERSION = VERSION_MIGRATE_TO_SERIALIZABLE;\n" +
-						"\n" +
+						"\tprivate static final long CLASS_ID = 0x%sL;\n\n" +
+						"\tprivate static final class ClassVersion {\n" +
+						"\t\tpublic static final int ORIGINAL = 1;\n" +
+						"\t}\n\n" +
 						"\t@Override\n" +
 						"\tpublic long getClassId() {\n" +
 						"\t\treturn CLASS_ID;\n" +
@@ -35,7 +34,7 @@ public class GenerateClassId {
 						"\n" +
 						"\t@Override\n" +
 						"\tpublic int getVersion() {\n" +
-						"\t\treturn CLASS_VERSION;\n" +
+						"\t\treturn ClassVersion.ORIGINAL;\n" +
 						"\t}",
 				Long.toHexString(new Random().nextLong())
 		);

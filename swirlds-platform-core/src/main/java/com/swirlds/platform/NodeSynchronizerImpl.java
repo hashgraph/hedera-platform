@@ -20,7 +20,7 @@ import com.swirlds.common.threading.ThreadConfiguration;
 import com.swirlds.platform.event.ValidateEventTask;
 import com.swirlds.platform.sync.SyncFallenBehind;
 import com.swirlds.platform.sync.SyncLogging;
-import com.swirlds.platform.sync.SyncShadowGraphManager;
+import com.swirlds.platform.sync.ShadowGraphManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -141,6 +141,8 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 							.setComponent("node-sync")
 							.buildFactory());
 
+	private static final int PARALLEL_TASK_1 = 1;
+	private static final int PARALLEL_TASK_2 = 2;
 
 	/**
 	 * use this for all logging, as controlled by the optional data/log4j2.xml file
@@ -190,7 +192,7 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 		super(
 				conn,
 				caller,
-				getSyncShadowGraphManager(conn),
+				getShadowGraphManager(conn),
 				new SyncThrottle(conn.getPlatform().getNumMembers()),
 				conn.getPlatform().getStats(),
 				(ValidateEventTask task) -> conn.getPlatform().getEventTaskCreator().addEvent(task),
@@ -247,7 +249,7 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 
 		// STEP 2: READ and WRITE the ACK/NACK, and tip hashes, tip booleans, and generation numbers
 
-		getSyncShadowGraphManager().setInitialTips(getSyncData());
+		getShadowGraphManager().setInitialTips(getSyncData());
 		conn.getPlatform().getStats().updateTipsPerSync(getSyncData().getSendingTipList().size());
 		conn.getPlatform().getStats().updateMultiTipsPerSync(getSyncData().computeMultiTipCount());
 
@@ -787,18 +789,18 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 
 
 	/**
-	 * getSyncShadowGraphManager
+	 * getShadowGraphManager
 	 *
 	 * @param conn
 	 * 		the connection instance over which to gossip/synchronize
 	 * @return a (reference to) this node's shadow graph
 	 */
-	private static synchronized SyncShadowGraphManager getSyncShadowGraphManager(
+	private static synchronized ShadowGraphManager getShadowGraphManager(
 			final SyncConnection conn) {
 
 		final AbstractPlatform platform = conn.getPlatform();
 
-		return platform.getSyncShadowGraphManager();
+		return platform.getShadowGraphManager();
 	}
 
 
@@ -837,18 +839,18 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 		} catch (ExecutionException | InterruptedException | CancellationException exception) {
 
 			if (exception.getCause() != null) {
-				throw new ParallelExecutionException(exception.getCause(), callerName, 1);
+				throw new ParallelExecutionException(exception.getCause(), callerName, PARALLEL_TASK_1);
 			} else {
-				throw new ParallelExecutionException(exception, callerName, 1);
+				throw new ParallelExecutionException(exception, callerName, PARALLEL_TASK_1);
 			}
 
 			// task2 exception
 		} catch (Exception exception) {
 
 			if (exception.getCause() != null) {
-				throw new ParallelExecutionException(exception.getCause(), callerName, 2);
+				throw new ParallelExecutionException(exception.getCause(), callerName, PARALLEL_TASK_2);
 			} else {
-				throw new ParallelExecutionException(exception, callerName, 2);
+				throw new ParallelExecutionException(exception, callerName, PARALLEL_TASK_2);
 			}
 		}
 	}

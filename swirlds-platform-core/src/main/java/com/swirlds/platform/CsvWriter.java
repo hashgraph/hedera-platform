@@ -129,7 +129,7 @@ class CsvWriter implements Runnable {
 	 * 		which statistic within that object
 	 * @return true if this statistic should be written
 	 */
-	private boolean shouldWrite(AbstractStatistics statsObj, int pos) {
+	private boolean shouldWrite(final AbstractStatistics statsObj, final int pos) {
 		boolean result = true;
 
 		// Only write internal stats if the Settings.showInternalStats are enabled
@@ -145,7 +145,7 @@ class CsvWriter implements Runnable {
 	 */
 	@Override
 	public void run() {
-		AbstractStatistics[] statisticsObjs = new AbstractStatistics[(showDbStats) ? 4 : 3];
+		final AbstractStatistics[] statisticsObjs = new AbstractStatistics[(showDbStats) ? 4 : 3];
 		statisticsObjs[0] = platform.getStats();
 		statisticsObjs[1] = CryptoStatistics.getInstance();
 		statisticsObjs[2] = platform.getAppStats();
@@ -218,7 +218,7 @@ class CsvWriter implements Runnable {
 				newline();
 				Thread.sleep(writePeriod); // add new rows infrequently
 			}
-		} catch (InterruptedException e) {
+		} catch (final InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
 
@@ -227,10 +227,10 @@ class CsvWriter implements Runnable {
 	/** Erase the existing file (if one exists) */
 	private void eraseFile() {
 		// erase file in current directory
-		try (BufferedWriter file = new BufferedWriter(
+		try (final BufferedWriter file = new BufferedWriter(
 				new FileWriter(csvFilePath, false))) {
 			file.write("");
-		} catch (IOException ex) {
+		} catch (final IOException ex) {
 			log.error(EXCEPTION.getMarker(),
 					"CsvWriter: Failed to erase the CSV file, no stats will be logged [ file = '{}' ] ",
 					csvFilePath, ex);
@@ -278,16 +278,16 @@ class CsvWriter implements Runnable {
 	 * @param newline
 	 * 		true if a new line should be started after this one
 	 */
-	private void write(String message, boolean newline) {
+	private void write(final String message, final boolean newline) {
 		// create or append to file in current directory
-		try (BufferedWriter file = new BufferedWriter(
+		try (final BufferedWriter file = new BufferedWriter(
 				new FileWriter(csvFilePath, true))) {
 			if (newline) {
 				file.write("\n");
 			} else {
 				file.write(message.trim().replaceAll(",", "") + ",");
 			}
-		} catch (IOException ex) {
+		} catch (final IOException ex) {
 			log.error(EXCEPTION.getMarker(),
 					"CsvWriter: Unable to write to the CSV file, no stats will be logged [ file = '{}' ]",
 					csvFilePath, ex);
@@ -300,7 +300,7 @@ class CsvWriter implements Runnable {
 	 * @param message
 	 * 		the String to write
 	 */
-	private void write(String message) {
+	private void write(final String message) {
 		write(message, false);
 	}
 
@@ -315,9 +315,9 @@ class CsvWriter implements Runnable {
 	 * @param statsObj
 	 * 		statistics instance hold an array of statistic entry
 	 */
-	private void writeDescriptions(AbstractStatistics statsObj) {
-		String[] names = statsObj.getNameStrings(false);
-		String[] descriptions = statsObj.getDescriptionStrings();
+	private void writeDescriptions(final AbstractStatistics statsObj) {
+		final String[] names = statsObj.getNameStrings(false);
+		final String[] descriptions = statsObj.getDescriptionStrings();
 
 		for (int i = 0; i < names.length; i++) {
 			if (shouldWrite(statsObj, i)) {
@@ -334,8 +334,8 @@ class CsvWriter implements Runnable {
 	 * @param statsObj
 	 * 		statistics instance hold an array of statistic entry
 	 */
-	private void writeCategories(AbstractStatistics statsObj) {
-		String[] categories = statsObj.getCategoryStrings();
+	private void writeCategories(final AbstractStatistics statsObj) {
+		final String[] categories = statsObj.getCategoryStrings();
 		for (int i = 0; i < categories.length; i++) {
 			if (shouldWrite(statsObj, i)) {
 				write(categories[i]);
@@ -350,8 +350,8 @@ class CsvWriter implements Runnable {
 	 * @param statsObj
 	 * 		statistics instance hold an array of statistic entry
 	 */
-	private void writeStatNames(AbstractStatistics statsObj) {
-		String[] names = statsObj.getNameStrings(true);
+	private void writeStatNames(final AbstractStatistics statsObj) {
+		final String[] names = statsObj.getNameStrings(true);
 		for (int i = 0; i < names.length; i++) {
 			if (shouldWrite(statsObj, i)) {
 				write(names[i]);
@@ -365,12 +365,12 @@ class CsvWriter implements Runnable {
 	 * @param statsObj
 	 * 		statistics instance hold an array of statistic entry
 	 */
-	private void writeStatValues(AbstractStatistics statsObj) {
+	private void writeStatValues(final AbstractStatistics statsObj) {
 		if (statsObj == null) {
 			return;
 		}
 
-		String[] values = statsObj.getValueStrings();
+		final String[] values = statsObj.getResetValueStrings();
 		for (int i = 0; i < values.length; i++) {
 			if (shouldWrite(statsObj, i)) {
 				write(values[i]);

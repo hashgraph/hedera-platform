@@ -199,7 +199,9 @@ public class SignedStateManager implements StateSignatureRecorder {
 				ss.weakReserveState();
 				// All signed states from earlier rounds can be archived now.
 				for (SignedState state : allStates.values()) {
-					if (!state.isMarkedForArchival() && state.getLastRoundReceived() < ss.getLastRoundReceived()) {
+					if (!state.isMarkedForArchival()
+							&& state.isComplete()
+							&& state.getLastRoundReceived() < ss.getLastRoundReceived()) {
 						state.markForArchival();
 						garbageCollector.archiveBackground(state);
 					}
@@ -304,16 +306,15 @@ public class SignedStateManager implements StateSignatureRecorder {
 
 			final Runnable closeCallback = () -> {
 				if (latest != null) {
-					latest.weakReleaseState();
+					latest.releaseState();
 				}
 			};
 
 			T swirldState = null;
 			if (latest != null) {
-				latest.weakReserveState();
+				latest.reserveState();
 				swirldState = (T) latest.getSwirldState();
 			}
-
 
 			return new AutoCloseableWrapper<>(swirldState, closeCallback);
 		}
@@ -387,7 +388,7 @@ public class SignedStateManager implements StateSignatureRecorder {
 			final SignedStateFileManager signedStateFileManager, final StateSettings stateSettings,
 			final JsonExporterSettings jsonExporterSettings) {
 		this(platform, crypto, signedStateFileManager, stateSettings,
-				jsonExporterSettings, new SignedStateGarbageCollector(platform::getStats));
+				jsonExporterSettings, new SignedStateGarbageCollector(platform::getStats, stateSettings));
 	}
 
 	/**
@@ -741,6 +742,7 @@ public class SignedStateManager implements StateSignatureRecorder {
 				if (sigSet.isNewlyComplete()) {
 					// at this point the signed state has the majority of signatures for the first time
 					signedState.reserveState();
+					signedState.markAsComplete();
 					if (!newSignedStateQueue.offer(signedState)) {
 						signedState.releaseState();
 						log.error(SIGNED_STATE.getMarker(),

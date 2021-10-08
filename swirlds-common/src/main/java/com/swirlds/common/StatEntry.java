@@ -23,21 +23,23 @@ import java.util.function.Supplier;
  */
 public class StatEntry {
 	/** the kind of statistic (stats are grouped or filtered by this) */
-	public String category;
+	public final String category;
 	/** a short name for the statistic */
-	public String name;
+	public final String name;
 	/** a one-sentence description of the statistic */
-	public String desc;
+	public final String desc;
 	/** a string that can be passed to String.format() to format the statistic */
-	public String format;
+	public final String format;
 	/** the statistics object (if it implements StatsBuffered), else null */
 	public StatsBuffered buffered;
 	/** a lambda that instantiates and initializes, using the given half life */
-	public Function<Double, StatsBuffered> init;
+	public final Function<Double, StatsBuffered> init;
 	/** a lambda that resets the statistic, using the given half life */
-	public Consumer<Double> reset;
+	public final Consumer<Double> reset;
 	/** a lambda that returns the statistic string */
-	public Supplier<Object> supplier;
+	public final Supplier<Object> statsStringSupplier;
+	/** a lambda that returns the statistic string and resets it at the same time */
+	public final Supplier<Object> resetStatsStringSupplier;
 
 	/**
 	 * stores all the parameters, which can be accessed directly
@@ -56,20 +58,45 @@ public class StatEntry {
 	 * 		a lambda that instantiates and initializes, using the given half life
 	 * @param reset
 	 * 		a lambda that resets the statistic, using the given half life
-	 * @param supplier
+	 * @param statsStringSupplier
 	 * 		a lambda that returns the statistic string
+	 * @param resetStatsStringSupplier
+	 * 		a lambda that returns the statistic string and resets the value at the same time
 	 */
-	public StatEntry(String category, String name, String desc, String format,
-			StatsBuffered buffered, Function<Double, StatsBuffered> init,
-			Consumer<Double> reset, Supplier<Object> supplier) {
+	public StatEntry(final String category,
+			final String name,
+			final String desc,
+			final String format,
+			final StatsBuffered buffered,
+			final Function<Double, StatsBuffered> init,
+			final Consumer<Double> reset,
+			final Supplier<Object> statsStringSupplier,
+			final Supplier<Object> resetStatsStringSupplier) {
 		this.category = category;
 		this.name = name;
 		this.desc = desc;
 		this.format = format;
 		this.init = init;
 		this.reset = reset;
-		this.supplier = supplier;
+		this.statsStringSupplier = statsStringSupplier;
 		this.buffered = buffered;
+		this.resetStatsStringSupplier = resetStatsStringSupplier;
+	}
+
+	/**
+	 * Same as
+	 * {@link StatEntry#StatEntry(String, String, String, String, StatsBuffered, Function, Consumer, Supplier, Supplier)}
+	 * with the resetSupplier being set to supplier
+	 */
+	public StatEntry(final String category,
+			final String name,
+			final String desc,
+			final String format,
+			final StatsBuffered buffered,
+			final Function<Double, StatsBuffered> init,
+			final Consumer<Double> reset,
+			final Supplier<Object> statsStringSupplier) {
+		this(category, name, desc, format, buffered, init, reset, statsStringSupplier, statsStringSupplier);
 	}
 
 }

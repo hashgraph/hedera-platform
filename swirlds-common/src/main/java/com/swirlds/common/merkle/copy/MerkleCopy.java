@@ -154,7 +154,7 @@ public final class MerkleCopy {
 	 * @param newParent
 	 * 		the node that is getting the children
 	 */
-	public static void adoptChildren(MerkleInternal originalParent, MerkleInternal newParent) {
+	public static void adoptChildren(final MerkleInternal originalParent, final MerkleInternal newParent) {
 		for (int childIndex = 0; childIndex < originalParent.getNumberOfChildren(); childIndex++) {
 			final MerkleNode child = originalParent.getChild(childIndex);
 			MerkleRoute childRoute = null;

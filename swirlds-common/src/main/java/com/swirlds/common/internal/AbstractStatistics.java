@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.IllegalFormatException;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * An abstract class that can be extended to create a container for statistics.
@@ -93,7 +94,7 @@ public abstract class AbstractStatistics implements Statistics {
 	 */
 	protected void setUpStatEntries() {
 		if (statEntries != null) { //if it exists, call it now. Otherwise, the child class must call setUpStatEntries
-			for (StatEntry stat : statEntries) {
+			for (final StatEntry stat : statEntries) {
 				if (stat.init != null) {
 					stat.buffered = stat.init.apply(SettingsCommon.halfLife);
 				}
@@ -110,7 +111,7 @@ public abstract class AbstractStatistics implements Statistics {
 	 * reset all the Speedometer and RunningAverage objects with a half life of Platform.halfLife
 	 */
 	public void resetAllSpeedometers() {
-		for (StatEntry stat : statEntries) {
+		for (final StatEntry stat : statEntries) {
 			if (stat.reset != null) {
 				stat.reset.accept(SettingsCommon.halfLife);
 			} else if (stat.buffered != null) {
@@ -128,7 +129,7 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		number of milliseconds between writes
 	 */
 	@Override
-	public void setStatsWritePeriod(int writePeriod) {
+	public void setStatsWritePeriod(final int writePeriod) {
 		this.statsWritePeriod = writePeriod;
 	}
 
@@ -170,12 +171,12 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @return the statistic
 	 */
 	@Override
-	public double getStat(String statName) {
-		StatEntry stat = name2entry.get(statName);
+	public double getStat(final String statName) {
+		final StatEntry stat = name2entry.get(statName);
 		if (stat == null) {
 			return -1.0;
 		}
-		Object s = stat.supplier.get();
+		final Object s = stat.statsStringSupplier.get();
 		if (s instanceof Number) {
 			return (Double) s;
 		}
@@ -193,12 +194,12 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @return the statistic
 	 */
 	@Override
-	public double getStat(int index) {
-		StatEntry stat = index2entry.get(index);
+	public double getStat(final int index) {
+		final StatEntry stat = index2entry.get(index);
 		if (stat == null) {
 			return -1.0;
 		}
-		Object s = stat.supplier.get();
+		final Object s = stat.statsStringSupplier.get();
 		if (s instanceof Number) {
 			return (Double) s;
 		}
@@ -213,12 +214,12 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @return the StatsBuffer, or null if there is no statistic for that name, or there is one but it
 	 * 		doesn't keep a history
 	 */
-	public StatsBuffer getAllHistory(String statName) {
-		StatEntry stat = name2entry.get(statName);
+	public StatsBuffer getAllHistory(final String statName) {
+		final StatEntry stat = name2entry.get(statName);
 		if (stat == null) {
 			return null;
 		}
-		StatsBuffered buf = stat.buffered;
+		final StatsBuffered buf = stat.buffered;
 		if (buf == null) {
 			return null;
 		}
@@ -233,12 +234,12 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @return the StatsBuffer, or null if there is no statistic for that name, or there is one but it
 	 * 		doesn't keep a history
 	 */
-	public StatsBuffer getRecentHistory(String statName) {
-		StatEntry stat = name2entry.get(statName);
+	public StatsBuffer getRecentHistory(final String statName) {
+		final StatEntry stat = name2entry.get(statName);
 		if (stat == null) {
 			return null;
 		}
-		StatsBuffered buf = stat.buffered;
+		final StatsBuffered buf = stat.buffered;
 		if (buf == null) {
 			return null;
 		}
@@ -253,12 +254,12 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		the index of the statistic to get
 	 * @return the StatsBuffer, or null if there is none
 	 */
-	public StatsBuffer getAllHistory(int index) {
-		StatEntry stat = index2entry.get(index);
+	public StatsBuffer getAllHistory(final int index) {
+		final StatEntry stat = index2entry.get(index);
 		if (stat == null) {
 			return null;
 		}
-		StatsBuffered buf = stat.buffered;
+		final StatsBuffered buf = stat.buffered;
 		if (buf == null) {
 			return null;
 		}
@@ -272,12 +273,12 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		the index of the statistic to get
 	 * @return the StatsBuffered, or null if there is none
 	 */
-	public StatsBuffer getRecentHistory(int index) {
-		StatEntry stat = index2entry.get(index);
+	public StatsBuffer getRecentHistory(final int index) {
+		final StatEntry stat = index2entry.get(index);
 		if (stat == null) {
 			return null;
 		}
-		StatsBuffered buf = stat.buffered;
+		final StatsBuffered buf = stat.buffered;
 		if (buf == null) {
 			return null;
 		}
@@ -294,8 +295,8 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @return the statistic converted to a string
 	 */
 	@Override
-	public String getStatString(String statName) {
-		StatEntry stat = name2entry.get(statName);
+	public String getStatString(final String statName) {
+		final StatEntry stat = name2entry.get(statName);
 		if (stat == null) {
 			return "";
 		}
@@ -312,12 +313,12 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @return the index, or -1 if that name doesn't match any statistic
 	 */
 	@Override
-	public int getStatIndex(String statName) {
-		StatEntry stat = name2entry.get(statName);
+	public int getStatIndex(final String statName) {
+		final StatEntry stat = name2entry.get(statName);
 		if (stat == null) {
 			return -1;
 		}
-		Integer index = entry2index.get(stat);
+		final Integer index = entry2index.get(stat);
 		if (index == null) {
 			return -1;
 		}
@@ -331,20 +332,30 @@ public abstract class AbstractStatistics implements Statistics {
 	 *
 	 * @param index
 	 * 		index of the statistic in the array returned by getAvailableStats
+	 * @param reset
+	 * 		whether to reset the value when returning
 	 * @return the statistic converted to a string
 	 */
-	@Override
-	public String getStatString(int index) {
+	public String getStatString(final int index, final boolean reset) {
 		try {
-			StatEntry stat = index2entry.get(index);
+			final StatEntry stat = index2entry.get(index);
 			if (stat == null) {
 				return "";
 			}
-			return String.format(Locale.US, stat.format, stat.supplier.get());
-		} catch (IllegalFormatException e) {
+			final Supplier<Object> supplier = reset ? stat.resetStatsStringSupplier : stat.statsStringSupplier;
+			return String.format(Locale.US, stat.format, supplier.get());
+		} catch (final IllegalFormatException e) {
 			log.error(ERROR, "", e);
 		}
 		return "";
+	}
+
+	/**
+	 * Same as {@link #getStatString(int, boolean)} with reset=false
+	 */
+	@Override
+	public String getStatString(final int index) {
+		return getStatString(index, false);
 	}
 
 	/**
@@ -356,14 +367,14 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		index of the statistic in the array returned by index2entry
 	 * @return the statistic converted to a string
 	 */
-	public String getMinString(int index) {
+	public String getMinString(final int index) {
 		try {
-			StatEntry stat = index2entry.get(index);
+			final StatEntry stat = index2entry.get(index);
 			if (stat == null || stat.buffered == null) {
 				return "";
 			}
 			return String.format(Locale.US, stat.format, stat.buffered.getMin());
-		} catch (IllegalFormatException e) {
+		} catch (final IllegalFormatException e) {
 			log.error(ERROR, "", e);
 		}
 		return "";
@@ -378,14 +389,14 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		index of the statistic in the array returned by index2entry
 	 * @return the statistic converted to a string
 	 */
-	public String getMaxString(int index) {
+	public String getMaxString(final int index) {
 		try {
-			StatEntry stat = index2entry.get(index);
+			final StatEntry stat = index2entry.get(index);
 			if (stat == null || stat.buffered == null) {
 				return "";
 			}
 			return String.format(Locale.US, stat.format, stat.buffered.getMax());
-		} catch (IllegalFormatException e) {
+		} catch (final IllegalFormatException e) {
 			log.error(ERROR, "", e);
 		}
 		return "";
@@ -400,14 +411,14 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		index of the statistic in the array returned by index2entry
 	 * @return the statistic converted to a string
 	 */
-	public String getStdDevString(int index) {
+	public String getStdDevString(final int index) {
 		try {
-			StatEntry stat = index2entry.get(index);
+			final StatEntry stat = index2entry.get(index);
 			if (stat == null || stat.buffered == null) {
 				return "";
 			}
 			return String.format(Locale.US, stat.format, stat.buffered.getStdDev());
-		} catch (IllegalFormatException e) {
+		} catch (final IllegalFormatException e) {
 			log.error(ERROR, "", e);
 		}
 		return "";
@@ -422,8 +433,8 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @return the statistic category
 	 */
 	@Override
-	public String getStatCategory(int index) {
-		StatEntry stat = index2entry.get(index);
+	public String getStatCategory(final int index) {
+		final StatEntry stat = index2entry.get(index);
 		if (stat == null) {
 			return "";
 		}
@@ -438,8 +449,8 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @return the statistic name
 	 */
 	@Override
-	public String getName(int index) {
-		StatEntry stat = index2entry.get(index);
+	public String getName(final int index) {
+		final StatEntry stat = index2entry.get(index);
 		if (stat == null) {
 			return "";
 		}
@@ -455,10 +466,10 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		the StatEntry describing this statistic
 	 * @return the statistic converted to a string
 	 */
-	String getStatString(StatEntry stat) {
+	String getStatString(final StatEntry stat) {
 		try {
-			return String.format(Locale.US, stat.format, stat.supplier.get());
-		} catch (IllegalFormatException e) {
+			return String.format(Locale.US, stat.format, stat.statsStringSupplier.get());
+		} catch (final IllegalFormatException e) {
 			log.error(ERROR, "", e);
 		}
 		return "";
@@ -484,13 +495,13 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @param includeInternal
 	 * 		true if all stats should be included, including category "internal"
 	 */
-	public void initStatEntries(boolean includeInternal) {
-		ArrayList<StatEntry> toShow = new ArrayList<>();
+	public void initStatEntries(final boolean includeInternal) {
+		final ArrayList<StatEntry> toShow = new ArrayList<>();
 		Arrays.sort(statEntries,
 				(a, b) -> a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 		int index = 0;
 		for (int i = 0; i < statEntries.length; i++) {
-			String category = statEntries[i].category;
+			final String category = statEntries[i].category;
 			if (includeInternal || !category.equals(INTERNAL_CATEGORY)) {
 
 				toShow.add(statEntries[i]);
@@ -503,7 +514,7 @@ public abstract class AbstractStatistics implements Statistics {
 		allStatEntries = new String[toShow.size()][3];
 		for (int i = 0; i < toShow.size(); i++) {
 
-			StatEntry stat = toShow.get(i);
+			final StatEntry stat = toShow.get(i);
 			allStatEntries[i][0] = stat.name;
 			allStatEntries[i][1] = stat.desc;
 			allStatEntries[i][2] = stat.format;
@@ -554,13 +565,13 @@ public abstract class AbstractStatistics implements Statistics {
 	 */
 	public String[] getCategoryStrings() {
 
-		String[] result = getStringArray();
+		final String[] result = getStringArray();
 
 		if (allStatEntries != null && name2entry != null) {
 			int stringCount = 0;
 			for (int index = 0; index < allStatEntries.length; index++) {
-				StatEntry entry = name2entry.get(allStatEntries[index][0]);
-				String category = entry.category;
+				final StatEntry entry = name2entry.get(allStatEntries[index][0]);
+				final String category = entry.category;
 
 				if (SettingsCommon.verboseStatistics && (!category.contains(EXCLUDE_CATEGORY))) { //info category no
 					// need
@@ -584,8 +595,8 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		allow expand if Settings.verboseStatistics is true
 	 * @return String array of stats names
 	 */
-	public String[] getNameStrings(boolean allowExpand) {
-		String[] result = allowExpand ? getStringArray() :
+	public String[] getNameStrings(final boolean allowExpand) {
+		final String[] result = allowExpand ? getStringArray() :
 				(allStatEntries != null ? new String[allStatEntries.length] : new String[0]);
 
 		if (allStatEntries != null && name2entry != null) {
@@ -593,8 +604,8 @@ public abstract class AbstractStatistics implements Statistics {
 
 			for (int index = 0; index < allStatEntries.length; index++) {
 
-				StatEntry entry = name2entry.get(allStatEntries[index][0]);
-				String category = entry.category;
+				final StatEntry entry = name2entry.get(allStatEntries[index][0]);
+				final String category = entry.category;
 
 				if (allowExpand && SettingsCommon.verboseStatistics && (!category.contains(
 						EXCLUDE_CATEGORY))) { //info category no need to be
@@ -618,15 +629,15 @@ public abstract class AbstractStatistics implements Statistics {
 	 *
 	 * @return String array of stats values
 	 */
-	public String[] getValueStrings() {
+	public String[] getResetValueStrings() {
 
-		String[] result = getStringArray();
+		final String[] result = getStringArray();
 
 		if (allStatEntries != null && name2entry != null) {
 			int stringCount = 0;
 			for (int index = 0; index < allStatEntries.length; index++) {
-				StatEntry entry = name2entry.get(allStatEntries[index][0]);
-				String category = entry.category;
+				final StatEntry entry = name2entry.get(allStatEntries[index][0]);
+				final String category = entry.category;
 
 				if (SettingsCommon.verboseStatistics && (!category.contains(EXCLUDE_CATEGORY))) { //info category no
 					// need
@@ -636,7 +647,7 @@ public abstract class AbstractStatistics implements Statistics {
 					result[stringCount++] = this.getMinString(index);
 					result[stringCount++] = this.getStdDevString(index);
 				} else {
-					result[stringCount++] = this.getStatString(index);
+					result[stringCount++] = this.getStatString(index, true);
 				}
 			}
 		}
@@ -649,10 +660,10 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @return String array of stats descriptions
 	 */
 	public String[] getDescriptionStrings() {
-		String[] result = statEntries != null ? new String[statEntries.length] : new String[0];
+		final String[] result = statEntries != null ? new String[statEntries.length] : new String[0];
 		if (statEntries != null) {
 			for (int index = 0; index < statEntries.length; index++) {
-				StatEntry entry = statEntries[index];
+				final StatEntry entry = statEntries[index];
 				result[index] = entry.desc;
 			}
 		}
