@@ -24,7 +24,6 @@ import com.swirlds.common.merkle.io.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.ReceivingSynchronizer;
 import com.swirlds.logging.payloads.ReconnectDataUsagePayload;
 import com.swirlds.logging.payloads.ReconnectFailurePayload;
-import com.swirlds.platform.AbstractPlatform;
 import com.swirlds.platform.Crypto;
 import com.swirlds.platform.ReconnectStatistics;
 import com.swirlds.platform.SyncConnection;
@@ -173,7 +172,6 @@ public class ReconnectReceiver {
 		NodeId otherId = connection.getOtherId();
 		SyncInputStream dis = connection.getDis();
 		SyncOutputStream dos = connection.getDos();
-		AbstractPlatform platform = connection.getPlatform();
 
 		// send the request
 		dos.write(SyncConstants.COMM_STATE_REQUEST);

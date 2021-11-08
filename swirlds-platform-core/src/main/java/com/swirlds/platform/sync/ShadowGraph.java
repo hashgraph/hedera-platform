@@ -33,12 +33,24 @@ import static com.swirlds.common.CommonUtils.throwArgNull;
 import static com.swirlds.logging.LogMarker.EXPIRE_EVENT;
 
 /**
- * A shadow graph is a graph which replicates the hashgraph structure, with
- * child links in addition to parent links. Together with certain fields in {@link SyncData},
+ * A shadow graph is a graph which replicates the hashgraph structure, with child links in addition to parent links.
+ * It is aggregated by the shadow graph manager, which is its external interface.
  * these additional links facilitate searching when constructing a list of
  * hashgraph events to be sent for gossiping.
- * <p>
+ *
+ * It supports:
+ * <ul>
+ * <li>insertion of a shadow event</li>
+ * <li>expiration of a shadow event and its ancestry</li>
+ * <li>querying for a shadow event by hashgraph event base hash</li>
+ * <li>providing a descendant sub-DAG iterator of a given shadow event</li>
+ * </ul>
+ * A shadow graph is thread-unaware. It provides no synchronization or general concurrency guarantees.
  * Use of this type in production code is through the {@link ShadowGraphManager} type.
+ *
+ * Because a shadow graph's events are expired by generation, and hashgraph's events are expired by round-created, it
+ * is typical for a shadow graph to have a references to a small number of expired hashgraph events.
+ *
  */
 public class ShadowGraph implements Iterable<ShadowEvent> {
 	private static final Logger LOG = LogManager.getLogger();

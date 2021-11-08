@@ -36,7 +36,6 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.components to com.swirlds.platform.test;
 	exports com.swirlds.platform.observers to com.swirlds.platform.test;
 	exports com.swirlds.platform.eventhandling to com.swirlds.platform.test;
-
 	exports com.swirlds.platform.sync to com.swirlds.platform.test;
 
 	/* Swirlds Libraries */

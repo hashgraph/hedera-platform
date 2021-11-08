@@ -113,18 +113,6 @@ public class SyncConnection {
 		return socket;
 	}
 
-	public AbstractPlatform getPlatform() {
-		return platform;
-	}
-
-	public SyncManager getSyncManager() {
-		return platform.getSyncManager();
-	}
-
-	public SyncServer getSyncServer() {
-		return platform.getSyncServer();
-	}
-
 	/**
 	 * End this connection by closing the socket and streams, and setting them to null. Also update the
 	 * statistics for the caller (if caller is true) or listener (if false).

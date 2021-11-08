@@ -317,4 +317,10 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	 * Sets event creation to be frozen, platform's status will be MAINTENANCE after this method is called
 	 */
 	public abstract void enterMaintenance();
+
+	/**
+	 * @return the platform instance of the instantiator
+	 */
+	public abstract NodeSynchronizerInstantiator getNodeSynchronizerInstantiator();
+
 }

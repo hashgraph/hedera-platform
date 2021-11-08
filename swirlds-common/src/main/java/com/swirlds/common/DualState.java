@@ -32,4 +32,18 @@ public interface DualState {
 	 * 		an Instant in UTC
 	 */
 	void setFreezeTime(Instant freezeTime);
+
+	/**
+	 * Gets the time when the freeze starts
+	 *
+	 * @return the time when the freeze starts
+	 */
+	Instant getFreezeTime();
+
+	/**
+	 * Gets the last freezeTime based on which the nodes were frozen
+	 *
+	 * @return the last freezeTime based on which the nodes were frozen
+	 */
+	Instant getLastFrozenTime();
 }

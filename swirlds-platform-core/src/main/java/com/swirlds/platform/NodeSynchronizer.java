@@ -55,7 +55,7 @@ interface NodeSynchronizer {
 	 * 		<p> (b) the gossip implementor itself throws an exception
 	 */
 	boolean synchronize(final boolean canAcceptSync, final boolean reconnected)
-			throws IOException;
+			throws Exception;
 
 
 }

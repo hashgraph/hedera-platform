@@ -46,9 +46,6 @@ import static com.swirlds.logging.LogMarker.SYNC_START;
 class SyncServer implements Runnable {
 	/** total number of connections created so far (both caller and listener) */
 	final AtomicInteger connsCreated = new AtomicInteger(0);
-	/** total number of times writeUnknownEvents needed to send an event that was already discarded */
-	final AtomicInteger discardedEventsRequested = new AtomicInteger(0);
-
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
 	/** overrides ip if not null */

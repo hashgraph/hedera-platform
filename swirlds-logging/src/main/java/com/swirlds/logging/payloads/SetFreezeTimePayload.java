@@ -12,17 +12,31 @@
  * OR NON-INFRINGEMENT.
  */
 
-package com.swirlds.common.threading;
+package com.swirlds.logging.payloads;
+
+import java.time.Instant;
 
 /**
- * An exception thrown by @{@link ParallelExecutor} when one or both of the tasks fails
+ * This payload is logged when the platform sets freeze time
  */
-public class ParallelExecutionException extends Exception {
-	/**
-	 * @param cause
-	 * 		the original exception
-	 */
-	public ParallelExecutionException(final Throwable cause) {
-		super(cause);
+public class SetFreezeTimePayload extends AbstractLogPayload {
+
+	/** the time when the freeze starts */
+	private Instant freezeTime;
+
+	public SetFreezeTimePayload() {
+	}
+
+	public SetFreezeTimePayload(final Instant freezeTime) {
+		super("Set freeze time");
+		this.freezeTime = freezeTime;
+	}
+
+	public Instant getFreezeTime() {
+		return freezeTime;
+	}
+
+	public void setFreezeTime(Instant freezeTime) {
+		this.freezeTime = freezeTime;
 	}
 }

@@ -33,14 +33,37 @@ import static com.swirlds.logging.LogMarker.EXPIRE_EVENT;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 
 /**
- * This type implements the following behaviors:
- * <pre>
- *  Coordinates a shadow graph with a hashgraph (insertion (addEvent) and deletion (expire))
- *  Implements the phases of the event exchange protocol for gossiping (See platform docs.)
- * </pre>
+ * <p>At a high level, this type coordinates hashgraph/consensus on this node and other-nodes. </p>
+ * This type aggregates an implementation of `ShadowGraph`. It supports the following behaviors.
+ * <ul>
+ * <li>
+ * Insertion of shadow events.
+ * Every added event is a new tip event, replacing its self-parent as a tip.
+ * </li>
+ * <li>
+ * Expiration of shadow events.
+ * Shadow events are expired by generation. When the expired gen increases, the SGM deletes all shadow events with
+ * generation less than or equal to expired generation
+ * </li>
+ * <li>
+ * Querying the set of tip events for the shadow graph.
+ * </li>
+ * <li>
+ * Querying for a shadow event by base hash of a hashgraph event
+ * </li>
+ * <li>
+ * Traversing sub-DAGs from a given shadow graph vertex.
+ * </li>
+ * </ul>
+ * An SGM is executed on multiple, concurrent threads.
+ *
+ * The SGM may add an event during a traversal.
+ * It may expire an event (and its ancestors) during a traversal.
+ *
+ * An SGM manages synchronization between traversal and event insertion/expiration.
+ *
  * This implementation therefore constitutes two interfaces: one for event intake, and one for
- * gossip. At a high level, this type coordinates hashgraph/consensus on this node and
- * other-nodes.
+ * gossip.
  */
 public final class ShadowGraphManager {
 	private static final Logger LOG = LogManager.getLogger();

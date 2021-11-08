@@ -289,7 +289,8 @@ class SyncCaller implements Runnable {
 							platform.getSyncServer().numSyncs.incrementAndGet(); // matching decr in finally
 							try {
 								final boolean ignored = false;
-								syncAccepted = NodeSynchronizerImpl.synchronize(conn, true, ignored, reconnected);
+								syncAccepted = platform.getNodeSynchronizerInstantiator()
+										.synchronize(conn, true, ignored, reconnected);
 								if (reconnected) {
 									log.debug(RECONNECT.getMarker(),
 											"`callRequestSync` : {} synced with {} ? {}",
@@ -602,7 +603,7 @@ class SyncCaller implements Runnable {
 			State consState = signedState.getState().copy();
 			platform.getEventFlow().setState(consState);
 
-			consState.getSwirldState().init(platform, addressBook.copy());
+			consState.getSwirldState().init(platform, addressBook.copy(), signedState.getState().getSwirldDualState());
 
 			platform.getSignedStateManager().addCompleteSignedState(signedState, false);
 			platform.loadIntoConsensusAndEventIntake(signedState);

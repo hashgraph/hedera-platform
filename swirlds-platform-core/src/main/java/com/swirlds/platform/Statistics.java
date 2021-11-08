@@ -18,6 +18,7 @@ import com.swirlds.common.NodeId;
 import com.swirlds.common.PlatformStatNames;
 import com.swirlds.common.StatEntry;
 import com.swirlds.common.Transaction;
+import com.swirlds.common.Units;
 import com.swirlds.common.internal.AbstractStatistics;
 import com.swirlds.platform.event.EventCounter;
 import com.swirlds.platform.observers.EventAddedObserver;
@@ -25,8 +26,9 @@ import com.swirlds.platform.state.StateInfo;
 import com.swirlds.platform.stats.ConsensusStats;
 import com.swirlds.platform.stats.HashgraphStats;
 import com.swirlds.platform.stats.PlatformStatistics;
-import com.swirlds.platform.stats.ShadowGraphStats;
 import com.swirlds.platform.stats.SignedStateStats;
+import com.swirlds.platform.stats.SyncStats;
+import com.swirlds.platform.sync.SyncTiming;
 
 import java.io.File;
 import java.lang.management.ManagementFactory;
@@ -40,6 +42,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.DoubleAccumulator;
 
@@ -107,8 +110,13 @@ import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
  * <li><b>write</b> - the app claimed to log statistics every this many milliseconds *
  * </ul>
  */
-public class Statistics extends AbstractStatistics implements ConsensusStats, SignedStateStats, HashgraphStats,
-		EventAddedObserver, PlatformStatistics, ShadowGraphStats {
+public class Statistics extends AbstractStatistics implements
+		ConsensusStats,
+		SignedStateStats,
+		HashgraphStats,
+		EventAddedObserver,
+		PlatformStatistics,
+		SyncStats {
 
 	/** which Platform to watch */
 	protected AbstractPlatform platform;
@@ -375,6 +383,8 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 	 * avg time taken to delete a signed state (in microseconds)
 	 */
 	StatsRunningAverage stateDeletionTimeAvg;
+	/** total number of times writeUnknownEvents needed to send an event that was already discarded */
+	private final AtomicInteger discardedEventsRequested = new AtomicInteger(0);
 
 
 	File rootDirectory = new File("/");
@@ -445,8 +455,7 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 					);
 					avgConnsCreated.recordValue(
 							platform.getSyncServer().connsCreated.get());
-					avgDiscEvReq.recordValue(
-							platform.getSyncServer().discardedEventsRequested.get());
+					avgDiscEvReq.recordValue(discardedEventsRequested.get());
 				}
 				freeDiskspace = rootDirectory.getFreeSpace();
 			}
@@ -487,9 +496,9 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 		this.osBean = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
 		this.thbean = ManagementFactory.getThreadMXBean();
 		this.savedFileStatistics = new SavedFileStatistics();
-		final int abSize = platform.getAddressBook() == null ? 0 : platform.getAddressBook().getSize(); //0 during unit
-		// tests
+
 		this.reconnectStatistics = new ReconnectStatistics();
+		int abSize = platform.getAddressBook() == null ? 0 : platform.getAddressBook().getSize(); //0 during unit tests
 
 		avgPingMilliseconds = new StatsRunningAverage[abSize];
 		avgBytePerSecSent = new StatsSpeedometer[abSize];
@@ -2223,5 +2232,65 @@ public class Statistics extends AbstractStatistics implements ConsensusStats, Si
 
 	public ReconnectStatistics getReconnectStats() {
 		return reconnectStatistics;
+	}
+
+	@Override
+	public void syncEventsWritten(final int eventsWritten) {
+		avgEventsPerSyncSent.recordValue(eventsWritten);
+	}
+
+	@Override
+	public void syncThrottleBytesWritten(final int bytesWritten) {
+		bytesPerSecondCatchupSent.update(bytesWritten);
+		fracSyncSlowed.recordValue(bytesWritten > 0 ? 1 : 0);
+	}
+
+	@Override
+	public void syncEventsRead(final int eventsRead) {
+		avgEventsPerSyncRec.recordValue(eventsRead);
+	}
+
+	@Override
+	public void recordSyncTiming(final SyncTiming timing, final SyncConnection conn) {
+		avgSyncDuration1.recordValue(timing.getPointDiff(1, 0) * Units.NANOSECONDS_TO_SECONDS);
+		avgSyncDuration2.recordValue(timing.getPointDiff(2, 1) * Units.NANOSECONDS_TO_SECONDS);
+		avgSyncDuration3.recordValue(timing.getPointDiff(3, 2) * Units.NANOSECONDS_TO_SECONDS);
+		avgSyncDuration4.recordValue(timing.getPointDiff(4, 3) * Units.NANOSECONDS_TO_SECONDS);
+
+		// SyncConnection.disconnect sets the stream references to null, so if the connection has been
+		// closed before this line executes, we can not get the byte counts. This is (part of) the subject of
+		// issue #3197.
+		if (!conn.connected()) {
+			return;
+		}
+
+		final double syncDurationSec = timing.getPointDiff(5, 0) * Units.NANOSECONDS_TO_SECONDS;
+		avgSyncDuration.recordValue(syncDurationSec);
+		maxSyncTimeSec.accumulate(syncDurationSec);
+		final double speed =
+				Math.max(conn.getDis().getSyncByteCounter().getCount(), conn.getDos().getSyncByteCounter().getCount())
+						/ syncDurationSec;
+
+		// set the bytes/sec speed of the sync currently measured
+		avgBytesPerSecSync.recordValue(speed);
+	}
+
+	@Override
+	public void syncDone(boolean caller) {
+		if (caller) {
+			callSyncsPerSecond.cycle();
+		} else {
+			recSyncsPerSecond.cycle();
+		}
+	}
+
+	@Override
+	public void eventCreation(boolean shouldCreateEvent) {
+		this.shouldCreateEvent.recordValue(shouldCreateEvent ? 1 : 0);
+	}
+
+	@Override
+	public void nodeFallenBehind() {
+		discardedEventsRequested.incrementAndGet();
 	}
 }

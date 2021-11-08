@@ -14,7 +14,61 @@
 
 package com.swirlds.platform.stats;
 
-public interface ShadowGraphStats extends DefaultStats {
+import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.sync.SyncTiming;
+
+/**
+ * Interface to update relevant sync statistics
+ */
+public interface SyncStats {
+	/**
+	 * @param eventsWritten
+	 * 		the number of events written in a sync
+	 */
+	void syncEventsWritten(int eventsWritten);
+
+	/**
+	 * @param eventsRead
+	 * 		the number of events read in a sync
+	 */
+	void syncEventsRead(int eventsRead);
+
+	/**
+	 * @param bytesWritten
+	 * 		the number of throttle bytes written during a sync
+	 */
+	void syncThrottleBytesWritten(int bytesWritten);
+
+	/**
+	 * Record all stats related to sync timing
+	 *
+	 * @param syncTiming
+	 * 		object that holds the timing data
+	 * @param conn
+	 * 		the sync connections
+	 */
+	void recordSyncTiming(SyncTiming syncTiming, SyncConnection conn);
+
+	/**
+	 * Notifies the stats that a sync is done
+	 *
+	 * @param caller
+	 * 		was the platform a caller in this sync?
+	 */
+	void syncDone(boolean caller);
+
+	/**
+	 * Notifies the stats that the event creation phase has entered
+	 *
+	 * @param shouldCreateEvent
+	 * 		did the sync manager tell us to create an event?
+	 */
+	void eventCreation(boolean shouldCreateEvent);
+
+	/**
+	 * Notifies the stats that a sync failed because one of the nodes is behind
+	 */
+	void nodeFallenBehind();
 
 	/**
 	 * Called by {@code NodeSynchronizerImpl} to update the {@code tips/sync} statistic with the number of creators that
@@ -39,5 +93,4 @@ public interface ShadowGraphStats extends DefaultStats {
 	 * com.swirlds.platform.StatsSpeedometer} instance.
 	 */
 	void updateTipAbsorptionOpsPerSec();
-
 }
