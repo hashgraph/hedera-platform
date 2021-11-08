@@ -14,6 +14,11 @@
 
 package com.swirlds.common.merkle.exceptions;
 
+import com.swirlds.common.crypto.Hash;
+
+import java.util.List;
+import java.util.Set;
+
 /**
  * This exception is thrown if there is an error due to the archival state of a merkle node.
  */

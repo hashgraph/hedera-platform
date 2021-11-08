@@ -23,8 +23,22 @@ import java.util.List;
 
 /**
  * A shadow event wraps a hashgraph event, and provides parent and child pointers to shadow events.
- * This is the elemental type of a {@link ShadowGraph}. Connection to and disconnection from
- * other events in a shadow graph is implemented here.
+ *
+ * The shadow event type is the vertex type of the shadow graph. This is the elemental type of a {@link ShadowGraph}.
+ * It provides a reference to a hashgraph event instance, together with pointers to the children of that hashgraph
+ * event, and the following operations.
+ *
+ * <ul>
+ * <li>linking of a parent or child shadow event</li>
+ * <li>unlinking of a parent or child shadow event</li>
+ * <li>querying for related events (parent or child)</li>
+ * </ul>
+ * All linking and unlinking of a shadow event is implemented by this type.
+ *
+ * Every time a new event is added to the shadow graph, it also added to the appropriate list in each parent (if any).
+ *
+ * A shadow event never modifies the fields in a hashgraph event.
+ *
  */
 public class ShadowEvent {
 	/**

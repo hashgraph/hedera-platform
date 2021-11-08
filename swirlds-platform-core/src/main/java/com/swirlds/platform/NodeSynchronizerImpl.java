@@ -15,26 +15,21 @@
 package com.swirlds.platform;
 
 import com.swirlds.common.io.BadIOException;
-import com.swirlds.common.threading.ParallelExecutionException;
-import com.swirlds.common.threading.ThreadConfiguration;
-import com.swirlds.platform.event.ValidateEventTask;
+import com.swirlds.common.threading.ParallelExecutor;
+import com.swirlds.platform.components.EventTaskCreator;
+import com.swirlds.platform.stats.SyncStats;
+import com.swirlds.platform.sync.ShadowGraphManager;
 import com.swirlds.platform.sync.SyncFallenBehind;
 import com.swirlds.platform.sync.SyncLogging;
-import com.swirlds.platform.sync.ShadowGraphManager;
+import com.swirlds.platform.sync.SyncTiming;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.io.SyncFailedException;
 import java.util.Random;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.logging.LogMarker.SYNC;
@@ -43,7 +38,6 @@ import static com.swirlds.logging.LogMarker.SYNC_GENERATIONS;
 import static com.swirlds.logging.LogMarker.SYNC_SGM;
 import static com.swirlds.logging.LogMarker.SYNC_STEP_1;
 import static com.swirlds.logging.LogMarker.SYNC_STEP_2;
-import static com.swirlds.logging.LogMarker.SYNC_STEP_3;
 import static com.swirlds.logging.LogMarker.SYNC_STEP_4;
 import static com.swirlds.logging.LogMarker.SYNC_STEP_5;
 
@@ -131,18 +125,12 @@ import static com.swirlds.logging.LogMarker.SYNC_STEP_5;
  */
 class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 
-	/**
-	 * The static thread pool used by this class.
-	 */
-	private static final ExecutorService SYNC_THREAD_POOL = Executors
-			.newCachedThreadPool(
-					new ThreadConfiguration()
-							.setThreadName("node-sync")
-							.setComponent("node-sync")
-							.buildFactory());
-
-	private static final int PARALLEL_TASK_1 = 1;
-	private static final int PARALLEL_TASK_2 = 2;
+	/** provides the current consensus instance */
+	private final Supplier<Consensus> consensusSupplier;
+	/** manages sync related decisions */
+	private final SyncManager syncManager;
+	/** executes tasks in parallel */
+	private final ParallelExecutor executor;
 
 	/**
 	 * use this for all logging, as controlled by the optional data/log4j2.xml file
@@ -166,11 +154,6 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 	private final long callerDelayAfterSync;
 
 	/**
-	 * A functor invoked to create  an event from event data received from peer nodes.
-	 */
-	private final Consumer<Long> createEvent;
-
-	/**
 	 * true iff the listener accepts the caller sync request.
 	 * Used only when this instance is executed on a caller thread.
 	 * Ignored by listener thread.
@@ -178,59 +161,56 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 	 */
 	private boolean syncAccepted;
 
-
 	/**
-	 * Production constructor
-	 *
 	 * @param conn
 	 * 		the connection to sync through
 	 * @param caller
 	 * 		true if this computer is calling the other (initiating the sync). False if this computer
 	 * 		is a listener.
+	 * @param shadowGraphManager
+	 * 		manages the shadowgraph
+	 * @param stats
+	 * 		records sync related stats
+	 * @param eventTaskCreator
+	 * 		manages event validation and creation tasks
+	 * @param consensusSupplier
+	 * 		provides the current consensus instance
+	 * @param syncManager
+	 * 		manages sync related decisions
+	 * @param executor
+	 * 		executes tasks in parallel
+	 * @param numberOfNodes
+	 * 		number of nodes in the network
+	 * @param callerDelayAfterSync
+	 * 		amount of time to sleep after a sync
 	 */
-	public NodeSynchronizerImpl(final SyncConnection conn, final boolean caller) throws SyncFailedException {
+	protected NodeSynchronizerImpl(
+			final SyncConnection conn,
+			final boolean caller,
+			final ShadowGraphManager shadowGraphManager,
+			final SyncStats stats,
+			final EventTaskCreator eventTaskCreator,
+			final Supplier<Consensus> consensusSupplier,
+			final SyncManager syncManager,
+			final ParallelExecutor executor,
+			final long numberOfNodes,
+			final long callerDelayAfterSync) {
+
 		super(
 				conn,
 				caller,
-				getShadowGraphManager(conn),
-				new SyncThrottle(conn.getPlatform().getNumMembers()),
-				conn.getPlatform().getStats(),
-				(ValidateEventTask task) -> conn.getPlatform().getEventTaskCreator().addEvent(task),
-				conn.getPlatform().getNumMembers(),
+				shadowGraphManager,
+				new SyncThrottle(numberOfNodes),
+				stats,
+				eventTaskCreator,
+				numberOfNodes,
 				LOG,
 				SyncLogging.getSyncLogString(conn, caller));
-		this.callerDelayAfterSync = conn.getPlatform().getSleepAfterSync();
-		this.createEvent = (Long otherID) -> conn.getPlatform().getEventTaskCreator().createEvent(otherID);
-	}
 
-	/**
-	 * @param conn
-	 * 		the connection to sync through
-	 * @param caller
-	 * 		true if this computer is calling the other (initiating the sync). False if this computer
-	 * 		is a listener.
-	 * @param canAcceptSync
-	 * 		If this function is executed from a {@link SyncListener} thread, this value is true iff a
-	 * 		listener thread can accept a sync request from a caller.
-	 *
-	 * 		If executed from a {@link SyncCaller} thread, this value is ignored.
-	 * @param reconnected
-	 * 		true iff this call is the first call after a reconnect on this thread, used for logging
-	 * @return true iff a sync was (a) accepted, and (b) completed, including exchange of event data
-	 * @throws IOException
-	 * 		iff:
-	 * 		<p>	(a) an underlying stream instance throws an exception (timeouts and other stream errors)
-	 * 		<p> (b) the gossip implementor itself throws an exception
-	 */
-	protected static boolean synchronize(
-			final SyncConnection conn,
-			final boolean caller,
-			final boolean canAcceptSync,
-			final boolean reconnected) throws IOException {
-
-		final NodeSynchronizerImpl nodeSync = new NodeSynchronizerImpl(conn, caller);
-
-		return nodeSync.synchronize(canAcceptSync, reconnected);
+		this.callerDelayAfterSync = callerDelayAfterSync;
+		this.consensusSupplier = consensusSupplier;
+		this.syncManager = syncManager;
+		this.executor = executor;
 	}
 
 	/**
@@ -238,7 +218,7 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 	 */
 	@Override
 	public boolean synchronize(final boolean canAcceptSync, final boolean reconnected)
-			throws IOException {
+			throws Exception {
 
 		init(canAcceptSync, isCaller());
 		timing.start();
@@ -250,8 +230,8 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 		// STEP 2: READ and WRITE the ACK/NACK, and tip hashes, tip booleans, and generation numbers
 
 		getShadowGraphManager().setInitialTips(getSyncData());
-		conn.getPlatform().getStats().updateTipsPerSync(getSyncData().getSendingTipList().size());
-		conn.getPlatform().getStats().updateMultiTipsPerSync(getSyncData().computeMultiTipCount());
+		getStats().updateTipsPerSync(getSyncData().getSendingTipList().size());
+		getStats().updateMultiTipsPerSync(getSyncData().computeMultiTipCount());
 
 		syncStep2(canAcceptSync, reconnected);
 		timing.setTimePoint(2);
@@ -275,7 +255,7 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 			timing.setTimePoint(5);
 
 			// Update statistics accumulators and record lastSyncSpeed in platform.
-			timing.finish(conn, getStats());
+			getStats().recordSyncTiming(timing, conn);
 
 			LOG.debug(SYNC_SGM.getMarker(),
 					"Sizes after `sync`, workingTips: {}, receivedTipHashes: {}, sendList: {}",
@@ -327,7 +307,7 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 	 */
 	protected void writeGenerations() throws IOException {
 
-		fallenBehind.setSelfGenerations(conn.getPlatform().getConsensus());
+		fallenBehind.setSelfGenerations(consensusSupplier.get());
 
 		getOutputStream().writeLong(fallenBehind.getSelfMaxRoundGeneration());
 		getOutputStream().writeLong(fallenBehind.getSelfMinRoundGeneration());
@@ -370,25 +350,13 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 	 * 		true iff the currently executing sync is a first sync after this node reconnects. Used
 	 * 		for logging.
 	 */
-	private void syncStep2(final boolean canAcceptSync, final boolean reconnected) {
-
-		try {
-			doParallel(
-					syncStep2aReadTipHashesAndGenerations(reconnected),
-					syncStep2bWriteTipHashesAndGenerations(canAcceptSync),
-					"syncStep2(tip hashes & gens)");
-		} catch (ParallelExecutionException e) {
-			LOG.debug(SYNC_STEP_2.getMarker(), "{}", getLogString(), e);
-		}
-		try {
-			doParallel(
-					syncStep2aReadTipBooleans(),
-					syncStep2bWriteTipBooleans(),
-					"syncStep2(tip booleans)");
-		} catch (ParallelExecutionException e) {
-			LOG.debug(SYNC_STEP_2.getMarker(), "{}", getLogString(), e);
-		}
-
+	private void syncStep2(final boolean canAcceptSync, final boolean reconnected) throws Exception {
+		executor.doParallel(
+				syncStep2aReadTipHashesAndGenerations(reconnected),
+				syncStep2bWriteTipHashesAndGenerations(canAcceptSync));
+		executor.doParallel(
+				syncStep2aReadTipBooleans(),
+				syncStep2bWriteTipBooleans());
 	}
 
 
@@ -598,31 +566,18 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 					fallenBehind::getOtherMinRoundGeneration,
 					fallenBehind::getOtherMaxRoundGeneration);
 		}
-
-		final boolean slowDown = !fallenBehind.detected();
-
-		getStats().fracSyncSlowed.recordValue(slowDown ? 1 : 0);
-
-		LOG.debug(SYNC_STEP_3.getMarker(),
-				"{}slowDown = {}",
-				syncLogString, slowDown);
 	}
 
 
 	/**
 	 * Exchange selected events
 	 */
-	private void syncStep4() {
-		try {
-			doParallel(
-					// THREAD A: READ the events, and create a new ValidateEventTask
-					syncStep4aReadEvents(),
-					// THREAD B: WRITE the events
-					syncStep4bWriteEvents(),
-					"syncStep4");
-		} catch (ParallelExecutionException e) {
-			LOG.debug(SYNC_STEP_4.getMarker(), "{}", getLogString(), e);
-		}
+	private void syncStep4() throws Exception {
+		executor.doParallel(
+				// THREAD A: READ the events, and create a new ValidateEventTask
+				syncStep4aReadEvents(),
+				// THREAD B: WRITE the events
+				syncStep4bWriteEvents());
 	}
 
 	/**
@@ -709,7 +664,6 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 					"|||************** {} called {}", conn.getSelfId(), conn.getOtherId());
 			LOG.debug(SYNC.getMarker(),
 					"{} (caller) done syncing with {}", conn.getSelfId(), conn.getOtherId());
-			getStats().callSyncsPerSecond.cycle();
 			try {
 				Thread.sleep(callerDelayAfterSync);
 			} catch (InterruptedException e) {
@@ -720,8 +674,8 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 					"|||############## {} listened to {}", conn.getSelfId(), conn.getOtherId());
 			LOG.debug(SYNC.getMarker(),
 					"{} (listener) done syncing with {}", conn.getSelfId(), conn.getOtherId());
-			getStats().recSyncsPerSecond.cycle();
 		}
+		getStats().syncDone(isCaller());
 
 		if (fallenBehind.selfFallenBehind()) {
 			reportSelfHasFallenBehind();
@@ -738,13 +692,13 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 	private boolean shouldCreateEvent() {
 		final boolean hasOneNodeFallenBehind = fallenBehind.detected();
 
-		final boolean shouldCreateEvent = conn.getSyncManager().shouldCreateEvent(
+		final boolean shouldCreateEvent = syncManager.shouldCreateEvent(
 				conn.getOtherId(),
 				hasOneNodeFallenBehind,
 				getEventsRead().get(),
 				getEventsWritten().get());
 
-		getStats().shouldCreateEvent.recordValue(shouldCreateEvent ? 1 : 0);
+		getStats().eventCreation(shouldCreateEvent);
 
 		return shouldCreateEvent;
 	}
@@ -753,7 +707,7 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 	 * Notify the sync manager that the remote node reports that this node has fallen behind
 	 */
 	private void reportSelfHasFallenBehind() {
-		conn.getSyncManager().reportFallenBehind(conn.getOtherId());
+		syncManager.reportFallenBehind(conn.getOtherId());
 	}
 
 	/**
@@ -767,7 +721,7 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 	 */
 	private void createEvents() {
 
-		createEvent.accept(conn.getOtherId().getId());
+		getEventTaskCreator().createEvent(conn.getOtherId().getId());
 
 		LOG.debug(SYNC.getMarker(), "{} created event for sync otherId:{}", conn.getSelfId(), conn.getOtherId());
 
@@ -779,80 +733,12 @@ class NodeSynchronizerImpl extends AbstractNodeSynchronizer {
 			final long randomOtherId = random.nextInt((int) getNumberOfNodes());
 			// we don't want to create an event with selfId==otherId
 			if (!conn.getSelfId().equalsMain(randomOtherId)) {
-				createEvent.accept(randomOtherId);
+				getEventTaskCreator().createEvent(randomOtherId);
 				LOG.debug(SYNC.getMarker(), "{} created random event otherId:{}", conn.getSelfId(), randomOtherId);
 			}
 		}
 
-		conn.getPlatform().getEventTaskCreator().rescueChildlessEvents();
-	}
-
-
-	/**
-	 * getShadowGraphManager
-	 *
-	 * @param conn
-	 * 		the connection instance over which to gossip/synchronize
-	 * @return a (reference to) this node's shadow graph
-	 */
-	private static synchronized ShadowGraphManager getShadowGraphManager(
-			final SyncConnection conn) {
-
-		final AbstractPlatform platform = conn.getPlatform();
-
-		return platform.getShadowGraphManager();
-	}
-
-
-	/**
-	 * Run two tasks in parallel, the second one in the current thread, and the first in a thread from the
-	 * syncThreadPool. This method returns only after both have finished.
-	 * <p>
-	 * If either throws an exception, the first one to throw an exception has it caught here,
-	 * wrapped in a {@link ParallelExecutionException}, and re-thrown, while the other one's exception is ignored.
-	 * <p>
-	 * This is intended to be used in the comm system for syncing, so if anything goes wrong, we will
-	 * log here the exception type reported.
-	 *
-	 * A {@link ParallelExecutionException} wraps either of an {@code Exception} (if task2 threw),
-	 * or else an exception type thrown by task1. It is a wrapper around the actual exception, so logging
-	 * can still see what the real exception was.
-	 *
-	 * @param task1
-	 * 		a task to execute in parallel
-	 * @param task2
-	 * 		a task to execute in parallel
-	 * @throws ParallelExecutionException
-	 * 		iff either of the invoked tasks throws
-	 */
-	private static void doParallel(
-			Callable<Object> task1,
-			Callable<Object> task2,
-			String callerName) throws ParallelExecutionException {
-
-		try {
-			Future<Object> future1 = SYNC_THREAD_POOL.submit(task1);
-			task2.call();
-			future1.get();
-
-			// task1 exception
-		} catch (ExecutionException | InterruptedException | CancellationException exception) {
-
-			if (exception.getCause() != null) {
-				throw new ParallelExecutionException(exception.getCause(), callerName, PARALLEL_TASK_1);
-			} else {
-				throw new ParallelExecutionException(exception, callerName, PARALLEL_TASK_1);
-			}
-
-			// task2 exception
-		} catch (Exception exception) {
-
-			if (exception.getCause() != null) {
-				throw new ParallelExecutionException(exception.getCause(), callerName, PARALLEL_TASK_2);
-			} else {
-				throw new ParallelExecutionException(exception, callerName, PARALLEL_TASK_2);
-			}
-		}
+		getEventTaskCreator().rescueChildlessEvents();
 	}
 
 }

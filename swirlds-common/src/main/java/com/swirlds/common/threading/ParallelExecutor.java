@@ -14,15 +14,21 @@
 
 package com.swirlds.common.threading;
 
+import java.util.concurrent.Callable;
+
 /**
- * An exception thrown by @{@link ParallelExecutor} when one or both of the tasks fails
+ * Used for executing tasks in parallel
  */
-public class ParallelExecutionException extends Exception {
+public interface ParallelExecutor {
 	/**
-	 * @param cause
-	 * 		the original exception
+	 * Run two tasks in parallel
+	 *
+	 * @param task1
+	 * 		a task to execute in parallel
+	 * @param task2
+	 * 		a task to execute in parallel
+	 * @throws ParallelExecutionException
+	 * 		if anything goes wrong
 	 */
-	public ParallelExecutionException(final Throwable cause) {
-		super(cause);
-	}
+	void doParallel(Callable<Object> task1, Callable<Object> task2) throws ParallelExecutionException;
 }

@@ -159,15 +159,6 @@ public interface Platform extends Signer {
 	long getLastSeq(long creatorID);
 
 	/**
-	 * Get the speed of the last sync for a given node
-	 *
-	 * @param nodeIndex
-	 * 		the index of the node
-	 * @return the speed in bytes/second, or -1 if no speed is available
-	 */
-	double getLastSyncSpeed(int nodeIndex);
-
-	/**
 	 * Get the number of participating members. This is the size of the current address book.
 	 *
 	 * @return the number of members
@@ -273,16 +264,6 @@ public interface Platform extends Signer {
 	 * 		what should show in the "about" window from the menu
 	 */
 	void setAbout(String about);
-
-	/**
-	 * set the speed of the last sync for a given node
-	 *
-	 * @param nodeIndex
-	 * 		the index of the node
-	 * @param lastSyncSpeed
-	 * 		the speed in bytes/second
-	 */
-	void setLastSyncSpeed(int nodeIndex, double lastSyncSpeed);
 
 	/**
 	 * Set the number of milliseconds the Platform should delay after each gossip sync it initiates. This is

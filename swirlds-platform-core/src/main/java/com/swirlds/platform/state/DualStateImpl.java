@@ -18,6 +18,8 @@ import com.swirlds.common.SwirldDualState;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
 import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
+import com.swirlds.logging.payloads.SetFreezeTimePayload;
+import com.swirlds.logging.payloads.SetLastFrozenTimePayload;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -82,13 +84,13 @@ public class DualStateImpl extends AbstractMerkleLeaf implements PlatformDualSta
 	public void setFreezeTime(Instant freezeTime) {
 		this.freezeTime = freezeTime;
 		LOGGER.info(FREEZE.getMarker(), "setFreezeTime: {}", () -> freezeTime);
+		LOGGER.info(FREEZE.getMarker(), () -> new SetFreezeTimePayload(freezeTime).toString());
 	}
 
 	/**
-	 * Gets the time when the freeze starts
-	 *
-	 * @return the time when the freeze starts
+	 * {@inheritDoc}
 	 */
+	@Override
 	public Instant getFreezeTime() {
 		return freezeTime;
 	}
@@ -104,13 +106,13 @@ public class DualStateImpl extends AbstractMerkleLeaf implements PlatformDualSta
 	public void setLastFrozenTimeToBeCurrentFreezeTime() {
 		this.lastFrozenTime = freezeTime;
 		LOGGER.info(FREEZE.getMarker(), "setLastFrozenTimeToBeCurrentFreezeTime: {}", () -> lastFrozenTime);
+		LOGGER.info(FREEZE.getMarker(), () -> new SetLastFrozenTimePayload(freezeTime).toString());
 	}
 
 	/**
-	 * Gets the last freezeTime based on which the nodes were frozen
-	 *
-	 * @return the last freezeTime based on which the nodes were frozen
+	 * {@inheritDoc}
 	 */
+	@Override
 	public Instant getLastFrozenTime() {
 		return lastFrozenTime;
 	}

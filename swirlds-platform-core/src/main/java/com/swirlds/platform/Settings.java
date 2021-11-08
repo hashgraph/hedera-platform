@@ -98,7 +98,7 @@ class Settings {
 	///////////////////////////////////////////
 	// settings from settings.txt file
 
-	static String about = "Swirlds browser v. 0.18.1\n"
+	static String about = "Swirlds browser v. 0.19.0\n"
 			+ "(c)2016-2021 Swirlds Inc\n" + "This is an early alpha version. \n"
 			+ "The Swirlds™ software is covered by one or more patents \n"
 			+ "(see www.swirlds.com/ip). The browser is free to download, \n"
@@ -439,17 +439,17 @@ class Settings {
 	 * @param directory
 	 * 		the directory to write to
 	 */
-	static void writeSettingsUsed(File directory) {
-		String[][] settings = Settings.currSettings();
-		try (BufferedWriter writer = Files.newBufferedWriter(
+	static void writeSettingsUsed(final File directory) {
+		final String[][] settings = Settings.currSettings();
+		try (final BufferedWriter writer = Files.newBufferedWriter(
 				Paths.get(CommonUtils.canonicalFile(directory, settingsUsedFilename).getCanonicalPath()))) {
 			writer.write(
 					"The following are all the settings, as modified by settings.txt, but not reflecting any changes " +
 							"made by config.txt.\n\n");
-			for (String[] pair : settings) {
+			for (final String[] pair : settings) {
 				writer.write(String.format("%15s = %s\n", pair[1], pair[0]));
 			}
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			log.error(EXCEPTION.getMarker(), "Error in writing to settingsUsed.txt", e);
 		}
 	}
@@ -471,14 +471,14 @@ class Settings {
 	 * defaults set in this source file. The settings.txt file is only used for testing and debugging.
 	 */
 	static void loadSettings() {
-		Scanner scanner;
+		final Scanner scanner;
 		if (!settingsTxtExists()) {
 			return; // normally, the file won't exist, so the defaults are used.
 		}
 
 		try {
 			scanner = new Scanner(Settings.settingsPath, "utf-8");
-		} catch (FileNotFoundException e) { // this should never happen
+		} catch (final FileNotFoundException e) { // this should never happen
 			CommonUtils.tellUserConsole("The file " + Settings.settingsPath
 					+ " exists, but can't be opened. " + e);
 			return;
@@ -489,16 +489,16 @@ class Settings {
 
 		int count = 0;
 		while (scanner.hasNextLine()) {
-			String originalLine = scanner.nextLine();
+			final String originalLine = scanner.nextLine();
 			String line = originalLine;
-			int pos = line.indexOf("#");
+			final int pos = line.indexOf("#");
 			if (pos > -1) {
 				line = line.substring(0, pos);
 			}
 			line = line.trim();
 			count++;
 			if (!line.isEmpty()) {
-				String[] pars = Browser.splitLine(line);
+				final String[] pars = Browser.splitLine(line);
 				if (pars.length == 0) { // ignore empty lines
 				} else {
 					try {
@@ -507,7 +507,7 @@ class Settings {
 									"bad name of setting in settings.txt line "
 											+ count + ": " + originalLine);
 						}
-					} catch (Exception e) {
+					} catch (final Exception e) {
 						CommonUtils.tellUserConsole(
 								"syntax error in settings.txt on line " + count
 										+ ":    " + originalLine);
@@ -545,29 +545,29 @@ class Settings {
 	 * 		the parameters on that line, split by commas
 	 * @return true if the line is a valid setting assignment
 	 */
-	static boolean handleSetting(String[] pars) {
+	static boolean handleSetting(final String[] pars) {
 		String name = pars[0];
 		String subName = null;
 		if (name.contains(".")) {
 			// if the name contains a dot (.), then we need to set a variable that is inside an object
-			String[] split = name.split("\\.");
+			final String[] split = name.split("\\.");
 			name = split[0];
 			subName = split[1];
 		}
-		String val = pars.length > 1 ? pars[1].trim() : ""; // the first parameter passed in, or "" if none
+		final String val = pars.length > 1 ? pars[1].trim() : ""; // the first parameter passed in, or "" if none
 		boolean good = false; // is name a valid name of a non-final static field in Settings?
-		Field field = getFieldByName(Settings.class.getDeclaredFields(), name);
+		final Field field = getFieldByName(Settings.class.getDeclaredFields(), name);
 		if (field != null && !Modifier.isFinal(field.getModifiers())) {
 			try {
 				if (subName == null) {
 					good = setValue(field, null, val);
 				} else {
-					Field subField = getFieldByName(field.getType().getDeclaredFields(), subName);
+					final Field subField = getFieldByName(field.getType().getDeclaredFields(), subName);
 					if (subField != null) {
 						good = setValue(subField, field.get(Settings.class), val);
 					}
 				}
-			} catch (IllegalArgumentException | IllegalAccessException | SettingsException e) {
+			} catch (final IllegalArgumentException | IllegalAccessException | SettingsException e) {
 				log.error(EXCEPTION.getMarker(),
 						"illegal line in settings.txt: {}, {}  {}", pars[0],
 						pars[1], e);
@@ -575,7 +575,7 @@ class Settings {
 		}
 
 		if (!good) {
-			String err = "ERROR: " + pars[0] + " is not a valid setting name.";
+			final String err = "ERROR: " + pars[0] + " is not a valid setting name.";
 			// this only happens if settings.txt exist, so it's internal, not users, so print it
 			CommonUtils.tellUserConsole(err);
 			log.error(EXCEPTION.getMarker(), err);
@@ -593,8 +593,8 @@ class Settings {
 	 * 		the name of the field to look for
 	 * @return the field with the name supplied, or null if such a field cannot be found
 	 */
-	static Field getFieldByName(Field[] fields, String name) {
-		for (Field f : fields) {
+	static Field getFieldByName(final Field[] fields, final String name) {
+		for (final Field f : fields) {
 			if (f.getName().toLowerCase().equals(name.toLowerCase())) {
 				return f;
 			}
@@ -616,8 +616,8 @@ class Settings {
 	 * 		if this Field object is enforcing Java language access control and the
 	 * 		underlying field is either inaccessible or final.
 	 */
-	static boolean setValue(Field field, Object object, String value) throws IllegalAccessException {
-		Class<?> t = field.getType();
+	static boolean setValue(final Field field, final Object object, final String value) throws IllegalAccessException {
+		final Class<?> t = field.getType();
 		if (t == String.class) {
 			field.set(object, value);
 			return true;
@@ -659,16 +659,16 @@ class Settings {
 	 * @return the current settings
 	 */
 	static String[][] currSettings() {
-		Field[] fields = Settings.class.getDeclaredFields();
-		List<String[]> list = new ArrayList<>();
-		for (Field f : fields) {
+		final Field[] fields = Settings.class.getDeclaredFields();
+		final List<String[]> list = new ArrayList<>();
+		for (final Field f : fields) {
 			// every non-setting field should be final, so the following deals with the correct fields
 			if (!Modifier.isFinal(f.getModifiers())) {
 				try {
 					if (SubSetting.class.isAssignableFrom(f.getType())) {
-						Field[] subFields = f.getType().getDeclaredFields();
-						for (Field subField : subFields) {
-							Object subFieldValue = subField.get(f.get(Settings.class));
+						final Field[] subFields = f.getType().getDeclaredFields();
+						for (final Field subField : subFields) {
+							final Object subFieldValue = subField.get(f.get(Settings.class));
 							list.add(new String[] {
 									f.getName() + "." + subField.getName(),
 									subFieldValue == null ? "null" : subFieldValue.toString()
@@ -677,7 +677,7 @@ class Settings {
 					} else {
 						list.add(new String[] { f.getName(), f.get(null).toString() });
 					}
-				} catch (IllegalArgumentException | IllegalAccessException e) {
+				} catch (final IllegalArgumentException | IllegalAccessException e) {
 					log.error(EXCEPTION.getMarker(),
 							"error while reading settings.txt", e);
 				}
@@ -686,7 +686,7 @@ class Settings {
 		return list.toArray(new String[0][0]);
 	}
 
-	public static void main(String[] args) {
+	public static void main(final String[] args) {
 		loadSettings();
 		writeSettingsUsed();
 	}

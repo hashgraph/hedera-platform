@@ -18,7 +18,9 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.BaseEventHashedData;
 import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.common.io.BadIOException;
+import com.swirlds.platform.components.EventTaskCreator;
 import com.swirlds.platform.event.ValidateEventTask;
+import com.swirlds.platform.stats.SyncStats;
 import com.swirlds.platform.sync.ShadowGraphManager;
 import com.swirlds.platform.sync.SyncData;
 import com.swirlds.platform.sync.SyncInputStream;
@@ -30,7 +32,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
 
 import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.logging.LogMarker.SYNC;
@@ -74,10 +75,10 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 	private final SyncThrottle throttle;
 
 	/** Update timing stats. */
-	private final Statistics stats;
+	private final SyncStats stats;
 
-	/** Consumer for generating events from gossip-neighbors. */
-	private final Consumer<ValidateEventTask> addEvent;
+	/** responsible for enqueueing received event data and create event tasks */
+	private final EventTaskCreator eventTaskCreator;
 
 	/** tracks how many bytes have been written */
 	private final AtomicLong bytesWritten = new AtomicLong(0);
@@ -96,8 +97,8 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 	 * 		The {@link SyncThrottle} instance to use for this connection
 	 * @param stats
 	 * 		The statistics accumulator which {@code this} will update
-	 * @param addEvent
-	 * 		A functor to use for enqueueing received event data, for ingestion by consensus hashgraph
+	 * @param eventTaskCreator
+	 * 		for enqueueing received event data
 	 * @param numberOfNodes
 	 * 		The number of nodes in the network.
 	 * @param log
@@ -110,8 +111,8 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 			final boolean caller,
 			final ShadowGraphManager shadowGraphManager,
 			final SyncThrottle throttle,
-			final Statistics stats,
-			final Consumer<ValidateEventTask> addEvent,
+			final SyncStats stats,
+			final EventTaskCreator eventTaskCreator,
 			final long numberOfNodes,
 			final Logger log,
 			final String logString) {
@@ -122,7 +123,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 		this.shadowGraphManager = shadowGraphManager;
 		this.throttle = throttle;
 		this.stats = stats;
-		this.addEvent = addEvent;
+		this.eventTaskCreator = eventTaskCreator;
 		this.log = log;
 	}
 
@@ -162,6 +163,10 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 		return shadowGraphManager;
 	}
 
+	public EventTaskCreator getEventTaskCreator() {
+		return eventTaskCreator;
+	}
+
 	/**
 	 * Get the string used to identify log entries emitted by {@code this}
 	 *
@@ -185,7 +190,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 	 *
 	 * @return the statistics accumulator used by {@code this}
 	 */
-	protected Statistics getStats() {
+	protected SyncStats getStats() {
 		return stats;
 	}
 
@@ -254,10 +259,10 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 		final List<EventImpl> diffEvents = getShadowGraphManager().finishSendEventList(syncData, syncLogString);
 
 		if (syncData.isTipAbsorptionActive()) {
-			conn.getPlatform().getStats().updateTipAbsorptionOpsPerSec();
+			getStats().updateTipAbsorptionOpsPerSec();
 		}
 
-		
+
 		log.debug(SYNC_SGM.getMarker(), "{}{} events to send", syncLogString, diffEvents.size());
 
 		for (final EventImpl event : diffEvents) {
@@ -276,7 +281,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 		// record history of events written per sync
 		// (stats may be null for testing)
 		if (stats != null) {
-			stats.avgEventsPerSyncSent.recordValue(eventsWritten.get());
+			stats.syncEventsWritten(eventsWritten.get());
 		}
 	}
 
@@ -287,7 +292,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 	protected void writeFallenBehind() throws IOException {
 		final String syncLogString = getLogString() + ": `writeFallenBehind `: ";
 
-		conn.getSyncServer().discardedEventsRequested.incrementAndGet();
+		stats.nodeFallenBehind();
 		writeByte(SyncConstants.COMM_EVENT_DISCARDED);
 		writeFlush();
 		log.debug(RECONNECT.getMarker(),
@@ -320,7 +325,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 			// record number of throttle bytes written
 			// (stats may be null for testing)
 			if (stats != null) {
-				stats.bytesPerSecondCatchupSent.update(nThrottleBytes);
+				stats.syncThrottleBytesWritten(nThrottleBytes);
 			}
 		}
 	}
@@ -387,7 +392,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 				break;
 			} else if (next == SyncConstants.COMM_EVENT_NEXT) {
 				final ValidateEventTask validateEventTask = readEventData();
-				addEvent.accept(validateEventTask);
+				eventTaskCreator.addEvent(validateEventTask);
 			} else {
 				// Unconditionally throws IOException
 				badByte(next);
@@ -397,7 +402,7 @@ abstract class AbstractNodeSynchronizer implements NodeSynchronizer {
 		// record history of events read per sync
 		// (stats may be null for testing)
 		if (stats != null) {
-			stats.avgEventsPerSyncRec.recordValue(eventsRead.get());
+			stats.syncEventsRead(eventsRead.get());
 		}
 	}
 

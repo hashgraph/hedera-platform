@@ -95,7 +95,6 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import static com.swirlds.common.Units.SECONDS_TO_MILLISECONDS;
 import static com.swirlds.common.merkle.utility.MerkleUtils.rehashTree;
@@ -193,13 +192,6 @@ public class SwirldsPlatform extends AbstractPlatform {
 	/** a thread that writes, reads and deletes FastCopyable object to/from files */
 	private SignedStateFileManager signedStateFileManager;
 
-
-	/**
-	 * an array containing the last sync speed for each of the nodes in bytes/second. used by PRIORITY
-	 * SyncCaller
-	 */
-	private AtomicReferenceArray<Double> lastSyncSpeed;
-
 	/** last time stamp when pause check timer is active */
 	private long pauseCheckTimeStamp;
 	/** alert threshold for java app pause */
@@ -275,6 +267,9 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** the object that contains all key pairs and CSPRNG state for this member */
 	protected Crypto crypto;
+
+	/** Wrapper class for syncing until the refactor is complete #3736 */
+	private NodeSynchronizerInstantiator nodeSynchronizerInstantiator;
 
 	/**
 	 * This object is responsible for rate limiting reconnect attempts (in the role of sender)
@@ -522,7 +517,8 @@ public class SwirldsPlatform extends AbstractPlatform {
 						}
 					}
 
-					signedState.getState().getSwirldState().init(this, initialAddressBook.copy());
+					signedState.getState().getSwirldState().init(this, initialAddressBook.copy(),
+							signedState.getState().getSwirldDualState());
 
 					this.initialState = signedState.getState().copy();
 
@@ -928,7 +924,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 				state.getPlatformDualState().setFreezeTime(Instant.ofEpochSecond(genesisFreezeTime));
 			}
 			// hashgraph and state get separate copies of
-			state.getSwirldState().genesisInit(this, initialAddressBook.copy());
+			state.getSwirldState().genesisInit(this, initialAddressBook.copy(), state.getSwirldDualState());
 			// addressBook
 			// this state passed will become stateCons
 			newEventFlow = new EventFlow(this, state);
@@ -984,6 +980,16 @@ public class SwirldsPlatform extends AbstractPlatform {
 				.setRunnable(appMain)
 				.build();
 
+		nodeSynchronizerInstantiator = new NodeSynchronizerInstantiator(
+				getShadowGraphManager(),
+				getNumMembers(),
+				getStats(),
+				getSleepAfterSync(),
+				consensusRef::get,
+				eventTaskCreator,
+				syncManager
+		);
+
 		//In recover mode, skip sync with other nodes,
 		// and don't start main to accept any new transactions
 		if (!Settings.enableStateRecovery) {
@@ -1015,8 +1021,6 @@ public class SwirldsPlatform extends AbstractPlatform {
 							.start();
 				}
 			}
-			lastSyncSpeed = new AtomicReferenceArray<>(
-					getAddressBook().getSize());
 			// create and start threads to call other members
 			for (int i = 0; i < Settings.maxOutgoingSyncs; i++) {
 				if (i < Settings.maxOutgoingRandomSyncs) {
@@ -1543,13 +1547,6 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** {@inheritDoc} */
 	@Override
-	public double getLastSyncSpeed(int nodeIndex) {
-		Double d = lastSyncSpeed.get(nodeIndex);
-		return d == null ? -1 : d;
-	}
-
-	/** {@inheritDoc} */
-	@Override
 	public int getNumMembers() {
 		return initialAddressBook.getSize();
 	}
@@ -1609,12 +1606,6 @@ public class SwirldsPlatform extends AbstractPlatform {
 	@Override
 	public void setAbout(String about) {
 		appAbout = about;
-	}
-
-	/** {@inheritDoc} */
-	@Override
-	public void setLastSyncSpeed(int nodeIndex, double lastSyncSpeed) {
-		this.lastSyncSpeed.set(nodeIndex, lastSyncSpeed);
 	}
 
 	/** {@inheritDoc} */
@@ -1731,5 +1722,9 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	void setGenesisFreezeTime(final long genesisFreezeTime) {
 		this.genesisFreezeTime = genesisFreezeTime;
+	}
+
+	public NodeSynchronizerInstantiator getNodeSynchronizerInstantiator() {
+		return nodeSynchronizerInstantiator;
 	}
 }

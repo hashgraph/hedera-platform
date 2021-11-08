@@ -19,6 +19,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
+import java.time.Instant;
+
 
 /**
  * Provides boiler plate implementation for LogPayload methods.
@@ -35,6 +40,9 @@ public abstract class AbstractLogPayload implements LogPayload {
 	static {
 		mapper = new ObjectMapper();
 		mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+		//make output a readable ISO-8601 format :2021-09-30T16:02:01.656445Z
+		mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+		mapper.registerModule(new JavaTimeModule());
 	}
 
 	public AbstractLogPayload() {

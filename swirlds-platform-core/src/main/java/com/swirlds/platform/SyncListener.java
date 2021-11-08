@@ -221,10 +221,10 @@ class SyncListener implements Runnable {
 	 * @param syncServer
 	 * 		the SyncServer that stores the current connection to every member
 	 * @return true if a heartbeat or sync request was read and handled
-	 * @throws IOException
+	 * @throws Exception
 	 * 		if there is any exception during sync, or it times out
 	 */
-	boolean handleOneMsgOrException(NodeId otherId, final SyncServer syncServer) throws IOException {
+	boolean handleOneMsgOrException(NodeId otherId, final SyncServer syncServer) throws Exception {
 		final SyncConnection conn;
 		final NodeId selfId;
 		// otherId assumed to be main
@@ -278,11 +278,13 @@ class SyncListener implements Runnable {
 							"node {} has fallen behind. Incoming sync requests will not be accepted.", selfId);
 
 					// if we have fallen behind, dont accept any syncs
-					NodeSynchronizerImpl.synchronize(conn, false, false, true);
+					platform.getNodeSynchronizerInstantiator().
+							synchronize(conn, false, false, true);
 
 				} else if (!lockCallListen.tryLock()) {
 					// caller is already syncing with otherId, so reply NACK
-					NodeSynchronizerImpl.synchronize(conn, false, false, false);
+					platform.getNodeSynchronizerInstantiator()
+							.synchronize(conn, false, false, false);
 
 				} else {
 					log.debug(HEARTBEAT.getMarker(),
@@ -296,7 +298,8 @@ class SyncListener implements Runnable {
 											"requests will not be accepted.");
 						}
 
-						NodeSynchronizerImpl.synchronize(conn, false, acceptIncoming, false);
+						platform.getNodeSynchronizerInstantiator()
+								.synchronize(conn, false, acceptIncoming, false);
 
 					} finally {
 						lockCallListen.unlock();

@@ -26,15 +26,19 @@ import java.util.Set;
 import static com.swirlds.common.CommonUtils.throwArgNull;
 
 /**
- * A bottom-up DFS iterator for all descendants of a given shadow event in a shadow graph. Here, "bottom-up" means that
+ * A bottom-up DFS iterator for all descendants of a given shadow event in a shadow graph, , in an arbitrary
+ * depth-first-search partial order. Here, "bottom-up" means that
  * if an event in the DAG is encountered, then at least one its parents has already been encountered. That is, any two
- * traversal paths share only the starting event. That is, no two traversal paths intersect after leaving the starting
- * event. In other words, iteration is unique: In a single loop with a single iterator, a shadow event is visited
+ * traversal paths share only the starting event. In other words, iteration is unique: In a single loop with a single iterator, a shadow event is visited
  * at most once.
  *
  * Further, iteration is exhaustive: all descendants of the starting iterator are encountered. I.e., execution is
  * theta(linear) in the number of events, which, for a finite graph, is equivalent to saying it is theta(linear)
  * in the number of descendants of the starting event.
+ *
+ * The value type of the iterator is a shadow event.
+ *
+ * This iterator is paired with a `ShadowGraphDescendantView` type.
  */
 public class ShadowGraphDescendantDFSIterator implements Iterator<ShadowEvent> {
 

@@ -45,15 +45,17 @@ public interface SwirldState extends Archivable, MerkleNode {
 	 * to initialize the state and/or internal metadata with default values at this time as well.
 	 *
 	 * When the Platform first instantiates an object of an app's class implementing SwirldState,
-	 * it will call the method {@link #genesisInit(Platform, AddressBook) init}, then
+	 * it will call the method {@link #genesisInit(Platform, AddressBook, SwirldDualState) init}, then
 	 * call copy() zero or one times, then call handleTransaction for the first time.
 	 *
 	 * @param platform
 	 * 		the Platform that instantiated this state
 	 * @param addressBook
 	 * 		the members and info about them
+	 * @param swirldDualState
+	 * 		the dual state instance used by the initialization function
 	 */
-	void genesisInit(Platform platform, AddressBook addressBook);
+	void genesisInit(final Platform platform, final AddressBook addressBook, final SwirldDualState swirldDualState);
 
 	/**
 	 * Initialize a state at a later time than genesis. Called exactly once each time a node recreates
@@ -67,8 +69,10 @@ public interface SwirldState extends Archivable, MerkleNode {
 	 * 		the Platform that instantiated this state
 	 * @param addressBook
 	 * 		the members and info about them
+	 * @param swirldDualState
+	 * 		the dual state instance used by the initialization function
 	 */
-	void init(Platform platform, AddressBook addressBook);
+	void init(final Platform platform, final AddressBook addressBook, final SwirldDualState swirldDualState);
 
 	/**
 	 * Migrate the state from a previous format, if needed. It is the responsibility of the state
