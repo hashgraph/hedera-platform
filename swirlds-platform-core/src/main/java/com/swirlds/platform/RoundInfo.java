@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -12,6 +12,8 @@
  * OR NON-INFRINGEMENT.
  */
 package com.swirlds.platform;
+
+import com.swirlds.platform.event.EventConstants;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -36,7 +38,7 @@ public class RoundInfo {
 	 *
 	 * This is the initial value of the minimum witness generation for a round.
 	 */
-	protected static final long MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED = -1;
+	protected static final long MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED = EventConstants.GENERATION_UNDEFINED;
 
 	/**
 	 * The first round number at genesis is zero.

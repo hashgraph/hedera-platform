@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -43,8 +43,10 @@ module com.swirlds.common {
 	exports com.swirlds.common.crypto.internal to com.swirlds.platform, com.swirlds.common.test;
 	exports com.swirlds.common.testutils to com.swirlds.platform, com.swirlds.common.test, com.swirlds.platform.test;
 	exports com.swirlds.common.notification.internal to com.swirlds.common.test;
-	exports com.swirlds.common.signingtool to com.swirlds.common.test, com.swirlds.demo.platform, com.swirlds.regression;
+	exports com.swirlds.common.signingtool to com.swirlds.common.test, com.swirlds.demo.platform,
+			com.swirlds.regression;
 	exports com.swirlds.common.stream;
+	exports com.swirlds.common.crypto.engine to com.swirlds.common.test;
 
 	opens com.swirlds.common.crypto to com.fasterxml.jackson.databind;
 	opens com.swirlds.common.merkle.utility to com.fasterxml.jackson.databind;
@@ -59,6 +61,7 @@ module com.swirlds.common {
 	/* Cryptography Libraries */
 	requires lazysodium.java;
 	requires jocl;
+	requires org.bouncycastle.provider;
 
 	/* Logging Libraries */
 	requires org.apache.logging.log4j;

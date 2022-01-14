@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -33,7 +33,7 @@ public class SignedStateGarbageCollector implements Runnable {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
 
-	private static final int DELETION_QUEUE_SIZE = 200;
+	public static final int DELETION_QUEUE_SIZE = 200;
 
 	private final LinkedBlockingQueue<SignedState> deletionQueue;
 	private final LinkedBlockingQueue<SignedState> archivalQueue;

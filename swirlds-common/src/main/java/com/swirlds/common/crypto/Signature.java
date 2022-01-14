@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -17,10 +17,9 @@ package com.swirlds.common.crypto;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.Marker;
-import org.apache.logging.log4j.MarkerManager;
 
 import java.io.IOException;
 import java.security.InvalidKeyException;
@@ -40,13 +39,16 @@ import static com.swirlds.common.crypto.SignatureType.RSA;
 public class Signature implements SelfSerializable {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
-	private static final Marker LOGM_EXCEPTION = MarkerManager.getMarker("EXCEPTION");
 
+	/** a unique class type identifier */
 	private static final long CLASS_ID = 0x13dc4b399b245c69L;
+
+	/** the current serialization version */
 	private static final int CLASS_VERSION = 1;
 
 	/** The type of cryptographic algorithm used to create the signature */
 	private SignatureType signatureType;
+
 	/** signature byte array */
 	private byte[] sigBytes;
 
@@ -56,19 +58,25 @@ public class Signature implements SelfSerializable {
 	public Signature() {
 	}
 
-	public Signature(SignatureType signatureType, byte[] sigBytes) {
+	public Signature(final SignatureType signatureType, final byte[] sigBytes) {
 		this.signatureType = signatureType;
 		this.sigBytes = sigBytes;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
+	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
 		this.signatureType = SignatureType.from(in.readInt(), RSA);
-		this.sigBytes = in.readByteArray(this.signatureType.getSignatureLength(), true);
+		this.sigBytes = in.readByteArray(this.signatureType.signatureLength(), true);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public void serialize(SerializableDataOutputStream out) throws IOException {
+	public void serialize(final SerializableDataOutputStream out) throws IOException {
 		out.writeInt(signatureType.ordinal());
 		out.writeByteArray(sigBytes, true);
 	}
@@ -82,38 +90,46 @@ public class Signature implements SelfSerializable {
 	 * 		publicKey
 	 * @return true if the signature is valid
 	 */
-	public boolean verifySignature(byte[] data, PublicKey publicKey) {
+	public boolean verifySignature(final byte[] data, final PublicKey publicKey) {
 		if (publicKey == null) {
-			log.info(LOGM_EXCEPTION, "verifySignature :: missing PublicKey");
+			log.info(LogMarker.EXCEPTION.getMarker(), "verifySignature :: missing PublicKey");
 			return false;
 		}
 
 		final String signingAlgorithm = signatureType.signingAlgorithm();
 		final String sigProvider = signatureType.provider();
 		try {
-			java.security.Signature sig = java.security.Signature.getInstance(signingAlgorithm, sigProvider);
+			final java.security.Signature sig = java.security.Signature.getInstance(signingAlgorithm, sigProvider);
 			sig.initVerify(publicKey);
 			sig.update(data);
 			return sig.verify(sigBytes);
-		} catch (NoSuchAlgorithmException | NoSuchProviderException
+		} catch (final NoSuchAlgorithmException | NoSuchProviderException
 				| InvalidKeyException | SignatureException e) {
-			log.error(LOGM_EXCEPTION, " verifySignature :: Fail to verify Signature: {}, PublicKey: {}",
-					this,
-					hex(publicKey.getEncoded()), e);
+			log.error(LogMarker.EXCEPTION.getMarker(), " verifySignature :: Fail to verify Signature: {}, PublicKey: " +
+					"{}", this, hex(publicKey.getEncoded()), e);
 		}
 		return false;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public long getClassId() {
 		return CLASS_ID;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public int getVersion() {
 		return CLASS_VERSION;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public boolean equals(final Object obj) {
 		if (this == obj) {
@@ -124,16 +140,22 @@ public class Signature implements SelfSerializable {
 			return false;
 		}
 
-		Signature signature = (Signature) obj;
+		final Signature signature = (Signature) obj;
 		return Arrays.equals(sigBytes, signature.sigBytes)
 				&& signatureType == signature.signatureType;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public int hashCode() {
 		return Objects.hash(signatureType, sigBytes);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public String toString() {
 		return String.format("Signature{signatureType: %s, sigBytes: %s",

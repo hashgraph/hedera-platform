@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -36,7 +36,8 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.components to com.swirlds.platform.test;
 	exports com.swirlds.platform.observers to com.swirlds.platform.test;
 	exports com.swirlds.platform.eventhandling to com.swirlds.platform.test;
-	exports com.swirlds.platform.sync to com.swirlds.platform.test;
+	exports com.swirlds.platform.sync;
+	exports com.swirlds.platform.consensus to com.swirlds.platform.test;
 
 	/* Swirlds Libraries */
 	requires transitive com.swirlds.common;

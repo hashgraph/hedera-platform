@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -1006,8 +1006,12 @@ class EventFlow extends AbstractEventFlow {
 		// we need to keep all events that are non-ancient
 		final long minGenerationNonAncient = minGenQueue.getRoundGeneration(staleRound);
 		signedStateEvents.expireEvents(minGenerationNonAncient);
-		// we also need a round generation for each round that the events stored are created in
-		minGenQueue.expire(signedStateEvents.getMinRoundCreatedInQueue());
+		// sometimes we will have events that have a round created lower than staleRound, so we need to keep more than
+		// the specified number of rounds. At other times, we might have round generation numbers that are not
+		// increasing, so we might have no events in the staleRound.
+		// we want to keep at least roundsAncient number of rounds, sometimes more
+		final long expireRoundsBelow = Math.min(staleRound, signedStateEvents.getMinRoundCreatedInQueue());
+		minGenQueue.expire(expireRoundsBelow);
 
 		platform.getStats().avgConsForSigCleanMicros.recordValue(
 				(System.nanoTime() - startForSigClean) * NANOSECONDS_TO_MICROSECONDS);

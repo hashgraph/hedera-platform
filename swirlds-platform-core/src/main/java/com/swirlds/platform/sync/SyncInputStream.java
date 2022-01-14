@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,16 +15,26 @@
 package com.swirlds.platform.sync;
 
 import com.swirlds.common.crypto.DigestType;
+import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.events.BaseEventHashedData;
+import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.extendable.CountingStreamExtension;
 import com.swirlds.common.io.extendable.ExtendableInputStream;
 import com.swirlds.common.io.extendable.HashingStreamExtension;
 import com.swirlds.common.io.extendable.StreamExtensionList;
+import com.swirlds.platform.event.ValidateEventTask;
 
 import java.io.BufferedInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 
 public class SyncInputStream extends SerializableDataInputStream {
+
+	/** The maximum number of tips allowed per node. */
+	private static final int MAX_TIPS_PER_NODE = 1000;
+
 	private final CountingStreamExtension syncByteCounter;
 	private final HashingStreamExtension hasher;
 
@@ -55,5 +65,57 @@ public class SyncInputStream extends SerializableDataInputStream {
 
 	public HashingStreamExtension getHasher() {
 		return hasher;
+	}
+
+	/**
+	 * Reads a sync request response from the stream
+	 *
+	 * @return true if the sync has been accepted, false if it was rejected
+	 * @throws IOException
+	 * 		if a stream exception occurs
+	 * @throws SyncException
+	 * 		if something unexpected has been read from the stream
+	 */
+	public boolean readSyncRequestResponse() throws IOException, SyncException {
+		final byte b = readByte();
+		if (b == SyncConstants.COMM_SYNC_NACK) {
+			// sync rejected
+			return false;
+		}
+		if (b != SyncConstants.COMM_SYNC_ACK) {
+			throw new SyncException(String.format(
+					"COMM_SYNC_REQUEST was sent but reply was %02x instead of COMM_SYNC_ACK or COMM_SYNC_NACK", b));
+		}
+		return true;
+	}
+
+	/**
+	 * Read the other node's generation numbers from an input stream
+	 *
+	 * @throws IOException
+	 * 		if a stream exception occurs
+	 */
+	public SyncGenerations readGenerations() throws IOException {
+		return readSerializable(false, SyncGenerations::new);
+	}
+
+	/**
+	 * Read the other node's tip hashes
+	 *
+	 * @throws IOException
+	 * 		is a stream exception occurs
+	 */
+	public List<Hash> readTipHashes(final int numberOfNodes) throws IOException {
+		return readSerializableList(
+				numberOfNodes * MAX_TIPS_PER_NODE,
+				false,
+				Hash::new);
+	}
+
+	public ValidateEventTask readEventData() throws IOException {
+		final BaseEventHashedData hashedData = readSerializable(false, BaseEventHashedData::new);
+		final BaseEventUnhashedData unhashedData = readSerializable(false, BaseEventUnhashedData::new);
+
+		return new ValidateEventTask(hashedData, unhashedData);
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -20,6 +20,7 @@ import com.swirlds.common.crypto.HashBuilder;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildHashException;
+import com.swirlds.logging.LogMarker;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -60,7 +61,7 @@ public class MerkleInternalDigestProvider extends
 						childNode.getRoute());
 
 
-				log().trace(CryptoEngine.LOGM_TESTING_EXCEPTIONS, msg);
+				log().trace(LogMarker.TESTING_EXCEPTIONS.getMarker(), msg);
 				throw new IllegalChildHashException(msg);
 			}
 

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -30,5 +30,5 @@ public interface ParallelExecutor {
 	 * @throws ParallelExecutionException
 	 * 		if anything goes wrong
 	 */
-	void doParallel(Callable<Object> task1, Callable<Object> task2) throws ParallelExecutionException;
+	<T> T doParallel(Callable<T> task1, Callable<Void> task2) throws ParallelExecutionException;
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,16 +15,10 @@
 package com.swirlds.platform;
 
 import com.swirlds.common.AddressBook;
-import com.swirlds.common.NodeId;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.event.EventUtils;
-import com.swirlds.platform.internal.CreatorSeqPair;
-import com.swirlds.platform.internal.SignedStateLoadingException;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.stats.ConsensusStats;
-import com.swirlds.platform.sync.SyncLogging;
-import com.swirlds.platform.sync.ShadowGraphManager;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,8 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Queue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
@@ -52,7 +44,6 @@ import java.util.function.Supplier;
 import static com.swirlds.logging.LogMarker.ADD_EVENT;
 import static com.swirlds.logging.LogMarker.EXPIRE_EVENT;
 import static com.swirlds.logging.LogMarker.INVALID_EVENT_ERROR;
-import static com.swirlds.logging.LogMarker.RECONNECT_SGM;
 import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.platform.Settings.minTransTimestampIncrNanos;
 
@@ -135,9 +126,6 @@ import static com.swirlds.platform.Settings.minTransTimestampIncrNanos;
 public class ConsensusImpl implements Consensus {
 	private static final Logger log = LogManager.getLogger();
 	// ------------------------ Variable passed to the constructor ------------------------
-	/** the member ID of the member running the platform using this hashgraph */
-	private final NodeId selfId;
-
 	/** the only address book currently, until address book changes are implemented */
 	private final AddressBook addressBook;
 
@@ -188,35 +176,11 @@ public class ConsensusImpl implements Consensus {
 	// for that same round.
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	/** A map of all the events stored in this object */
-	private final ConcurrentHashMap<CreatorSeqPair, EventImpl> eventsByCreatorSeq;
-
 	/** an array that keeps the last consensus event by each member. */
 	private final AtomicReferenceArray<EventImpl> lastConsEventByMember;
 
-	/**
-	 * maximum round number of all events stored in "rounds", or -1 if none. This is the max round created
-	 * of all events ever added to the hashgraph.
-	 */
-	private final AtomicLong maxRound = new AtomicLong(-1);
-
-	/**
-	 * minimum round number of all events stored in "rounds", or -1 if none. This may not be the min round
-	 * created of all events ever added to the hashgraph, since some of the older rounds may have been
-	 * decided and discarded.
-	 */
-	private final AtomicLong minRound = new AtomicLong(-1);
-
-	/**
-	 * "rounds" is a HashMap mapping round number (starts at 0) to a RoundInfo that knows the witnesses etc.
-	 * for that round. It includes the max created round of all events ever added to the hashgraph (by
-	 * consRecordEvent()), but it may not include very old rounds that have already been decided and
-	 * discarded.
-	 */
-	private final ConcurrentHashMap<Long, RoundInfo> rounds;
-
-	/** fame has been decided for all rounds less than this, but not for this round. */
-	private final AtomicLong fameDecidedBelow = new AtomicLong(1);
+	/** stores all round information */
+	private final ConsensusRounds rounds;
 
 	/** events to be cleared in the future */
 	private final List<EventImpl> toBeCleared = new LinkedList<>();
@@ -249,26 +213,6 @@ public class ConsensusImpl implements Consensus {
 	/** the number of coin rounds that have happened so far (used to update the statistics) */
 	private long numCoinRounds = 0;
 
-	/**
-	 * The minimum judge generation number from the oldest non-expired round, if there is one.
-	 * Else, this is the minimum judge generation number from the oldest round in memory, if there is one.
-	 * Else, this is {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}.
-	 * <p>
-	 * Updated only on consensus thread, read concurrently from gossip threads.
-	 * </p>
-	 */
-	private volatile long minRoundGeneration = RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
-
-	/**
-	 * The minimum judge generation number from the most recent fame-decided round, if there is one.
-	 * Else, this is the minimum judge generation from the most recent event round, if there is one.
-	 * Else, this is {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}.
-	 * <p>
-	 * Updated only on consensus thread, read concurrently from gossip threads.
-	 * </p>
-	 */
-	private volatile long maxRoundGeneration = RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
-
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Public constructors
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -280,27 +224,21 @@ public class ConsensusImpl implements Consensus {
 	 * 		should return the statistics object
 	 * @param minGenConsumer
 	 * 		a method that accepts minimum generation info
-	 * @param selfId
-	 * 		the memberID of the member running this consensus
 	 * @param addressBook
 	 * 		the global address book, which never changes
 	 */
 	public ConsensusImpl(
 			final Supplier<ConsensusStats> statsSupplier,
 			final BiConsumer<Long, Long> minGenConsumer,
-			final NodeId selfId,
 			final AddressBook addressBook) {
 
 		this.statsSupplier = statsSupplier;
 		this.minGenConsumer = minGenConsumer;
 
-		this.selfId = selfId;
 		// until we implement address book changes, we will just use the use this address book
 		this.addressBook = addressBook;
 
-		this.eventsByCreatorSeq = new ConcurrentHashMap<>();
-
-		this.rounds = new ConcurrentHashMap<>();
+		this.rounds = new ConsensusRounds(addressBook);
 
 		this.lastConsEventByMember = new AtomicReferenceArray<>(addressBook.getSize());
 	}
@@ -313,8 +251,6 @@ public class ConsensusImpl implements Consensus {
 	 * 		should return the statistics object
 	 * @param minGenConsumer
 	 * 		a method that accepts minimum generation info
-	 * @param selfId
-	 * 		the memberID of the member running this consensus
 	 * @param addressBook
 	 * 		the global address book, which never changes
 	 * @param signedState
@@ -323,263 +259,42 @@ public class ConsensusImpl implements Consensus {
 	public ConsensusImpl(
 			final Supplier<ConsensusStats> statsSupplier,
 			final BiConsumer<Long, Long> minGenConsumer,
-			final NodeId selfId,
 			final AddressBook addressBook,
-			final SignedState signedState,
-			final ShadowGraphManager sgm) throws SignedStateLoadingException {
-		this(statsSupplier, minGenConsumer, selfId, addressBook);
+			final SignedState signedState) {
+		this(statsSupplier, minGenConsumer, addressBook);
 
-		EventImpl[] events = signedState.getEvents();
+		// create all the rounds that we need to store events in
+		rounds.createRoundsForSignedStateConstructor(signedState.getMinGenInfo());
+
 		// the first part of the array of events will be old events, they are kept so that we can know what the last
 		// event of each member is. we don't need to create rounds for these events or put them in the map, they will
 		// only be stored in lastEventByMember
-		long roundNew = Utilities.getLowestFromHighestSequence(events, EventImpl::getRoundCreated);
-
-		// map round numbers to minimum generation for easy access
-		final Map<Long, Long> minGen = new HashMap<>();
-		for (final Pair<Long, Long> pair : signedState.getMinGenInfo()) {
-			minGen.put(pair.getKey(), pair.getValue());
-		}
-
-		for (final EventImpl event : events) {
-
-			addShadowEvent(sgm, event);
-
+		for (final EventImpl event : signedState.getEvents()) {
 			event.setConsensus(true);
-
 			lastConsEventByMember.set((int) event.getCreatorId(), event);
-
-			if (event.getRoundCreated() < roundNew) {
-				// this event wont be stored in rounds, so it should be cleared as soon as we get a new consensus
-				// event from this member
+			final RoundInfo roundInfo = rounds.get(event.getRoundCreated());
+			if (roundInfo == null) {
+				// this event is old and won't be stored in rounds, so it should be cleared as soon as we get a new
+				// consensus event from this member
 				toBeCleared.add(event);
 			} else {
-				eventsByCreatorSeq.put(new CreatorSeqPair(event.getCreatorId(),
-						event.getCreatorSeq()), event);
-
-				// events are store in consensus order, so the last event in consensus order should be
+				// events are stored in consensus order, so the last event in consensus order should be
 				// incremented by 1 to get the numConsensus
 				numConsensus = event.getConsensusOrder() + 1;
-
-				final RoundInfo roundInfo = createRoundForSignedStateConstructor(event.getRoundCreated(), minGen);
-
 				roundInfo.allEvents.add(event);
-				roundInfo.fameDecided = true;
 			}
 		}
 
 		// The minTimestamp is just above the last transaction that has been handled
 		minTimestamp = calcMinTimestampForNextEvent(signedState.getLastTransactionTimestamp());
 
-		fameDecidedBelow.set(signedState.getLastRoundReceived() + 1);
-
-		createRoundForSignedStateConstructor(signedState.getLastRoundReceived(), minGen);
-
-		updateMaxRoundGeneration();
-		updateMinRoundGeneration();
-
 		LogManager.getLogger().debug(STARTUP.getMarker(),
 				"ConsensusImpl is initialized from signed state. minRound: {}(min gen = {}), maxRound: {}(max gen = " +
 						"{})",
-				minRound::get,
-				() -> minRoundGeneration,
-				maxRound::get,
-				() -> maxRoundGeneration);
-	}
-
-	/**
-	 * Update the min round judge generation.
-	 *
-	 * Executed only on consensus thread.
-	 */
-	private void updateMinRoundGeneration() {
-
-		long newMinRoundGeneration;
-
-		if (rounds.isEmpty()) {
-			// First execution
-			newMinRoundGeneration = RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
-		} else if (rounds.get(getMinRoundNonExpired()) != null) {
-			// This is typical.
-			newMinRoundGeneration = rounds.get(getMinRoundNonExpired()).getMinGeneration();
-		} else {
-			// This usually happens at genesis or after a reconnect.
-			// It's possible this branch may be executed during steady state operation, but that should be rare.
-			newMinRoundGeneration = rounds.get(getMinRound()).getMinGeneration();
-		}
-
-		// 13 May 2021
-		// Guarantee that the round generation is non-decreasing. When we have a local events file,
-		// this condition will be implicit, so this clause will be removed.
-		if (minRoundGeneration != RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED) {
-			if (newMinRoundGeneration < minRoundGeneration) {
-				newMinRoundGeneration = minRoundGeneration;
-			}
-		}
-
-		// 13 May 2021
-		// This check is desirable, and we will re-enable this in future, but this condition can
-		// cause an exception after a node restart or reconnect. A local events file will pass this check.
-		// That is a separate task, and will be implemented in future. For now, we disable this check,
-		// and replace it with the enforced non-decreasing clause above.
-//		if (newMinRoundGeneration < minRoundGeneration) {
-//
-//			final String msg = String.format(
-//					"Consensus min round generation can not decrease. Change %s -> %s disallowed (min round = %s, min" +
-//							" " +
-//							"round non-expired = %s)",
-//					minRoundGeneration,
-//					newMinRoundGeneration,
-//					minRound.get(),
-//					fameDecidedBelow.get() - Settings.state.roundsExpired);
-//
-//			throw new IllegalStateException(msg);
-//		}
-
-		minRoundGeneration = newMinRoundGeneration;
-	}
-
-	/**
-	 * Update the max round judge generation
-	 *
-	 * Executed only on consensus thread.
-	 */
-	private void updateMaxRoundGeneration() {
-
-		long newMaxRoundGeneration;
-
-		if (rounds.isEmpty()) {
-			// First execution
-			newMaxRoundGeneration = RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
-		} else if (rounds.get(fameDecidedBelow.get() - 1) != null) {
-			// This is typical.
-			newMaxRoundGeneration = rounds.get(fameDecidedBelow.get() - 1).getMinGeneration();
-		} else {
-			// This happens universally, just after genesis.
-			newMaxRoundGeneration = rounds.get(getMaxRound()).getMinGeneration();
-		}
-
-		// 13 May 2021
-		// Guarantee that the round generation is non-decreasing. When we have a local events file,
-		// this condition will be implicit, so this clause will be removed.
-		if (maxRoundGeneration != RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED) {
-			if (newMaxRoundGeneration < maxRoundGeneration) {
-				newMaxRoundGeneration = maxRoundGeneration;
-			}
-		}
-
-		// 13 May 2021
-		// This check is desirable, and we will re-enable this in future, but this condition can
-		// cause an exception after a node restart or reconnect. A local events file will pass this check.
-		// That is a separate task, and will be implemented in future. For now, we disable this check,
-		// and replace it with the enforced non-decreasing clause above.
-//		if (newMaxRoundGeneration < maxRoundGeneration) {
-//			final String msg = String.format(
-//					"Consensus max round generation can not decrease. Change %s -> %s disallowed. (LFD round = %s,
-//					max" +
-//							" " +
-//							"round = %s)",
-//					maxRoundGeneration,
-//					newMaxRoundGeneration,
-//					fameDecidedBelow.get() - 1,
-//					maxRound.get());
-//
-//			throw new IllegalStateException(msg);
-//		}
-
-		maxRoundGeneration = newMaxRoundGeneration;
-	}
-
-	/**
-	 * Used ONLY by the constructor that loads data from a signed state.
-	 * If the supplied round already exists, it will simply return the existing one.
-	 * If the round does not exist, it will create it as well as any other rounds to ensure that there are no gaps in
-	 * the round numbers. If will set the round generation information for each of these rounds.
-	 *
-	 * @param round
-	 * 		the round to create and return
-	 * @param minGen
-	 * 		a mapping between round numbers and round generations
-	 * @return the round requested
-	 * @throws SignedStateLoadingException
-	 * 		if any issue occurs when creating these rounds
-	 */
-	private RoundInfo createRoundForSignedStateConstructor(long round,
-			Map<Long, Long> minGen) throws SignedStateLoadingException {
-		RoundInfo requestedRound = rounds.get(round);
-		if (requestedRound != null) {
-			// round already exists
-			return requestedRound;
-		}
-		// fill in the gaps
-		final long startRound = round < minRound.get() ? round : maxRound.get();
-		final long endRound = round > maxRound.get() ? round : minRound.get();
-		if (startRound > endRound) {
-			throw new SignedStateLoadingException(
-					String.format("Issue in determining which rounds to create from a SignedState." +
-									"startRound:%d endRound:%d",
-							startRound, endRound)
-			);
-		}
-		for (long r = startRound; r <= endRound; r++) {
-			RoundInfo roundInfo = new RoundInfo(round, addressBook.getSize());
-			rounds.put(round, roundInfo);
-
-			maxRound.set(Math.max(maxRound.get(), roundInfo.getRound()));
-			minRound.set((minRound.get() == -1) ? roundInfo.getRound()
-					: Math.min(minRound.get(), roundInfo.getRound()));
-
-			// set the minGeneration as stored in state
-			Long minGeneration = minGen.get(roundInfo.getRound());
-			if (minGeneration == null) {
-				throw new SignedStateLoadingException(String.format(
-						"MinGen info missing for round %d", roundInfo.getRound()
-				));
-			} else {
-				roundInfo.updateMinGeneration(minGeneration);
-			}
-			if (r == round) {
-				requestedRound = roundInfo;
-			}
-		}
-
-		if (requestedRound == null) {
-			throw new SignedStateLoadingException(String.format(
-					"An issue occurred when creating round %d", round
-			));
-		}
-
-		return requestedRound;
-	}
-
-	/**
-	 * Construct a shadow event for the given event and add it to the shadow graph.
-	 *
-	 * @param sgm
-	 * 		the shadow graph manager
-	 * @param event
-	 * 		the hashgraph event (assumed to be non-null)
-	 */
-	private void addShadowEvent(final ShadowGraphManager sgm, final EventImpl event) {
-		// (Shadow Graph Manager may be null for testing.)
-		if (sgm == null) {
-			return;
-		}
-
-		log.debug(RECONNECT_SGM.getMarker(),
-				"{}: `addShadowEvent`: adding to shadow graph: {}",
-				() -> selfId,
-				() -> SyncLogging.getSyncLogString(event));
-
-		final boolean inserted = sgm.addEvent(event);
-
-		if (!inserted) {
-			log.debug(RECONNECT_SGM.getMarker(),
-					"{}: `addShadowEvent`: failed to add event {} to shadow graph",
-					() -> selfId,
-					() -> SyncLogging.getSyncLogString(event));
-
-		}
+				rounds::getMinRound,
+				rounds::getMinRoundGeneration,
+				rounds::getMaxRound,
+				rounds::getMaxRoundGeneration);
 	}
 
 	/**
@@ -598,8 +313,6 @@ public class ConsensusImpl implements Consensus {
 	 * 		should return the statistics object
 	 * @param minGenConsumer
 	 * 		a method that accepts minimum generation info
-	 * @param selfId
-	 * 		the memberID of the member running this consensus
 	 * @param addressBook
 	 * 		the global address book, which never changes
 	 * @param round
@@ -611,14 +324,12 @@ public class ConsensusImpl implements Consensus {
 	public ConsensusImpl(
 			final Supplier<ConsensusStats> statsSupplier,
 			final BiConsumer<Long, Long> minGenConsumer,
-			final NodeId selfId,
 			final AddressBook addressBook,
 			final long round,
 			final List<List<Hash>> witnessHashes) {
 
 		this.statsSupplier = statsSupplier;
 		this.minGenConsumer = minGenConsumer;
-		this.selfId = selfId;
 		// until we implement address book changes, we will just use the use this address book
 		this.addressBook = addressBook;
 		this.hashRound = round;
@@ -632,10 +343,9 @@ public class ConsensusImpl implements Consensus {
 		numInitJudgesMissing = witnessHashes.get(0).size();
 		hashRoundJudges = new ArrayList<>();
 
-		this.eventsByCreatorSeq = new ConcurrentHashMap<>();
 		this.lastConsEventByMember = new AtomicReferenceArray<>(addressBook.getSize());
 
-		this.rounds = new ConcurrentHashMap<>();
+		this.rounds = new ConsensusRounds(addressBook);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -647,7 +357,7 @@ public class ConsensusImpl implements Consensus {
 	 */
 	@Override
 	public long getMaxRoundGeneration() {
-		return maxRoundGeneration;
+		return rounds.getMaxRoundGeneration();
 	}
 
 	/**
@@ -655,15 +365,15 @@ public class ConsensusImpl implements Consensus {
 	 */
 	@Override
 	public long getMinRoundGeneration() {
-		return minRoundGeneration;
+		return rounds.getMinRoundGeneration();
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public long getLastRoundDecided() {
-		return fameDecidedBelow.get();  //not synchronized because it's AtomicLong
+	public long getFameDecidedBelow() {
+		return rounds.getFameDecidedBelow();  //not synchronized because it's AtomicLong
 	}
 
 	/**
@@ -671,7 +381,7 @@ public class ConsensusImpl implements Consensus {
 	 */
 	@Override
 	public long getMaxRound() {
-		return maxRound.get();  //not synchronized because it's AtomicLong
+		return rounds.getMaxRound();  //not synchronized because it's AtomicLong
 	}
 
 	/**
@@ -679,70 +389,29 @@ public class ConsensusImpl implements Consensus {
 	 */
 	@Override
 	public long getMinRound() {
-		return minRound.get();  //not synchronized because it's AtomicLong
+		return rounds.getMinRound();  //not synchronized because it's AtomicLong
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * Return the minimum generation of all the famous witnesses that are not in ancient rounds.
+	 *
+	 * <p>Define gen(R) to be the minimum generation of all the events that were famous witnesses in round R.
+	 *
+	 * If round R is the most recent round for which we have decided the fame of all the witnesses, then any event with
+	 * a generation less than gen(R - {@code Settings.state.roundsExpired}) is called an “expired” event. And any
+	 * non-expired event with a generation less than gen(R - {@code Settings.state.roundsStale}) is an “ancient” event.
+	 * If the event failed to achieve consensus before becoming ancient, then it is “stale”. So every non-expired event
+	 * with a generation before gen(R - {@code Settings.state.roundsStale}) is either stale or consensus, not both.
+	 *
+	 * Expired events can be removed from memory unless they are needed for an old signed state that is still being used
+	 * for something (such as still in the process of being written to disk).
+	 * </p>
+	 *
+	 * @return the minimum generation
 	 */
 	@Override
-	public long getDeleteRound() {
-		return getMinRound() - 1;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public synchronized long getMinGenerationNonAncient() {
-		if (getLastRoundDecided() - Settings.state.roundsStale < 0) {
-			// if we dont have any stale rounds yet
-			return -1;
-		}
-
-		if (getLastRoundDecided() - Settings.state.roundsStale < minRound.get()) {
-			// this can happen after a restart when loading a state saved with the old code
-			for (int i = 0; i < 10; i++) {
-				RoundInfo ri = rounds.get(minRound.get());
-				if (ri != null) {
-					return ri.getMinGeneration();
-				}
-			}
-		}
-
-		// because LastRoundDecided can change, we try to get the min generation multiple times
-		// in practice, we should always get it on the first try
-		for (int i = 0; i < 10; i++) {
-			RoundInfo ri = rounds.get(getLastRoundDecided() - Settings.state.roundsStale);
-			if (ri != null) {
-				return ri.getMinGeneration();
-			}
-		}
-		// in case we don't find it, we throw an exception that will likely never happen
-		throw new RuntimeException("Cannot find stale round!");
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public synchronized long getMinRoundNonExpired() {
-		return getLastRoundDecided() - Settings.state.roundsExpired;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public synchronized long getMinGenerationNonExpired() {
-		final long minRoundNotExpired = getLastRoundDecided() - Settings.state.roundsExpired;
-		long minGenNotExpired = -1;
-		final RoundInfo expRound = rounds.get(minRoundNotExpired);
-		if (expRound != null) {
-			minGenNotExpired = expRound.getMinGeneration();
-		}
-
-		return minGenNotExpired;
+	public long getMinGenerationNonAncient() {
+		return rounds.getMinGenerationNonAncient();
 	}
 
 	/**
@@ -750,71 +419,7 @@ public class ConsensusImpl implements Consensus {
 	 */
 	@Override
 	public synchronized EventImpl[] getAllEvents() {
-		ArrayList<EventImpl> all = new ArrayList<>();
-		for (long r = minRound.get(); r <= maxRound.get(); r++) {
-			RoundInfo info = rounds.get(r); // each element of rounds has its own lock
-			if (info != null) {
-				all.addAll(info.allEvents); // allEvents has its own lock
-			}
-		}
-		return all.toArray(new EventImpl[0]);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public synchronized int getNumEvents() {
-		int count = 0;
-		for (long r = minRound.get(); r <= maxRound.get(); r++) {
-			final RoundInfo info = rounds.get(r); // each element of rounds has its own lock
-
-			if (info != null) {
-				count += info.allEvents.size(); // allEvents has its own lock
-			}
-		}
-		return count;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public synchronized EventImpl[] getRecentEvents(final long minGenerationNumber) {
-		final ArrayList<EventImpl> recentEvents = new ArrayList<>();
-
-		for (long r = maxRound.get(); r >= minRound.get(); --r) {
-			RoundInfo info = rounds.get(r); // each element of rounds has its own lock
-
-			if (info == null) {
-				// Round has been deleted because expired, so all older rounds are
-				// also deleted-as-expired.
-				break;
-			}
-
-			for (final EventImpl e : info.allEvents) {
-				if (e.getGeneration() >= minGenerationNumber) {
-					recentEvents.add(e);
-				}
-			}
-		}
-
-		return recentEvents.toArray(new EventImpl[0]);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public synchronized EventImpl getEvent(CreatorSeqPair pair) {
-		final EventImpl event = eventsByCreatorSeq.get(pair);
-		if (event == null) {
-			EventImpl lastEvent = lastConsEventByMember.get((int) pair.getCreatorId());
-			if (lastEvent != null && lastEvent.getSeq() == pair.getSeq()) {
-				return lastConsEventByMember.get((int) pair.getCreatorId());
-			}
-		}
-		return event;
+		return rounds.getAllEvents();
 	}
 
 	/**
@@ -895,7 +500,6 @@ public class ConsensusImpl implements Consensus {
 	public synchronized List<EventImpl> addEvent(EventImpl event, AddressBook addressBook) {
 		// all events that reached consensus because of a single addEvent call, in consensus order
 		//List<EventImpl> newConsensusEvents = new LinkedList<>();
-		addToEventsByCreator(event);
 
 		// fill in any event.* that can be calculated by looking only at self and parents
 		setFastVars(event);
@@ -905,8 +509,9 @@ public class ConsensusImpl implements Consensus {
 		RoundInfo roundInfo = setRoundCreated(event, stronglySeen);
 		statsSupplier.get().addedEvent(event);
 
-		//force it to memoize for this event now, to avoid deep recursion of stronglySeeP later.
+		//force it to memoize for this event now, to avoid deep recursion of these methods later
 		stronglySeeP(event, 0);
+		firstSelfWitnessS(event);
 
 		// set event.isWitness appropriately, and propagate consensus info
 		setIsWitness(event, roundInfo);
@@ -1090,11 +695,6 @@ public class ConsensusImpl implements Consensus {
 		roundInfo = new RoundInfo(round, addressBook.getSize());
 		rounds.put(round, roundInfo);
 
-		maxRound.set(Math.max(maxRound.get(), round));
-		minRound.set((minRound.get() == -1) ? round : Math.min(minRound.get(), round));
-
-		updateMinRoundGeneration();
-
 		// create elections in this round based on the previous one
 		RoundInfo oldRoundInfo = rounds.get(round - 1);
 		if (oldRoundInfo != null) { // if there is a previous round, use it 2 ways:
@@ -1260,22 +860,20 @@ public class ConsensusImpl implements Consensus {
 		// they'll all be instantly marked as not famous.
 		roundInfo.fameDecided = true;
 		long round = roundInfo.getRound();
-		while (fameDecidedBelow.get() == round && roundInfo.fameDecided) {
+		while (rounds.getFameDecidedBelow() == round && roundInfo.fameDecided) {
 			minGenConsumer.accept(round, roundInfo.getMinGeneration());
 			findReceivedInRound(roundInfo, newConsensusEvents);
 			round++;
-			fameDecidedBelow.set(
+			rounds.setFameDecidedBelow(
 					round); // all rounds before this round are now decided, and appropriate events marked consensus
 			statsSupplier.get().consensusReachedOnRound();
 			roundInfo = rounds.get(round);
 		}
 
-		updateMaxRoundGeneration();
-
 		delRounds(); // we could delete old rounds more often, but once per new decided round is enough
 
 		//now that a new round reached consensus, some events became ancient, so set the non-consensus ones to stale
-		for (long r = minRound.get(); r <= roundInfo.getRound(); r++) {
+		for (long r = rounds.getMinRound(); r <= roundInfo.getRound(); r++) {
 			RoundInfo info = rounds.get(r); // each element of rounds has its own lock
 			if (info != null) {
 				for (EventImpl e : info.allEvents) { // allEvents has its own lock
@@ -1340,9 +938,9 @@ public class ConsensusImpl implements Consensus {
 		// any event with generation less than minGenConsensus is ancient, and will be stale if not already consensus
 		long minGenConsensus = 0;
 		long staleRound = roundInfo.getRound() - Settings.state.roundsStale;
-		if (staleRound < minRound.get()) {
+		if (staleRound < rounds.getMinRound()) {
 			// this can happen after a restart when loading a state saved with the old code
-			staleRound = minRound.get();
+			staleRound = rounds.getMinRound();
 		}
 		if (staleRound >= 0) {
 			minGenConsensus = rounds.get(staleRound).getMinGeneration();
@@ -1488,7 +1086,7 @@ public class ConsensusImpl implements Consensus {
 	 */
 	private void delRounds() {
 		//delete rounds before minRoundNotExpired
-		long minRoundNotExpired = getLastRoundDecided() - Settings.state.roundsExpired;
+		long minRoundNotExpired = getFameDecidedBelow() - Settings.state.roundsExpired;
 		//events are expired if their generation is less than minGenNotExpired
 		long minGenNotExpired = -1;
 		RoundInfo expRound = rounds.get(minRoundNotExpired);
@@ -1496,11 +1094,11 @@ public class ConsensusImpl implements Consensus {
 			minGenNotExpired = expRound.getMinGeneration();
 		}
 
-		final long curMinRound = minRound.get();
+		final long curMinRound = rounds.getMinRound();
 		long newMinRound = curMinRound;
 
 		roundLoop:
-		for (long r = minRound.get(); r < minRoundNotExpired; r++) {
+		for (long r = rounds.getMinRound(); r < minRoundNotExpired; r++) {
 			RoundInfo info = rounds.get(r);
 			if (info != null) {
 				// we should not delete any round that has an event with a generation >= minGenNotExpired
@@ -1516,10 +1114,8 @@ public class ConsensusImpl implements Consensus {
 		}
 
 		if (newMinRound > curMinRound) {
-			minRound.set(newMinRound);
+			rounds.aboutToRemoveBelow(newMinRound);
 		}
-
-		updateMinRoundGeneration();
 
 		for (long r = curMinRound; r < newMinRound; r++) {
 			// at this point, every event in the round is expired, every witness has fame decided, no
@@ -1553,9 +1149,6 @@ public class ConsensusImpl implements Consensus {
 					log.debug(EXPIRE_EVENT.getMarker(),
 							"HG removing {}", e::toShortString);
 				}
-
-				// remove it from the record of all the events in the universe.
-				eventsByCreatorSeq.remove(new CreatorSeqPair(e.getCreatorId(), e.getCreatorSeq()));
 			}
 		}
 
@@ -1627,18 +1220,6 @@ public class ConsensusImpl implements Consensus {
 		if (last != null) {
 			last.setLastInRoundReceived(true);
 		}
-	}
-
-	/**
-	 * Record that the given event was created by the member who created it.
-	 *
-	 * @param evt
-	 * 		the event to record
-	 */
-	private void addToEventsByCreator(EventImpl evt) {
-		eventsByCreatorSeq.put(
-				new CreatorSeqPair(evt.getCreatorId(), evt.getCreatorSeq()),
-				evt);
 	}
 
 	/**

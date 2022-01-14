@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,20 +14,26 @@
 package com.swirlds.platform;
 
 import com.sun.management.OperatingSystemMXBean;
-import com.swirlds.common.NodeId;
 import com.swirlds.common.PlatformStatNames;
 import com.swirlds.common.StatEntry;
 import com.swirlds.common.Transaction;
 import com.swirlds.common.Units;
 import com.swirlds.common.internal.AbstractStatistics;
+import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.EventCounter;
 import com.swirlds.platform.observers.EventAddedObserver;
 import com.swirlds.platform.state.StateInfo;
+import com.swirlds.platform.stats.AverageAndMax;
+import com.swirlds.platform.stats.AverageStat;
 import com.swirlds.platform.stats.ConsensusStats;
 import com.swirlds.platform.stats.HashgraphStats;
+import com.swirlds.platform.stats.MaxStat;
 import com.swirlds.platform.stats.PlatformStatistics;
 import com.swirlds.platform.stats.SignedStateStats;
 import com.swirlds.platform.stats.SyncStats;
+import com.swirlds.platform.stats.TimeStat;
+import com.swirlds.platform.sync.SyncManager;
+import com.swirlds.platform.sync.SyncResult;
 import com.swirlds.platform.sync.SyncTiming;
 
 import java.io.File;
@@ -42,9 +48,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.DoubleAccumulator;
 
 import static com.swirlds.common.PlatformStatNames.SIGNED_STATE_HASHING_TIME;
 import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
@@ -167,18 +171,71 @@ public class Statistics extends AbstractStatistics implements
 	StatsRunningAverage avgReceivedConsensusTime;
 	/** time for a member, from knowing consensus to handling that consensus transaction */
 	StatsRunningAverage avgConsHandleTime;
-	/** the maximum sync time since the last write to file */
-	DoubleAccumulator maxSyncTimeSec = new DoubleAccumulator(Double::max, 0);
+	private final AverageStat knownSetSize = new AverageStat(
+			CATEGORY,
+			"knownSetSize",
+			"the average size of the known set during a sync",
+			FLOAT_FORMAT_10_3,
+			AverageStat.WEIGHT_VOLATILE
+	);
 	/** average wall clock time from start of a successful sync until it's done */
-	StatsRunningAverage avgSyncDuration;
+	private final TimeStat avgSyncDuration = new TimeStat(
+			ChronoUnit.SECONDS,
+			INTERNAL_CATEGORY,
+			"sec/sync",
+			"duration of average successful sync (in seconds)"
+	);
+
 	/** average wall clock time for step 1 of a successful sync */
-	StatsRunningAverage avgSyncDuration1;
+	private final TimeStat avgSyncDuration1 = new TimeStat(
+			ChronoUnit.SECONDS,
+			INTERNAL_CATEGORY,
+			"sec/sync1",
+			"duration of step 1 of average successful sync (in seconds)"
+	);
 	/** average wall clock time for step 2 of a successful sync */
-	StatsRunningAverage avgSyncDuration2;
+	private final TimeStat avgSyncDuration2 = new TimeStat(
+			ChronoUnit.SECONDS,
+			INTERNAL_CATEGORY,
+			"sec/sync2",
+			"duration of step 2 of average successful sync (in seconds)"
+	);
 	/** average wall clock time for step 3 of a successful sync */
-	StatsRunningAverage avgSyncDuration3;
+	private final TimeStat avgSyncDuration3 = new TimeStat(
+			ChronoUnit.SECONDS,
+			INTERNAL_CATEGORY,
+			"sec/sync3",
+			"duration of step 3 of average successful sync (in seconds)"
+	);
 	/** average wall clock time for step 4 of a successful sync */
-	StatsRunningAverage avgSyncDuration4;
+	private final TimeStat avgSyncDuration4 = new TimeStat(
+			ChronoUnit.SECONDS,
+			INTERNAL_CATEGORY,
+			"sec/sync4",
+			"duration of step 4 of average successful sync (in seconds)"
+	);
+	/** average wall clock time for step 5 of a successful sync */
+	private final TimeStat avgSyncDuration5 = new TimeStat(
+			ChronoUnit.SECONDS,
+			INTERNAL_CATEGORY,
+			"sec/sync5",
+			"duration of step 5 of average successful sync (in seconds)"
+	);
+	private final AverageStat syncGenerationDiff = new AverageStat(
+			INTERNAL_CATEGORY,
+			"syncGenDiff",
+			"number of generation ahead (positive) or behind (negative) when syncing",
+			FLOAT_FORMAT_8_1,
+			AverageStat.WEIGHT_VOLATILE
+	);
+	private final AverageStat eventRecRate = new AverageStat(
+			INTERNAL_CATEGORY,
+			"eventRecRate",
+			"the rate at which we receive and enqueue events in ev/sec",
+			FLOAT_FORMAT_8_1,
+			AverageStat.WEIGHT_VOLATILE
+	);
+
 	/** average time (in seconds) to send a byte and get a reply, for each member (holds 0 for self) */
 	public StatsRunningAverage[] avgPingMilliseconds;
 	/** average bytes per second received during a sync with each member (holds 0 for self) */
@@ -240,7 +297,7 @@ public class Statistics extends AbstractStatistics implements
 	/** average time it takes to create a new SignedState (in seconds) */
 	StatsRunningAverage avgSecNewSignedState;
 
-	/** boolean result of function {@link SyncManager#shouldCreateEvent(NodeId, boolean, int, int)} */
+	/** boolean result of function {@link SyncManager#shouldCreateEvent(SyncResult)} */
 	StatsRunningAverage shouldCreateEvent;
 
 	/** number of coin rounds that have occurred so far */
@@ -255,8 +312,6 @@ public class Statistics extends AbstractStatistics implements
 	StatsRunningAverage avgPing;
 	/** number of connections created (both calling and listening) */
 	StatsRunningAverage avgConnsCreated;
-	/** number of discarded events requested during syncs */
-	StatsRunningAverage avgDiscEvReq;
 	/** bytes of free memory (which can increase after a garbage collection) */
 	StatsRunningAverage memFree;
 	/** total bytes in the Java Virtual Machine */
@@ -300,9 +355,26 @@ public class Statistics extends AbstractStatistics implements
 	/** latest round with signed state by a supermajority */
 	StatsRunningAverage avgRoundSupermajority;
 	/** number of events sent per successful sync */
-	StatsRunningAverage avgEventsPerSyncSent;
+	private final AverageAndMax avgEventsPerSyncSent = new AverageAndMax(
+			CATEGORY,
+			"ev/syncS",
+			"number of events sent per successful sync",
+			FLOAT_FORMAT_8_1
+	);
 	/** number of events received per successful sync */
-	StatsRunningAverage avgEventsPerSyncRec;
+	private final AverageAndMax avgEventsPerSyncRec = new AverageAndMax(
+			CATEGORY,
+			"ev/syncR",
+			"number of events received per successful sync",
+			FLOAT_FORMAT_8_1
+	);
+	private final AverageStat averageOtherParentAgeDiff = new AverageStat(
+			CATEGORY,
+			"opAgeDiff",
+			"average age difference (in generations) between an event created by this node and its other parent",
+			FLOAT_FORMAT_5_3,
+			AverageStat.WEIGHT_VOLATILE
+	);
 	/** INTERNAL: total number of events in memory, for all members on the local machine together */
 	StatsRunningAverage avgEventsInMem;
 	/** running average of the number of signatures collected on each signed state */
@@ -316,11 +388,34 @@ public class Statistics extends AbstractStatistics implements
 	StatsSpeedometer rescuedEventsPerSecond;
 
 	/** The number of creators that have more than one tip at the start of each sync. */
-	private StatsSpeedometer multiTipsPerSync;
+	private final MaxStat multiTipsPerSync = new MaxStat(
+			CATEGORY,
+			PlatformStatNames.MULTI_TIPS_PER_SYNC,
+			"the number of creators that have more than one tip at the start of each sync",
+			INTEGER_FORMAT_5
+	);
 	/** The average number of tips per sync at the start of each sync. */
 	private StatsRunningAverage tipsPerSync;
-	/** The number of calls to the multiTip absorption logic per second. */
-	private StatsSpeedometer tipAbsorptionOpsPerSec;
+
+	/** The average number of generations that should be expired but cannot because of reservations. */
+	private final AverageStat gensWaitingForExpiry = new AverageStat(
+			CATEGORY,
+			PlatformStatNames.GENS_WAITING_FOR_EXPIRY,
+			"the average number of generations waiting to be expired",
+			FLOAT_FORMAT_5_3,
+			AverageStat.WEIGHT_VOLATILE
+	);
+
+	/**
+	 * The ratio of rejected syncs to accepted syncs over time.
+	 */
+	private final AverageStat rejectedSyncRatio = new AverageStat(
+			INTERNAL_CATEGORY,
+			PlatformStatNames.REJECTED_SYNC_RATIO,
+			"the averaged ratio of rejected syncs to accepted syncs over time",
+			FLOAT_FORMAT_1_3,
+			AverageStat.WEIGHT_VOLATILE
+	);
 
 	/**
 	 * average time spent in
@@ -383,18 +478,19 @@ public class Statistics extends AbstractStatistics implements
 	 * avg time taken to delete a signed state (in microseconds)
 	 */
 	StatsRunningAverage stateDeletionTimeAvg;
-	/** total number of times writeUnknownEvents needed to send an event that was already discarded */
-	private final AtomicInteger discardedEventsRequested = new AtomicInteger(0);
-
 
 	File rootDirectory = new File("/");
 	long freeDiskspace = rootDirectory.getFreeSpace();
 	long totalDiskspace = rootDirectory.getTotalSpace();
 
+	private static final String INTEGER_FORMAT_5 = "%5d";
 	private static final String FLOAT_FORMAT_10_3 = "%,10.3f";
 	private static final String FLOAT_FORMAT_13_0 = "%,13.0f";
 	private static final String FLOAT_FORMAT_15_3 = "%,15.3f";
 	private static final String FLOAT_FORMAT_16_2 = "%,16.2f";
+	private static final String FLOAT_FORMAT_8_1 = "%,8.1f";
+	private static final String FLOAT_FORMAT_1_3 = "%,1.3f";
+	private static final String FLOAT_FORMAT_5_3 = "%,5.3f";
 
 	/** once a second, update all the statistics that aren't updated by any other class */
 	@Override
@@ -455,7 +551,6 @@ public class Statistics extends AbstractStatistics implements
 					);
 					avgConnsCreated.recordValue(
 							platform.getSyncServer().connsCreated.get());
-					avgDiscEvReq.recordValue(discardedEventsRequested.get());
 				}
 				freeDiskspace = rootDirectory.getFreeSpace();
 			}
@@ -544,20 +639,6 @@ public class Statistics extends AbstractStatistics implements
 	}
 
 	/**
-	 * Returns the bytes per second received from each member during a sync. This is an
-	 * exponentially-weighted average of recent throughput measurements. Throughput is the total number of
-	 * bytes received during a sync, divided by the total time of the sync.
-	 * <p>
-	 * This is an exponentially-weighted average of recent measurements. The caller must NOT modify the
-	 * array, nor call methods to modify the objects in it.
-	 *
-	 * @return the object for bytes per second for each member (null for self)
-	 */
-	StatsSpeedometer[] getBytePerSecs() {
-		return avgBytePerSecSent;
-	}
-
-	/**
 	 * return an array of info about all the statistics
 	 *
 	 * @return the array of StatEntry elements for every statistic managed by this class
@@ -634,76 +715,6 @@ public class Statistics extends AbstractStatistics implements
 						},//
 						null,//
 						() -> avgConsHandleTime.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"maxSyncTimeSec",//
-						"the maximum sync time since the last write to file",//
-						FLOAT_FORMAT_10_3,//
-						null,//
-						null,//
-						(h) -> maxSyncTimeSec.reset(),//
-						() -> maxSyncTimeSec.get(),
-						() -> maxSyncTimeSec.getThenReset()),//
-				new StatEntry(//
-						CATEGORY,//
-						"sec/sync",//
-						"duration of average successful sync (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgSyncDuration,//
-						(h) -> {
-							avgSyncDuration = new StatsRunningAverage(h);
-							return avgSyncDuration;
-						},//
-						null,//
-						() -> avgSyncDuration.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"sec/sync1",//
-						"duration of step 1 of average successful sync (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgSyncDuration1,//
-						(h) -> {
-							avgSyncDuration1 = new StatsRunningAverage(h);
-							return avgSyncDuration1;
-						},//
-						null,//
-						() -> avgSyncDuration1.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"sec/sync2",//
-						"duration of step 2 of average successful sync (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgSyncDuration2,//
-						(h) -> {
-							avgSyncDuration2 = new StatsRunningAverage(h);
-							return avgSyncDuration2;
-						},//
-						null,//
-						() -> avgSyncDuration2.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"sec/sync3",//
-						"duration of step 3 of average successful sync (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgSyncDuration3,//
-						(h) -> {
-							avgSyncDuration3 = new StatsRunningAverage(h);
-							return avgSyncDuration3;
-						},//
-						null,//
-						() -> avgSyncDuration3.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"sec/sync4",//
-						"duration of step 4 of average successful sync (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgSyncDuration4,//
-						(h) -> {
-							avgSyncDuration4 = new StatsRunningAverage(h);
-							return avgSyncDuration4;
-						},//
-						null,//
-						() -> avgSyncDuration4.getWeightedMean()),//
 				new StatEntry(//
 						CATEGORY,//
 						"rounds/sec",//
@@ -1213,30 +1224,6 @@ public class Statistics extends AbstractStatistics implements
 						null,//
 						() -> avgRoundSupermajority.getWeightedMean()),//
 				new StatEntry(//
-						CATEGORY,//
-						"ev/syncS",//
-						"number of events sent per successful sync",//
-						"%,8.1f",//
-						avgEventsPerSyncSent,//
-						(h) -> {
-							avgEventsPerSyncSent = new StatsRunningAverage(h);
-							return avgEventsPerSyncSent;
-						},//
-						null,//
-						() -> avgEventsPerSyncSent.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"ev/syncR",//
-						"number of events received per successful sync",//
-						"%,8.1f",//
-						avgEventsPerSyncRec,//
-						(h) -> {
-							avgEventsPerSyncRec = new StatsRunningAverage(h);
-							return avgEventsPerSyncRec;
-						},//
-						null,//
-						() -> avgEventsPerSyncRec.getWeightedMean()),//
-				new StatEntry(//
 						INTERNAL_CATEGORY,//
 						"secSC2T",//
 						"self event consensus timestamp minus time created (in seconds)",//
@@ -1322,18 +1309,6 @@ public class Statistics extends AbstractStatistics implements
 						},// no smoothing
 						(h) -> avgConnsCreated.reset(0),// zero lambda for no smoothing
 						() -> avgConnsCreated.getWeightedMean()),
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"discEvReq",//
-						"number of old discarded events requested during sync",//
-						"%,10.0f",//
-						avgDiscEvReq,//
-						(h) -> {
-							avgDiscEvReq = new StatsRunningAverage(0);
-							return avgDiscEvReq;
-						},// no smoothing
-						(h) -> avgDiscEvReq.reset(0),// zero lambda for no smoothing
-						() -> avgDiscEvReq.getWeightedMean()),
 				new StatEntry(//
 						INFO_CATEGORY,//
 						"TLS",//
@@ -1577,26 +1552,6 @@ public class Statistics extends AbstractStatistics implements
 						null,//
 						() -> platform.getSyncManager() == null ? 0 :
 								platform.getSyncManager().transThrottleCallAndCreate()),//
-
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"shouldAcceptSync",//
-						"shouldAcceptSync",//
-						"%b",//
-						null,//
-						null,//
-						null,//
-						() -> platform.getSyncManager() == null ? 0 : platform.getSyncManager().shouldAcceptSync()),//
-
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"shouldInitiateSync",//
-						"shouldInitiateSync",//
-						"%b",//
-						null,//
-						null,//
-						null,//
-						() -> platform.getSyncManager() == null ? 0 : platform.getSyncManager().shouldInitiateSync()),//
 
 				new StatEntry(//
 						INTERNAL_CATEGORY,//
@@ -1879,18 +1834,6 @@ public class Statistics extends AbstractStatistics implements
 						() -> stateDeletionTimeAvg.getWeightedMean()),
 				new StatEntry(//
 						INTERNAL_CATEGORY,//
-						PlatformStatNames.MULTI_TIPS_PER_SYNC,//
-						"the number of creators that have more than one tip at the start of each sync",//
-						FLOAT_FORMAT_15_3,//
-						multiTipsPerSync,//
-						h -> {
-							multiTipsPerSync = new StatsSpeedometer(h);
-							return multiTipsPerSync;
-						},//
-						null,//
-						() -> multiTipsPerSync.getCyclesPerSecond()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
 						PlatformStatNames.TIPS_PER_SYNC,//
 						"the average number of tips per sync at the start of each sync",//
 						FLOAT_FORMAT_15_3,//
@@ -1901,18 +1844,6 @@ public class Statistics extends AbstractStatistics implements
 						},//
 						null,//
 						() -> tipsPerSync.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						PlatformStatNames.SYNC_PHASE_3_CALLS_PER_SEC,//
-						"tipAbsorptionOps",//
-						FLOAT_FORMAT_15_3,//
-						tipAbsorptionOpsPerSec,//
-						h -> {
-							tipAbsorptionOpsPerSec = new StatsSpeedometer(h);
-							return tipAbsorptionOpsPerSec;
-						},//
-						null,//
-						() -> tipAbsorptionOpsPerSec.getCyclesPerSecond()),//
 		};
 		final List<StatEntry> entryList = new ArrayList<>(Arrays.asList(statEntries));
 
@@ -1922,6 +1853,23 @@ public class Statistics extends AbstractStatistics implements
 				"Size of SignedState.swh, bytes"));
 		entryList.add(this.savedFileStatistics.createStatForTrackingFileSize("PostgresBackup.tar.gz",
 				"Size of PostgresDB, bytes"));
+
+		// atomic stats
+		entryList.addAll(avgEventsPerSyncSent.getAllEntries());
+		entryList.addAll(avgEventsPerSyncRec.getAllEntries());
+		entryList.addAll(avgSyncDuration.getAllEntries());
+		entryList.add(avgSyncDuration1.getAverageStat());
+		entryList.add(avgSyncDuration2.getAverageStat());
+		entryList.add(avgSyncDuration3.getAverageStat());
+		entryList.add(avgSyncDuration4.getAverageStat());
+		entryList.add(avgSyncDuration5.getAverageStat());
+		entryList.add(syncGenerationDiff.getStatEntry());
+		entryList.add(eventRecRate.getStatEntry());
+		entryList.add(rejectedSyncRatio.getStatEntry());
+		entryList.add(averageOtherParentAgeDiff.getStatEntry());
+		entryList.add(gensWaitingForExpiry.getStatEntry());
+		entryList.add(knownSetSize.getStatEntry());
+		entryList.add(multiTipsPerSync.getStatEntry());
 
 		for (int i = 0; i < avgPingMilliseconds.length; i++) {
 			final int ii = i; //make the current value of i into a constant inside each lambda generated here
@@ -2133,6 +2081,9 @@ public class Statistics extends AbstractStatistics implements
 	public void eventAdded(final EventImpl event) {
 		if (event.isCreatedBy(platform.getSelfId())) {
 			eventsCreatedPerSecond.cycle();
+			if (event.getBaseEventHashedData().hasOtherParent()) {
+				averageOtherParentAgeDiff.update(event.getGeneration() - event.getOtherParentGen());
+			}
 		}
 
 		// count the unique events in the hashgraph
@@ -2226,8 +2177,16 @@ public class Statistics extends AbstractStatistics implements
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void updateTipAbsorptionOpsPerSec() {
-		tipAbsorptionOpsPerSec.cycle();
+	public void updateGensWaitingForExpiry(final long numGenerations) {
+		gensWaitingForExpiry.update(numGenerations);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void updateRejectedSyncRatio(final boolean syncRejected) {
+		rejectedSyncRatio.update(syncRejected);
 	}
 
 	public ReconnectStatistics getReconnectStats() {
@@ -2235,8 +2194,18 @@ public class Statistics extends AbstractStatistics implements
 	}
 
 	@Override
-	public void syncEventsWritten(final int eventsWritten) {
-		avgEventsPerSyncSent.recordValue(eventsWritten);
+	public void generations(GraphGenerations self, GraphGenerations other) {
+		syncGenerationDiff.update(self.getMaxRoundGeneration() - other.getMaxRoundGeneration());
+	}
+
+	@Override
+	public void eventsReceived(long nanosStart, int numberReceived) {
+		if (numberReceived == 0) {
+			return;
+		}
+		final double nanos = ((double) System.nanoTime()) - nanosStart;
+		final double seconds = nanos / ChronoUnit.SECONDS.getDuration().toNanos();
+		eventRecRate.update(Math.round(numberReceived / seconds));
 	}
 
 	@Override
@@ -2246,27 +2215,15 @@ public class Statistics extends AbstractStatistics implements
 	}
 
 	@Override
-	public void syncEventsRead(final int eventsRead) {
-		avgEventsPerSyncRec.recordValue(eventsRead);
-	}
-
-	@Override
 	public void recordSyncTiming(final SyncTiming timing, final SyncConnection conn) {
-		avgSyncDuration1.recordValue(timing.getPointDiff(1, 0) * Units.NANOSECONDS_TO_SECONDS);
-		avgSyncDuration2.recordValue(timing.getPointDiff(2, 1) * Units.NANOSECONDS_TO_SECONDS);
-		avgSyncDuration3.recordValue(timing.getPointDiff(3, 2) * Units.NANOSECONDS_TO_SECONDS);
-		avgSyncDuration4.recordValue(timing.getPointDiff(4, 3) * Units.NANOSECONDS_TO_SECONDS);
+		avgSyncDuration1.update(timing.getTimePoint(0), timing.getTimePoint(1));
+		avgSyncDuration2.update(timing.getTimePoint(1), timing.getTimePoint(2));
+		avgSyncDuration3.update(timing.getTimePoint(2), timing.getTimePoint(3));
+		avgSyncDuration4.update(timing.getTimePoint(3), timing.getTimePoint(4));
+		avgSyncDuration5.update(timing.getTimePoint(4), timing.getTimePoint(5));
 
-		// SyncConnection.disconnect sets the stream references to null, so if the connection has been
-		// closed before this line executes, we can not get the byte counts. This is (part of) the subject of
-		// issue #3197.
-		if (!conn.connected()) {
-			return;
-		}
-
+		avgSyncDuration.update(timing.getTimePoint(0), timing.getTimePoint(5));
 		final double syncDurationSec = timing.getPointDiff(5, 0) * Units.NANOSECONDS_TO_SECONDS;
-		avgSyncDuration.recordValue(syncDurationSec);
-		maxSyncTimeSec.accumulate(syncDurationSec);
 		final double speed =
 				Math.max(conn.getDis().getSyncByteCounter().getCount(), conn.getDos().getSyncByteCounter().getCount())
 						/ syncDurationSec;
@@ -2276,21 +2233,23 @@ public class Statistics extends AbstractStatistics implements
 	}
 
 	@Override
-	public void syncDone(boolean caller) {
-		if (caller) {
+	public void knownSetSize(final int knownSetSize) {
+		this.knownSetSize.update(knownSetSize);
+	}
+
+	@Override
+	public void syncDone(final SyncResult info) {
+		if (info.isCaller()) {
 			callSyncsPerSecond.cycle();
 		} else {
 			recSyncsPerSecond.cycle();
 		}
+		avgEventsPerSyncSent.update(info.getEventsWritten());
+		avgEventsPerSyncRec.update(info.getEventsRead());
 	}
 
 	@Override
 	public void eventCreation(boolean shouldCreateEvent) {
 		this.shouldCreateEvent.recordValue(shouldCreateEvent ? 1 : 0);
-	}
-
-	@Override
-	public void nodeFallenBehind() {
-		discardedEventsRequested.incrementAndGet();
 	}
 }

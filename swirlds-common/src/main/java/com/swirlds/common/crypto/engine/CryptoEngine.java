@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -35,8 +35,7 @@ import com.swirlds.common.merkle.hash.MerkleHashBuilder;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.Marker;
-import org.apache.logging.log4j.MarkerManager;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.jocl.CLException;
 import org.jocl.Pointer;
 import org.jocl.Sizeof;
@@ -45,6 +44,7 @@ import org.jocl.cl_platform_id;
 
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
+import java.security.Security;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -70,59 +70,9 @@ import static org.jocl.CL.setExceptionsEnabled;
 public class CryptoEngine extends AbstractCryptography implements Cryptography {
 
 	/**
-	 * logs exceptions thrown by the OpenCL API
-	 */
-	public static final Marker LOGM_OPENCL_INIT_EXCEPTIONS = MarkerManager.getMarker(
-			LogMarker.OPENCL_INIT_EXCEPTIONS.name());
-
-	/**
-	 * log all exceptions, and serious problems. These should never happen unless we are either receiving packets from
-	 * an attacker, or there is a bug in the code. In most cases, this should include a full stack trace of the
-	 * exception.
-	 */
-	public static final Marker LOGM_EXCEPTION = MarkerManager.getMarker(LogMarker.EXCEPTION.name());
-
-	/**
-	 * exceptions that shouldn't happen during testing, but can happen in production if there is a malicious
-	 * node. This should be turned off in production so that a malicious node cannot clutter the logs
-	 */
-	public static final Marker LOGM_TESTING_EXCEPTIONS = MarkerManager
-			.getMarker(LogMarker.TESTING_EXCEPTIONS.name());
-
-	/**
-	 * logs events related to the startup of the application
-	 */
-	public static final Marker LOGM_STARTUP = MarkerManager.getMarker(LogMarker.STARTUP.name());
-
-	/**
-	 * logs events related to the startup of the application
-	 */
-	public static final Marker LOGM_ADV_CRYPTO_SYSTEM = MarkerManager.getMarker(LogMarker.ADV_CRYPTO_SYSTEM.name());
-
-	/**
 	 * use this for all logging, as controlled by the optional data/log4j2.xml file
 	 */
 	private static final Logger log = LogManager.getLogger(CryptoEngine.class);
-
-	/**
-	 * the intake dispatcher instance that handles asynchronous signature verification
-	 */
-	private volatile IntakeDispatcher<TransactionSignature, VerificationProvider, AsyncVerificationHandler> verificationDispatcher;
-
-	/**
-	 * the intake dispatcher instance that handles asynchronous message digests
-	 */
-	private volatile IntakeDispatcher<Message, DigestProvider, AsyncDigestHandler> digestDispatcher;
-
-	/**
-	 * the {@link ConcurrentLinkedQueue} instance of {@link TransactionSignature} waiting for verification
-	 */
-	private volatile BlockingQueue<List<TransactionSignature>> verificationQueue;
-
-	/**
-	 * the {@link ConcurrentLinkedQueue} instance of {@link Message} pending message digest computation
-	 */
-	private volatile BlockingQueue<List<Message>> digestQueue;
 
 	/**
 	 * The digest provider instance that is used to generate hashes of SelfSerializable objects.
@@ -152,12 +102,44 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	/**
 	 * The verification provider used to perform signature verification of {@link TransactionSignature} instances.
 	 */
-	private final VerificationProvider verificationProvider;
+	private final Ed25519VerificationProvider ed25519VerificationProvider;
+
+	/**
+	 * The verification provider used to perform signature verification of {@link TransactionSignature} instances.
+	 */
+	private final EcdsaSecp256k1VerificationProvider ecdsaSecp256k1VerificationProvider;
+
+	/**
+	 * The verification provider used to delegate signature verification of {@link TransactionSignature} instances
+	 * to either the {@code ed25519VerificationProvider} or {@code ecdsaSecp256k1VerificationProvider} as apropos.
+	 */
+	private final DelegatingVerificationProvider delegatingVerificationProvider;
 
 	/**
 	 * the total number of available physical processors and physical processor cores
 	 */
 	private final int availableCpuCount;
+
+	/**
+	 * The intake dispatcher instance that handles asynchronous signature verification
+	 */
+	private volatile IntakeDispatcher<TransactionSignature, DelegatingVerificationProvider,
+			AsyncVerificationHandler> verificationDispatcher;
+
+	/**
+	 * the intake dispatcher instance that handles asynchronous message digests
+	 */
+	private volatile IntakeDispatcher<Message, DigestProvider, AsyncDigestHandler> digestDispatcher;
+
+	/**
+	 * the {@link ConcurrentLinkedQueue} instance of {@link TransactionSignature} waiting for verification
+	 */
+	private volatile BlockingQueue<List<TransactionSignature>> verificationQueue;
+
+	/**
+	 * the {@link ConcurrentLinkedQueue} instance of {@link Message} pending message digest computation
+	 */
+	private volatile BlockingQueue<List<Message>> digestQueue;
 
 	/**
 	 * the current configuration settings
@@ -183,6 +165,10 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 		this(CryptographySettings.getDefaultSettings());
 	}
 
+	static {
+		Security.addProvider(new BouncyCastleProvider());
+	}
+
 	/**
 	 * Constructs a new {@link CryptoEngine} using the provided settings.
 	 *
@@ -193,7 +179,12 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 		this.settings = settings;
 		this.availableCpuCount = Runtime.getRuntime().availableProcessors();
 		this.digestProvider = new DigestProvider();
-		this.verificationProvider = new VerificationProvider();
+
+		this.ed25519VerificationProvider = new Ed25519VerificationProvider();
+		this.ecdsaSecp256k1VerificationProvider = new EcdsaSecp256k1VerificationProvider();
+		this.delegatingVerificationProvider = new DelegatingVerificationProvider(
+				ed25519VerificationProvider, ecdsaSecp256k1VerificationProvider);
+
 		this.serializationDigestProvider = new SerializationDigestProvider();
 		this.merkleInternalDigestProvider = new MerkleInternalDigestProvider();
 		this.runningHashProvider = new RunningHashProvider();
@@ -204,6 +195,114 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 		}
 		applySettings();
 		buildNullHashes();
+	}
+
+	/**
+	 * Supplier implementation for {@link AsyncVerificationHandler} used by the {@link #CryptoEngine()} constructor.
+	 *
+	 * @param provider
+	 * 		the required {@link OperationProvider} to be used while performing the cryptographic transformations
+	 * @param workItems
+	 * 		the {@link List} of items to be processed by the created {@link AsyncOperationHandler} implementation
+	 * @return an {@link AsyncOperationHandler} implementation
+	 */
+	private static AsyncVerificationHandler verificationHandler(
+			final OperationProvider<TransactionSignature, Void, Boolean, ?, SignatureType> provider,
+			final List<TransactionSignature> workItems) {
+		return new AsyncVerificationHandler(workItems, provider);
+	}
+
+	/**
+	 * Efficiently builds a {@link TransactionSignature} instance from the supplied components.
+	 *
+	 * @param data
+	 * 		the original contents that the signature should be verified against
+	 * @param signature
+	 * 		the signature to be verified
+	 * @param publicKey
+	 * 		the public key required to validate the signature
+	 * @param signatureType
+	 * 		the type of signature to be verified
+	 * @return a {@link TransactionSignature} containing the provided components
+	 */
+	private static TransactionSignature wrap(final byte[] data, final byte[] signature, final byte[] publicKey,
+			final SignatureType signatureType) {
+		if (data == null || data.length == 0) {
+			throw new IllegalArgumentException("data");
+		}
+
+		if (signature == null || signature.length == 0) {
+			throw new IllegalArgumentException("signature");
+		}
+
+		if (publicKey == null || publicKey.length == 0) {
+			throw new IllegalArgumentException("publicKey");
+		}
+
+		final ByteBuffer buffer = ByteBuffer.allocate(data.length + signature.length + publicKey.length);
+		final int sigOffset = data.length;
+		final int pkOffset = sigOffset + signature.length;
+
+		buffer.put(data).put(signature).put(publicKey);
+
+		return new TransactionSignature(buffer.array(), sigOffset, signature.length, pkOffset,
+				publicKey.length, 0, data.length, signatureType);
+	}
+
+	/**
+	 * Common private utility method for performing synchronous digest computations.
+	 *
+	 * @param message
+	 * 		the message contents to be hashed
+	 * @param provider
+	 * 		the underlying provider to be used
+	 * @param future
+	 * 		the {@link Future} to be associated with the {@link Message}
+	 * @return the cryptographic hash for the given message contents
+	 */
+	private static Hash digestSyncInternal(final Message message, final DigestProvider provider,
+			final WaitingFuture<Void> future) {
+		final Hash hash;
+
+		try {
+			hash = provider.compute(message, message.getDigestType());
+			message.setHash(hash);
+		} catch (final NoSuchAlgorithmException ex) {
+			message.setFuture(future);
+			throw new CryptographyException(ex, LogMarker.EXCEPTION);
+		}
+
+		message.setFuture(future);
+
+		return hash;
+	}
+
+	/**
+	 * Common private utility method for performing synchronous signature verification.
+	 *
+	 * @param signature
+	 * 		the signature to be verified
+	 * @param provider
+	 * 		the underlying provider to be used
+	 * @param future
+	 * 		the {@link Future} to be associated with the {@link TransactionSignature}
+	 * @return true if the signature is valid; otherwise false
+	 */
+	private static boolean verifySyncInternal(final TransactionSignature signature,
+			final OperationProvider<TransactionSignature, Void, Boolean, ?, SignatureType> provider,
+			final WaitingFuture<Void> future) {
+		final boolean isValid;
+
+		try {
+			isValid = provider.compute(signature, signature.getSignatureType());
+			signature.setSignatureStatus(isValid ? VerificationStatus.VALID : VerificationStatus.INVALID);
+			signature.setFuture(future);
+		} catch (final NoSuchAlgorithmException ex) {
+			signature.setFuture(future);
+			throw new CryptographyException(ex, LogMarker.EXCEPTION);
+		}
+
+		return isValid;
 	}
 
 	/**
@@ -253,7 +352,6 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 		return availableCpuCount;
 	}
 
-
 	/**
 	 * {@inheritDoc}
 	 */
@@ -261,7 +359,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	public void digestAsync(final Message message) {
 		try {
 			digestQueue.put(Collections.singletonList(message));
-		} catch (InterruptedException ex) {
+		} catch (final InterruptedException ex) {
 			Thread.currentThread().interrupt();
 		}
 	}
@@ -273,7 +371,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	public void digestAsync(final List<Message> messages) {
 		try {
 			digestQueue.put(messages);
-		} catch (InterruptedException ex) {
+		} catch (final InterruptedException ex) {
 			Thread.currentThread().interrupt();
 		}
 	}
@@ -290,12 +388,12 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 			return new WrappingLambdaFuture<>(() -> {
 				try {
 					return wrappedMessage.waitForFuture();
-				} catch (InterruptedException ex) {
+				} catch (final InterruptedException ex) {
 					Thread.currentThread().interrupt();
 					return null;
 				}
 			}, wrappedMessage::getHash);
-		} catch (InterruptedException ex) {
+		} catch (final InterruptedException ex) {
 			Thread.currentThread().interrupt();
 			throw new CryptographyException(ex, LogMarker.TESTING_EXCEPTIONS);
 		}
@@ -321,7 +419,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 		final WaitingFuture<Void> future = new WaitingFuture<>();
 		future.done(null);
 
-		for (Message message : messages) {
+		for (final Message message : messages) {
 			digestSyncInternal(message, digestProvider, future);
 		}
 	}
@@ -338,10 +436,10 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Hash digestSync(SelfSerializable serializable, DigestType digestType) {
+	public Hash digestSync(final SelfSerializable serializable, final DigestType digestType) {
 		try {
 			return serializationDigestProvider.compute(serializable, digestType);
-		} catch (NoSuchAlgorithmException ex) {
+		} catch (final NoSuchAlgorithmException ex) {
 			throw new CryptographyException(ex, LogMarker.EXCEPTION);
 		}
 	}
@@ -350,14 +448,14 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Hash digestSync(SerializableHashable serializableHashable, DigestType digestType, boolean setHash) {
+	public Hash digestSync(final SerializableHashable serializableHashable, final DigestType digestType, final boolean setHash) {
 		try {
 			final Hash hash = serializationDigestProvider.compute(serializableHashable, digestType);
 			if (setHash) {
 				serializableHashable.setHash(hash);
 			}
 			return hash;
-		} catch (NoSuchAlgorithmException ex) {
+		} catch (final NoSuchAlgorithmException ex) {
 			throw new CryptographyException(ex, LogMarker.EXCEPTION);
 		}
 	}
@@ -366,7 +464,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Hash digestTreeSync(MerkleNode root, DigestType digestType) {
+	public Hash digestTreeSync(final MerkleNode root, final DigestType digestType) {
 		return merkleHashBuilder.digestTreeSync(root);
 	}
 
@@ -374,7 +472,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public FutureMerkleHash digestTreeAsync(MerkleNode root, DigestType digestType) {
+	public FutureMerkleHash digestTreeAsync(final MerkleNode root, final DigestType digestType) {
 		return merkleHashBuilder.digestTreeAsync(root);
 	}
 
@@ -383,8 +481,8 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 */
 	private void buildNullHashes() {
 		nullHashes = new HashMap<>();
-		for (DigestType digestType : DigestType.values()) {
-			HashBuilder hb = new HashBuilder(digestType);
+		for (final DigestType digestType : DigestType.values()) {
+			final HashBuilder hb = new HashBuilder(digestType);
 			nullHashes.put(digestType, hb.build());
 		}
 	}
@@ -393,7 +491,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Hash getNullHash(DigestType digestType) {
+	public Hash getNullHash(final DigestType digestType) {
 		return nullHashes.get(digestType);
 	}
 
@@ -401,14 +499,14 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Hash digestSync(MerkleInternal node, List<Hash> childHashes, boolean setHash) {
+	public Hash digestSync(final MerkleInternal node, final List<Hash> childHashes, final boolean setHash) {
 		try {
 			final Hash hash = merkleInternalDigestProvider.compute(node, childHashes, MERKLE_DIGEST_TYPE);
 			if (setHash) {
 				node.setHash(hash);
 			}
 			return hash;
-		} catch (NoSuchAlgorithmException e) {
+		} catch (final NoSuchAlgorithmException e) {
 			throw new CryptographyException(e, LogMarker.EXCEPTION);
 		}
 	}
@@ -420,7 +518,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	public void verifyAsync(final TransactionSignature signature) {
 		try {
 			verificationQueue.put(Collections.singletonList(signature));
-		} catch (InterruptedException ex) {
+		} catch (final InterruptedException ex) {
 			Thread.currentThread().interrupt();
 		}
 	}
@@ -432,7 +530,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	public void verifyAsync(final List<TransactionSignature> signatures) {
 		try {
 			verificationQueue.put(signatures);
-		} catch (InterruptedException ex) {
+		} catch (final InterruptedException ex) {
 			Thread.currentThread().interrupt();
 		}
 	}
@@ -443,21 +541,19 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	@Override
 	public Future<Boolean> verifyAsync(final byte[] data, final byte[] signature, final byte[] publicKey,
 			final SignatureType signatureType) {
-
 		final TransactionSignature wrappedSignature = wrap(data, signature, publicKey, signatureType);
-
 		try {
 			verificationQueue.put(Collections.singletonList(wrappedSignature));
 
 			return new WrappingLambdaFuture<>(() -> {
 				try {
 					return wrappedSignature.waitForFuture();
-				} catch (InterruptedException ex) {
+				} catch (final InterruptedException ex) {
 					Thread.currentThread().interrupt();
 					return null;
 				}
 			}, () -> wrappedSignature.getSignatureStatus() == VerificationStatus.VALID);
-		} catch (InterruptedException ex) {
+		} catch (final InterruptedException ex) {
 			Thread.currentThread().interrupt();
 			throw new CryptographyException(ex, LogMarker.TESTING_EXCEPTIONS);
 		}
@@ -470,8 +566,11 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	public boolean verifySync(final TransactionSignature signature) {
 		final WaitingFuture<Void> future = new WaitingFuture<>();
 		future.done(null);
-
-		return verifySyncInternal(signature, verificationProvider, future);
+		if (signature.getSignatureType() == SignatureType.ECDSA_SECP256K1) {
+			return verifySyncInternal(signature, ecdsaSecp256k1VerificationProvider, future);
+		} else {
+			return verifySyncInternal(signature, ed25519VerificationProvider, future);
+		}
 	}
 
 	/**
@@ -484,8 +583,15 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 
 		boolean finalOutcome = true;
 
-		for (TransactionSignature signature : signatures) {
-			if (!verifySyncInternal(signature, verificationProvider, future)) {
+		OperationProvider<TransactionSignature, Void, Boolean, ?, SignatureType> provider;
+		for (final TransactionSignature signature : signatures) {
+			if (signature.getSignatureType() == SignatureType.ECDSA_SECP256K1) {
+				provider = ecdsaSecp256k1VerificationProvider;
+			} else {
+				provider = ed25519VerificationProvider;
+			}
+
+			if (!verifySyncInternal(signature, provider, future)) {
 				finalOutcome = false;
 			}
 		}
@@ -499,7 +605,11 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	@Override
 	public boolean verifySync(final byte[] data, final byte[] signature, final byte[] publicKey,
 			final SignatureType signatureType) {
-		return verificationProvider.compute(data, signature, publicKey, signatureType);
+		if (signatureType == SignatureType.ECDSA_SECP256K1) {
+			return ecdsaSecp256k1VerificationProvider.compute(data, signature, publicKey, signatureType);
+		} else {
+			return ed25519VerificationProvider.compute(data, signature, publicKey, signatureType);
+		}
 	}
 
 	/**
@@ -510,7 +620,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 			final DigestType digestType) {
 		try {
 			return runningHashProvider.compute(runningHash, newHashToAdd, digestType);
-		} catch (NoSuchAlgorithmException e) {
+		} catch (final NoSuchAlgorithmException e) {
 			throw new CryptographyException(e, LogMarker.EXCEPTION);
 		}
 	}
@@ -520,7 +630,6 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * applying the changes, and relaunching the {@link IntakeDispatcher} threads.
 	 */
 	protected synchronized void applySettings() {
-
 		// Cleanup existing (if applicable) background threads
 		if (this.verificationDispatcher != null) {
 			this.verificationDispatcher.shutdown();
@@ -547,10 +656,11 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 			this.digestQueue.addAll(oldDigestQueue);
 		}
 
-
 		// Launch new background threads with the new settings
 		this.verificationDispatcher = new IntakeDispatcher<>(this, TransactionSignature.class, this.verificationQueue,
-				this.verificationProvider, settings.computeCpuVerifierThreadCount(), this::verificationHandler);
+				this.delegatingVerificationProvider, settings.computeCpuVerifierThreadCount(),
+				CryptoEngine::verificationHandler);
+
 		this.digestDispatcher = new IntakeDispatcher<>(this, Message.class, this.digestQueue, this.digestProvider,
 				settings.computeCpuDigestThreadCount(), this::digestHandler);
 	}
@@ -567,20 +677,6 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 */
 	private AsyncDigestHandler digestHandler(final DigestProvider provider, final List<Message> workItems) {
 		return new AsyncDigestHandler(workItems, provider);
-	}
-
-	/**
-	 * Supplier implementation for {@link AsyncVerificationHandler} used by the {@link #CryptoEngine()} constructor.
-	 *
-	 * @param provider
-	 * 		the required {@link OperationProvider} to be used while performing the cryptographic transformations
-	 * @param workItems
-	 * 		the {@link List} of items to be processed by the created {@link AsyncOperationHandler} implementation
-	 * @return an {@link AsyncOperationHandler} implementation
-	 */
-	private AsyncVerificationHandler verificationHandler(final VerificationProvider provider,
-			final List<TransactionSignature> workItems) {
-		return new AsyncVerificationHandler(workItems, provider);
 	}
 
 	/**
@@ -613,7 +709,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 			clGetPlatformIDs(platforms.length, platforms, null);
 
 			// Enumerate devices for each platform
-			for (cl_platform_id plat : platforms) {
+			for (final cl_platform_id plat : platforms) {
 				// Get number of devices available in this platform
 				try {
 					clGetDeviceIDs(plat, CL_DEVICE_TYPE_ALL, 0, null, count);
@@ -630,9 +726,9 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 					clGetDeviceIDs(plat, CL_DEVICE_TYPE_ALL, devices.length, devices, null);
 
 					// Enumerate the devices & detect existence of supported CPU or GPU
-					for (cl_device_id dev : devices) {
+					for (final cl_device_id dev : devices) {
 						if (isSupportedDevice(dev)) {
-							log.debug(LOGM_ADV_CRYPTO_SYSTEM,
+							log.debug(LogMarker.ADV_CRYPTO_SYSTEM.getMarker(),
 									"Adv Crypto Subsystem: Located an acceptable GPU acceleration device ({})",
 									resolveDeviceName(dev));
 							gpuAvailable = true;
@@ -644,15 +740,16 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 					if (gpuAvailable) {
 						break;
 					}
-				} catch (CLException ex) {
+				} catch (final CLException ex) {
 					// Suppress Exception
 				}
 			}
 
-		} catch (CLException | UnsatisfiedLinkError | NoClassDefFoundError ex) {
-			log.info(LOGM_ADV_CRYPTO_SYSTEM, "Adv Crypto Subsystem: No supported GPU acceleration device found");
+		} catch (final CLException | UnsatisfiedLinkError | NoClassDefFoundError ex) {
+			log.info(LogMarker.ADV_CRYPTO_SYSTEM.getMarker(),
+					"Adv Crypto Subsystem: No supported GPU acceleration device found");
 
-			log.debug(LOGM_OPENCL_INIT_EXCEPTIONS,
+			log.debug(LogMarker.OPENCL_INIT_EXCEPTIONS.getMarker(),
 					"Adv Crypto Subsystem: Caught an unhandled OpenCL exception during device detection", ex);
 
 			openCLAvailable = false;
@@ -717,71 +814,6 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	}
 
 	/**
-	 * Efficiently builds a {@link TransactionSignature} instance from the supplied components.
-	 *
-	 * @param data
-	 * 		the original contents that the signature should be verified against
-	 * @param signature
-	 * 		the signature to be verified
-	 * @param publicKey
-	 * 		the public key required to validate the signature
-	 * @param signatureType
-	 * 		the type of signature to be verified
-	 * @return a {@link TransactionSignature} containing the provided components
-	 */
-	private TransactionSignature wrap(final byte[] data, final byte[] signature, final byte[] publicKey,
-			final SignatureType signatureType) {
-		if (data == null || data.length == 0) {
-			throw new IllegalArgumentException("data");
-		}
-
-		if (signature == null || signature.length == 0) {
-			throw new IllegalArgumentException("signature");
-		}
-
-		if (publicKey == null || publicKey.length == 0) {
-			throw new IllegalArgumentException("publicKey");
-		}
-
-		final ByteBuffer buffer = ByteBuffer.allocate(data.length + signature.length + publicKey.length);
-		final int sigOffset = data.length;
-		final int pkOffset = sigOffset + signature.length;
-
-		buffer.put(data).put(signature).put(publicKey);
-
-		return new TransactionSignature(buffer.array(), sigOffset, signature.length, pkOffset,
-				publicKey.length, 0, data.length, signatureType);
-	}
-
-	/**
-	 * Common private utility method for performing synchronous digest computations.
-	 *
-	 * @param message
-	 * 		the message contents to be hashed
-	 * @param provider
-	 * 		the underlying provider to be used
-	 * @param future
-	 * 		the {@link Future} to be associated with the {@link Message}
-	 * @return the cryptographic hash for the given message contents
-	 */
-	private Hash digestSyncInternal(final Message message, final DigestProvider provider,
-			final WaitingFuture<Void> future) {
-		final Hash hash;
-
-		try {
-			hash = provider.compute(message, message.getDigestType());
-			message.setHash(hash);
-		} catch (NoSuchAlgorithmException ex) {
-			message.setFuture(future);
-			throw new CryptographyException(ex, LogMarker.EXCEPTION);
-		}
-
-		message.setFuture(future);
-
-		return hash;
-	}
-
-	/**
 	 * Common private utility method for performing synchronous digest computations.
 	 *
 	 * @param message
@@ -795,37 +827,8 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	private Hash digestSyncInternal(final byte[] message, final DigestType digestType, final DigestProvider provider) {
 		try {
 			return provider.compute(message, digestType);
-		} catch (NoSuchAlgorithmException ex) {
+		} catch (final NoSuchAlgorithmException ex) {
 			throw new CryptographyException(ex, LogMarker.EXCEPTION);
 		}
-	}
-
-	/**
-	 * Common private utility method for performing synchronous signature verification.
-	 *
-	 * @param signature
-	 * 		the signature to be verified
-	 * @param provider
-	 * 		the underlying provider to be used
-	 * @param future
-	 * 		the {@link Future} to be associated with the {@link TransactionSignature}
-	 * @return true if the signature is valid; otherwise false
-	 */
-	private boolean verifySyncInternal(final TransactionSignature signature, final VerificationProvider provider,
-			final WaitingFuture<Void> future) {
-		final boolean isValid;
-
-		try {
-			isValid = provider.compute(signature, signature.getSignatureType());
-
-			signature.setSignatureStatus(((isValid) ? VerificationStatus.VALID : VerificationStatus.INVALID));
-			signature.setFuture(future);
-		} catch (NoSuchAlgorithmException ex) {
-			signature.setFuture(future);
-			throw new CryptographyException(ex, LogMarker.EXCEPTION);
-		}
-
-
-		return isValid;
 	}
 }

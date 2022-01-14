@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -27,13 +27,71 @@ public final class StaticSettingsProvider implements SettingsProvider {
 	private StaticSettingsProvider() {
 	}
 
+
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public boolean isEnableBetaMirror() {
 		return Settings.enableBetaMirror;
 	}
 
+
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public int getRescueChildlessInverseProbability() {
 		return Settings.rescueChildlessInverseProbability;
+	}
+
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getRandomEventProbability() {
+		return Settings.randomEventProbability;
+	}
+
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean shouldSendSyncDoneByte() {
+		return Settings.sendSyncDoneByte;
+	}
+
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public double getThrottle7Threshold() {
+		return Settings.throttle7threshold;
+	}
+
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public double getThrottle7Extra() {
+		return Settings.throttle7extra;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getThrottle7MaxBytes() {
+		return Settings.throttle7maxBytes;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public boolean isThrottle7Enabled() {
+		return Settings.throttle7;
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -21,12 +21,14 @@ import com.swirlds.common.io.SerializableDataOutputStream;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 import static com.swirlds.common.CommonUtils.hex;
 
-//Note: There is a another class com.swirlds.platform.Hash that I have marked as deprecated, the plan is
-//      that this class replaces that one.
+/**
+ * A cryptographic hash of some data.
+ */
 public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
 
 	private static final long CLASS_ID = 0xf422da83a251741eL;
@@ -35,22 +37,64 @@ public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
 	private byte[] value;
 	private DigestType digestType;
 
+	/**
+	 * Zero arg constructor. Creates a hash without any data using the default digest type ({@link DigestType#SHA_384}).
+	 */
 	public Hash() {
 		this(DigestType.SHA_384);
 	}
 
+	/**
+	 * Create a hash with a specific digest type but without any hash data.
+	 *
+	 * @param digestType
+	 * 		the digest type
+	 */
 	public Hash(final DigestType digestType) {
-		this(new byte[digestType.digestLength()], digestType, true);
+		this(new byte[digestType.digestLength()], digestType, true, false);
 	}
 
+	/**
+	 * Instantiate a hash with data from a byte array. Uses the default digest type ({@link DigestType#SHA_384}).
+	 *
+	 * @param value
+	 * 		the hash bytes
+	 */
 	public Hash(final byte[] value) {
 		this(value, DigestType.SHA_384);
 	}
 
+	/**
+	 * Instantiate a hash with data from a byte array with a specific digest type.
+	 *
+	 * @param value
+	 * 		the hash bytes
+	 * @param digestType
+	 * 		the digest type
+	 */
 	public Hash(final byte[] value, final DigestType digestType) {
-		this(value, digestType, false);
+		this(value, digestType, false, false);
 	}
 
+	/**
+	 * Instantiate a hash with a byte buffer and a digest type.
+	 *
+	 * @param byteBuffer
+	 * 		a buffer that contains the data for this hash
+	 * @param digestType
+	 * 		the digest type of this hash
+	 */
+	public Hash(final ByteBuffer byteBuffer, final DigestType digestType) {
+		this(digestType);
+		byteBuffer.get(this.value);
+	}
+
+	/**
+	 * Create a hash making a deep copy of another hash.
+	 *
+	 * @param other
+	 * 		the hash to copy
+	 */
 	public Hash(final Hash other) {
 		if (other == null) {
 			throw new IllegalArgumentException("other");
@@ -58,10 +102,6 @@ public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
 
 		this.digestType = other.digestType;
 		this.value = Arrays.copyOf(other.value, other.value.length);
-	}
-
-	protected Hash(final byte[] value, final DigestType digestType, final boolean bypassSafetyCheck) {
-		this(value, digestType, bypassSafetyCheck, false);
 	}
 
 	protected Hash(final byte[] value, final DigestType digestType, final boolean bypassSafetyCheck,
@@ -85,35 +125,33 @@ public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
 		if (bypassSafetyCheck) {
 			this.value = valuePtr;
 		} else {
-			setValue(valuePtr);
+			// Check for all zeros & stop when first non-zero byte has been encountered
+			for (byte b : value) {
+				if (b != 0) {
+					this.value = value;
+					return;
+				}
+			}
+
+			// We throw an exception here because the value array contained all zero bytes
+			throw new EmptyHashValueException("Hash creation failed, hash is array of zeroes");
 		}
 	}
 
+	/**
+	 * Get the byte array representing the value of the hash.
+	 *
+	 * @return the hash value
+	 */
 	public byte[] getValue() {
 		return value;
 	}
 
-	public void setValue(final byte[] value) {
-		this.updateHashValue(value);
-	}
-
-	private void updateHashValue(final byte[] value) {
-		if (value == null || value.length != digestType.digestLength()) {
-			throw new IllegalArgumentException("value");
-		}
-
-		// Check for all zeros & stop when first non-zero byte has been encountered
-		for (byte b : value) {
-			if (b != 0) {
-				this.value = value;
-				return;
-			}
-		}
-
-		// We throw an exception here because the value array contained all zero bytes
-		throw new EmptyHashValueException("Hash creation failed, hash is array of zeroes");
-	}
-
+	/**
+	 * Get a deep copy of this hash.
+	 *
+	 * @return a new hash
+	 */
 	public Hash copy() {
 		return new Hash(this);
 	}
@@ -181,11 +219,7 @@ public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
 	 */
 	@Override
 	public int hashCode() {
-		int ret = 17;
-		ret += 31 * ret + Integer.hashCode(digestType.id());
-		ret += 31 * ret + Arrays.hashCode(value);
-
-		return ret;
+		return ((value[0] << 24) + (value[1] << 16) + (value[2] << 8) + (value[3]));
 	}
 
 	/**
@@ -218,6 +252,11 @@ public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
 		return (value == null) ? null : hex(value);
 	}
 
+	/**
+	 * Get the digest type of this hash.
+	 *
+	 * @return the digest type
+	 */
 	public DigestType getDigestType() {
 		return this.digestType;
 	}

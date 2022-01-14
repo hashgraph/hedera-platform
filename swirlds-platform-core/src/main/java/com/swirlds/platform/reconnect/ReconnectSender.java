@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -20,8 +20,8 @@ import com.swirlds.common.merkle.synchronization.SendingSynchronizer;
 import com.swirlds.logging.payloads.ReconnectFinishPayload;
 import com.swirlds.logging.payloads.ReconnectStartPayload;
 import com.swirlds.platform.ReconnectStatistics;
-import com.swirlds.platform.SyncConnection;
-import com.swirlds.platform.SyncConstants;
+import com.swirlds.platform.SocketSyncConnection;
+import com.swirlds.platform.sync.SyncConstants;
 import com.swirlds.platform.state.SignedState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,7 +40,7 @@ public class ReconnectSender {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
 
-	private final SyncConnection connection;
+	private final SocketSyncConnection connection;
 	private final SignedState signedState;
 	private final int reconnectSocketTimeout;
 
@@ -59,7 +59,7 @@ public class ReconnectSender {
 
 
 	public ReconnectSender(
-			final SyncConnection connection,
+			final SocketSyncConnection connection,
 			final SignedState signedState,
 			final int reconnectSocketTimeout,
 			final ReconnectThrottle reconnectThrottle,
@@ -89,7 +89,7 @@ public class ReconnectSender {
 		try {
 			originalSocketTimeout = connection.getSocket().getSoTimeout();
 			connection.getSocket().setSoTimeout(reconnectSocketTimeout);
-		} catch (SocketException e) {
+		} catch (final SocketException e) {
 			throw new ReconnectException(e);
 		}
 	}
@@ -110,7 +110,7 @@ public class ReconnectSender {
 
 		try {
 			connection.getSocket().setSoTimeout(originalSocketTimeout);
-		} catch (SocketException e) {
+		} catch (final SocketException e) {
 			throw new ReconnectException(e);
 		}
 	}
@@ -207,7 +207,7 @@ public class ReconnectSender {
 	private void reconnect() throws InterruptedException {
 		log.info(RECONNECT.getMarker(), "Starting synchronization in the role of the sender.");
 		statistics.incrementSenderStartTimes();
-		SendingSynchronizer synchronizer = new SendingSynchronizer(
+		final SendingSynchronizer synchronizer = new SendingSynchronizer(
 				new MerkleDataInputStream(connection.getDis(), false),
 				new MerkleDataOutputStream(connection.getDos(), false),
 				signedState.getState(), log, RECONNECT.getMarker());

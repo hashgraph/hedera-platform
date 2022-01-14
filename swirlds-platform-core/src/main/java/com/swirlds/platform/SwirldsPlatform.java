@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -45,7 +45,6 @@ import com.swirlds.common.threading.ThreadConfiguration;
 import com.swirlds.logging.payloads.PlatformStatusPayload;
 import com.swirlds.logging.payloads.RecoveredStateSavedPayload;
 import com.swirlds.logging.payloads.SavedStateLoadedPayload;
-import com.swirlds.platform.SyncCaller.SyncCallerType;
 import com.swirlds.platform.components.CriticalQuorum;
 import com.swirlds.platform.components.CriticalQuorumImpl;
 import com.swirlds.platform.components.EventCreationRules;
@@ -59,6 +58,7 @@ import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRules;
 import com.swirlds.platform.components.TransactionTracker;
 import com.swirlds.platform.event.EventIntakeTask;
+import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.internal.SignedStateLoadingException;
 import com.swirlds.platform.internal.SystemExitReason;
 import com.swirlds.platform.observers.EventObserverDispatcher;
@@ -71,7 +71,9 @@ import com.swirlds.platform.state.SignedStateManager;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.stats.StatConstructor;
 import com.swirlds.platform.swirldapp.SwirldAppLoader;
-import com.swirlds.platform.sync.ShadowGraphManager;
+import com.swirlds.platform.sync.ShadowGraph;
+import com.swirlds.platform.sync.ShadowGraphSynchronizer;
+import com.swirlds.platform.sync.SyncCallerType;
 import org.apache.commons.lang3.SystemUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -93,6 +95,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -172,10 +175,10 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * The shadow graph manager. This wraps a shadow graph, which is an Event graph that
 	 * adds child pointers to the Hashgraph Event graph. Used for gossiping.
 	 */
-	private final ShadowGraphManager sgm;
+	private final ShadowGraph shadowGraph;
 
 	/** tells callers who to sync with and keeps track of whether we have fallen behind */
-	private SyncManager syncManager;
+	private SyncManagerImpl syncManager;
 
 	/**
 	 * a single thread uses this to listen for incoming requests to set up a connection for future syncing
@@ -268,8 +271,8 @@ public class SwirldsPlatform extends AbstractPlatform {
 	/** the object that contains all key pairs and CSPRNG state for this member */
 	protected Crypto crypto;
 
-	/** Wrapper class for syncing until the refactor is complete #3736 */
-	private NodeSynchronizerInstantiator nodeSynchronizerInstantiator;
+	/** Executes a sync with a remote node */
+	private ShadowGraphSynchronizer shadowgraphSynchronizer;
 
 	/**
 	 * This object is responsible for rate limiting reconnect attempts (in the role of sender)
@@ -311,15 +314,15 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * @param appLoader
 	 * 		the object used to load the user app
 	 */
-	SwirldsPlatform(int winNum, String[] parameters, Crypto crypto, byte[] swirldId,
-			NodeId id, AddressBook initialAddressBook, int fontSize,
-			String mainClassName, String swirldName, SwirldAppLoader appLoader) {
+	SwirldsPlatform(final int winNum, final String[] parameters, final Crypto crypto, final byte[] swirldId,
+			final NodeId id, final AddressBook initialAddressBook, final int fontSize,
+			final String mainClassName, final String swirldName, final SwirldAppLoader appLoader) {
 		// ThreadDumpGenerator.createDeadlock(); // intentionally deadlock, for debugging
 		this.mainClassName = mainClassName;
 		this.swirldName = swirldName;
 		try {
 			this.appMain = appLoader.instantiateSwirldMain();
-		} catch (Exception e) {
+		} catch (final Exception e) {
 			CommonUtils.tellUserConsolePopup("ERROR", "ERROR: There are problems starting class " +
 					mainClassName + "\n" + ExceptionUtils.getStackTrace(e));
 			log.error(EXCEPTION.getMarker(), "Problems with class {}", mainClassName, e);
@@ -334,8 +337,6 @@ public class SwirldsPlatform extends AbstractPlatform {
 		// set here, then given to the state in run(). A copy of it is given to hashgraph.
 		this.initialAddressBook = initialAddressBook;
 
-		this.sgm = new ShadowGraphManager();
-
 		this.eventMapper = new EventMapper(selfId, initialAddressBook.getSize());
 
 		this.stats = new Statistics(
@@ -347,6 +348,8 @@ public class SwirldsPlatform extends AbstractPlatform {
 						currentPlatformStatus::get
 				))
 		);
+
+		this.shadowGraph = new ShadowGraph(stats, initialAddressBook.getSize());
 
 		this.fontSize = fontSize;
 
@@ -394,7 +397,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * {@inheritDoc}
 	 */
 	@Override
-	void setInfoMember(StateHierarchy.InfoMember infoMember) {
+	void setInfoMember(final StateHierarchy.InfoMember infoMember) {
 		this.infoMember = infoMember;
 		this.platformName = infoMember.name//
 				+ " - " + infoMember.swirld.name //
@@ -480,7 +483,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 */
 	synchronized boolean loadSavedStateFromDisk() throws SignedStateLoadingException {
 
-		SavedStateInfo[] savedStateFiles = SignedStateFileManager.getSavedStateFiles(mainClassName,
+		final SavedStateInfo[] savedStateFiles = SignedStateFileManager.getSavedStateFiles(mainClassName,
 				selfId, swirldName);
 		if (savedStateFiles == null || savedStateFiles.length == 0) {
 			if (Settings.requireStateLoad) {
@@ -525,7 +528,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 					signedStateManager.addCompleteSignedState(signedState, true);
 
 					loadedSavedState = true;
-				} catch (Exception e) {
+				} catch (final Exception e) {
 					signedState = null;
 					throw new SignedStateLoadingException("Exception while reading signed state!", e);
 				}
@@ -550,18 +553,25 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * {@inheritDoc}
 	 */
 	@Override
-	void loadIntoConsensusAndEventIntake(SignedState signedState) throws SignedStateLoadingException {
+	void loadIntoConsensusAndEventIntake(final SignedState signedState) throws SignedStateLoadingException {
 		consensusRef.set(new ConsensusImpl(
 				this::getStats,
 				eventFlow::addMinGenInfo,
-				selfId,
 				getAddressBook(),
-				signedState,
-				sgm));
+				signedState));
+
+		shadowGraph.initFromEvents(
+				EventUtils.prepareForShadowGraph(
+						// ConsensusImpl will filter out events that are not insertable,
+						// so we get only the insertable ones
+						consensusRef.get().getAllEvents()
+				),
+				// we need to provide the minGen from consensus so that expiry matches after a restart/reconnect
+				consensusRef.get().getMinRoundGeneration());
 
 		// Data that is needed for the intake system to work
 		for (int i = 0; i < signedState.getEvents().length; i++) {
-			EventImpl e = signedState.getEvents()[i];
+			final EventImpl e = signedState.getEvents()[i];
 
 			try {
 				eventMapper.eventAdded(e);
@@ -598,7 +608,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 		Settings.state.setEnableStateRecovery(true);
 		stateRecoveryInProgress = true;
 
-		Instant loadedLastTimestamp = signedState.getConsensusTimestamp();
+		final Instant loadedLastTimestamp = signedState.getConsensusTimestamp();
 		log.info(EVENT_PARSER.getMarker(), "Last timestamp from loaded state is {} of round {}",
 				loadedLastTimestamp,
 				signedState.getLastRoundReceived());
@@ -606,13 +616,13 @@ public class SwirldsPlatform extends AbstractPlatform {
 		if (!Settings.playbackEndTimeStamp.isEmpty()) {
 			try {
 				endTimeStamp = Instant.parse(Settings.playbackEndTimeStamp);
-			} catch (DateTimeParseException e) {
+			} catch (final DateTimeParseException e) {
 				log.info(EXCEPTION.getMarker(), "Parsing playbackEndTimeStamp error ", e);
 			}
 		}
 
 		// the round number of last signed state loaded from disk
-		long roundOfLoadedSignedState = signedState.getLastRoundReceived();
+		final long roundOfLoadedSignedState = signedState.getLastRoundReceived();
 
 		//run parser on a different thread, so platform can poll and insert to forCons at the same time
 		// to avoid memory failure if there were huge amount of events to be loaded
@@ -623,7 +633,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 			name = String.valueOf(selfId);
 		}
 
-		StreamEventParser streamEventParser = new StreamEventParser(
+		final StreamEventParser streamEventParser = new StreamEventParser(
 				Settings.playbackStreamFileDirectory + "/events_" + name,
 				loadedLastTimestamp,
 				endTimeStamp);
@@ -640,7 +650,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 				// sleep 10 secs to let event stream finish writing the last file
 				try {
 					Thread.sleep(10 * SECONDS_TO_MILLISECONDS);
-				} catch (InterruptedException e) {
+				} catch (final InterruptedException e) {
 					log.error(EXCEPTION.getMarker(), "could not sleep", e);
 					Thread.currentThread().interrupt();
 				}
@@ -653,7 +663,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 		long minGen = Long.MAX_VALUE;
 		EventImpl event;
 		EventImpl prevRecoveredEvent = null;
-		long lastRecoverRoundWithNewUserTran = roundOfLoadedSignedState;
+		final long lastRecoverRoundWithNewUserTran = roundOfLoadedSignedState;
 		do {
 			//poll event from streamEventParser
 			event = streamEventParser.getNextEvent();
@@ -738,7 +748,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 */
 	boolean restorePostgresBackup(final SignedState signedState) {
 		if (Settings.dbRestore.isActive()) {
-			SnapshotTask snapshotTask = new SnapshotTask(
+			final SnapshotTask snapshotTask = new SnapshotTask(
 					SnapshotTaskType.RESTORE,
 					getMainClassName(),
 					getSwirldName(),
@@ -777,7 +787,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 				Settings.numConnections, 0);
 
 		// initializes EventStreamManager instance
-		Address address = this.getAddress();
+		final Address address = this.getAddress();
 		if (address.getMemo() != null && !address.getMemo().isEmpty()) {
 			initEventStreamManager(address.getMemo());
 		} else {
@@ -806,7 +816,6 @@ public class SwirldsPlatform extends AbstractPlatform {
 			consensusRef.set(new ConsensusImpl(
 					this::getStats,
 					eventFlow::addMinGenInfo,
-					selfId,
 					getAddressBook()
 			));
 		}
@@ -829,7 +838,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 				consensusRef::get,
 				initialAddressBook,
 				dispatcher,
-				getShadowGraphManager()
+				getShadowGraph()
 		);
 
 		final EventCreator eventCreator = new EventCreator(
@@ -856,7 +865,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 				eventIntake::addEvent,
 				stats,
 				consensusRef::get,
-				sgm::hashgraphEvent);
+				shadowGraph::hashgraphEvent);
 
 		/** dispatches tasks to the creator and validator */
 		final EventTaskDispatcher taskDispatcher = new EventTaskDispatcher(
@@ -870,23 +879,15 @@ public class SwirldsPlatform extends AbstractPlatform {
 				.setComponent(PLATFORM_THREAD_POOL_NAME)
 				.setThreadName("event-intake")
 				.setHandler(taskDispatcher::dispatchTask)
+				.setCapacity(Settings.eventIntakeQueueSize)
 				.build();
-
-		this.eventTaskCreator = new EventTaskCreator(
-				eventMapper,
-				// hashgraph and state get separate copies of the address book
-				initialAddressBook.copy(),
-				selfId,
-				this.stats,
-				intakeQueue,
-				StaticSettingsProvider.getSingleton());
 
 		intakeQueue.start();
 		eventFlow.startAll(); // start all threads managing the queues.
 
 		try {
 			appMain.init(this, selfId);
-		} catch (Exception e) {
+		} catch (final Exception e) {
 			log.error(EXCEPTION.getMarker(), "Exception while calling {}.init! Exiting...", mainClassName, e);
 			Browser.exitSystem(SWIRLD_MAIN_THREW_EXCEPTION);
 		}
@@ -896,7 +897,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * Build a new event flow object.
 	 */
 	private EventFlow buildEventFlow() {
-		EventFlow newEventFlow;
+		final EventFlow newEventFlow;
 		if (signedState != null) {
 			log.debug(STARTUP.getMarker(), () -> new SavedStateLoadedPayload(
 					signedState.getLastRoundReceived(),
@@ -916,7 +917,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 			newEventFlow = new EventFlow(this, initialState);
 			newEventFlow.loadDataFromSignedState(signedState, false);
 		} else {
-			State state = new State();
+			final State state = new State();
 			state.setSwirldState(appMain.newState());
 			state.setDualState(new DualStateImpl());
 			// if genesisFreezeTime is positive, and the nodes start from genesis
@@ -939,7 +940,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 */
 	@Override
 	void run() {
-		syncManager = new SyncManager(
+		syncManager = new SyncManagerImpl(
 				intakeQueue,
 				connectionGraph,
 				selfId,
@@ -954,12 +955,23 @@ public class SwirldsPlatform extends AbstractPlatform {
 				criticalQuorum,
 				initialAddressBook);
 
+		this.eventTaskCreator = new EventTaskCreator(
+				eventMapper,
+				// hashgraph and state get separate copies of the address book
+				initialAddressBook.copy(),
+				selfId,
+				this.stats,
+				intakeQueue,
+				StaticSettingsProvider.getSingleton(),
+				syncManager,
+				ThreadLocalRandom::current);
+
 		// a genesis event could be created here, but it isn't needed. This member will naturally create an
 		// event after their first sync, where the first sync will involve sending no events.
 
 		if (Settings.statUpdatePeriod > 0) {// if -1, then never update, don't create the thread
 			/* a Timer with one thread that calls stats.updateOthers() once a second */
-			Timer statTimer = new Timer("stat timer", true);
+			final Timer statTimer = new Timer("stat timer", true);
 			statTimer.schedule(new TimerTask() {
 				@Override
 				public void run() {
@@ -980,14 +992,15 @@ public class SwirldsPlatform extends AbstractPlatform {
 				.setRunnable(appMain)
 				.build();
 
-		nodeSynchronizerInstantiator = new NodeSynchronizerInstantiator(
-				getShadowGraphManager(),
+		shadowgraphSynchronizer = new ShadowGraphSynchronizer(
+				getShadowGraph(),
 				getNumMembers(),
 				getStats(),
-				getSleepAfterSync(),
 				consensusRef::get,
 				eventTaskCreator,
-				syncManager
+				syncManager,
+				PlatformConstructor.parallelExecutor(),
+				PlatformConstructor.settingsProvider()
 		);
 
 		//In recover mode, skip sync with other nodes,
@@ -1008,7 +1021,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 					spawnSyncListener(NodeId.createMain(i));
 
 					// create and start new thread to send heartbeats on the SyncCaller channels
-					SyncHeartbeat sh = new SyncHeartbeat(this, NodeId.createMain(i));
+					final SyncHeartbeat sh = new SyncHeartbeat(this, NodeId.createMain(i));
 
 					new ThreadConfiguration()
 							.setPriority(Settings.threadPrioritySync)
@@ -1047,11 +1060,11 @@ public class SwirldsPlatform extends AbstractPlatform {
 		if (Settings.runPauseCheckTimer) {
 			// periodically check current time stamp to detect whether the java application
 			// has been paused for a long period
-			Timer pauseCheckTimer = new Timer("pause check", true);
+			final Timer pauseCheckTimer = new Timer("pause check", true);
 			pauseCheckTimer.schedule(new TimerTask() {
 				@Override
 				public void run() {
-					long currentTimeStamp = System.currentTimeMillis();
+					final long currentTimeStamp = System.currentTimeMillis();
 					if ((currentTimeStamp - pauseCheckTimeStamp) > PAUSE_ALERT_INTERVAL && pauseCheckTimeStamp != 0) {
 						log.error(EXCEPTION.getMarker(), "ERROR, a pause larger than {} is detected ",
 								PAUSE_ALERT_INTERVAL);
@@ -1074,14 +1087,14 @@ public class SwirldsPlatform extends AbstractPlatform {
 		// When the SwirldMain quits, end the run() for this platform instance
 		try {
 			mainThread.join();
-		} catch (InterruptedException e) {
+		} catch (final InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
 	}
 
 	// spawn a thread to handle incoming TCP/IP connections
 	private void spawnSyncServer() {
-		Address address = getAddressBook().getAddress(selfId.getId());
+		final Address address = getAddressBook().getAddress(selfId.getId());
 		syncServer = new SyncServer(this, address.getListenAddressIpv4(),
 				address.getListenPortIpv4());
 
@@ -1097,10 +1110,10 @@ public class SwirldsPlatform extends AbstractPlatform {
 	}
 
 	// spawn a thread to handle incoming syncs from user otherId
-	private void spawnSyncListener(NodeId otherId) {
-		SyncListener syncListener = new SyncListener(this, selfId, otherId, reconnectThrottle);
+	private void spawnSyncListener(final NodeId otherId) {
+		final SyncListener syncListener = new SyncListener(this, selfId, otherId, reconnectThrottle);
 
-		Thread syncListenerThread = new ThreadConfiguration()
+		final Thread syncListenerThread = new ThreadConfiguration()
 				.setPriority(Settings.threadPrioritySync)
 				.setNodeId(selfId.getId())
 				.setComponent(PLATFORM_THREAD_POOL_NAME)
@@ -1118,7 +1131,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * @param callerNumber
 	 * 		0 for the first caller thread created by this platform, 1 for the next, etc
 	 */
-	private void spawnSyncCaller(int callerNumber, SyncCaller.SyncCallerType callerType) {
+	private void spawnSyncCaller(final int callerNumber, final SyncCallerType callerType) {
 		// create a caller that will run repeatedly to call random members other than selfId
 		final SyncCaller syncCaller = new SyncCaller(this, getAddressBook(),
 				selfId, callerNumber, callerType);
@@ -1152,17 +1165,17 @@ public class SwirldsPlatform extends AbstractPlatform {
 		// screen, whichever is likely to have the close button for the Browser window that lies behind the
 		// Platform windows.
 
-		int leftGap = (SystemUtils.IS_OS_WINDOWS ? 0 : 25); // extra space at left screen edge
-		int rightGap = (SystemUtils.IS_OS_WINDOWS ? 50 : 0); // extra space at right screen edge
-		Rectangle screenSize = GraphicsEnvironment.getLocalGraphicsEnvironment()
+		final int leftGap = (SystemUtils.IS_OS_WINDOWS ? 0 : 25); // extra space at left screen edge
+		final int rightGap = (SystemUtils.IS_OS_WINDOWS ? 50 : 0); // extra space at right screen edge
+		final Rectangle screenSize = GraphicsEnvironment.getLocalGraphicsEnvironment()
 				.getMaximumWindowBounds();
-		int winCount = getAddressBook().getOwnHostCount();
-		int contentWidth = (screenSize.width - leftGap - rightGap
+		final int winCount = getAddressBook().getOwnHostCount();
+		final int contentWidth = (screenSize.width - leftGap - rightGap
 				- Browser.insets.left - Browser.insets.right) / winCount;
-		int x = screenSize.x + leftGap + contentWidth * this.winNum;
-		int y = screenSize.y;
-		int width = contentWidth + Browser.insets.left + Browser.insets.right;
-		int height = screenSize.height;
+		final int x = screenSize.x + leftGap + contentWidth * this.winNum;
+		final int y = screenSize.y;
+		final int width = contentWidth + Browser.insets.left + Browser.insets.right;
+		final int height = screenSize.height;
 		return new Rectangle(x, y, width, height);
 	}
 
@@ -1207,7 +1220,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * {@inheritDoc}
 	 */
 	@Override
-	SyncManager getSyncManager() {
+	SyncManagerImpl getSyncManager() {
 		return syncManager;
 	}
 
@@ -1215,8 +1228,8 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * {@inheritDoc}
 	 */
 	@Override
-	ShadowGraphManager getShadowGraphManager() {
-		return sgm;
+	ShadowGraph getShadowGraph() {
+		return shadowGraph;
 	}
 
 	/**
@@ -1328,7 +1341,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 */
 	@Override
 	void checkPlatformStatus() {
-		int numNodes = initialAddressBook.getSize();
+		final int numNodes = initialAddressBook.getSize();
 
 		synchronized (currentPlatformStatus) {
 			PlatformStatus newStatus = null;
@@ -1344,7 +1357,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 				newStatus = PlatformStatus.ACTIVE;
 			}
 
-			PlatformStatus oldStatus = currentPlatformStatus.getAndSet(newStatus);
+			final PlatformStatus oldStatus = currentPlatformStatus.getAndSet(newStatus);
 			if (oldStatus != newStatus) {
 				final PlatformStatus ns = newStatus;
 				log.info(PLATFORM_STATUS.getMarker(), () -> new PlatformStatusPayload(
@@ -1375,7 +1388,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 */
 	@Override
 	void connectionClosed() {
-		int connectionNumber = activeConnectionNumber.decrementAndGet();
+		final int connectionNumber = activeConnectionNumber.decrementAndGet();
 		if (connectionNumber < 0) {
 			log.error(EXCEPTION.getMarker(),
 					"activeConnectionNumber is {}, this is a bug!",
@@ -1412,14 +1425,14 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** {@inheritDoc} */
 	@Override
-	public Console createConsole(boolean visible) {
+	public Console createConsole(final boolean visible) {
 		if (GraphicsEnvironment.isHeadless()) {
 			return null;
 		}
-		Rectangle winRect = winRect();
+		final Rectangle winRect = winRect();
 		// remember last 100 lines
 		// if SwirldMain calls createConsole, this remembers the window created
-		Console console = new Console(
+		final Console console = new Console(
 				getAddressBook().getAddress(selfId.getId()).getSelfName(),
 				100, // remember last 100 lines
 				winRect, fontSize, false);
@@ -1453,16 +1466,16 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** {@inheritDoc} */
 	@Override
-	public JFrame createWindow(boolean visible) {
+	public JFrame createWindow(final boolean visible) {
 		if (GraphicsEnvironment.isHeadless()) {
 			return null;
 		}
-		Rectangle winRect = winRect();
+		final Rectangle winRect = winRect();
 
 		JFrame frame = null;
 		try {
-			Address addr = getAddressBook().getAddress(selfId.getId());
-			String name = addr.getSelfName();
+			final Address addr = getAddressBook().getAddress(selfId.getId());
+			final String name = addr.getSelfName();
 			frame = new JFrame(name); // create a new window
 
 			frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
@@ -1474,7 +1487,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 			frame.setFocusable(true);
 			frame.requestFocusInWindow();
 			frame.setVisible(visible); // show it
-		} catch (Exception e) {
+		} catch (final Exception e) {
 			log.error(EXCEPTION.getMarker(), "", e);
 		}
 
@@ -1517,7 +1530,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** {@inheritDoc} */
 	@Override
-	public Address getAddress(long id) {
+	public Address getAddress(final long id) {
 		return getAddressBook().getAddress(id);
 	}
 
@@ -1541,7 +1554,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** {@inheritDoc} */
 	@Override
-	public long getLastSeq(long creatorId) {
+	public long getLastSeq(final long creatorId) {
 		return eventMapper.getSequenceNumber(creatorId);
 	}
 
@@ -1604,19 +1617,19 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** {@inheritDoc} */
 	@Override
-	public void setAbout(String about) {
+	public void setAbout(final String about) {
 		appAbout = about;
 	}
 
 	/** {@inheritDoc} */
 	@Override
-	public void setSleepAfterSync(long delay) {
+	public void setSleepAfterSync(final long delay) {
 		delayAfterSync = delay;
 	}
 
 	/** {@inheritDoc} */
 	@Override
-	public byte[] sign(byte[] data) {
+	public byte[] sign(final byte[] data) {
 		return crypto.sign(data);
 	}
 
@@ -1628,7 +1641,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** {@inheritDoc} */
 	@Override
-	public void recordStatsValue(StatsType statsType, double value) {
+	public void recordStatsValue(final StatsType statsType, final double value) {
 		if (statsType == StatsType.AVGSTATESIGS) {
 			getStats().avgStateSigs.recordValue(value);
 		}
@@ -1690,7 +1703,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * @param name
 	 * 		name of this node
 	 */
-	void initEventStreamManager(String name) {
+	void initEventStreamManager(final String name) {
 		try {
 			log.info(STARTUP.getMarker(), "initialize eventStreamManager");
 			eventStreamManager = new EventStreamManager<>(
@@ -1701,7 +1714,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 					Settings.eventsLogPeriod,
 					Settings.eventStreamQueueCapacity,
 					this::isLastEventBeforeRestart);
-		} catch (NoSuchAlgorithmException | IOException e) {
+		} catch (final NoSuchAlgorithmException | IOException e) {
 			log.error(EXCEPTION.getMarker(), "Fail to initialize eventStreamHelper. Exception: {}",
 					ExceptionUtils.getStackTrace(e));
 		}
@@ -1724,7 +1737,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 		this.genesisFreezeTime = genesisFreezeTime;
 	}
 
-	public NodeSynchronizerInstantiator getNodeSynchronizerInstantiator() {
-		return nodeSynchronizerInstantiator;
+	public ShadowGraphSynchronizer getShadographSynchronizer() {
+		return shadowgraphSynchronizer;
 	}
 }

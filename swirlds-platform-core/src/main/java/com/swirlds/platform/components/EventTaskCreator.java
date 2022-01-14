@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -22,18 +22,23 @@ import com.swirlds.platform.event.CreateEventTask;
 import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.event.ValidateEventTask;
 import com.swirlds.platform.stats.HashgraphStats;
+import com.swirlds.platform.sync.SyncManager;
+import com.swirlds.platform.sync.SyncResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Random;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STALE_EVENTS;
+import static com.swirlds.logging.LogMarker.SYNC;
 
-
+/**
+ * Responsible for creating and enqueuing event tasks. Event tasks can either be {@link ValidateEventTask} or {@link
+ * CreateEventTask}
+ */
 public class EventTaskCreator {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger LOG = LogManager.getLogger();
@@ -59,6 +64,9 @@ public class EventTaskCreator {
 	/** supplies the Random object */
 	private final Supplier<Random> random;
 
+	/** manages sync related tasks */
+	private final SyncManager syncManager;
+
 	/**
 	 * constructor that is given the platform using the hashgraph, and the initial addressBook (which can
 	 * change)
@@ -75,20 +83,10 @@ public class EventTaskCreator {
 	 * 		the queue add tasks to
 	 * @param settings
 	 * 		provides access to settings
-	 */
-	public EventTaskCreator(
-			final EventMapper eventMapper,
-			final AddressBook addressBook,
-			final NodeId selfId,
-			final HashgraphStats stats,
-			final BlockingQueue<EventIntakeTask> eventIntakeQueue,
-			final SettingsProvider settings) {
-		// ThreadLocalRandom used to avoid locking issues
-		this(eventMapper, addressBook, selfId, stats, eventIntakeQueue, settings, ThreadLocalRandom::current);
-	}
-
-	/**
-	 * constructor used for unit testing
+	 * @param syncManager
+	 * 		decides if an event should be created
+	 * @param random
+	 * 		supplies the random instance to use
 	 */
 	public EventTaskCreator(
 			final EventMapper eventMapper,
@@ -97,14 +95,55 @@ public class EventTaskCreator {
 			final HashgraphStats stats,
 			final BlockingQueue<EventIntakeTask> eventIntakeQueue,
 			final SettingsProvider settings,
-			Supplier<Random> random) {
+			final SyncManager syncManager,
+			final Supplier<Random> random) {
 		this.eventMapper = eventMapper;
 		this.stats = stats;
 		this.selfId = selfId;
 		this.addressBook = addressBook.immutableCopy();
 		this.eventIntakeQueue = eventIntakeQueue;
 		this.settings = settings;
+		this.syncManager = syncManager;
 		this.random = random;
+	}
+
+	/**
+	 * Creates the appropriate events after a sync has finished successfully. If an event should be created according to
+	 * the rules in {@link SyncManager#shouldCreateEvent(SyncResult)}, a self event with an other-parent of the node we
+	 * just synced with is added to the intake queue. An additional event may be created with a different other-parent.
+	 *
+	 * @param result
+	 * 		information about the sync that just finished successfully
+	 */
+	public void syncDone(final SyncResult result) {
+		final boolean shouldCreateEvent = syncManager.shouldCreateEvent(result);
+		stats.eventCreation(shouldCreateEvent);
+		if (!shouldCreateEvent) {
+			// we are not creating any events
+			return;
+		}
+
+		createEvent(result.getOtherId().getId());
+
+		LOG.debug(SYNC.getMarker(), "{} created event for sync otherId:{}", selfId, result.getOtherId());
+
+		randomEvent();
+
+		rescueChildlessEvents();
+	}
+
+	private void randomEvent() {
+		final Random r = random.get();
+		// maybe create an event with a random other parent
+		if (settings.getRandomEventProbability() > 0 &&
+				r.nextInt(settings.getRandomEventProbability()) == 0) {
+			final long randomOtherId = r.nextInt(addressBook.getSize());
+			// we don't want to create an event with selfId==otherId
+			if (!selfId.equalsMain(randomOtherId)) {
+				createEvent(randomOtherId);
+				LOG.debug(SYNC.getMarker(), "{} created random event otherId:{}", selfId, randomOtherId);
+			}
+		}
 	}
 
 	/**

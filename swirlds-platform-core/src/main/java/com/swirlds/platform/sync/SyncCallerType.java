@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,26 +14,7 @@
 
 package com.swirlds.platform.sync;
 
-/**
- * An enum type that defines every verification status for a shadow graph instance
- */
-public enum ShadowGraphVerificationStatus {
-	VERIFIED,
-	EVENT_NOT_IN_SHADOW_GRAPH,
-	MISMATCHED_EVENT_HASH,
-	MISSING_SELF_PARENT,
-	MISSING_OTHER_PARENT,
-	EXPIRED_SELF_PARENT,
-	EXPIRED_OTHER_PARENT,
-	MISMATCHED_SELF_PARENT,
-	MISMATCHED_OTHER_PARENT,
-	MISSING_INBOUND_SELF_CHILD_POINTER,
-	MISSING_INBOUND_OTHER_CHILD_POINTER,
-	MISSING_INBOUND_SELF_PARENT_POINTER,
-	MISSING_INBOUND_OTHER_PARENT_POINTER,
-	MISMATCHED_INBOUND_SELF_PARENT_POINTER,
-	MISMATCHED_INBOUND_OTHER_PARENT_POINTER,
-	INVALID_TIP,
-	MISSING_TIP,
-	INVALID_STATUS
+/** an enum that is used to determine the type of caller */
+public enum SyncCallerType {
+	RANDOM, PRIORITY
 }

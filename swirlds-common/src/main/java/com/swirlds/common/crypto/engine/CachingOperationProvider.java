@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -42,7 +42,7 @@ import java.util.HashMap;
  * @param <AlgType>
  * 		the type of the enumeration providing the list of available algorithms
  */
-public abstract class CachingOperationProvider<Element, OptionalData, Result, Alg, AlgType extends Enum>
+public abstract class CachingOperationProvider<Element, OptionalData, Result, Alg, AlgType extends Enum<AlgType>>
 		extends OperationProvider<Element, OptionalData, Result, Alg, AlgType> {
 
 	private final ThreadLocal<HashMap<AlgType, Alg>> context = ThreadLocal.withInitial(HashMap::new);

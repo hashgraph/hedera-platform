@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -22,7 +22,10 @@ public enum SystemExitReason {
 	/**
 	 * This node has fallen behind but can not reconnect due to policy.
 	 */
-	BEHIND_RECONNECT_DISABLED(202);
+	BEHIND_RECONNECT_DISABLED(202),
+
+	/** This node exceeded the maximum consecutive failed reconnect attempts. */
+	RECONNECT_FAILURE(203);
 
 	private int exitCode;
 

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -50,12 +50,6 @@ import java.util.ArrayList;
 @ConstructableIgnored
 public class EventImpl extends AbstractSerializableHashable implements Comparable<EventImpl>, Event,
 		OptionalSelfSerializable<EventSerializationOptions>, Timestamped, SerializableRunningHashable {
-	/** the sequence number used to represent that there is no event */
-	public static final long NO_EVENT_SEQ = -1;
-	/** the generation number used to represent that there is no event */
-	public static final long NO_EVENT_GEN = -1;
-	/** the ID number used to represent that there is no event */
-	public static final long NO_EVENT_ID = -1;
 
 	/** The hashed part of a base event */
 	private BaseEventHashedData baseEventHashedData;
@@ -974,11 +968,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	@Override
 	public String toString() {
-		return "eventImpl{" +
-				"baseEventHashedData=" + baseEventHashedData +
-				", baseEventUnhashedData=" + baseEventUnhashedData +
-				", consensusData=" + consensusData +
-				", internalEventData=" + internalEventData +
-				'}';
+		return toMediumString();
 	}
 }

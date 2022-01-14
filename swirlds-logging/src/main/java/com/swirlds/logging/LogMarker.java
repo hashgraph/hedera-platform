@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -85,11 +85,6 @@ public enum LogMarker {
 	STARTUP(LogMarkerType.INFO),
 
 	/**
-	 * log events related to the shadow graph manager during gossiping
-	 */
-	SYNC_SGM(LogMarkerType.INFO),
-
-	/**
 	 * log all the steps of a sync
 	 */
 	SYNC(LogMarkerType.INFO),
@@ -100,33 +95,9 @@ public enum LogMarker {
 	SYNC_START(LogMarkerType.INFO),
 
 	/**
-	 * for NodeSynchronizer, sync steps 1 - 5
+	 * Relevant information about each step of the sync without too much logging
 	 */
-	SYNC_STEP_1(LogMarkerType.INFO),
-	SYNC_STEP_2(LogMarkerType.INFO),
-	SYNC_STEP_3(LogMarkerType.INFO),
-	SYNC_STEP_4(LogMarkerType.INFO),
-	SYNC_STEP_5(LogMarkerType.INFO),
-
-	/**
-	 * for logging consensus hashgraph generation numbers sent/received
-	 */
-	SYNC_GENERATIONS(LogMarkerType.INFO),
-
-	/**
-	 * for logging when a node has fallen behind
-	 */
-	SYNC_FALLEN_BEHIND(LogMarkerType.INFO),
-
-	/**
-	 * for sync throttle logging
-	 */
-	SYNC_THROTTLE(LogMarkerType.INFO),
-
-	/**
-	 * for SyncCaller
-	 */
-	SYNC_CALLER(LogMarkerType.INFO),
+	SYNC_INFO(LogMarkerType.INFO),
 
 	/**
 	 * for SyncListener
@@ -142,11 +113,6 @@ public enum LogMarker {
 	 * for SyncConnection
 	 */
 	SYNC_CONNECTION(LogMarkerType.INFO),
-
-	/**
-	 * completed sync
-	 */
-	SYNC_DONE(LogMarkerType.INFO),
 
 	/**
 	 * connection error C or L -1 or -2
@@ -174,11 +140,6 @@ public enum LogMarker {
 	EXPIRE_EVENT(LogMarkerType.INFO),
 
 	/**
-	 * log every event sent and received
-	 */
-	WATCH_EVENTS_SEND_REC(LogMarkerType.INFO),
-
-	/**
 	 * log when events enter and leave the various event queues in eventFlow
 	 */
 	QUEUES(LogMarkerType.INFO),
@@ -197,16 +158,6 @@ public enum LogMarker {
 	 * logs the certificates either loaded of created
 	 */
 	CERTIFICATES(LogMarkerType.INFO),
-
-	/**
-	 * logs info related to obtaining and releasing synchronization locks
-	 */
-	LOCKS(LogMarkerType.INFO),
-
-	/**
-	 * logs info that is parsed and used to measure duration of anything
-	 */
-	TIME_MEASURE(LogMarkerType.INFO),
 
 	/**
 	 * logs events related the distribution of state signatures
@@ -263,11 +214,6 @@ public enum LogMarker {
 	RECONNECT_SENDER(LogMarkerType.INFO),
 
 	/**
-	 * logs events related to shadow graph construction on reconnect
-	 */
-	RECONNECT_SGM(LogMarkerType.INFO),
-
-	/**
 	 * logs related to PTA runs. It is useful during debugging PTA with info from the platform
 	 */
 	DEMO_INFO(LogMarkerType.INFO),
@@ -289,12 +235,6 @@ public enum LogMarker {
 	STATE_ON_DISK_QUEUE(LogMarkerType.INFO),
 
 	/**
-	 * logs related to new signed state transfer queue used to notify
-	 * com.swirlds.common.SwirldMain#newSignedState(SwirldState, Instant, long)} application method.
-	 */
-	NEW_SIGNED_STATE_EVENT_QUEUE(LogMarkerType.INFO),
-
-	/**
 	 * logs explicitly related to beta mirror node operation and warnings. Enabling this marker may generate large
 	 * amounts of log output and is not recommended from production environments.
 	 */
@@ -310,10 +250,15 @@ public enum LogMarker {
 	 * from consuming excessive disk space we should only write event contents to the log when this diagnostic marker
 	 * is enabled.
 	 */
-	EVENT_CONTENT(LogMarkerType.INFO);
+	EVENT_CONTENT(LogMarkerType.INFO),
 
-	private LogMarkerType type;
-	private Marker marker;
+	/**
+	 * Detail information about .
+	 */
+	JASPER_DB(LogMarkerType.INFO);
+
+	private final LogMarkerType type;
+	private final Marker marker;
 
 	LogMarker(final LogMarkerType type) {
 		this.type = type;

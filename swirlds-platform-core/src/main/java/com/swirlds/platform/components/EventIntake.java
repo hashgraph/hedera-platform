@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -18,19 +18,20 @@ import com.swirlds.common.AddressBook;
 import com.swirlds.common.NodeId;
 import com.swirlds.platform.Consensus;
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.observers.EventObserverDispatcher;
-import com.swirlds.platform.sync.SyncLogging;
-import com.swirlds.platform.sync.ShadowGraphManager;
+import com.swirlds.platform.sync.ShadowGraph;
+import com.swirlds.platform.sync.ShadowGraphInsertionException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.function.Supplier;
 
+import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.INTAKE_EVENT;
 import static com.swirlds.logging.LogMarker.STALE_EVENTS;
 import static com.swirlds.logging.LogMarker.SYNC;
-import static com.swirlds.logging.LogMarker.SYNC_SGM;
 import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT;
 
 /**
@@ -62,10 +63,10 @@ public class EventIntake {
 	private final EventObserverDispatcher dispatcher;
 
 	/**
-	 * A (@link ShadowGraphManager} instance, updated whenever the hashgraph is.
+	 * A {@link ShadowGraph} instance, updated whenever the hashgraph is.
 	 * Used for gossiping.
 	 */
-	private final ShadowGraphManager sgm;
+	private final ShadowGraph shadowGraph;
 
 
 	/**
@@ -85,12 +86,12 @@ public class EventIntake {
 			final Supplier<Consensus> consensusSupplier,
 			final AddressBook addressBook,
 			final EventObserverDispatcher dispatcher,
-			final ShadowGraphManager sgm) {
+			final ShadowGraph shadowGraph) {
 		this.selfId = selfId;
 		this.consensusSupplier = consensusSupplier;
 		this.addressBook = addressBook;
 		this.dispatcher = dispatcher;
-		this.sgm = sgm;
+		this.shadowGraph = shadowGraph;
 	}
 
 	/**
@@ -133,33 +134,17 @@ public class EventIntake {
 	 * 		true iff inserting {@code event} in the consensus instance caused events to reach consensus
 	 */
 	private void addShadowEvent(final EventImpl event, final boolean newConsensus) {
-		// (Shadow Graph Manager may be null for testing.)
-		if (sgm == null) {
-			return;
-		}
-
-		log.debug(SYNC_SGM.getMarker(),
-				"{}: `EventIntake.addShadowEvent`: adding to shadow graph: {}",
-				() -> selfId,
-				() -> SyncLogging.getSyncLogString(event));
-
-		final boolean addedShadow = sgm.addEvent(event);
-		if (!addedShadow) {
-			log.debug(SYNC_SGM.getMarker(), "{}: `EventIntake.addShadowEvent`: failed to add event {} to shadow graph.",
-					() -> selfId,
-					() -> SyncLogging.getSyncLogString(event));
+		try {
+			shadowGraph.addEvent(event);
+		} catch (ShadowGraphInsertionException e) {
+			log.error(EXCEPTION.getMarker(), "EventIntake: failed to add event {} to shadow graph",
+					EventStrings.toMediumString(event), e);
 		}
 
 		// If no new consensus, the expired generation has not been increased, so nothing
 		// to expire from the shadow graph.
 		if (newConsensus) {
-			final int nExpired = sgm.expire(consensus().getMinGenerationNonExpired() - 1);
-			if (nExpired > 0) {
-				log.debug(SYNC_SGM.getMarker(),
-						"{} `EventIntake.addShadowEvent`: purged {} expired shadow events",
-						selfId,
-						nExpired);
-			}
+			shadowGraph.expireBelow(consensus().getMinRoundGeneration());
 		}
 
 	}
@@ -233,7 +218,7 @@ public class EventIntake {
 					"Consensus min round {}, max round {}, last round decided {}",
 					consensus().getMinRound(),
 					consensus().getMaxRound(),
-					consensus().getLastRoundDecided());
+					consensus().getFameDecidedBelow());
 			event.setStale(true);
 			event.clear();
 			return true;

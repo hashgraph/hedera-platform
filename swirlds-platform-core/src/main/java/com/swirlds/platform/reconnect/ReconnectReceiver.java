@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -27,7 +27,7 @@ import com.swirlds.logging.payloads.ReconnectFailurePayload;
 import com.swirlds.platform.Crypto;
 import com.swirlds.platform.ReconnectStatistics;
 import com.swirlds.platform.SyncConnection;
-import com.swirlds.platform.SyncConstants;
+import com.swirlds.platform.sync.SyncConstants;
 import com.swirlds.platform.Utilities;
 import com.swirlds.platform.state.SigInfo;
 import com.swirlds.platform.state.SigSet;
@@ -59,7 +59,7 @@ public class ReconnectReceiver {
 	private final AddressBook addressBook;
 	private final Crypto crypto;
 
-	private State currentState;
+	private final State currentState;
 	private final int reconnectSocketTimeout;
 
 	private SignedState signedState;
@@ -96,9 +96,9 @@ public class ReconnectReceiver {
 	 */
 	private void increaseSocketTimeout() throws ReconnectException {
 		try {
-			originalSocketTimeout = connection.getSocket().getSoTimeout();
-			connection.getSocket().setSoTimeout(reconnectSocketTimeout);
-		} catch (SocketException e) {
+			originalSocketTimeout = connection.getTimeout();
+			connection.setTimeout(reconnectSocketTimeout);
+		} catch (final SocketException e) {
 			throw new ReconnectException(e);
 		}
 	}
@@ -116,8 +116,8 @@ public class ReconnectReceiver {
 		}
 
 		try {
-			connection.getSocket().setSoTimeout(originalSocketTimeout);
-		} catch (SocketException e) {
+			connection.setTimeout(originalSocketTimeout);
+		} catch (final SocketException e) {
 			throw new ReconnectException(e);
 		}
 	}
@@ -149,9 +149,9 @@ public class ReconnectReceiver {
 			receiveSignatures();
 			validate();
 
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			throw new ReconnectException(e);
-		} catch (InterruptedException e) {
+		} catch (final InterruptedException e) {
 			Thread.currentThread().interrupt();
 		} finally {
 			resetSocketTimeout();
@@ -169,9 +169,9 @@ public class ReconnectReceiver {
 	 * 		thrown when the other node is unwilling to reconnect right now
 	 */
 	private boolean isNodeReadyForReconnect() throws IOException, ReconnectException {
-		NodeId otherId = connection.getOtherId();
-		SyncInputStream dis = connection.getDis();
-		SyncOutputStream dos = connection.getDos();
+		final NodeId otherId = connection.getOtherId();
+		final SyncInputStream dis = connection.getDis();
+		final SyncOutputStream dos = connection.getDos();
 
 		// send the request
 		dos.write(SyncConstants.COMM_STATE_REQUEST);
@@ -179,7 +179,7 @@ public class ReconnectReceiver {
 		log.info(RECONNECT.getMarker(), "Requesting to reconnect with node {}.", otherId);
 
 		// read the response
-		byte stateResponse = dis.readByte();
+		final byte stateResponse = dis.readByte();
 		if (stateResponse == SyncConstants.COMM_STATE_ACK) {
 			log.info(RECONNECT.getMarker(),
 					"Node {} is willing to help this node to reconnect.", otherId);
@@ -204,18 +204,18 @@ public class ReconnectReceiver {
 	 */
 	private void reconnect() throws InterruptedException {
 		statistics.incrementReceiverStartTimes();
-		ExtendableInputStream<CountingStreamExtension> countingStream =
+		final ExtendableInputStream<CountingStreamExtension> countingStream =
 				new ExtendableInputStream<>(connection.getDis(), new CountingStreamExtension());
-		MerkleDataInputStream in = new MerkleDataInputStream(countingStream, false);
-		MerkleDataOutputStream out = new MerkleDataOutputStream(connection.getDos(), false);
+		final MerkleDataInputStream in = new MerkleDataInputStream(countingStream, false);
+		final MerkleDataOutputStream out = new MerkleDataOutputStream(connection.getDos(), false);
 
-		ReceivingSynchronizer synchronizer = new ReceivingSynchronizer(in, out,
+		final ReceivingSynchronizer synchronizer = new ReceivingSynchronizer(in, out,
 				currentState, log, RECONNECT.getMarker());
 
 		final State state = (State) synchronizer.synchronize();
 		signedState = new SignedState(state);
 
-		double mbReceived = countingStream.getExtension().getCount() / 1024.0 / 1024.0;
+		final double mbReceived = countingStream.getExtension().getCount() / 1024.0 / 1024.0;
 		log.info(RECONNECT.getMarker(), () -> new ReconnectDataUsagePayload(
 				"Reconnect data usage report",
 				mbReceived).toString());
@@ -232,11 +232,11 @@ public class ReconnectReceiver {
 
 		// validate the signatures from the received state
 		log.info(RECONNECT.getMarker(), "Validating signatures of the received state");
-		int numSigs = signedState.getSigSet().getNumMembers();
-		Future<Boolean>[] validFutures = new Future[numSigs];
+		final int numSigs = signedState.getSigSet().getNumMembers();
+		final Future<Boolean>[] validFutures = new Future[numSigs];
 		for (int i = 0; i < numSigs; i++) {
-			PublicKey key = addressBook.getAddress(i).getSigPublicKey();
-			SigInfo sigInfo = signedState.getSigSet().getSigInfo(i);
+			final PublicKey key = addressBook.getAddress(i).getSigPublicKey();
+			final SigInfo sigInfo = signedState.getSigSet().getSigInfo(i);
 			if (sigInfo == null) {
 				continue;
 			}
@@ -258,7 +258,7 @@ public class ReconnectReceiver {
 					validCount++;
 					validStake += signedState.getAddressBook().getStake(i);
 				}
-			} catch (Exception e) {
+			} catch (final Exception e) {
 				log.info(EXCEPTION.getMarker(), "Error while validating signature from received state: ", e);
 			}
 		}
@@ -285,7 +285,7 @@ public class ReconnectReceiver {
 	 */
 	private void receiveSignatures() throws IOException {
 		log.info(RECONNECT.getMarker(), "Receiving signed state signatures");
-		SigSet sigSet = new SigSet(addressBook);
+		final SigSet sigSet = new SigSet(addressBook);
 		sigSet.deserialize(connection.getDis(), sigSet.getVersion());
 		signedState.setSigSet(sigSet);
 	}

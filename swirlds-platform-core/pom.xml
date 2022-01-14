@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ (c) 2016-2021 Swirlds, Inc.
+  ~ (c) 2016-2022 Swirlds, Inc.
   ~
   ~ This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
   ~ intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -24,7 +24,7 @@
 	<parent>
 		<groupId>com.swirlds</groupId>
 		<artifactId>swirlds-platform</artifactId>
-		<version>0.19.0-orvw.1</version>
+		<version>0.21.0-orvw.1</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -49,13 +49,13 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-common</artifactId>
-			<version>0.19.0-orvw.1</version>
+			<version>0.21.0-orvw.1</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-logging</artifactId>
-			<version>0.19.0-orvw.1</version>
+			<version>0.21.0-orvw.1</version>
 		</dependency>
 
 		
@@ -161,7 +161,7 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-fchashmap</artifactId>
-			<version>0.19.0-orvw.1</version>
+			<version>0.21.0-orvw.1</version>
 			<scope>compile</scope>
 		</dependency>
 	</dependencies>

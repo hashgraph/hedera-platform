@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -103,7 +103,7 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 		round = in.readLong();
 		memberId = in.readLong();
 		hash = in.readByteArray(DigestType.SHA_384.digestLength());
-		sig = in.readByteArray(SignatureType.RSA.getSignatureLength());
+		sig = in.readByteArray(SignatureType.RSA.signatureLength());
 	}
 
 	/**

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -39,8 +39,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * State written and used by the platform.
@@ -156,29 +154,6 @@ public class PlatformState extends AbstractMerkleLeaf {
 			long value = stream.readLong();
 			return Pair.of(key, value);
 		});
-
-		if (version < ClassVersion.LOAD_MINGEN_INTO_CONSENSUS) {
-			// in earlier versions, we did not use mingen info when loading consensus. because of this, these versions
-			// do not have info for all rounds. to mitigate this issue on migration, we filer out these events.
-			final Map<Long, Long> minGenMap = minGenInfo.stream().collect(
-					Collectors.toMap(Pair::getKey, Pair::getValue));
-
-			final List<EventImpl> filteredEvents = new ArrayList<>();
-			// the first part of the array of events will be old events, they are kept so that we can know what the last
-			// event of each member is. we keep old events, and we filter new ones.
-
-			// the round number where new events start
-			final long roundNew = Utilities.getLowestFromHighestSequence(events, EventImpl::getRoundCreated);
-
-			for (final EventImpl event : events) {
-				if (event.getRoundCreated() < roundNew // keep old events
-						// we have minGen for this round, we can keep this event
-						|| minGenMap.containsKey(event.getRoundCreated())) {
-					filteredEvents.add(event);
-				}
-			}
-			events = filteredEvents.toArray(new EventImpl[0]);
-		}
 
 		State.linkParents(events);
 

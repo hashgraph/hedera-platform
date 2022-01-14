@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -33,7 +33,8 @@ import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.internal.SignedStateLoadingException;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.SignedStateManager;
-import com.swirlds.platform.sync.ShadowGraphManager;
+import com.swirlds.platform.sync.ShadowGraph;
+import com.swirlds.platform.sync.ShadowGraphSynchronizer;
 
 public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	/**
@@ -148,14 +149,14 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	/**
 	 * @return the SyncManager used by this platform
 	 */
-	abstract SyncManager getSyncManager();
+	abstract SyncManagerImpl getSyncManager();
 
 	/**
-	 * Get the shadow graph and tip Event set used by this platform
+	 * Get the shadow graph used by this platform
 	 *
-	 * @return the ShadowGraphManager used by this platform
+	 * @return the {@link ShadowGraph} used by this platform
 	 */
-	abstract ShadowGraphManager getShadowGraphManager();
+	abstract ShadowGraph getShadowGraph();
 
 	/**
 	 * @return the connection ID for this platform
@@ -319,8 +320,8 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	public abstract void enterMaintenance();
 
 	/**
-	 * @return the platform instance of the instantiator
+	 * @return the platform instance of the {@link ShadowGraphSynchronizer}
 	 */
-	public abstract NodeSynchronizerInstantiator getNodeSynchronizerInstantiator();
+	public abstract ShadowGraphSynchronizer getShadographSynchronizer();
 
 }

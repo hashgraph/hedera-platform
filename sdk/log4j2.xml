@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ (c) 2016-2021 Swirlds, Inc.
+  ~ (c) 2016-2022 Swirlds, Inc.
   ~
   ~ This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
   ~ intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -34,23 +34,13 @@
 		<MarkerFilter marker="JVM_PAUSE_ERROR"        onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
 
 		<!-- Synchronization/Gossip (Debug) -->
-		<MarkerFilter marker="SYNC_START"             onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_DONE"              onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_ERROR"             onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="SYNC"                   onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_SGM"               onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_STEP_1"            onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_STEP_2"            onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_STEP_3"            onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_STEP_4"            onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_STEP_5"            onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_GENERATIONS"       onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_FALLEN_BEHIND"     onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_THROTTLE"          onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_START"             onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_INFO"              onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="SYNC_LISTENER"          onMatch="DENY"    onMismatch="NEUTRAL"/>
-		<MarkerFilter marker="SYNC_CALLER"            onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="SYNC_CLIENT"            onMatch="DENY"    onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="SYNC_CONNECTION"        onMatch="DENY"    onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="SYNC_ERROR"             onMatch="DENY"    onMismatch="NEUTRAL"/>
 
 		<MarkerFilter marker="HEARTBEAT"              onMatch="DENY"    onMismatch="NEUTRAL"/>
 

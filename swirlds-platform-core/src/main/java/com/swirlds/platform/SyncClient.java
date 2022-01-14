@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -39,7 +39,7 @@ class SyncClient {
 	/** the number of members in the community */
 	private final int numMembers;
 	/** a separate SyncConnection for the connection to each other member. Some may be null. */
-	private final AtomicReferenceArray<SyncConnection> callerConn;
+	private final AtomicReferenceArray<SocketSyncConnection> callerConn;
 
 	/**
 	 * The client that has a method to create new connections to the server.
@@ -47,7 +47,7 @@ class SyncClient {
 	 * @param platform
 	 * 		the platform that is using this
 	 */
-	SyncClient(AbstractPlatform platform) {
+	SyncClient(final AbstractPlatform platform) {
 		this.platform = platform;
 		this.numMembers = platform.getNumMembers();
 		this.callerConn = new AtomicReferenceArray<>(numMembers);
@@ -60,7 +60,7 @@ class SyncClient {
 	 * @return the number of bytes written
 	 */
 	long getBytesWrittenSinceLast() {
-		return SyncConnection.getBytesWrittenSinceLast(platform, callerConn);
+		return SocketSyncConnection.getBytesWrittenSinceLast(platform, callerConn);
 	}
 
 	/**
@@ -72,13 +72,13 @@ class SyncClient {
 	 * 		the connection ID of the member to get the connection to
 	 * @return the connection (or null if none)
 	 */
-	SyncConnection getCallerConnOrConnectOnce(NodeId otherConnId) {
+	SocketSyncConnection getCallerConnOrConnectOnce(final NodeId otherConnId) {
 		log.debug(SYNC_CLIENT.getMarker(),
 				"{} `getCallerConnOrConnectOnce` : getting connection",
 				platform.getSelfId());
 
-		SyncConnection connection;
-		NodeId selfConnId = platform.getSelfConnectionId();
+		SocketSyncConnection connection;
+		final NodeId selfConnId = platform.getSelfConnectionId();
 		if (selfConnId.sameNetwork(otherConnId) &&
 				!platform.getConnectionGraph().isAdjacent(selfConnId.getIdAsInt(), otherConnId.getIdAsInt())) {
 			log.error(EXCEPTION.getMarker(),
@@ -87,10 +87,10 @@ class SyncClient {
 			return null;
 		}
 		connection = callerConn.get(otherConnId.getIdAsInt());
-		boolean connected = (connection != null && connection.connected());
+		final boolean connected = (connection != null && connection.connected());
 		if (!connected) {
 			// only try once. This may take a while.
-			connection = SyncConnection.connect(platform, platform.getSelfId(),
+			connection = SocketSyncConnection.connect(platform, platform.getSelfId(),
 					otherConnId);
 			callerConn.set(otherConnId.getIdAsInt(), connection);
 			if (connection != null) {
@@ -114,7 +114,7 @@ class SyncClient {
 	 * 		the ID of the member to connect to
 	 * @return the connection
 	 */
-	SyncConnection getExistingCallerConn(int id) {
+	SocketSyncConnection getExistingCallerConn(final int id) {
 		return callerConn.get(id);
 	}
 }

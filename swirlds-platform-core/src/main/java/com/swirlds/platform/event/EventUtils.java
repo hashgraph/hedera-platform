@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -19,8 +19,10 @@ import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.EventStrings;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.function.BiPredicate;
+import java.util.ListIterator;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -80,14 +82,77 @@ public abstract class EventUtils {
 				.collect(Collectors.joining(","));
 	}
 
-	public static boolean sorted(List<EventImpl> events, BiPredicate<Event, Event> p) {
-		boolean sorted = true;
-		for(int i = 1; i < events.size(); ++i) {
-			sorted = sorted && p.test(events.get(i - 1), events.get(i));
-		}
-
-		return sorted;
+	public static int generationComparator(final Event e1, final Event e2) {
+		return Long.compare(e1.getGeneration(), e2.getGeneration());
 	}
 
+	/**
+	 * Prepares consensus events for shadow graph during a restart or reconnect by sorting the events by generation and
+	 * checking for generation gaps.
+	 *
+	 * @param events
+	 * 		events supplied by consensus
+	 * @return a list of input events, sorted and checked
+	 */
+	public static List<EventImpl> prepareForShadowGraph(final EventImpl[] events) {
+		if (events == null || events.length == 0) {
+			return Collections.emptyList();
+		}
+		// shadow graph expects them to be sorted
+		Arrays.sort(events, EventUtils::generationComparator);
+		final List<EventImpl> forShadowGraph = Arrays.asList(events);
+		return lastContiguousEvents(forShadowGraph);
+	}
+
+	/**
+	 * <p>Returns the subset of events that are in the latest (youngest) contiguous set of generations. If there is a
+	 * generation difference of more than 1 between events, all events older than the gap are excluded from the returned
+	 * list.</p>
+	 *
+	 * <p>{@code events} must be ordered by generation in ascending order (smallest to largest). The resulting list
+	 * maintains the order of {@code events}.</p>
+	 *
+	 * @param events
+	 * 		events to look for generation gaps in, sorted in ascending order by generation
+	 * @return the list of events that are the subset of {@code events} that are in the latest contiguous set of
+	 * 		generations.
+	 */
+	public static List<EventImpl> lastContiguousEvents(final List<EventImpl> events) {
+		if (events == null) {
+			throw new IllegalArgumentException("Event list should not be null.");
+		}
+		if (events.isEmpty()) {
+			return Collections.emptyList();
+		}
+		LinkedList<EventImpl> lastContiguousEvents = new LinkedList<>();
+		ListIterator<EventImpl> listIterator = events.listIterator(events.size());
+
+		// Iterate through the list from back to front, evaluating the youngest events first
+		EventImpl prev = listIterator.previous();
+
+		while (listIterator.hasPrevious()) {
+
+			// No gap found yet, so add the previous event.
+			// Add to the front to maintain the original order.
+			lastContiguousEvents.addFirst(prev);
+
+			EventImpl event = listIterator.previous();
+			final long diff = prev.getGeneration() - event.getGeneration();
+			if (diff > 1 || diff < 0) {
+				// There is a gap in generations. We don't include any
+				// events lower than the gap, so stop iterating.
+				break;
+			}
+
+			prev = event;
+		}
+
+		// If no gaps were found, prev will be the first event in the list,
+		// in which case it should be included because there were no gaps
+		if (prev == events.get(0)) {
+			lastContiguousEvents.addFirst(prev);
+		}
+		return lastContiguousEvents;
+	}
 
 }

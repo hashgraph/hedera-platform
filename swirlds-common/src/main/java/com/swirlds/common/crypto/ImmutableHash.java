@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -55,13 +55,5 @@ public class ImmutableHash extends Hash {
 	public byte[] getValue() {
 		final byte[] value = super.getValue();
 		return Arrays.copyOf(value, value.length);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void setValue(final byte[] value) {
-		throw new UnsupportedOperationException();
 	}
 }

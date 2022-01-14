@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,6 +15,11 @@
 package com.swirlds.platform.stats;
 
 import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.consensus.GraphGenerations;
+import com.swirlds.platform.sync.ShadowGraph;
+import com.swirlds.platform.sync.ShadowGraphSynchronizer;
+import com.swirlds.platform.sync.SyncManager;
+import com.swirlds.platform.sync.SyncResult;
 import com.swirlds.platform.sync.SyncTiming;
 
 /**
@@ -22,22 +27,30 @@ import com.swirlds.platform.sync.SyncTiming;
  */
 public interface SyncStats {
 	/**
-	 * @param eventsWritten
-	 * 		the number of events written in a sync
+	 * Supplies the generation numbers of a sync for statistics
+	 *
+	 * @param self
+	 * 		generations of our graph at the start of the sync
+	 * @param other
+	 * 		generations of their graph at the start of the sync
 	 */
-	void syncEventsWritten(int eventsWritten);
+	void generations(final GraphGenerations self, final GraphGenerations other);
 
 	/**
-	 * @param eventsRead
-	 * 		the number of events read in a sync
+	 * Supplies information about the rate of receiving events when all events are read
+	 *
+	 * @param nanosStart
+	 * 		The {@link System#nanoTime()} when we started receiving events
+	 * @param numberReceived
+	 * 		the number of events received
 	 */
-	void syncEventsRead(int eventsRead);
+	void eventsReceived(final long nanosStart, final int numberReceived);
 
 	/**
 	 * @param bytesWritten
 	 * 		the number of throttle bytes written during a sync
 	 */
-	void syncThrottleBytesWritten(int bytesWritten);
+	void syncThrottleBytesWritten(final int bytesWritten);
 
 	/**
 	 * Record all stats related to sync timing
@@ -47,32 +60,27 @@ public interface SyncStats {
 	 * @param conn
 	 * 		the sync connections
 	 */
-	void recordSyncTiming(SyncTiming syncTiming, SyncConnection conn);
+	void recordSyncTiming(final SyncTiming syncTiming, final SyncConnection conn);
+
+	/**
+	 * Records the size of the known set during a sync. This is the most compute intensive part of the sync, so this is
+	 * useful information to validate sync performance.
+	 *
+	 * @param knownSetSize the size of the known set
+	 */
+	void knownSetSize(int knownSetSize);
 
 	/**
 	 * Notifies the stats that a sync is done
 	 *
-	 * @param caller
-	 * 		was the platform a caller in this sync?
+	 * @param info
+	 * 		information about the sync that occurred
 	 */
-	void syncDone(boolean caller);
+	void syncDone(final SyncResult info);
 
 	/**
-	 * Notifies the stats that the event creation phase has entered
-	 *
-	 * @param shouldCreateEvent
-	 * 		did the sync manager tell us to create an event?
-	 */
-	void eventCreation(boolean shouldCreateEvent);
-
-	/**
-	 * Notifies the stats that a sync failed because one of the nodes is behind
-	 */
-	void nodeFallenBehind();
-
-	/**
-	 * Called by {@code NodeSynchronizerImpl} to update the {@code tips/sync} statistic with the number of creators that
-	 * have more than one {@code sendTip} in the current synchronization.
+	 * Called by {@link ShadowGraphSynchronizer} to update the {@code tips/sync} statistic with the number of creators
+	 * that have more than one {@code sendTip} in the current synchronization.
 	 *
 	 * @param multiTipCount
 	 * 		the number of creators in the current synchronization that have more than one sending tip.
@@ -80,7 +88,7 @@ public interface SyncStats {
 	void updateMultiTipsPerSync(final int multiTipCount);
 
 	/**
-	 * Called by {@code NodeSynchronizerImpl} to update the {@code tips/sync} statistic with the number of {@code
+	 * Called by {@link ShadowGraphSynchronizer} to update the {@code tips/sync} statistic with the number of {@code
 	 * sendTips} in the current synchronization.
 	 *
 	 * @param tipCount
@@ -89,8 +97,20 @@ public interface SyncStats {
 	void updateTipsPerSync(final int tipCount);
 
 	/**
-	 * Updates the {@code tipAbsorptionOps/sec} statistic by cycling the underlying {@link
-	 * com.swirlds.platform.StatsSpeedometer} instance.
+	 * Called by {@link ShadowGraph} to update the number of generations that should
+	 * be expired but can't be yet due to reservations.
+	 *
+	 * @param numGenerations
+	 * 		the new number of generations
 	 */
-	void updateTipAbsorptionOpsPerSec();
+	void updateGensWaitingForExpiry(final long numGenerations);
+
+	/**
+	 * Called by {@link SyncManager#shouldAcceptSync()} when a sync is accepted or rejected to maintain the ratio of
+	 * rejected syncs to accepted syncs.
+	 *
+	 * @param syncRejected
+	 * 		true is a sync was rejected, false otherwise
+	 */
+	void updateRejectedSyncRatio(final boolean syncRejected);
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -55,12 +55,12 @@ public class CachedPoolParallelExecutor implements ParallelExecutor {
 	 * 		will be the cause and the task1 exception will be the suppressed exception
 	 */
 	@Override
-	public void doParallel(
-			final Callable<Object> task1,
-			final Callable<Object> task2)
+	public <T> T doParallel(
+			final Callable<T> task1,
+			final Callable<Void> task2)
 			throws ParallelExecutionException {
 
-		final Future<Object> future1 = threadPool.submit(task1);
+		final Future<T> future1 = threadPool.submit(task1);
 
 		// exception to throw, if any of the tasks throw
 		ParallelExecutionException toThrow = null;
@@ -71,13 +71,14 @@ public class CachedPoolParallelExecutor implements ParallelExecutor {
 			toThrow = new ParallelExecutionException(e);
 		}
 
+		T result = null;
 		try {
-			future1.get();
+			result = future1.get();
 		} catch (InterruptedException | ExecutionException e) {
 			if (toThrow == null) {
 				toThrow = new ParallelExecutionException(e);
 			} else {
-				// if task2 already threw an exception, we add this one as a supressed exception
+				// if task2 already threw an exception, we add this one as a suppressed exception
 				toThrow.addSuppressed(e);
 			}
 		}
@@ -86,5 +87,7 @@ public class CachedPoolParallelExecutor implements ParallelExecutor {
 		if (toThrow != null) {
 			throw toThrow;
 		}
+
+		return result;
 	}
 }

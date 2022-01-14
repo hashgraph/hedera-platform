@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,6 +15,7 @@ package com.swirlds.platform;
 
 
 import com.swirlds.common.NodeId;
+import com.swirlds.platform.sync.SyncConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,7 +43,7 @@ class SyncHeartbeat implements Runnable {
 	 * member, and receive their ACK each time, using the same channel that the SyncCaller uses. So there is
 	 * a separate SyncHeartbeat per member.
 	 */
-	public SyncHeartbeat(AbstractPlatform platform, NodeId otherId) {
+	public SyncHeartbeat(final AbstractPlatform platform, final NodeId otherId) {
 		this.platform = platform;
 		this.otherId = otherId;
 	}
@@ -57,7 +58,7 @@ class SyncHeartbeat implements Runnable {
 
 				// get the existing connection. If it's not yet connected, try to establish a connection.
 				// We only try once per time through this loop.
-				SyncConnection conn = platform.getSyncClient()
+				final SocketSyncConnection conn = platform.getSyncClient()
 						.getCallerConnOrConnectOnce(otherId);
 
 				if (conn == null || !conn.connected()) {
@@ -73,10 +74,10 @@ class SyncHeartbeat implements Runnable {
 				log.debug(HEARTBEAT.getMarker(), "heartbeat about to sleep");
 				Thread.sleep(Settings.sleepHeartbeat); // Slow down heartbeats to match the configured interval
 				log.debug(HEARTBEAT.getMarker(), "heartbeat awoke");
-			} catch (InterruptedException ex) {
+			} catch (final InterruptedException ex) {
 				Thread.currentThread().interrupt();
 				return;
-			} catch (Exception e) {
+			} catch (final Exception e) {
 				log.error(EXCEPTION.getMarker(), "Exception while sending/receiving heartbeat/ACK:", e);
 			}
 		}
@@ -94,13 +95,13 @@ class SyncHeartbeat implements Runnable {
 	 * @param conn
 	 * 		the connection (which must already be connected)
 	 */
-	void doHeartbeat(SyncConnection conn) {
+	void doHeartbeat(final SocketSyncConnection conn) {
 		log.debug(HEARTBEAT.getMarker(),
 				"about to lock platform[{}].syncServer.lockCallHeartbeat[{}]",
 				platform.getSelfId(), otherId);
 		final ReentrantLock lock = platform.getSyncServer().lockCallHeartbeat.get(otherId.getIdAsInt());
-		DataOutputStream dos = conn.getDos();
-		DataInputStream dis = conn.getDis();
+		final DataOutputStream dos = conn.getDos();
+		final DataInputStream dis = conn.getDis();
 		if (dis == null || dos == null) {
 			return;
 		}
@@ -113,11 +114,11 @@ class SyncHeartbeat implements Runnable {
 					platform.getSelfId(), otherId);
 			log.debug(HEARTBEAT.getMarker(), "about to send heartbeat");
 
-			long startTime = System.nanoTime();
+			final long startTime = System.nanoTime();
 			dos.write((int) SyncConstants.HEARTBEAT);
 			dos.flush();
 			conn.getSocket().setSoTimeout(Settings.timeoutSyncClientSocket);
-			byte b = dis.readByte();
+			final byte b = dis.readByte();
 			platform.getStats().avgPingMilliseconds[otherId.getIdAsInt()].recordValue(
 					(System.nanoTime() - startTime) / 1_000_000.0);
 			if (b != SyncConstants.HEARTBEAT_ACK) {
@@ -127,7 +128,7 @@ class SyncHeartbeat implements Runnable {
 				conn.disconnect(true, 12);
 				platform.getSyncClient().getCallerConnOrConnectOnce(otherId); // try once to reconnect
 			}
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			// this is either a timeout because nothing was received for a long time (e.g., 15 seconds),
 			// or an error that happened during the read or write (e.g., because the socket closed)
 			log.error(HEARTBEAT.getMarker(), "error while sending or receiving the heartbeat:", e);

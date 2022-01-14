@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -126,8 +126,8 @@ public final class EventStringBuilder {
 			long generation,
 			Hash hash) {
 		sb.append('(');
-		if (creatorId == EventImpl.NO_EVENT_ID) {
-			if (generation == EventImpl.NO_EVENT_GEN && hash == null) {
+		if (creatorId == EventConstants.CREATOR_ID_UNDEFINED) {
+			if (generation == EventConstants.GENERATION_UNDEFINED && hash == null) {
 				sb.append("none)");
 				return;
 			} else {

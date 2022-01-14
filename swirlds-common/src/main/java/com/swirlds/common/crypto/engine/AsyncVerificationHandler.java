@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,6 +14,7 @@
 
 package com.swirlds.common.crypto.engine;
 
+import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.crypto.VerificationStatus;
 
@@ -27,8 +28,8 @@ import java.util.List;
  * asynchronous manner on a background thread. This object also serves as the {@link java.util.concurrent.Future}
  * implementation assigned to each item contained in the {@link List}.
  */
-public class AsyncVerificationHandler extends AsyncOperationHandler<TransactionSignature, VerificationProvider> {
-
+public class AsyncVerificationHandler extends AsyncOperationHandler<TransactionSignature,
+		OperationProvider<TransactionSignature, Void, Boolean, ?, SignatureType>> {
 	/**
 	 * Constructs an {@link AsyncOperationHandler} which will operate on the provided {@link List} of items using the
 	 * specified algorithm provider. This method does not make a copy of the list provided and expects exclusive access
@@ -39,7 +40,8 @@ public class AsyncVerificationHandler extends AsyncOperationHandler<TransactionS
 	 * @param provider
 	 * 		the algorithm provider used to perform cryptographic transformations on each item
 	 */
-	public AsyncVerificationHandler(final List<TransactionSignature> workItems, final VerificationProvider provider) {
+	public AsyncVerificationHandler(final List<TransactionSignature> workItems,
+			final OperationProvider<TransactionSignature, Void, Boolean, ?, SignatureType> provider) {
 		super(workItems, provider);
 	}
 
@@ -55,7 +57,7 @@ public class AsyncVerificationHandler extends AsyncOperationHandler<TransactionS
 	 * 		the algorithm provider used to perform cryptographic transformations on each item
 	 */
 	public AsyncVerificationHandler(final List<TransactionSignature> workItems, final boolean shouldCopy,
-			final VerificationProvider provider) {
+			final OperationProvider<TransactionSignature, Void, Boolean, ?, SignatureType> provider) {
 		super(workItems, shouldCopy, provider);
 	}
 
@@ -71,11 +73,11 @@ public class AsyncVerificationHandler extends AsyncOperationHandler<TransactionS
 	 * 		if an implementation of the required algorithm cannot be located or loaded
 	 */
 	@Override
-	protected void handleWorkItem(final VerificationProvider provider,
+	protected void handleWorkItem(
+			final OperationProvider<TransactionSignature, Void, Boolean, ?, SignatureType> provider,
 			final TransactionSignature item) throws NoSuchAlgorithmException {
 		item.setFuture(this);
 		final boolean isValid = provider.compute(item, item.getSignatureType());
-
-		item.setSignatureStatus((isValid) ? VerificationStatus.VALID : VerificationStatus.INVALID);
+		item.setSignatureStatus(isValid ? VerificationStatus.VALID : VerificationStatus.INVALID);
 	}
 }

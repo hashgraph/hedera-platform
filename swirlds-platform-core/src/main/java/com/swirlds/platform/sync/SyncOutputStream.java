@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,17 +14,24 @@
 
 package com.swirlds.platform.sync;
 
+import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.SerializableDataOutputStream;
 import com.swirlds.common.io.extendable.CountingStreamExtension;
 import com.swirlds.common.io.extendable.ExtendableOutputStream;
 import com.swirlds.common.io.extendable.StreamExtensionList;
+import com.swirlds.platform.EventImpl;
 
 import java.io.BufferedOutputStream;
+import java.io.IOException;
 import java.io.OutputStream;
+import java.time.Instant;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class SyncOutputStream extends SerializableDataOutputStream {
 	private final CountingStreamExtension syncByteCounter;
 	private final CountingStreamExtension connectionByteCounter;
+	private final AtomicReference<Instant> requestSent;
 
 	protected SyncOutputStream(OutputStream out,
 			CountingStreamExtension syncByteCounter,
@@ -32,6 +39,7 @@ public class SyncOutputStream extends SerializableDataOutputStream {
 		super(out);
 		this.syncByteCounter = syncByteCounter;
 		this.connectionByteCounter = connectionByteCounter;
+		this.requestSent = new AtomicReference<>(null);
 	}
 
 	public static SyncOutputStream createSyncOutputStream(OutputStream out, int bufferSize) {
@@ -57,5 +65,76 @@ public class SyncOutputStream extends SerializableDataOutputStream {
 
 	public CountingStreamExtension getConnectionByteCounter() {
 		return connectionByteCounter;
+	}
+
+	/**
+	 * @return the time the last sync request was sent
+	 */
+	public Instant getRequestSentTime() {
+		return requestSent.get();
+	}
+
+	/**
+	 * Send a sync request
+	 *
+	 * @throws IOException
+	 * 		if a stream exception occurs
+	 */
+	public void requestSync() throws IOException {
+		writeByte(SyncConstants.COMM_SYNC_REQUEST);
+		requestSent.set(Instant.now());
+	}
+
+	/**
+	 * Accepts a previously requested sync
+	 *
+	 * @throws IOException
+	 * 		if a stream exception occurs
+	 */
+	public void acceptSync() throws IOException {
+		writeByte(SyncConstants.COMM_SYNC_ACK);
+	}
+
+	/**
+	 * Rejects a previously requested sync
+	 *
+	 * @throws IOException
+	 * 		if a stream exception occurs
+	 */
+	public void rejectSync() throws IOException {
+		writeByte(SyncConstants.COMM_SYNC_NACK);
+	}
+
+	/**
+	 * Write this node's generation numbers to an output stream
+	 *
+	 * @throws IOException
+	 * 		if a stream exception occurs
+	 */
+	public void writeGenerations(final SyncGenerations generations) throws IOException {
+		writeSerializable(generations, false);
+	}
+
+	/**
+	 * Write to the {@link SyncOutputStream} the hashes of the tip events from this node's shadow graph
+	 *
+	 * @throws IOException
+	 * 		iff the {@link SyncOutputStream} throws
+	 */
+	public void writeTipHashes(final List<Hash> tipHashes) throws IOException {
+		writeSerializableList(tipHashes, false, true);
+	}
+
+	/**
+	 * Write event data
+	 *
+	 * @param event
+	 * 		the event to write
+	 * @throws IOException
+	 * 		iff the {@link SyncOutputStream} instance throws
+	 */
+	public void writeEventData(final EventImpl event) throws IOException {
+		writeSerializable(event.getBaseEventHashedData(), false);
+		writeSerializable(event.getBaseEventUnhashedData(), false);
 	}
 }

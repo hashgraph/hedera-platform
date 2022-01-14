@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -98,7 +98,7 @@ class Settings {
 	///////////////////////////////////////////
 	// settings from settings.txt file
 
-	static String about = "Swirlds browser v. 0.19.0\n"
+	static String about = "Swirlds browser v. 0.21.0\n"
 			+ "(c)2016-2021 Swirlds Inc\n" + "This is an early alpha version. \n"
 			+ "The Swirlds™ software is covered by one or more patents \n"
 			+ "(see www.swirlds.com/ip). The browser is free to download, \n"
@@ -163,7 +163,7 @@ class Settings {
 	 * should we slow down when not behind? One of N members is "falling behind" when it receives at least
 	 * (N + throttle7threshold) events during a sync.
 	 */
-	static boolean throttle7 = true;
+	static boolean throttle7 = false;
 	/**
 	 * "falling behind" if received at least N * throttle7threshold events in a sync. A good choice for this
 	 * constant might be 1+2*d if a fraction d of received events are duplicates.
@@ -346,7 +346,17 @@ class Settings {
 	static boolean csvAppend = false;
 
 	/** The value for the event intake queue at which the node should stop syncing */
-	static int eventIntakeQueueThrottleSize = 1;
+	static int eventIntakeQueueThrottleSize = 1000;
+
+	/**
+	 * The size of the event intake queue,
+	 * {@link com.swirlds.common.threading.QueueThreadConfiguration#UNLIMITED_CAPACITY} for unbounded.
+	 * It is best that this queue is large, but not unbounded. Filling it up can cause sync threads to drop TCP
+	 * connections, but leaving it unbounded can cause out of memory errors, even with the {@link
+	 * #eventIntakeQueueThrottleSize}, because syncs that started before the throttle engages can grow the queue to very
+	 * large sizes on larger networks.
+	 */
+	static int eventIntakeQueueSize = 10_000;
 
 	/**
 	 * If true, the platform will recalculate the hash of the signed state and check it against the written hash. It

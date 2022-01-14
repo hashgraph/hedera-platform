@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -22,6 +22,11 @@ import com.swirlds.platform.components.TransThrottleSyncAndCreateRules;
 import com.swirlds.platform.components.TransThrottleSyncRule;
 import com.swirlds.platform.components.TransactionTracker;
 import com.swirlds.platform.event.EventIntakeTask;
+import com.swirlds.platform.sync.FallenBehindManager;
+import com.swirlds.platform.sync.SyncCallerType;
+import com.swirlds.platform.sync.SyncManager;
+import com.swirlds.platform.sync.SyncResult;
+import com.swirlds.platform.sync.SyncUtils;
 import org.apache.logging.log4j.LogManager;
 
 import java.util.ArrayList;
@@ -41,7 +46,7 @@ import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResp
 /**
  * A class that manages information about who we need to sync with, and whether we need to reconnect
  */
-class SyncManager {
+class SyncManagerImpl implements SyncManager, FallenBehindManager {
 
 	/** the event intake queue */
 	private final BlockingQueue<EventIntakeTask> intakeQueue;
@@ -86,8 +91,6 @@ class SyncManager {
 	private final HashSet<Long> allNeighbors;
 	/** the number of neighbors we have */
 	private final int numNeighbors;
-	/** an array with all the neighbor ids */
-	private int[] neighbors;
 
 	/** number of neighbors who think this node has fallen behind */
 	volatile int numReportFallenBehind = 0;
@@ -143,7 +146,7 @@ class SyncManager {
 	 * @param transactionTracker
 	 * 		tracks user transactions within events
 	 */
-	SyncManager(
+	SyncManagerImpl(
 			final BlockingQueue<EventIntakeTask> intakeQueue,
 			final RandomGraph connectionGraph,
 			final NodeId selfId,
@@ -178,10 +181,11 @@ class SyncManager {
 		notYetReportFallenBehind = ConcurrentHashMap.newKeySet();
 		reportFallenBehind = new HashSet<>();
 		allNeighbors = new HashSet<>();
-		neighbors = this.connectionGraph.getNeighbors(this.selfId.getIdAsInt());
+		/* an array with all the neighbor ids */
+		int[] neighbors = this.connectionGraph.getNeighbors(this.selfId.getIdAsInt());
 		numNeighbors = neighbors.length;
-		for (int i = 0; i < neighbors.length; i++) {
-			allNeighbors.add((long) neighbors[i]);
+		for (final int neighbor : neighbors) {
+			allNeighbors.add((long) neighbor);
 		}
 	}
 
@@ -190,7 +194,8 @@ class SyncManager {
 	 *
 	 * @return true if the sync should be accepted, false otherwise
 	 */
-	boolean shouldAcceptSync() {
+	@Override
+	public boolean shouldAcceptSync() {
 		// we shouldn't sync if the event intake queue is too big
 		final int intakeQueueSize = intakeQueue.size();
 		if (intakeQueueSize > Settings.eventIntakeQueueThrottleSize) {
@@ -215,7 +220,8 @@ class SyncManager {
 	 *
 	 * @return true if the sync should be initiated, false otherwise
 	 */
-	boolean shouldInitiateSync() {
+	@Override
+	public boolean shouldInitiateSync() {
 		//we shouldn't sync if the event intake queue is too big
 		return intakeQueue.size() <= Settings.eventIntakeQueueThrottleSize;
 	}
@@ -227,7 +233,8 @@ class SyncManager {
 	 * 		the type of caller to create a list for
 	 * @return a list of neighbors
 	 */
-	List<Long> getNeighborsToCall(SyncCaller.SyncCallerType callerType) {
+	@Override
+	public List<Long> getNeighborsToCall(final SyncCallerType callerType) {
 		// if there is an indication we might have fallen behind, calling nodes to establish this takes priority
 		List<Long> list = getNeededForFallenBehind();
 		if (list != null) {
@@ -238,7 +245,7 @@ class SyncManager {
 			case PRIORITY:
 				list = new LinkedList<>();
 				for (int i = 0; i < MAXIMUM_NEIGHBORS_TO_QUERY; i++) {
-					long neighbor = connectionGraph.randomNeighbor(selfId.getIdAsInt());
+					final long neighbor = connectionGraph.randomNeighbor(selfId.getIdAsInt());
 
 					// don't add duplicated nodes here
 					if (list.contains(neighbor)) {
@@ -262,7 +269,8 @@ class SyncManager {
 	 *
 	 * @return true if the caller should initiate a sync, false otherwise
 	 */
-	boolean transThrottle() {
+	@Override
+	public boolean transThrottle() {
 		// check 1: first consider all the checks in transThrottleCallAndCreate
 		if (transThrottleCallAndCreate()) {
 			return true;
@@ -287,7 +295,8 @@ class SyncManager {
 	 *
 	 * @return true if we should sync and create an event
 	 */
-	boolean transThrottleCallAndCreate() {
+	@Override
+	public boolean transThrottleCallAndCreate() {
 		// check 1: if transThrottle is off, initiate a sync and create an event
 		if (!Settings.transThrottle) {
 			return true;
@@ -303,7 +312,7 @@ class SyncManager {
 			return true;
 		}
 
-		long roundReceivedAllCons = transactionTracker.getLastRoundReceivedAllTransCons();
+		final long roundReceivedAllCons = transactionTracker.getLastRoundReceivedAllTransCons();
 		if (Settings.state.getSaveStatePeriod() > 0) {
 			// check 4: if we are saving states to disk, then we need to sync until we have saved a state that has
 			// processed all transactions
@@ -338,29 +347,40 @@ class SyncManager {
 	 * 		the number of events written during the sync
 	 * @return true if an event should be created, false otherwise
 	 */
-	boolean shouldCreateEvent(NodeId otherId, boolean oneNodeFallenBehind, int eventsRead, int eventsWritten) {
+	@Override
+	public boolean shouldCreateEvent(
+			final NodeId otherId, final boolean oneNodeFallenBehind, final int eventsRead, final int eventsWritten) {
+		return shouldCreateEvent(
+				new SyncResult(/*unused here*/false, otherId, eventsRead, eventsWritten));
+	}
+
+	/**
+	 * Called by {@link SyncUtils} after a successful sync to check whether it should create an event or not
+	 *
+	 * @param info
+	 * 		information about the sync
+	 * @return true if an event should be created, false otherwise
+	 */
+	@Override
+	public boolean shouldCreateEvent(final SyncResult info) {
 		// check EventCreationRules:
 		// (1) if the node is not main node, it should not create events.
 		// (2) if the number of freeze transactions is greater than 0, should create an event.
 		// (3) during startup freeze, should not create an event.
 		// (4) in freeze period, should not create an event.
-		EventCreationRuleResponse response = eventCreationRules.shouldCreateEvent();
+		final EventCreationRuleResponse response = eventCreationRules.shouldCreateEvent();
 		if (response == EventCreationRuleResponse.CREATE) {
 			return true;
 		} else if (response == EventCreationRuleResponse.DONT_CREATE) {
 			return false;
 		}
 
-		// check 2: if one node had fallen behind, don't create an event
-		if (oneNodeFallenBehind) {
-			return false;
-		}
 		// check 3: if neither node is part of the superMinority in the latest round, don't create an event
-		if (!criticalQuorum.isInCriticalQuorum(otherId.getId()) &&
+		if (!criticalQuorum.isInCriticalQuorum(info.getOtherId().getId()) &&
 				!criticalQuorum.isInCriticalQuorum(selfId.getId())) {
 			return false;
 		}
-		if (eventsRead + eventsWritten > 0) {
+		if (info.getEventsRead() + info.getEventsWritten() > 0) {
 			// if we have transferred events, reset the counter
 			transThrottleSyncsWithNoEvents.set(0);
 		}
@@ -368,8 +388,8 @@ class SyncManager {
 		if (!transThrottleCallAndCreate()) {
 			// once transThrottle says we should not create any more events, we should start keeping track of the
 			// transThrottleSyncsWithNoEvents counter
-			if (eventsRead + eventsWritten == 0) {
-				// if no events were trasferred, we should increment the counter
+			if (info.getEventsRead() + info.getEventsWritten() == 0) {
+				// if no events were transferred, we should increment the counter
 				transThrottleSyncsWithNoEvents.incrementAndGet();
 			}
 			return false;
@@ -377,7 +397,7 @@ class SyncManager {
 
 		// check 5: staleEventPrevention
 		if (Settings.staleEventPreventionThreshold > 0 &&
-				eventsRead > Settings.staleEventPreventionThreshold * addressBook.getSize()) {
+				info.getEventsRead() > Settings.staleEventPreventionThreshold * addressBook.getSize()) {
 			// if we read too many events during this sync, we skip creating an event to reduce the probability of
 			// having a stale event
 			return false;
@@ -391,7 +411,8 @@ class SyncManager {
 	/**
 	 * Notifies the sync manager that there was a successful sync
 	 */
-	void successfulSync() {
+	@Override
+	public void successfulSync() {
 		if (transThrottleInitialCalls.get() > 0) {
 			// since this is not synchronized, it might make the transThrottleInitialCalls go below 0, but that isn't an
 			// issue and will only result in a few extra initial syncs
@@ -400,13 +421,10 @@ class SyncManager {
 	}
 
 	/**
-	 * Notify the sync manager that a node has reported that they don't have events we need. This means we have probably
-	 * fallen behind and will need to reconnect
-	 *
-	 * @param id
-	 * 		the id of the node who says we have fallen behind
+	 * {@inheritDoc}
 	 */
-	synchronized void reportFallenBehind(NodeId id) {
+	@Override
+	public synchronized void reportFallenBehind(final NodeId id) {
 		if (reportFallenBehind.add(id.getId())) {
 			if (numReportFallenBehind == 0) {
 				// we have received the first indication that we have fallen behind, so we need to check with other
@@ -423,10 +441,10 @@ class SyncManager {
 	}
 
 	/**
-	 * We have determined that we have not fallen behind, or we have reconnected, so reset everything to the initial
-	 * state
+	 * {@inheritDoc}
 	 */
-	synchronized void resetFallenBehind() {
+	@Override
+	public synchronized void resetFallenBehind() {
 		numReportFallenBehind = 0;
 		reportFallenBehind.clear();
 		notYetReportFallenBehind.clear();
@@ -443,27 +461,25 @@ class SyncManager {
 		if (notYetReportFallenBehind.size() == 0) {
 			return null;
 		}
-		List<Long> ret = new ArrayList<>(notYetReportFallenBehind);
+		final List<Long> ret = new ArrayList<>(notYetReportFallenBehind);
 		Collections.shuffle(ret);
 		return ret;
 	}
 
 	/**
-	 * Have enough nodes reported that they don't have events we need, and that we have fallen behind?
-	 *
-	 * @return true if we have fallen behind, false otherwise
+	 * {@inheritDoc}
 	 */
-	boolean hasFallenBehind() {
+	@Override
+	public boolean hasFallenBehind() {
 		return numNeighbors * Settings.reconnect.getFallenBehindThreshold() < numReportFallenBehind;
 	}
 
 	/**
-	 * Get a list of neighbors to call if we need to do a reconnect
-	 *
-	 * @return a list of neighbor IDs
+	 * {@inheritDoc}
 	 */
-	synchronized List<Long> getNeighborsForReconnect() {
-		List<Long> ret = new ArrayList<>(reportFallenBehind);
+	@Override
+	public synchronized List<Long> getNeighborsForReconnect() {
+		final List<Long> ret = new ArrayList<>(reportFallenBehind);
 		Collections.shuffle(ret);
 		return ret;
 	}

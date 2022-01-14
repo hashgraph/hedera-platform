@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -53,4 +53,12 @@ public interface HashgraphStats extends DefaultStats, StaleEventObserver {
 	 * @param startTime a start time, in nanoseconds
 	 */
 	void processedEventTask(long startTime);
+
+	/**
+	 * Notifies the stats that the event creation phase has entered
+	 *
+	 * @param shouldCreateEvent
+	 * 		did the sync manager tell us to create an event?
+	 */
+	void eventCreation(boolean shouldCreateEvent);
 }

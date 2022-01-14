@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,6 +14,7 @@
 
 package com.swirlds.common;
 
+import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.SerializableDataInputStream;
@@ -215,6 +216,36 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 			final int publicKeyLength, final int messageOffset, final int messageLength) {
 		add(new TransactionSignature(contents, signatureOffset, signatureLength, publicKeyOffset, publicKeyLength,
 				messageOffset, messageLength));
+	}
+
+	/**
+	 * Efficiently extracts and adds a new signature of given signature type to this transaction bypassing the need to
+	 * make copies of the
+	 * underlying byte arrays.
+	 *
+	 * @param signatureOffset
+	 * 		the offset in the transaction payload where the signature begins
+	 * @param signatureLength
+	 * 		the length in bytes of the signature
+	 * @param publicKeyOffset
+	 * 		the offset in the transaction payload where the public key begins
+	 * @param publicKeyLength
+	 * 		the length in bytes of the public key
+	 * @param messageOffset
+	 * 		the offset in the transaction payload where the message begins
+	 * @param messageLength
+	 * 		the length of the message in bytes
+	 * @param sigType
+	 * 		signature type
+	 * @throws IllegalArgumentException
+	 * 		if any of the provided offsets or lengths falls outside the array bounds
+	 * @throws IllegalArgumentException
+	 * 		if the internal payload of this transaction is null or a zero length array
+	 */
+	public void extractSignature(final int signatureOffset, final int signatureLength, final int publicKeyOffset,
+			final int publicKeyLength, final int messageOffset, final int messageLength, final SignatureType sigType) {
+		add(new TransactionSignature(contents, signatureOffset, signatureLength, publicKeyOffset, publicKeyLength,
+				messageOffset, messageLength, sigType));
 	}
 
 	/**

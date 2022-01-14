@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -17,7 +17,8 @@ package com.swirlds.platform;
 import com.swirlds.common.AddressBook;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.components.OldEventChecker;
-import com.swirlds.platform.internal.CreatorSeqPair;
+import com.swirlds.platform.consensus.GraphGenerations;
+import com.swirlds.platform.consensus.RoundNumberProvider;
 
 import java.util.List;
 import java.util.Queue;
@@ -25,7 +26,7 @@ import java.util.Queue;
 /**
  * An interface for classes that calculate consensus of events
  */
-public interface Consensus extends OldEventChecker {
+public interface Consensus extends OldEventChecker, GraphGenerations, RoundNumberProvider {
 	/**
 	 * Adds an event to the consensus object. This should be the only public method that modifies the state of the
 	 * object.
@@ -39,121 +40,11 @@ public interface Consensus extends OldEventChecker {
 	List<EventImpl> addEvent(EventImpl event, AddressBook addressBook);
 
 	/**
-	 * Get the minimum judge generation number in the most recent round for which the fame of all witnesses
-	 * has been decided, if such a round exists.
-	 *
-	 * If no such round exists, return the minimum judge generation number of the most recent
-	 * round-created.
-	 *
-	 * If there are no events yet, return {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}.
-	 *
-	 * @return the generation number
-	 */
-	long getMaxRoundGeneration();
-
-	/**
-	 * Get the minimum generation number of the witnesses in the minimum non-expired round.
-	 *
-	 * If there are no events yet, return {@link RoundInfo#MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED}.
-	 *
-	 * @return the generation number
-	 */
-	long getMinRoundGeneration();
-
-
-	/**
-	 * return the round number of the latest round for which the fame of all witnesses has been decided for
-	 * that round and all earlier rounds.
-	 *
-	 * @return the round number
-	 */
-	long getLastRoundDecided();
-
-	/**
-	 * Return the max round number for which we have an event. If there are none yet, return -1.
-	 *
-	 * @return the max round number, or -1 if none.
-	 */
-	long getMaxRound();
-
-	/**
-	 * Return the minimum round number for which we have an event. If there are none yet, return -1.
-	 *
-	 * @return the minimum round number, or -1 if none.
-	 */
-	long getMinRound();
-
-	/**
-	 * Return the highest round number that has been deleted (or at least will be deleted soon).
-	 *
-	 * @return the round number that will be deleted (along with all earlier rounds)
-	 */
-	long getDeleteRound();
-
-	/**
-	 * Return the minimum generation of all the famous witnesses that are not in ancient rounds.
-	 *
-	 * <p>Define gen(R) to be the minimum generation of all the events that were famous witnesses in round R.
-	 *
-	 * If round R is the most recent round for which we have decided the fame of all the witnesses, then any event with
-	 * a generation less than gen(R - {@code Settings.state.roundsExpired}) is called an “expired” event. And any
-	 * non-expired event with a generation less than gen(R - {@code Settings.state.roundsStale}) is an “ancient” event.
-	 * If the event failed to achieve consensus before becoming ancient, then it is “stale”. So every non-expired event
-	 * with a generation before gen(R - {@code Settings.state.roundsStale}) is either stale or consensus, not both.
-	 *
-	 * Expired events can be removed from memory unless they are needed for an old signed state that is still being used
-	 * for something (such as still in the process of being written to disk).
-	 * </p>
-	 *
-	 * @return the minimum generation
-	 */
-	long getMinGenerationNonAncient();
-
-	/**
-	 * Return the minimum generation of all the famous witnesses that are not in expired rounds.
-	 *
-	 * @return the minimum (oldest, least recent) generation which is not yet expired
-	 */
-	long getMinGenerationNonExpired();
-
-	/**
-	 * Return the minimum round number from rounds that have not yet expired.
-	 *
-	 * @return the minimum (oldest, least recent) round which is not yet expired
-	 */
-	long getMinRoundNonExpired();
-
-	/**
-	 * @return the number of events in the hashgraph
-	 */
-	int getNumEvents();
-
-	/**
 	 * Get an array of all the events in the hashgraph.
 	 *
 	 * @return An array of events
 	 */
 	EventImpl[] getAllEvents();
-
-	/**
-	 * Get an array of all the events in the hashgraph with generation number
-	 * &gt;= `minGenerationNumber`
-	 *
-	 * @param minGenerationNumber
-	 * 		the minimum generation to identify in the hashgraph
-	 * @return An array of events
-	 */
-	EventImpl[] getRecentEvents(long minGenerationNumber);
-
-	/**
-	 * get an event, given the ID of its creator, and the sequence number, where that creator's first event
-	 * is seq==0, the next is seq==1 and so on. Return null if it doesn't exist.
-	 *
-	 * @param pair
-	 * 		the creator sequence pair that identifies this event
-	 * @return the Event, or null if it doesn't exist.
-	 */
-	EventImpl getEvent(CreatorSeqPair pair);
 
 	/**
 	 * Gets a queue of stale events.

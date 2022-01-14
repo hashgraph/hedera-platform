@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,6 +15,7 @@ package com.swirlds.platform;
 
 import com.swirlds.common.NodeId;
 import com.swirlds.platform.internal.PlatformThreadFactory;
+import com.swirlds.platform.sync.SyncConstants;
 import com.swirlds.platform.sync.SyncInputStream;
 import com.swirlds.platform.sync.SyncOutputStream;
 import org.apache.logging.log4j.LogManager;
@@ -53,13 +54,13 @@ class SyncServer implements Runnable {
 	/** the Platform running this SyncServer server */
 	private final AbstractPlatform platform;
 	/** the number of members in the address book. Many arrays etc are this size */
-	private int numMembers;
+	private final int numMembers;
 	/** the IP address that this server listens on for establishing new connections */
 	private final byte[] ip;
 	/** the port that this server listens on for establishing new connections */
 	private final int port;
 	/** listenerConn.get(i) is the connection used by listener thread i for syncs initiated by member i */
-	private final AtomicReferenceArray<SyncConnection> listenerConn;
+	private final AtomicReferenceArray<SocketSyncConnection> listenerConn;
 	/** number of listener threads currently in a sync */
 	AtomicInteger numListenerSyncs = new AtomicInteger(0);
 	/** number of syncs currently happening (both caller and listener) */
@@ -97,7 +98,7 @@ class SyncServer implements Runnable {
 	 * @param port
 	 * 		the port to listen to
 	 */
-	SyncServer(AbstractPlatform platform, byte[] ip, int port) {
+	SyncServer(final AbstractPlatform platform, final byte[] ip, final int port) {
 		this.platform = platform;
 		this.ip = (ip != null) ? ip : listenIP;
 		this.port = port;
@@ -122,7 +123,7 @@ class SyncServer implements Runnable {
 	 * @return the number of bytes written
 	 */
 	long getBytesWrittenSinceLast() {
-		return SyncConnection.getBytesWrittenSinceLast(platform, listenerConn);
+		return SocketSyncConnection.getBytesWrittenSinceLast(platform, listenerConn);
 	}
 
 	/**
@@ -133,7 +134,7 @@ class SyncServer implements Runnable {
 	 * 		the ID number of the member
 	 * @return the stream
 	 */
-	public SyncConnection getListenerConn(NodeId otherId) {
+	public SocketSyncConnection getListenerConn(final NodeId otherId) {
 		checkConnected(otherId);// this currently DOESN'T recreate a missing connection, but does set it to
 		// null
 		return listenerConn.get(otherId.getIdAsInt());// otherId assumed to be main
@@ -145,18 +146,18 @@ class SyncServer implements Runnable {
 	 * @param otherId
 	 * 		ID number of this member
 	 */
-	boolean checkConnected(NodeId otherId) {
-		SyncConnection conn = null;
+	boolean checkConnected(final NodeId otherId) {
+		SocketSyncConnection conn = null;
 		try {
 			conn = listenerConn.get(otherId.getIdAsInt()); // otherId assumed to be main
 			if (conn == null) {
 				return false;
 			}
-			Socket s = conn.getSocket();
+			final Socket s = conn.getSocket();
 			if (s != null && !s.isClosed() && s.isBound() && s.isConnected()) {
 				return true; // this is a good connection, so use it
 			}
-		} catch (Exception e) {
+		} catch (final Exception e) {
 			log.error(EXCEPTION.getMarker(), "SyncServer.checkConnection error", e);
 		}
 		// if anything is wrong with it, forget it and return false
@@ -178,13 +179,13 @@ class SyncServer implements Runnable {
 				try {
 					serverSocket = platform.getCrypto().newServerSocketConnect(ip,
 							port);
-				} catch (IOException e) {
+				} catch (final IOException e) {
 					log.error(EXCEPTION.getMarker(), "SyncServer.run error", e);
 
 					try {
 						Thread.sleep(Settings.sleepSyncServerSocketBind);
 						platform.getStats().sleep3perSecond.cycle();
-					} catch (InterruptedException ex) {
+					} catch (final InterruptedException ex) {
 						Thread.currentThread().interrupt();
 						return;
 					}
@@ -200,15 +201,15 @@ class SyncServer implements Runnable {
 					clientSocket = serverSocket.accept(); // listen, waiting until someone connects
 					incomingConnPool.submit(new IncomingConnectionHandler(this,
 							clientSocket, platform));
-				} catch (SocketTimeoutException expectedWithNonZeroSOTimeout) {
+				} catch (final SocketTimeoutException expectedWithNonZeroSOTimeout) {
 					// Suppress the timeout conditions
-				} catch (Exception e) {
+				} catch (final Exception e) {
 					log.error(EXCEPTION.getMarker(), "SyncServer serverSocket.accept() error", e);
 					try {
 						if (clientSocket != null) {
 							clientSocket.close();
 						}
-					} catch (Exception ignored) {
+					} catch (final Exception ignored) {
 						// Suppress any exceptions during cleanup
 					}
 				}
@@ -218,7 +219,7 @@ class SyncServer implements Runnable {
 				if (serverSocket != null) {
 					serverSocket.close();
 				}
-			} catch (Exception ignored) {
+			} catch (final Exception ignored) {
 				// Suppress any exceptions during cleanup
 			}
 		}
@@ -232,16 +233,23 @@ class SyncServer implements Runnable {
 	 * @param otherId
 	 * 		ID number of the remote member
 	 */
-	void tcpConnectionEstablished(Socket socket, NodeId otherId) {
-		SyncConnection sc = new SyncConnection();
+	void tcpConnectionEstablished(final Socket socket, final NodeId otherId) {
 		SyncInputStream dis = null;
 		SyncOutputStream dos = null;
 		try {
 			dis = SyncInputStream.createSyncInputStream(socket.getInputStream(), Settings.bufferSize);
 			dos = SyncOutputStream.createSyncOutputStream(socket.getOutputStream(), Settings.bufferSize);
 
-			sc.set(platform, platform.getSelfId(), otherId, socket, dis, dos);
-			SyncConnection oldConn = listenerConn.get(otherId.getIdAsInt());
+			final SocketSyncConnection sc = new SocketSyncConnection(
+					platform.getSelfId(),
+					otherId,
+					platform,
+					false,
+					socket,
+					dis,
+					dos
+			);
+			final SocketSyncConnection oldConn = listenerConn.get(otherId.getIdAsInt());
 			// end any old connection that might exist with them
 			if (oldConn != null) {
 				log.error(SOCKET_EXCEPTIONS.getMarker(),
@@ -255,33 +263,33 @@ class SyncServer implements Runnable {
 					"{} accepted connection from {}", sc.getSelfId(),
 					sc.getOtherId());
 
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			log.error(EXCEPTION.getMarker(), "", e);
 			close(dis, dos, socket);
 		}
 	}
 
-	private void close(DataInputStream dis, DataOutputStream dos,
-			Socket clientSocket) {
+	private void close(final DataInputStream dis, final DataOutputStream dos,
+			final Socket clientSocket) {
 		try {
 			if (dis != null) {
 				dis.close();
 			}
-		} catch (Exception ignored) {
+		} catch (final Exception ignored) {
 		}
 
 		try {
 			if (dos != null) {
 				dos.close();
 			}
-		} catch (Exception ignored) {
+		} catch (final Exception ignored) {
 		}
 
 		try {
 			if (clientSocket != null) {
 				clientSocket.close();
 			}
-		} catch (Exception ignored) {
+		} catch (final Exception ignored) {
 		}
 	}
 
@@ -289,9 +297,9 @@ class SyncServer implements Runnable {
 	 * This class is used to accept incoming connections in a separate thread
 	 */
 	private class IncomingConnectionHandler implements Runnable {
-		private SyncServer syncServer;
-		private Socket clientSocket;
-		private AbstractPlatform platform;
+		private final SyncServer syncServer;
+		private final Socket clientSocket;
+		private final AbstractPlatform platform;
 
 		/**
 		 * @param syncServer
@@ -301,8 +309,8 @@ class SyncServer implements Runnable {
 		 * @param platform
 		 * 		reference to the Platform
 		 */
-		public IncomingConnectionHandler(SyncServer syncServer,
-				Socket clientSocket, AbstractPlatform platform) {
+		public IncomingConnectionHandler(final SyncServer syncServer,
+				final Socket clientSocket, final AbstractPlatform platform) {
 			super();
 			this.syncServer = syncServer;
 			this.clientSocket = clientSocket;
@@ -345,15 +353,15 @@ class SyncServer implements Runnable {
 				} else {
 					close(dis, dos, clientSocket);
 				}
-			} catch (SocketTimeoutException expectedWithNonZeroSOTimeout) {
+			} catch (final SocketTimeoutException expectedWithNonZeroSOTimeout) {
 				// Suppressed intentionally
-			} catch (SSLException e) {
+			} catch (final SSLException e) {
 				// log the SSL connection exception which is caused by socket exceptions as warning.
 				log.warn(SOCKET_EXCEPTIONS.getMarker(),
 						"Listener {} hearing {} had SSLException:", platform.getSelfId(),
 						otherId, e);
 				close(dis, dos, clientSocket);
-			} catch (Exception e) {
+			} catch (final Exception e) {
 				log.error(EXCEPTION.getMarker(),
 						"SyncConnection.acceptConnection() error, remote IP: {}\nTime from accept to exception: {} " +
 								"ms",

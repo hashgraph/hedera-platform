@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -212,7 +212,12 @@ public class SignedStateFileManager implements Runnable {
 			signedState.weakReleaseState();
 		}
 
-		log.info(STATE_TO_DISK.getMarker(), "Finished writing '{}' to disk", taskDescription);
+
+		if (signedState.isFreezeState()) {
+			log.info(STATE_TO_DISK.getMarker(), "Finished writing during freeze '{}' to disk", taskDescription);
+		} else {
+			log.info(STATE_TO_DISK.getMarker(), "Finished writing '{}' to disk", taskDescription);
+		}
 	}
 
 	public static void writeAndRename(File file, File tmpFile,

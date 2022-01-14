@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -32,10 +32,8 @@ import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.net.SocketException;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 import java.util.function.Supplier;
-import java.util.function.ToLongFunction;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
@@ -488,37 +486,37 @@ public class Utilities extends DataStreamUtils {
 	 * 		return false otherwise
 	 */
 	static boolean isOrCausedBySocketException(final Throwable ex) {
-		if (ex == null) {
-			return false;
-		}
-
-		return ex instanceof SocketException ||
-				isOrCausedBySocketException(ex.getCause());
+		return isRootCauseSuppliedType(ex, SocketException.class);
 	}
 
 	/**
-	 * Search an array to find a last gap where adjacent values differ by more than 1
-	 *
-	 * @param array
-	 * 		the array of objects to search
-	 * @param getLong
-	 * 		provides a long value representing the object
-	 * @param <T>
-	 * 		the type provided
-	 * @return the lowest value of the sequence with no gaps
+	 * @param e
+	 * 		the exception to check
+	 * @return true if the cause is an IOException
 	 */
-	public static <T> long getLowestFromHighestSequence(T[] array, ToLongFunction<T> getLong) {
-		T[] sorted = array.clone();
-		Arrays.sort(sorted, Comparator.comparingLong(getLong));
-		long lowest = getLong.applyAsLong(sorted[sorted.length - 1]);
-		for (int i = sorted.length - 2; i >= 0; i--) {
-			long curr = getLong.applyAsLong(sorted[i]);
-			if (lowest - curr > 1) {
-				break;
-			}
-			lowest = curr;
+	static boolean isCausedByIOException(final Exception e) {
+		return isRootCauseSuppliedType(e, IOException.class);
+	}
+
+	/**
+	 * Unwraps a Throwable and checks the root cause
+	 *
+	 * @param t
+	 * 		the throwable to unwrap
+	 * @param type
+	 * 		the type to check against
+	 * @return true if the root cause matches the supplied type
+	 */
+	static boolean isRootCauseSuppliedType(final Throwable t, final Class<? extends Throwable> type) {
+		if (t == null) {
+			return false;
 		}
-		return lowest;
+		Throwable cause = t;
+		// get to the root cause
+		while (cause.getCause() != null) {
+			cause = cause.getCause();
+		}
+		return type.isInstance(cause);
 	}
 }
 

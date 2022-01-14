@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -16,13 +16,13 @@ package com.swirlds.common.merkle.hash;
 
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.crypto.engine.CryptoEngine;
 import com.swirlds.common.crypto.engine.CryptoThreadFactory;
 import com.swirlds.common.crypto.engine.ThreadExceptionHandler;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildHashException;
 import com.swirlds.common.merkle.iterators.MerkleHashIterator;
 import com.swirlds.common.merkle.iterators.MerkleRandomHashIterator;
+import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -60,7 +60,7 @@ public class MerkleHashBuilder {
 				new CryptoThreadFactory("merkle_hash_builder", new ThreadExceptionHandler(this.getClass()) {
 					@Override
 					public void uncaughtException(final Thread t, final Throwable ex) {
-						log.error(CryptoEngine.LOGM_EXCEPTION,
+						log.error(LogMarker.EXCEPTION.getMarker(),
 								"Uncaught exception in MerkleHashBuilder thread pool", ex);
 					}
 				}));
@@ -86,7 +86,7 @@ public class MerkleHashBuilder {
 		} catch (IllegalChildHashException ex) {
 			ex.setStackTrace(stackTrace);
 
-			log.error(CryptoEngine.LOGM_EXCEPTION, ex.getMessage(), ex);
+			log.error(LogMarker.EXCEPTION.getMarker(), ex.getMessage(), ex);
 			throw new IllegalChildHashException(ex);
 		}
 	}
@@ -154,7 +154,7 @@ public class MerkleHashBuilder {
 			} catch (IllegalChildHashException ex) {
 				ex.setStackTrace(stackTrace);
 
-				log.error(CryptoEngine.LOGM_EXCEPTION, ex.getMessage(), ex);
+				log.error(LogMarker.EXCEPTION.getMarker(), ex.getMessage(), ex);
 				throw new IllegalChildHashException(ex);
 			}
 		};

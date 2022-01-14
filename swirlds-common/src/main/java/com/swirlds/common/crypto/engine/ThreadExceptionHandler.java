@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,10 +14,9 @@
 
 package com.swirlds.common.crypto.engine;
 
+import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import static com.swirlds.common.crypto.engine.CryptoEngine.LOGM_EXCEPTION;
 
 /**
  * Custom {@link Thread.UncaughtExceptionHandler} implementation that logs the caught exception as if the provided {@link
@@ -42,8 +41,8 @@ public class ThreadExceptionHandler implements Thread.UncaughtExceptionHandler {
 	 */
 	@Override
 	public void uncaughtException(final Thread t, final Throwable ex) {
-		log.error(LOGM_EXCEPTION, String.format("Intercepted Uncaught Exception [ threadName = '%s' ]", t.getName()),
-				ex);
+		log.error(LogMarker.EXCEPTION.getMarker(),
+				String.format("Intercepted Uncaught Exception [ threadName = '%s' ]", t.getName()), ex);
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -20,6 +20,7 @@ import com.swirlds.platform.reconnect.ReconnectSender;
 import com.swirlds.platform.reconnect.ReconnectThrottle;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.StateDumpSource;
+import com.swirlds.platform.sync.SyncConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -95,7 +96,7 @@ class SyncListener implements Runnable {
 	public void run() {
 		try {
 			Thread.sleep(Settings.sleepSyncListenerStart);
-		} catch (InterruptedException ex) {
+		} catch (final InterruptedException ex) {
 			Thread.currentThread().interrupt();
 			return;
 		}
@@ -104,7 +105,7 @@ class SyncListener implements Runnable {
 		long lastSuccess = System.nanoTime();
 		while (true) { // loop forever, accepting syncs/heartbeats, until the user quits the browser
 			try {
-				SyncConnection conn = platform.getSyncServer()
+				final SocketSyncConnection conn = platform.getSyncServer()
 						.getListenerConn(otherId);
 
 				if (conn == null || !conn.connected()) {
@@ -125,18 +126,18 @@ class SyncListener implements Runnable {
 					// we successfully read one heartbeat or sync request and handled it
 					lastSuccess = System.nanoTime();
 				}
-			} catch (InterruptedException e) {
+			} catch (final InterruptedException e) {
 				Thread.currentThread().interrupt();
 				return;
-			} catch (Exception e) {
+			} catch (final Exception e) {
 				log.error(EXCEPTION.getMarker(), "SyncListener.run error 2", e);
 				try {
 					Thread.sleep(Settings.sleepListenerDisconnected);
 					platform.getStats().sleep2perSecond.cycle();
-				} catch (InterruptedException ex) {
+				} catch (final InterruptedException ex) {
 					Thread.currentThread().interrupt();
 					return;
-				} catch (Exception ex) {
+				} catch (final Exception ex) {
 					// Suppress any exception that may have been raised by the stats update
 				}
 			}
@@ -154,7 +155,7 @@ class SyncListener implements Runnable {
 	 * @return true if successfully read and handled one heartbeat or sync request
 	 */
 	private boolean handleOneMsg() {
-		SyncConnection conn = null;
+		SocketSyncConnection conn = null;
 		try {
 			log.debug(SYNC_START.getMarker(),
 					"listener {} about to listen for {}", selfId, otherId);
@@ -169,21 +170,21 @@ class SyncListener implements Runnable {
 			// wait for a sync to start, replying to any heartbeats that are received,
 			// and when a sync request is finally received, do the sync.
 			return handleOneMsgOrException(otherId, platform.getSyncServer());
-		} catch (BadIOException e) {
+		} catch (final BadIOException e) {
 			log.error(SOCKET_EXCEPTIONS.getMarker(),
 					"BadIOException.sync IOException (but not incrementing interruptedRecSyncsPerSecond) while {} " +
 							"listening for {}:", selfId, otherId, e);
 			if (conn != null) {
 				conn.disconnect(false, 4);// close the connection, don't reconnect until needed.
 			}
-		} catch (SocketException e) {
+		} catch (final SocketException e) {
 			log.error(SOCKET_EXCEPTIONS.getMarker(),
 					"SyncListener.sync SocketException (so incrementing interruptedRecSyncsPerSecond) while {} " +
 							"listening for {}:", selfId, otherId, e);
 			if (conn != null) {
 				conn.disconnect(false, 5);// close the connection, don't reconnect until needed.
 			}
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			// IOException covers both SocketTimeoutException and EOFException, plus more
 			log.error(SOCKET_EXCEPTIONS.getMarker(),
 					"SyncListener.sync IOException (so incrementing interruptedRecSyncsPerSecond) while {} listening " +
@@ -191,8 +192,12 @@ class SyncListener implements Runnable {
 			if (conn != null) {
 				conn.disconnect(false, 6);// close the connection, don't reconnect until needed.
 			}
-		} catch (Exception e) {
-			log.error(EXCEPTION.getMarker(),
+		} catch (final Exception e) {
+			// we use a different marker depending on what the root cause is
+			log.error(
+					Utilities.isCausedByIOException(e)
+							? SOCKET_EXCEPTIONS.getMarker()
+							: EXCEPTION.getMarker(),
 					"! SyncListener.sync Exception (so incrementing interruptedRecSyncsPerSecond) while {} listening " +
 							"for {}:", selfId, otherId, e);
 			if (conn != null) {
@@ -225,7 +230,7 @@ class SyncListener implements Runnable {
 	 * 		if there is any exception during sync, or it times out
 	 */
 	boolean handleOneMsgOrException(NodeId otherId, final SyncServer syncServer) throws Exception {
-		final SyncConnection conn;
+		final SocketSyncConnection conn;
 		final NodeId selfId;
 		// otherId assumed to be main
 		final ReentrantLock lockCallListen = platform.getSyncServer().lockCallListen.get(otherId.getIdAsInt());
@@ -235,7 +240,7 @@ class SyncListener implements Runnable {
 		log.debug(SYNC_START.getMarker(),
 				"about to read sync request or heartbeat (willing to wait for it)");
 
-		byte b;
+		final byte b;
 		conn = syncServer.getListenerConn(otherId);
 		if (conn == null || !conn.connected()) {
 			return false; // there is no connection to otherId, so return immediately
@@ -255,10 +260,10 @@ class SyncListener implements Runnable {
 		try {
 			log.debug(HEARTBEAT.getMarker(), "{} lsntr wait for {}", selfId, otherId);
 			b = dis.readByte();
-		} catch (SocketTimeoutException e) {
+		} catch (final SocketTimeoutException e) {
 			return false; // this short timeout isn't bad, but return false because nothing was read
 		}
-		DataOutputStream dos = conn.getDos();
+		final DataOutputStream dos = conn.getDos();
 		if (dos == null) {
 			return false; // there is no connection to otherId, so return immediately
 		}
@@ -278,28 +283,29 @@ class SyncListener implements Runnable {
 							"node {} has fallen behind. Incoming sync requests will not be accepted.", selfId);
 
 					// if we have fallen behind, dont accept any syncs
-					platform.getNodeSynchronizerInstantiator().
-							synchronize(conn, false, false, true);
+					platform.getShadographSynchronizer().rejectSync(conn);
 
 				} else if (!lockCallListen.tryLock()) {
 					// caller is already syncing with otherId, so reply NACK
-					platform.getNodeSynchronizerInstantiator()
-							.synchronize(conn, false, false, false);
+					platform.getShadographSynchronizer().rejectSync(conn);
 
 				} else {
 					log.debug(HEARTBEAT.getMarker(),
 							"SyncListener locked platform[{}].syncServer.lockCallListen[{}]",
 							platform.getSelfId(), otherId);
 					try {
-						final boolean acceptIncoming = platform.getSyncManager().shouldAcceptSync();
-						if (!acceptIncoming) {
+
+						boolean acceptSync = platform.getSyncManager().shouldAcceptSync();
+						platform.getStats().updateRejectedSyncRatio(!acceptSync);
+
+						if (acceptSync) {
+							platform.getShadographSynchronizer().synchronize(conn);
+						} else {
 							log.debug(SYNC_LISTENER.getMarker(),
 									"platform.getSyncManager().shouldAcceptSync() returned false. Incoming sync " +
 											"requests will not be accepted.");
+							platform.getShadographSynchronizer().rejectSync(conn);
 						}
-
-						platform.getNodeSynchronizerInstantiator()
-								.synchronize(conn, false, acceptIncoming, false);
 
 					} finally {
 						lockCallListen.unlock();
@@ -316,7 +322,7 @@ class SyncListener implements Runnable {
 		} else if (b == SyncConstants.COMM_STATE_REQUEST) {
 			log.info(RECONNECT.getMarker(), "{} got COMM_STATE_REQUEST from {}", platform.getSelfId(), otherId);
 
-			try (AutoCloseableWrapper<SignedState> stateWrapper =
+			try (final AutoCloseableWrapper<SignedState> stateWrapper =
 						 platform.getSignedStateManager().getLastCompleteSignedState()) {
 
 				// This was added to support writing signed state JSON files after every reconnect

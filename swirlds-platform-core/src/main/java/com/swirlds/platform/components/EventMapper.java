@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -16,6 +16,7 @@ package com.swirlds.platform.components;
 
 import com.swirlds.common.NodeId;
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.observers.EventAddedObserver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -221,7 +222,7 @@ public class EventMapper implements EventAddedObserver {
 	 */
 	public synchronized boolean isDuplicateInHashgraph(final EventImpl event) {
 		final EventImpl mapped = events.get(event.getCreatorId());
-		final long mappedSeq = mapped == null ? EventImpl.NO_EVENT_SEQ : mapped.getSeq();
+		final long mappedSeq = mapped == null ? EventConstants.SEQUENCE_UNDEFINED : mapped.getSeq();
 		if (mapped != null && mappedSeq == event.getSeq() && mapped.getGeneration() != event.getGeneration()) {
 			log.error(INVALID_EVENT_ERROR.getMarker(),
 					"Detected two events with the same sequence number {}\n{} & {}",

@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -21,6 +21,7 @@ import com.swirlds.common.events.BaseEventHashedData;
 import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.common.stream.Signer;
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.event.EventUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -267,11 +268,11 @@ public class EventCreator {
 	 * @param otherParent
 	 * 		an other-parent event
 	 * @return the sequence number of the given event,
-	 * 		or {@value EventImpl#NO_EVENT_SEQ} is the given event is {@code null}
+	 * 		or {@value EventConstants#SEQUENCE_UNDEFINED} is the given event is {@code null}
 	 */
 	protected long getOtherSeq(final EventImpl otherParent) {
 		if (otherParent == null) {
-			return EventImpl.NO_EVENT_SEQ;
+			return EventConstants.SEQUENCE_UNDEFINED;
 		} else {
 			return otherParent.getSeq();
 		}
@@ -365,16 +366,16 @@ public class EventCreator {
 	}
 
 	/**
-	 * Get the generation of an event. Returns {@value EventImpl#NO_EVENT_GEN} for null events.
+	 * Get the generation of an event. Returns {@value EventConstants#GENERATION_UNDEFINED} for null events.
 	 *
 	 * @param event
 	 * 		an event
 	 * @return the generation number of the given event,
-	 * 		or {@value EventImpl#NO_EVENT_GEN} is the event is {@code null}
+	 * 		or {@value EventConstants#GENERATION_UNDEFINED} is the event is {@code null}
 	 */
 	protected long getEventGeneration(final EventImpl event) {
 		if (event == null) {
-			return EventImpl.NO_EVENT_GEN;
+			return EventConstants.GENERATION_UNDEFINED;
 		}
 		return event.getGeneration();
 	}

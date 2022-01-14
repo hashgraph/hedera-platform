@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -14,47 +14,30 @@
 package com.swirlds.platform.sync;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.events.Event;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.EventStrings;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
- * A shadow event wraps a hashgraph event, and provides parent and child pointers to shadow events.
+ * A shadow event wraps a hashgraph event, and provides parent pointers to shadow events.
  *
- * The shadow event type is the vertex type of the shadow graph. This is the elemental type of a {@link ShadowGraph}.
- * It provides a reference to a hashgraph event instance, together with pointers to the children of that hashgraph
- * event, and the following operations.
+ * The shadow event type is the vertex type of the shadow graph. This is the elemental type of {@link ShadowGraph}.
+ * It provides a reference to a hashgraph event instance and the following operations:
  *
  * <ul>
- * <li>linking of a parent or child shadow event</li>
- * <li>unlinking of a parent or child shadow event</li>
- * <li>querying for related events (parent or child)</li>
+ * <li>linking of a parent shadow event</li>
+ * <li>unlinking of a parent shadow event</li>
+ * <li>querying for parent events</li>
  * </ul>
+ *
  * All linking and unlinking of a shadow event is implemented by this type.
  *
- * Every time a new event is added to the shadow graph, it also added to the appropriate list in each parent (if any).
- *
  * A shadow event never modifies the fields in a hashgraph event.
- *
  */
 public class ShadowEvent {
 	/**
 	 * the real event
 	 */
-	private final Event event;
-
-	/**
-	 * Self-children. Every shadow event whose self-parent is this one.
-	 */
-	private final List<ShadowEvent> selfChildren;
-
-	/**
-	 * Other-children. Every shadow event whose other-parent is this one.
-	 */
-	private final List<ShadowEvent> otherChildren;
+	private final EventImpl event;
 
 	/**
 	 * self-parent
@@ -76,10 +59,10 @@ public class ShadowEvent {
 	 * @param otherParent
 	 * 		the other-parent event's shadow
 	 */
-	public ShadowEvent(final Event event, final ShadowEvent selfParent, final ShadowEvent otherParent) {
-		this(event);
-		setSelfParent(selfParent);
-		setOtherParent(otherParent);
+	public ShadowEvent(final EventImpl event, final ShadowEvent selfParent, final ShadowEvent otherParent) {
+		this.event = event;
+		this.selfParent = selfParent;
+		this.otherParent = otherParent;
 	}
 
 	/**
@@ -88,12 +71,8 @@ public class ShadowEvent {
 	 * @param event
 	 * 		the event
 	 */
-	public ShadowEvent(final Event event) {
-		this.event = event;
-		this.selfParent = null;
-		this.otherParent = null;
-		this.selfChildren = new ArrayList<>();
-		this.otherChildren = new ArrayList<>();
+	public ShadowEvent(final EventImpl event) {
+		this(event, null, null);
 	}
 
 	/**
@@ -106,22 +85,6 @@ public class ShadowEvent {
 	}
 
 	/**
-	 * Set the self-parent of {@code this} shadow event
-	 *
-	 * @param s
-	 * 		the self-parent
-	 */
-	private void setSelfParent(final ShadowEvent s) {
-		if (s != null) {
-			selfParent = s;
-
-			if (!s.selfChildren.contains(this)) {
-				s.selfChildren.add(this);
-			}
-		}
-	}
-
-	/**
 	 * Get the other-parent of {@code this} shadow event
 	 *
 	 * @return the other-parent of {@code this} shadow event
@@ -131,68 +94,12 @@ public class ShadowEvent {
 	}
 
 	/**
-	 * Set the other-parent of {@code this} shadow event
-	 *
-	 * @param s
-	 * 		the other-parent of {@code this} shadow event
-	 */
-	private void setOtherParent(final ShadowEvent s) {
-		if (s != null) {
-			otherParent = s;
-
-			if (!s.otherChildren.contains(this)) {
-				s.otherChildren.add(this);
-			}
-		}
-	}
-
-	/**
-	 * Get the self-children of {@code this} shadow event
-	 *
-	 * @return the self-children of {@code this} shadow event
-	 */
-	public List<ShadowEvent> getSelfChildren() {
-		return selfChildren;
-	}
-
-	/**
-	 * Get the other-children of {@code this} shadow event
-	 *
-	 * @return the other-children of {@code this} shadow event
-	 */
-	public List<ShadowEvent> getOtherChildren() {
-		return otherChildren;
-	}
-
-	/**
-	 * Get the number of self-children of {@code this} shadow event
-	 *
-	 * @return the number of self-children of {@code this} shadow event
-	 */
-	public int getNumSelfChildren() {
-		return selfChildren.size();
-	}
-
-	/**
-	 * Get the number of other-children of {@code this} shadow event
-	 *
-	 * @return the number of other-children of {@code this} shadow event
-	 */
-	public int getNumOtherChildren() {
-		return otherChildren.size();
-	}
-
-	/**
 	 * Get the hashgraph event references by this shadow event
 	 *
 	 * @return the hashgraph event references by this shadow event
 	 */
-	public Event getEvent() {
+	public EventImpl getEvent() {
 		return event;
-	}
-
-	public EventImpl getEventImpl() {
-		return (EventImpl) event;
 	}
 
 	/**
@@ -204,76 +111,18 @@ public class ShadowEvent {
 		return event.getBaseHash();
 	}
 
-	/**
-	 * Evaluates to {@code true} iff {@code this} shadow event is a tip event
-	 *
-	 * @return {@code true} iff {@code this} shadow event is a tip event
-	 */
-	public boolean isTip() {
-		return selfChildren.isEmpty();
-	}
 
 	/**
-	 * Disconnect this shadow event from its parents and children. Remove inbound links and outbound links
+	 * Disconnect this shadow event from its parents. Remove inbound links and outbound links
 	 */
 	public void disconnect() {
-		removeSelfParent();
-		removeOtherParent();
-
-		for (final ShadowEvent s : selfChildren) {
-			s.selfParent = null;
-		}
-
-		for (final ShadowEvent s : otherChildren) {
-			s.otherParent = null;
-		}
-
-		selfChildren.clear();
-		otherChildren.clear();
-	}
-
-	/**
-	 * Add a self-child.
-	 *
-	 * @param s
-	 * 		the self child
-	 */
-	public void addSelfChild(final ShadowEvent s) {
-		if (s != null) {
-			s.setSelfParent(this);
-		}
-	}
-
-	/**
-	 * Add an other-child
-	 *
-	 * @param s
-	 * 		the other-child
-	 */
-	public void addOtherChild(final ShadowEvent s) {
-		if (s != null) {
-			s.setOtherParent(this);
-		}
-	}
-
-	private void removeSelfParent() {
-		if (selfParent != null) {
-			selfParent.selfChildren.remove(this);
-			selfParent = null;
-		}
-	}
-
-	private void removeOtherParent() {
-		if (otherParent != null) {
-			otherParent.otherChildren.remove(this);
-			otherParent = null;
-		}
+		selfParent = null;
+		otherParent = null;
 	}
 
 	/**
 	 * Two shadow events are equal iff their reference hashgraph events are equal.
 	 *
-	 * @param o
 	 * @return true iff {@code this} and {@code o} reference hashgraph events that compare equal
 	 */
 	@Override
@@ -307,36 +156,6 @@ public class ShadowEvent {
 	 */
 	@Override
 	public String toString() {
-		final StringBuilder builder = new StringBuilder();
-		builder.append("{");
-
-		builder.append(EventStrings.toShortString((EventImpl) getEvent()));
-
-		// Work around a bug in EventStringBuilder
-		if(getSelfParent() != null) {
-			builder.append(" sp").append(EventStrings.toShortString((EventImpl) getSelfParent().getEvent()));
-		} else {
-			builder.append(" sp(null)");
-		}
-
-		if(getOtherParent() != null) {
-			builder.append(" op").append(EventStrings.toShortString((EventImpl) getOtherParent().getEvent()));
-		} else {
-			builder.append(" op(null)");
-		}
-
-		builder.append(", sc:[");
-
-		for (final ShadowEvent sc : getSelfChildren()) {
-			builder.append(EventStrings.toShortString((EventImpl) sc.getEvent())).append(", ");
-		}
-
-		builder.append("], oc:[");
-		for (final ShadowEvent oc : getOtherChildren()) {
-			builder.append(EventStrings.toShortString((EventImpl) oc.getEvent())).append(", ");
-		}
-		builder.append(']').append('}');
-
-		return builder.toString();
+		return EventStrings.toMediumString(getEvent());
 	}
 }

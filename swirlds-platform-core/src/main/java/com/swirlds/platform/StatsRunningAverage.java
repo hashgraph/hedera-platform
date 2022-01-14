@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,6 +15,9 @@ package com.swirlds.platform;
 
 import com.swirlds.common.StatsBuffered;
 import com.swirlds.common.internal.StatsBuffer;
+import com.swirlds.logging.LogMarker;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * This class maintains a running average of some numeric value. It is exponentially weighted in time, with
@@ -22,6 +25,8 @@ import com.swirlds.common.internal.StatsBuffer;
  * of the timing.
  */
 public class StatsRunningAverage implements StatsBuffered {
+	private static final Logger LOG = LogManager.getLogger();
+
 	/** the estimated running average */
 	private double mean = 0;
 	/** each recordValue(X) counts as X calls to values.cycle() */
@@ -110,17 +115,24 @@ public class StatsRunningAverage implements StatsBuffered {
 		if (Double.isNaN(value)) { //java getSystemCpuLoad returns NaN at beginning
 			return;
 		}
-		if (firstRecord || value == mean) {
-			// if the same value is always given since the beginning, then avoid roundoff errors
-			firstRecord = false;
-			values.update(value);
-			times.update(1);
-			mean = value;
-		} else {
-			mean = values.update(value) / times.update(1);
+		// StatsRunningAverage is not thread safe, despite this, it is accessed by many threads throughout the platform
+		// Until we do a full statistics refactor, this try catch is a safeguard against any issues that might occur
+		// from this issue
+		try {
+			if (firstRecord || value == mean) {
+				// if the same value is always given since the beginning, then avoid roundoff errors
+				firstRecord = false;
+				values.update(value);
+				times.update(1);
+				mean = value;
+			} else {
+				mean = values.update(value) / times.update(1);
+			}
+			allHistory.record(mean);
+			recentHistory.record(mean);
+		} catch (Exception e) {
+			LOG.error(LogMarker.EXCEPTION.getMarker(), "Exception while updating statistics!", e);
 		}
-		allHistory.record(mean);
-		recentHistory.record(mean);
 	}
 
 	/**

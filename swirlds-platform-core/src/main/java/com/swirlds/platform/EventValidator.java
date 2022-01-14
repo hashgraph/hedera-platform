@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -21,6 +21,7 @@ import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.BaseEventHashedData;
 import com.swirlds.common.events.BaseEventUnhashedData;
+import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.stats.HashgraphStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -415,7 +416,7 @@ public class EventValidator {
 	private static boolean requiredParent(final long parentGeneration, final long minGenerationNonAncient) {
 		final boolean required;
 
-		final boolean hasParent = parentGeneration != EventImpl.NO_EVENT_GEN;
+		final boolean hasParent = parentGeneration != EventConstants.GENERATION_UNDEFINED;
 
 		final boolean currentParent = parentGeneration >= minGenerationNonAncient;
 

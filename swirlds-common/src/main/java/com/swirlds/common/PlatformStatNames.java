@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -52,5 +52,8 @@ public abstract class PlatformStatNames {
 	public static final String TIPS_PER_SYNC = "tips/sync";
 	/** the number of calls to the multiTip absorption logic per second */
 	public static final String SYNC_PHASE_3_CALLS_PER_SEC = "tipAbsorptionOps/sec";
-
+	/** the average number of generations that should be expired but cannot yet due to reservations. */
+	public static final String GENS_WAITING_FOR_EXPIRY = "gensWaitingForExpiry";
+	/** the ratio of rejected sync to accepted syncs over time. */
+	public static final String REJECTED_SYNC_RATIO = "rejectedSyncRatio";
 }

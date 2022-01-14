@@ -1,5 +1,5 @@
 /*
- * (c) 2016-2021 Swirlds, Inc.
+ * (c) 2016-2022 Swirlds, Inc.
  *
  * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
@@ -15,14 +15,13 @@
 package com.swirlds.common.crypto.engine;
 
 import com.swirlds.common.futures.WaitingFuture;
+import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
-
-import static com.swirlds.common.crypto.engine.CryptoEngine.LOGM_TESTING_EXCEPTIONS;
 
 /**
  * Provides a generic way to process cryptographic transformations for a given {@link List} of work items in a
@@ -96,7 +95,7 @@ public abstract class AsyncOperationHandler<Element, Provider extends OperationP
 			try {
 				handleWorkItem(provider, item);
 			} catch (RuntimeException | NoSuchAlgorithmException ex) {
-				log.warn(LOGM_TESTING_EXCEPTIONS, "Intercepted Uncaught Exception", ex);
+				log.warn(LogMarker.TESTING_EXCEPTIONS.getMarker(), "Intercepted Uncaught Exception", ex);
 			}
 		}
 
