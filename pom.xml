@@ -127,7 +127,7 @@
 
 		<!-- Compile Time Dependencies -->
 		<dep.ow2.asm.version>8.0.1</dep.ow2.asm.version>
-		<dep.log4j2.version>2.13.2</dep.log4j2.version>
+		<dep.log4j2.version>2.17.1</dep.log4j2.version>
 		<dep.jackson.version>2.11.2</dep.jackson.version>
 		<dep.portmapper.version>2.0.4</dep.portmapper.version>
 		<dep.commons.io.version>2.9.0</dep.commons.io.version>
