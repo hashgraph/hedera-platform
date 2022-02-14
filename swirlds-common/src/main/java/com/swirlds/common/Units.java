@@ -108,7 +108,40 @@ public final class Units {
 	public static final int WEEKS_TO_DAYS = 7;
 
 	/**
-	 * Multiply by this value for converting bits to bytes.
+	 * Multiply by this value for converting bytes to bits.
 	 */
-	public static final int BITS_TO_BYTES = 8;
+	public static final int BYTES_TO_BITS = 8;
+
+	/**
+	 * Multiply by these values for converting KB to bytes ("kilo" meaning 10^3, "kibi" meaning 2^10).
+	 */
+	public static final int KIBIBYTES_TO_BYTES = 1024;
+	public static final int KILOBYTES_TO_BYTES = 1000;
+	public static final int KB_TO_BYTES = KIBIBYTES_TO_BYTES;
+	public static final double BYTES_TO_KIBIBYTES = 1.0 / KIBIBYTES_TO_BYTES;
+
+	/**
+	 * Multiply by these values for converting MB to bytes ("mega" meaning 10^6, "mebi" meaning 2^20).
+	 */
+	public static final int MEBIBYTES_TO_BYTES = 1024 * KIBIBYTES_TO_BYTES;
+	public static final int MEGABYTES_TO_BYTES = 1000 * KILOBYTES_TO_BYTES;
+	public static final int MB_TO_BYTES = MEBIBYTES_TO_BYTES;
+	public static final double BYTES_TO_MEBIBYTES = 1.0 / MEBIBYTES_TO_BYTES;
+	public static final int MEBIBYTES_TO_KIBIBYTES = 1024;
+	public static final double KIBIBYTES_TO_MEBIBYTES = 1.0 / MEBIBYTES_TO_KIBIBYTES;
+
+	/**
+	 * Multiply by these values for converting GB to bytes ("giga" meaning 10^9, "gibi" meaning 2^30).
+	 * Unlike KIBI/KILO and MEBI/MEGA, these are defined as longs, because Integer.MAX_VALUE is one less than
+	 * 2*GIBIBYTES_TO_BYTES, so multiplying by anything larger than 1 is very likely to require a long to hold
+	 * the result.  (2 GIGABYTES can fit in an int, just not 2 GIBIBYES, but that's entirely a different matter.)
+	 */
+	public static final long GIBIBYTES_TO_BYTES = 1024L * MEBIBYTES_TO_BYTES;
+	public static final long GIGABYTES_TO_BYTES = 1000L * MEGABYTES_TO_BYTES;
+	public static final long GB_TO_BYTES = GIBIBYTES_TO_BYTES;
+	public static final double BYTES_TO_GIBIBYTES = 1.0 / GIBIBYTES_TO_BYTES;
+	public static final int GIBIBYTES_TO_KIBIBYTES = 1024 * MEBIBYTES_TO_KIBIBYTES;
+	public static final double KIBIBYTES_TO_GIBIBYTES = 1.0 / GIBIBYTES_TO_KIBIBYTES;
+	public static final int GIBIBYTES_TO_MEBIBYTES = 1024;
+	public static final double MEBIBYTES_TO_GIBIBYTES = 1.0 / GIBIBYTES_TO_MEBIBYTES;
 }

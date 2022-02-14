@@ -83,8 +83,9 @@ public interface MerkleInternal extends MerkleNode {
 	 * @param <T>
 	 * 		the type of the child
 	 * @return the child at the position <i>index</i>
-	 * @throws com.swirlds.common.merkle.exceptions.IllegalChildIndexException if the index is negative or if
-	 * the index is greater than {@link #getMaximumChildCount(int)}.
+	 * @throws com.swirlds.common.merkle.exceptions.IllegalChildIndexException
+	 * 		if the index is negative or if
+	 * 		the index is greater than {@link #getMaximumChildCount(int)}.
 	 */
 	<T extends MerkleNode> T getChild(final int index);
 

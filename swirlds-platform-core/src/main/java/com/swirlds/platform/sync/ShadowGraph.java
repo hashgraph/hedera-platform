@@ -123,12 +123,11 @@ public class ShadowGraph {
 
 	/**
 	 * <p>Initializes the {@link ShadowGraph} with the given {@code events}. This method should be used after
-	 * reconnect or restart. {@code events} must be ordered by generation, smallest to largest, and not have any
-	 * gaps in generation.</p>
+	 * reconnect or restart. {@code events} must be ordered by generation, smallest to largest.</p>
 	 *
 	 * <p>A minimum generation is necessary because events loaded from signed state a could have generation gaps and are
 	 * used in {@link com.swirlds.platform.Consensus}. {@link com.swirlds.platform.Consensus} will eventually expire its
-	 * smalled generation and that generation must be present in the {@link ShadowGraph} or an exception is thrown, so
+	 * smallest generation and that generation must be present in the {@link ShadowGraph} or an exception is thrown, so
 	 * we create empty generations to match {@link com.swirlds.platform.Consensus}.</p>
 	 *
 	 * @param events
@@ -221,7 +220,7 @@ public class ShadowGraph {
 	 * 		the hash to look for
 	 * @return true if the hash matches the hash of a shadow event in the shadow graph, false otherwise
 	 */
-	public boolean isHashInGraph(final Hash hash) {
+	public synchronized boolean isHashInGraph(final Hash hash) {
 		return hashToShadowEvent.containsKey(hash);
 	}
 
@@ -573,7 +572,7 @@ public class ShadowGraph {
 	 * @return An insertable status, indicating whether the event can be inserted, and if not, the reason it can not be
 	 * 		inserted.
 	 */
-	private InsertableStatus insertable(final Event e) {
+	private InsertableStatus insertable(final EventImpl e) {
 		if (e == null) {
 			return InsertableStatus.NULL_EVENT;
 		}
@@ -591,13 +590,13 @@ public class ShadowGraph {
 		final boolean hasOP = e.getOtherParent() != null;
 		final boolean hasSP = e.getSelfParent() != null;
 
-		// If e has an unexpired parent that is not already referenced
-		// by the shadow graph, then do not insert e.
+		// If e has an unexpired parent that is not already referenced by the shadow graph, then we log an error. This
+		// is only a sanity check, so there is no need to prevent insertion
 		if (hasOP) {
 			final boolean knownOP = shadow(e.getOtherParent()) != null;
 			final boolean expiredOP = expired(e.getOtherParent());
 			if (!knownOP && !expiredOP) {
-				return InsertableStatus.UNKNOWN_CURRENT_OTHER_PARENT;
+				LOG.error(EXCEPTION.getMarker(), "Missing non-expired other parent for {}", e::toMediumString);
 			}
 		}
 
@@ -605,7 +604,7 @@ public class ShadowGraph {
 			final boolean knownSP = shadow(e.getSelfParent()) != null;
 			final boolean expiredSP = expired(e.getSelfParent());
 			if (!knownSP && !expiredSP) {
-				return InsertableStatus.UNKNOWN_CURRENT_SELF_PARENT;
+				LOG.error(EXCEPTION.getMarker(), "Missing non-expired self parent for {}", e::toMediumString);
 			}
 		}
 

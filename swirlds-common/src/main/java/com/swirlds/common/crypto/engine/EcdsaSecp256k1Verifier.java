@@ -44,9 +44,6 @@ import static com.swirlds.common.crypto.SignatureType.ECDSA_SECP256K1;
  */
 public class EcdsaSecp256k1Verifier {
 	public static final int EC_COORD_SIZE = 32;
-	public static final String ECDSA_KEY_ALGORITHM = "EC";
-	public static final String ECDSA_ALGORITHM_PARAMS = "secp256k1";
-	public static final String ECDSA_SIGNING_ALGORITHM = ECDSA_SECP256K1.signingAlgorithm();
 	private static final Logger LOGGER = LogManager.getLogger(EcdsaSecp256k1Verifier.class);
 	private static final byte SIGN_MASK = (byte) 0x80;
 	private static final byte ASN1_INTEGER_TAG = (byte) 0x02;

@@ -191,7 +191,14 @@ public class StoppableThread {
 	}
 
 	/**
+	 * <p>
 	 * Attempt to gracefully stop the thread. If thread does not terminate in a timely manner then it is interrupted.
+	 * </p>
+	 *
+	 * <p>
+	 * Do not call this method inside the internal thread (i.e. the one calling the runnable over and over). This
+	 * method joins on that thread, and will deadlock if it attempts to join on itself.
+	 * </p>
 	 */
 	public void stop() {
 		try {

@@ -16,7 +16,6 @@ package com.swirlds.platform;
 
 import com.swirlds.common.AddressBook;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.platform.components.OldEventChecker;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.consensus.RoundNumberProvider;
 
@@ -26,7 +25,7 @@ import java.util.Queue;
 /**
  * An interface for classes that calculate consensus of events
  */
-public interface Consensus extends OldEventChecker, GraphGenerations, RoundNumberProvider {
+public interface Consensus extends GraphGenerations, RoundNumberProvider {
 	/**
 	 * Adds an event to the consensus object. This should be the only public method that modifies the state of the
 	 * object.

@@ -14,6 +14,8 @@
 
 package com.swirlds.platform.consensus;
 
+import com.swirlds.common.events.Event;
+
 public interface GraphGenerations {
 	long FIRST_GENERATION = 0;
 
@@ -34,4 +36,26 @@ public interface GraphGenerations {
 	 * 		Else this returns {@link #FIRST_GENERATION}.
 	 */
 	long getMinRoundGeneration();
+
+	/**
+	 * Checks if we have any ancient rounds yet. For a short period after genesis, there will be no ancient rounds.
+	 * After that, this will always return true.
+	 *
+	 * @return true if there are any ancient events, false otherwise
+	 */
+	default boolean areAnyEventsAncient() {
+		return getMinGenerationNonAncient() > FIRST_GENERATION;
+	}
+
+	/**
+	 * Checks if the supplied event is ancient or not. An event is ancient if its generation is smaller than the round
+	 * generation of the oldest non-ancient round.
+	 *
+	 * @param event
+	 * 		the event to check
+	 * @return true if its ancient, false otherwise
+	 */
+	default boolean isAncient(final Event event) {
+		return event.getGeneration() < getMinGenerationNonAncient();
+	}
 }

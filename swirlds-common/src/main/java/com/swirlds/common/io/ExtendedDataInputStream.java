@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLongArray;
 
+import static com.swirlds.common.io.SerializableStreamConstants.DEFAULT_CHECKSUM;
 import static com.swirlds.common.io.SerializableStreamConstants.NULL_INSTANT_EPOCH_SECOND;
 import static com.swirlds.common.io.SerializableStreamConstants.NULL_LIST_ARRAY_LENGTH;
 
@@ -80,7 +81,7 @@ public class ExtendedDataInputStream extends DataInputStream {
 	 * 		thrown if any problems occur
 	 */
 	public byte[] readByteArray(int maxLength) throws IOException {
-		return readByteArray(maxLength, ExtendedDataOutputStream.debug);
+		return readByteArray(maxLength, DEFAULT_CHECKSUM);
 	}
 
 	/**

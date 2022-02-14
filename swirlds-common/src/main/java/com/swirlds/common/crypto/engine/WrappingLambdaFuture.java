@@ -32,10 +32,9 @@ import java.util.function.Supplier;
  */
 public class WrappingLambdaFuture<ReturnType, InnerReturnType> implements Future<ReturnType> {
 
+	private final Supplier<Future<InnerReturnType>> innerFutureSupplier;
+	private final Supplier<ReturnType> returnTypeSupplier;
 	private volatile Future<InnerReturnType> innerFuture;
-
-	private Supplier<Future<InnerReturnType>> innerFutureSupplier;
-	private Supplier<ReturnType> returnTypeSupplier;
 
 	/**
 	 * Internal Use - Default Constructor
@@ -142,7 +141,10 @@ public class WrappingLambdaFuture<ReturnType, InnerReturnType> implements Future
 		return returnTypeSupplier.get();
 	}
 
-
+	/**
+	 * Populates the {@code innerFuture} field with the minimal amount of synchronization required to guarantee thread
+	 * safety.
+	 */
 	private synchronized void initialize() {
 		if (innerFuture == null) {
 			innerFuture = innerFutureSupplier.get();

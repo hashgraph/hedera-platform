@@ -16,6 +16,7 @@ package com.swirlds.platform.event;
 
 import com.swirlds.common.events.BaseEventHashedData;
 import com.swirlds.common.events.BaseEventUnhashedData;
+import com.swirlds.platform.EventStrings;
 
 /**
  * A class used to hold information about an event from another node that requires validation.
@@ -52,7 +53,6 @@ public class ValidateEventTask implements EventIntakeTask {
 
 	@Override
 	public String toString() {
-		return "(" + hashedData.getCreatorId() + "," + unhashedData.getCreatorSeq() + ")" +
-				" other (" + unhashedData.getOtherId() + "," + unhashedData.getOtherSeq() + ")";
+		return EventStrings.toMediumString(this);
 	}
 }

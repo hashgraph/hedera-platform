@@ -24,7 +24,6 @@ import com.swirlds.common.crypto.SerializableHashable;
 import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.crypto.VerificationStatus;
-import com.swirlds.common.crypto.internal.AbstractCryptography;
 import com.swirlds.common.crypto.internal.CryptographySettings;
 import com.swirlds.common.futures.WaitingFuture;
 import com.swirlds.common.io.SelfSerializable;
@@ -36,11 +35,6 @@ import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.jocl.CLException;
-import org.jocl.Pointer;
-import org.jocl.Sizeof;
-import org.jocl.cl_device_id;
-import org.jocl.cl_platform_id;
 
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
@@ -56,23 +50,24 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static com.swirlds.common.merkle.utility.MerkleConstants.MERKLE_DIGEST_TYPE;
-import static org.jocl.CL.CL_DEVICE_NAME;
-import static org.jocl.CL.CL_DEVICE_TYPE;
-import static org.jocl.CL.CL_DEVICE_TYPE_ALL;
-import static org.jocl.CL.CL_DEVICE_TYPE_GPU;
-import static org.jocl.CL.CL_DEVICE_VENDOR;
-import static org.jocl.CL.clGetDeviceIDs;
-import static org.jocl.CL.clGetDeviceInfo;
-import static org.jocl.CL.clGetPlatformIDs;
-import static org.jocl.CL.clReleaseDevice;
-import static org.jocl.CL.setExceptionsEnabled;
 
-public class CryptoEngine extends AbstractCryptography implements Cryptography {
+public class CryptoEngine implements Cryptography {
+
+	/**
+	 * The constant value used as the component name for all threads created by this module.
+	 */
+	public static final String THREAD_COMPONENT_NAME = "adv crypto";
+
 
 	/**
 	 * use this for all logging, as controlled by the optional data/log4j2.xml file
 	 */
-	private static final Logger log = LogManager.getLogger(CryptoEngine.class);
+	private static final Logger LOG = LogManager.getLogger(CryptoEngine.class);
+
+	static {
+		// Register the BouncyCastle Provider instance with the JVM
+		Security.addProvider(new BouncyCastleProvider());
+	}
 
 	/**
 	 * The digest provider instance that is used to generate hashes of SelfSerializable objects.
@@ -125,7 +120,6 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 */
 	private volatile IntakeDispatcher<TransactionSignature, DelegatingVerificationProvider,
 			AsyncVerificationHandler> verificationDispatcher;
-
 	/**
 	 * the intake dispatcher instance that handles asynchronous message digests
 	 */
@@ -147,15 +141,8 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	private volatile CryptographySettings settings;
 
 	/**
-	 * indicator if a support OpenCL framework is installed and available
+	 * a pre-computed {@link Map} of each algorithm's {@code null} hash value.
 	 */
-	private volatile boolean openCLAvailable = false;
-
-	/**
-	 * indicator if a supported GPU is installed and available
-	 */
-	private volatile boolean gpuAvailable = false;
-
 	private Map<DigestType, Hash> nullHashes;
 
 	/**
@@ -163,10 +150,6 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 */
 	public CryptoEngine() {
 		this(CryptographySettings.getDefaultSettings());
-	}
-
-	static {
-		Security.addProvider(new BouncyCastleProvider());
 	}
 
 	/**
@@ -190,9 +173,6 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 		this.runningHashProvider = new RunningHashProvider();
 		this.merkleHashBuilder = new MerkleHashBuilder(this, settings.computeCpuDigestThreadCount());
 
-		if (!settings.forceCpu()) {
-			detectSystemFeatures();
-		}
 		applySettings();
 		buildNullHashes();
 	}
@@ -311,7 +291,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * @return true if OpenCL is available; false otherwise
 	 */
 	public boolean isOpenCLAvailable() {
-		return openCLAvailable;
+		return false;
 	}
 
 	/**
@@ -320,7 +300,7 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * @return true if a support GPU is available; false otherwise
 	 */
 	public boolean isGpuAvailable() {
-		return gpuAvailable;
+		return false;
 	}
 
 	/**
@@ -448,7 +428,8 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Hash digestSync(final SerializableHashable serializableHashable, final DigestType digestType, final boolean setHash) {
+	public Hash digestSync(final SerializableHashable serializableHashable, final DigestType digestType,
+			final boolean setHash) {
 		try {
 			final Hash hash = serializationDigestProvider.compute(serializableHashable, digestType);
 			if (setHash) {
@@ -657,11 +638,11 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 		}
 
 		// Launch new background threads with the new settings
-		this.verificationDispatcher = new IntakeDispatcher<>(this, TransactionSignature.class, this.verificationQueue,
+		this.verificationDispatcher = new IntakeDispatcher<>(TransactionSignature.class, this.verificationQueue,
 				this.delegatingVerificationProvider, settings.computeCpuVerifierThreadCount(),
 				CryptoEngine::verificationHandler);
 
-		this.digestDispatcher = new IntakeDispatcher<>(this, Message.class, this.digestQueue, this.digestProvider,
+		this.digestDispatcher = new IntakeDispatcher<>(Message.class, this.digestQueue, this.digestProvider,
 				settings.computeCpuDigestThreadCount(), this::digestHandler);
 	}
 
@@ -677,140 +658,6 @@ public class CryptoEngine extends AbstractCryptography implements Cryptography {
 	 */
 	private AsyncDigestHandler digestHandler(final DigestProvider provider, final List<Message> workItems) {
 		return new AsyncDigestHandler(workItems, provider);
-	}
-
-	/**
-	 * Enumerates all available OpenCL devices and sets the {@link #gpuAvailable} and {@link #openCLAvailable} fields
-	 * appropriately based on the available hardware.
-	 */
-	private void detectSystemFeatures() {
-		try {
-			setExceptionsEnabled(true);
-			openCLAvailable = false;
-			gpuAvailable = false;
-
-			final int[] count = new int[1];
-
-			// Request the number of available OpenCL platforms
-			clGetPlatformIDs(0, null, count);
-
-			final int platformCount = count[0];
-			count[0] = 0;
-
-			if (platformCount < 1) {
-				return;
-			}
-
-			// There is at least one OpenCL platform available
-			openCLAvailable = true;
-
-			// Retrieve array of platforms
-			final cl_platform_id[] platforms = new cl_platform_id[platformCount];
-			clGetPlatformIDs(platforms.length, platforms, null);
-
-			// Enumerate devices for each platform
-			for (final cl_platform_id plat : platforms) {
-				// Get number of devices available in this platform
-				try {
-					clGetDeviceIDs(plat, CL_DEVICE_TYPE_ALL, 0, null, count);
-
-					final int deviceCount = count[0];
-					count[0] = 0;
-
-					if (deviceCount < 1) {
-						continue;
-					}
-
-					// Retrieve array of devices
-					final cl_device_id[] devices = new cl_device_id[deviceCount];
-					clGetDeviceIDs(plat, CL_DEVICE_TYPE_ALL, devices.length, devices, null);
-
-					// Enumerate the devices & detect existence of supported CPU or GPU
-					for (final cl_device_id dev : devices) {
-						if (isSupportedDevice(dev)) {
-							log.debug(LogMarker.ADV_CRYPTO_SYSTEM.getMarker(),
-									"Adv Crypto Subsystem: Located an acceptable GPU acceleration device ({})",
-									resolveDeviceName(dev));
-							gpuAvailable = true;
-						}
-
-						clReleaseDevice(dev);
-					}
-
-					if (gpuAvailable) {
-						break;
-					}
-				} catch (final CLException ex) {
-					// Suppress Exception
-				}
-			}
-
-		} catch (final CLException | UnsatisfiedLinkError | NoClassDefFoundError ex) {
-			log.info(LogMarker.ADV_CRYPTO_SYSTEM.getMarker(),
-					"Adv Crypto Subsystem: No supported GPU acceleration device found");
-
-			log.debug(LogMarker.OPENCL_INIT_EXCEPTIONS.getMarker(),
-					"Adv Crypto Subsystem: Caught an unhandled OpenCL exception during device detection", ex);
-
-			openCLAvailable = false;
-			gpuAvailable = false;
-		}
-	}
-
-	/**
-	 * Determines if the given device handle represents a supported OpenCL device.
-	 *
-	 * @param device
-	 * 		the OpenCL device handle
-	 * @return true if this is a supported device; false otherwise
-	 */
-	private boolean isSupportedDevice(final cl_device_id device) {
-		// Retrieve the device type
-		final long[] longRef = new long[1];
-		clGetDeviceInfo(device, CL_DEVICE_TYPE, Sizeof.cl_long, Pointer.to(longRef), null);
-
-		final long deviceType = longRef[0];
-		longRef[0] = 0;
-
-		// Exit early if the device is not a CPU or GPU
-		if (deviceType != CL_DEVICE_TYPE_GPU) {
-			return false;
-		}
-
-		// Retrieve the vendor name
-		clGetDeviceInfo(device, CL_DEVICE_VENDOR, 0, null, longRef);
-
-		final int vendorLength = (int) longRef[0];
-		final byte[] vendorRef = new byte[vendorLength + 1];
-		clGetDeviceInfo(device, CL_DEVICE_VENDOR, Sizeof.cl_char * (vendorLength + 1), Pointer.to(vendorRef), null);
-
-		final String vendorName = new String(vendorRef, 0, vendorLength);
-		final String deviceName = resolveDeviceName(device);
-
-		final DeviceVendor vendor = DeviceVendor.resolve(vendorName);
-		final DeviceName name = DeviceName.resolve(deviceName);
-
-		return (DeviceVendor.NVIDIA.equals(vendor) && DeviceName.NVIDIA_TESLA.equals(name)) || DeviceVendor.AMD.equals(
-				vendor);
-	}
-
-	/**
-	 * Uses OpenCL to request the device name from the underlying hardware device.
-	 *
-	 * @param device
-	 * 		the OpenCL device handle
-	 * @return the device name reported by the underlying hardware
-	 */
-	private String resolveDeviceName(final cl_device_id device) {
-		// Retrieve the device type
-		final long[] longRef = new long[1];
-		clGetDeviceInfo(device, CL_DEVICE_NAME, 0, null, longRef);
-
-		final int nameLength = (int) longRef[0];
-		final byte[] nameRef = new byte[nameLength];
-
-		clGetDeviceInfo(device, CL_DEVICE_NAME, Sizeof.cl_char * nameLength, Pointer.to(nameRef), null);
-		return new String(nameRef, 0, nameRef.length - 1);
 	}
 
 	/**

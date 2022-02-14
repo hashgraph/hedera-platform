@@ -36,12 +36,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Queue;
-import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static com.swirlds.logging.LogMarker.ADD_EVENT;
+import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.EXPIRE_EVENT;
 import static com.swirlds.logging.LogMarker.INVALID_EVENT_ERROR;
 import static com.swirlds.logging.LogMarker.STARTUP;
@@ -176,14 +176,8 @@ public class ConsensusImpl implements Consensus {
 	// for that same round.
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	/** an array that keeps the last consensus event by each member. */
-	private final AtomicReferenceArray<EventImpl> lastConsEventByMember;
-
 	/** stores all round information */
 	private final ConsensusRounds rounds;
-
-	/** events to be cleared in the future */
-	private final List<EventImpl> toBeCleared = new LinkedList<>();
 
 	/**
 	 * Number of events that have reached consensus order. This is used for setting consensus order numbers
@@ -239,8 +233,6 @@ public class ConsensusImpl implements Consensus {
 		this.addressBook = addressBook;
 
 		this.rounds = new ConsensusRounds(addressBook);
-
-		this.lastConsEventByMember = new AtomicReferenceArray<>(addressBook.getSize());
 	}
 
 	/**
@@ -262,27 +254,31 @@ public class ConsensusImpl implements Consensus {
 			final AddressBook addressBook,
 			final SignedState signedState) {
 		this(statsSupplier, minGenConsumer, addressBook);
-
 		// create all the rounds that we need to store events in
 		rounds.createRoundsForSignedStateConstructor(signedState.getMinGenInfo());
 
-		// the first part of the array of events will be old events, they are kept so that we can know what the last
-		// event of each member is. we don't need to create rounds for these events or put them in the map, they will
-		// only be stored in lastEventByMember
+		final long minNonAncientGen = Settings.state.getMinGenNonAncient(
+				signedState.getLastRoundReceived(), rounds::getRoundGeneration
+		);
+
 		for (final EventImpl event : signedState.getEvents()) {
+			if (event.getGeneration() < minNonAncientGen) {
+				// some old states might have events that are ancient, we will just ignore these events
+				continue;
+			}
 			event.setConsensus(true);
-			lastConsEventByMember.set((int) event.getCreatorId(), event);
 			final RoundInfo roundInfo = rounds.get(event.getRoundCreated());
 			if (roundInfo == null) {
-				// this event is old and won't be stored in rounds, so it should be cleared as soon as we get a new
-				// consensus event from this member
-				toBeCleared.add(event);
-			} else {
-				// events are stored in consensus order, so the last event in consensus order should be
-				// incremented by 1 to get the numConsensus
-				numConsensus = event.getConsensusOrder() + 1;
-				roundInfo.allEvents.add(event);
+				// this should never happen
+				log.error(EXCEPTION.getMarker(),
+						"No round found for event {} roundCreated={} minGen={}",
+						event::toMediumString, event::getRoundCreated, signedState::getMinGenInfo);
+				continue;
 			}
+			// events are stored in consensus order, so the last event in consensus order should be
+			// incremented by 1 to get the numConsensus
+			numConsensus = event.getConsensusOrder() + 1;
+			roundInfo.allEvents.add(event);
 		}
 
 		// The minTimestamp is just above the last transaction that has been handled
@@ -343,8 +339,6 @@ public class ConsensusImpl implements Consensus {
 		numInitJudgesMissing = witnessHashes.get(0).size();
 		hashRoundJudges = new ArrayList<>();
 
-		this.lastConsEventByMember = new AtomicReferenceArray<>(addressBook.getSize());
-
 		this.rounds = new ConsensusRounds(addressBook);
 	}
 
@@ -399,9 +393,10 @@ public class ConsensusImpl implements Consensus {
 	 *
 	 * If round R is the most recent round for which we have decided the fame of all the witnesses, then any event with
 	 * a generation less than gen(R - {@code Settings.state.roundsExpired}) is called an “expired” event. And any
-	 * non-expired event with a generation less than gen(R - {@code Settings.state.roundsStale}) is an “ancient” event.
-	 * If the event failed to achieve consensus before becoming ancient, then it is “stale”. So every non-expired event
-	 * with a generation before gen(R - {@code Settings.state.roundsStale}) is either stale or consensus, not both.
+	 * non-expired event with a generation less than gen(R - {@code Settings.state.roundsNonAncient} + 1) is an
+	 * “ancient” event. If the event failed to achieve consensus before becoming ancient, then it is “stale”. So every
+	 * non-expired event with a generation before gen(R - {@code Settings.state.roundsNonAncient} + 1) is either
+	 * stale or consensus, not both.
 	 *
 	 * Expired events can be removed from memory unless they are needed for an old signed state that is still being used
 	 * for something (such as still in the process of being written to disk).
@@ -934,19 +929,10 @@ public class ConsensusImpl implements Consensus {
 		}
 		whitening = roundInfo.whitening;
 
-		// get the minimum generation of famous witnesses for [roundsStale] rounds ago
+		// get the minimum generation of famous witnesses for oldest non-ancient round
 		// any event with generation less than minGenConsensus is ancient, and will be stale if not already consensus
-		long minGenConsensus = 0;
-		long staleRound = roundInfo.getRound() - Settings.state.roundsStale;
-		if (staleRound < rounds.getMinRound()) {
-			// this can happen after a restart when loading a state saved with the old code
-			staleRound = rounds.getMinRound();
-		}
-		if (staleRound >= 0) {
-			minGenConsensus = rounds.get(staleRound).getMinGeneration();
-		}
+		final long minGenConsensus = rounds.getMinGenerationNonAncient();
 
-		ArrayList<EventImpl> staleEvents = new ArrayList<>(); // new stale events in round r
 		ArrayList<EventImpl> visited = new ArrayList<>(); //each event visited by iterator from at least one ufw witness
 
 		//for each judge in this round that just decided fame
@@ -973,11 +959,9 @@ public class ConsensusImpl implements Consensus {
 						// this non-stale, non-consensus event is too old, so it should now be declared stale
 						RoundInfo eventRoundInfo = rounds.get(event.getRoundCreated());
 						staleEvent(event);
-						staleEvents.add(event);
 						if (eventRoundInfo == null) {
 							// added to figure out issue #2344
 							RoundInfo minRound = rounds.get(getMinRound());
-							final long finalMinGenConsensus = minGenConsensus;
 							log.error(INVALID_EVENT_ERROR.getMarker(),
 									"Judge {} rc:{}\n" +
 											"has ancestor:\n" +
@@ -990,7 +974,7 @@ public class ConsensusImpl implements Consensus {
 									event::getRoundCreated,
 									event::isConsensus,
 									event::isStale,
-									() -> finalMinGenConsensus,
+									() -> minGenConsensus,
 									this::getMinRound,
 									() -> minRound != null ? minRound.getMinGeneration() : null
 							);
@@ -1068,7 +1052,6 @@ public class ConsensusImpl implements Consensus {
 		setConsensusOrder(consensus);
 
 		for (EventImpl e : consensus) { // add them in consensus order
-			lastConsEventByMember.set((int) e.getCreatorId(), e);
 			newConsensusEvents.add(e);
 		}
 		for (EventImpl e : visited) {
@@ -1137,32 +1120,11 @@ public class ConsensusImpl implements Consensus {
 				if (!e.isConsensus() && !e.isStale()) {
 					staleEvent(e); // this should be incredibly rare: expiring before being marked stale
 				}
-				// if the event is the lastConsEventByMember, we might still need it in the future if the node
-				// starts generating events again. For this reason, we will not clear it until we get another
-				// event from that node
-				if (isLastConsEventByMember(e)) {
-					toBeCleared.add(e);
-				} else {
-					// null out the references to other events, so the garbage collector can delete
-					// those older events
-					e.clear();
-					log.debug(EXPIRE_EVENT.getMarker(),
-							"HG removing {}", e::toShortString);
-				}
-			}
-		}
-
-
-		// events were added to the toBeCleared array because they were the last event by a member. If this is no
-		// longer the case, we can clear this event
-		Iterator<EventImpl> it = toBeCleared.iterator();
-		while (it.hasNext()) {
-			EventImpl next = it.next();
-			if (!isLastConsEventByMember(next)) {
-				next.clear();
+				// null out the references to other events, so the garbage collector can delete
+				// those older events
+				e.clear();
 				log.debug(EXPIRE_EVENT.getMarker(),
-						"HG removing {}", next::toShortString);
-				it.remove();
+						"HG removing {}", e::toShortString);
 			}
 		}
 	}
@@ -1231,21 +1193,6 @@ public class ConsensusImpl implements Consensus {
 	private void staleEvent(EventImpl e) {
 		e.setStale(true);
 		staleNotConsensusEvents.add(e);
-	}
-
-	/**
-	 * Is the event supplied the last consensus event by its creator
-	 *
-	 * @param e
-	 * 		the event to check
-	 * @return true if the event is last consensus event by its creator, false otherwise
-	 */
-	private boolean isLastConsEventByMember(EventImpl e) {
-		EventImpl lastCons = lastConsEventByMember.get((int) e.getCreatorId());
-		if (lastCons == null) {
-			return false;
-		}
-		return lastCons.getCreatorSeq() == e.getCreatorSeq();
 	}
 
 	private AddressBook getAddressBook() {
@@ -1643,14 +1590,6 @@ public class ConsensusImpl implements Consensus {
 	 */
 	private boolean coin(EventImpl event) {
 		return ((event.getSignature()[(event.getSignature().length / 2)] & 1) == 1);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean isEventOld(final EventImpl event) {
-		return event.getRoundCreated() > 0 && event.getRoundCreated() <= getMinRound();
 	}
 
 	/**

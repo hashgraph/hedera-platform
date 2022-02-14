@@ -14,6 +14,9 @@
 
 package com.swirlds.common;
 
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
+
 import javax.sound.midi.MidiChannel;
 import javax.sound.midi.MidiSystem;
 import javax.sound.midi.Synthesizer;
@@ -31,13 +34,14 @@ import java.awt.event.HierarchyEvent;
 import java.awt.event.HierarchyListener;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.Normalizer;
 import java.util.Locale;
-
-import org.apache.commons.codec.DecoderException;
-import org.apache.commons.codec.binary.*;
+import java.util.stream.Stream;
 
 /**
  * Utility class for other operations
@@ -377,5 +381,64 @@ public class CommonUtils {
 			}
 		}
 		return directoryToBeDeleted.delete();
+	}
+
+	/**
+	 * Create a shallow copy of a directory structure using hard links. Resulting directory structure will contain the
+	 * same files. Modifying files in the new directory will also modify the corresponding files in the original
+	 * directory. Deleting files in the new directory has no effect on the old directory. Adding files to the new
+	 * directory has no effect on the old directory.
+	 *
+	 * @param source
+	 * 		the directory structure to copy, is legal for this argument to be a regular file (??)
+	 * @param destination
+	 * 		the location where the directory structure will be placed, assumed that no file or directory
+	 * 		already exists in this location. Note that the root of the copied directory structure will be placed at this
+	 * 		destination, and not in this destination.
+	 */
+	public static void hardLinkTree(final File source, final File destination) {
+
+		try {
+
+			if (!source.exists()) {
+				throw new IOException(source + " does not exist or can not be accessed");
+			}
+
+			if (destination.exists()) {
+				throw new IOException(destination + " already exists");
+			}
+
+			final Path sourcePath = source.toPath();
+			final Path destinationPath = destination.toPath();
+
+			// Recreate the directory tree
+			try (final Stream<Path> files = Files.walk(source.toPath())) {
+				files.filter(Files::isDirectory).forEach((final Path originalDirectoryPath) -> {
+					final Path relativeDirectoryPath = sourcePath.relativize(originalDirectoryPath);
+					final Path newDirectoryPath = destinationPath.resolve(relativeDirectoryPath);
+					try {
+						Files.createDirectories(newDirectoryPath);
+					} catch (final IOException ex) {
+						throw new UncheckedIOException(ex);
+					}
+				});
+			}
+
+			// Hard link files
+			try (final Stream<Path> files = Files.walk(source.toPath())) {
+				files.filter(Files::isRegularFile).forEach((final Path originalFilePath) -> {
+					final Path relativeFilePath = sourcePath.relativize(originalFilePath);
+					final Path newFilePath = destinationPath.resolve(relativeFilePath);
+					try {
+						Files.createLink(newFilePath, originalFilePath);
+					} catch (final IOException ex) {
+						throw new UncheckedIOException(ex);
+					}
+				});
+			}
+
+		} catch (final IOException ex) {
+			throw new UncheckedIOException(ex);
+		}
 	}
 }

@@ -26,7 +26,6 @@ import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -36,7 +35,6 @@ import static com.swirlds.common.stream.LinkedObjectStreamUtilities.getTimeStamp
 import static com.swirlds.common.stream.LinkedObjectStreamUtilities.parseStreamFile;
 import static com.swirlds.common.stream.LinkedObjectStreamUtilities.readFirstIntFromFile;
 import static com.swirlds.logging.LogMarker.EVENT_PARSER;
-import static com.swirlds.logging.LogMarker.EVENT_STREAM;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 /**
@@ -62,8 +60,6 @@ public class StreamEventParser extends Thread {
 	private long eventsCounter;
 	private EventImpl prevParsedEvent;
 
-	private final EventSeqChecker eventSeqChecker;
-
 	/**
 	 * current event stream version
 	 */
@@ -73,7 +69,6 @@ public class StreamEventParser extends Thread {
 		this.fileDir = fileDir;
 		this.startTimestamp = startTimestamp;
 		this.endTimestamp = endTimestamp;
-		eventSeqChecker = new EventSeqChecker();
 	}
 
 	public EventImpl getNextEvent() {
@@ -326,10 +321,6 @@ public class StreamEventParser extends Thread {
 
 		Instant consensusTimestamp = event.getConsensusTimestamp();
 
-		if (!eventSeqChecker.checkEventSeq(event)) {
-			return false;
-		}
-
 		boolean shouldContinue;
 		// Search criteria :
 		// 		startTimestamp < consensusTimestamp <= endTimestamp
@@ -363,40 +354,5 @@ public class StreamEventParser extends Thread {
 	@Override
 	public void run() {
 		eventPlayback();
-	}
-
-	/**
-	 * A check instance to event sequence numbers of multiple node
-	 */
-	static class EventSeqChecker {
-		private HashMap<Long, Long> writeSeqMap = new HashMap<>();
-
-		/**
-		 * Check whether the sequence number of a stream of events is in strictly increasing order
-		 *
-		 * @param event
-		 * 		Event object to be checked
-		 * @return return true of no out or order was detected
-		 */
-		boolean checkEventSeq(EventImpl event) {
-			final long creatorId = event.getCreatorId();
-			final long eventSeq = event.getSeq();
-			if (writeSeqMap.containsKey(creatorId)) {
-				final long lastSeq = writeSeqMap.get(creatorId);
-				final long expectSeq = lastSeq + 1;
-				if (eventSeq <= lastSeq || eventSeq != expectSeq) {
-					//it's possible that some stale events could be dropped
-					LOGGER.info(EVENT_STREAM.getMarker(),
-							"Writing out of order, expect creatorId {} seq {}, but " +
-									"actual seq: {} lastseq {}, possible due to dropped stale events",
-							() -> creatorId,
-							() -> expectSeq,
-							() -> eventSeq,
-							() -> lastSeq);
-				}
-			}
-			writeSeqMap.put(creatorId, eventSeq);
-			return true;
-		}
 	}
 }

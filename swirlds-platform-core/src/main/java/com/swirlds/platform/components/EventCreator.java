@@ -21,15 +21,16 @@ import com.swirlds.common.events.BaseEventHashedData;
 import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.common.stream.Signer;
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.event.EventUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.Instant;
+import java.util.function.Supplier;
 
 import static com.swirlds.logging.LogMarker.CREATE_EVENT;
-import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 /**
  * This class encapsulates the workflow required to create new events.
@@ -54,9 +55,9 @@ public class EventCreator {
 	private final Signer signer;
 
 	/**
-	 * An implementor of {@link OldEventChecker}
+	 * Supplies the key generation number from the hashgraph
 	 */
-	private final OldEventChecker oldEventChecker;
+	private final Supplier<GraphGenerations> graphGenerationsSupplier;
 
 	/**
 	 * An implementor of {@link TransactionSupplier}
@@ -95,8 +96,8 @@ public class EventCreator {
 	 * 		the ID of this node
 	 * @param signer
 	 * 		responsible for signing new events
-	 * @param oldEventChecker
-	 * 		a method that can check if a given event is an old event
+	 * @param graphGenerationsSupplier
+	 * 		supplies the key generation number from the hashgraph
 	 * @param transactionSupplier
 	 * 		this method supplies transactions that should be inserted into newly created events
 	 * @param newEventHandler
@@ -114,7 +115,7 @@ public class EventCreator {
 			final SwirldMainManager swirldMainManager,
 			final NodeId selfId,
 			final Signer signer,
-			final OldEventChecker oldEventChecker,
+			final Supplier<GraphGenerations> graphGenerationsSupplier,
 			final TransactionSupplier transactionSupplier,
 			final EventHandler newEventHandler,
 			final EventMapper eventMapper,
@@ -127,7 +128,7 @@ public class EventCreator {
 		this.selfId = selfId;
 
 		this.signer = signer;
-		this.oldEventChecker = oldEventChecker;
+		this.graphGenerationsSupplier = graphGenerationsSupplier;
 		this.transactionSupplier = transactionSupplier;
 		this.newEventHandler = newEventHandler;
 		this.eventMapper = eventMapper;
@@ -170,11 +171,10 @@ public class EventCreator {
 		final EventImpl selfParent = eventMapper.getMostRecentEvent(selfId.getId());
 
 		// Don't create an event if both parents are old.
-		if (areBothParentsOld(selfParent, otherParent)) {
-			log.error(EXCEPTION.getMarker(),
-					"Both parents are old, selfParent: {}, otherParent: {}",
+		if (areBothParentsAncient(selfParent, otherParent)) {
+			log.debug(CREATE_EVENT.getMarker(),
+					"Both parents are ancient, selfParent: {}, otherParent: {}",
 					() -> EventUtils.toShortString(selfParent), () -> EventUtils.toShortString(otherParent));
-			handleOldParents();
 			return;
 		}
 
@@ -202,14 +202,10 @@ public class EventCreator {
 		CryptoFactory.getInstance().digestSync(hashedData);
 
 		final BaseEventUnhashedData unhashedData = new BaseEventUnhashedData(
-				getCreatorSeq(selfParent),
 				getOtherParentCreatorId(otherParent),
-				getOtherSeq(otherParent),
 				signer.sign(hashedData.getHash().getValue()));
 
-		final EventImpl event = new EventImpl(hashedData, unhashedData, selfParent, otherParent);
-
-		return event;
+		return new EventImpl(hashedData, unhashedData, selfParent, otherParent);
 	}
 
 	/**
@@ -232,21 +228,6 @@ public class EventCreator {
 	}
 
 	/**
-	 * Derive the creator sequence number for the next event.
-	 *
-	 * @param selfParent
-	 * 		the self-parent event
-	 * @return the resultant sequence number
-	 */
-	protected long getCreatorSeq(final EventImpl selfParent) {
-		if (selfParent == null) {
-			return 0;
-		} else {
-			return selfParent.getCreatorSeq() + 1;
-		}
-	}
-
-	/**
 	 * Get the creator ID of the event. If null return self ID.
 	 *
 	 * @param otherParent
@@ -256,38 +237,22 @@ public class EventCreator {
 	 */
 	protected long getOtherParentCreatorId(final EventImpl otherParent) {
 		if (otherParent == null) {
-			return selfId.getId();
+			return EventConstants.CREATOR_ID_UNDEFINED;
 		} else {
 			return otherParent.getCreatorId();
 		}
 	}
 
 	/**
-	 * Derive the sequence number of the other parent.
-	 *
-	 * @param otherParent
-	 * 		an other-parent event
-	 * @return the sequence number of the given event,
-	 * 		or {@value EventConstants#SEQUENCE_UNDEFINED} is the given event is {@code null}
-	 */
-	protected long getOtherSeq(final EventImpl otherParent) {
-		if (otherParent == null) {
-			return EventConstants.SEQUENCE_UNDEFINED;
-		} else {
-			return otherParent.getSeq();
-		}
-	}
-
-	/**
-	 * Check if both parents are old.
+	 * Check if both parents are ancient
 	 *
 	 * @param selfParent
 	 * 		the self-parent event
 	 * @param otherParent
 	 * 		the other-parent event
-	 * @return true iff both parents are old
+	 * @return true iff both parents are ancient
 	 */
-	protected boolean areBothParentsOld(
+	protected boolean areBothParentsAncient(
 			final EventImpl selfParent,
 			final EventImpl otherParent) {
 		// This is introduced as a fix for problems seen while recovering from the mainnet hardware
@@ -295,30 +260,18 @@ public class EventCreator {
 		// old events in the state. When the nodes started back up,
 		// nodes that previously crashed synced with other nodes that crashed. This created events where both
 		// parents are old, and these events could not be entered into the hashgraph on the nodes that created
-		// them, and they were not gossipped out. This fix prevents these events from being created.
-		// this exception is acceptable when more than one nodes reconnects, after the last events created by
-		// them have been stale.
-		return otherParent == null
-				&& selfParent != null
-				&& oldEventChecker.isEventOld(selfParent);
-	}
-
-	/**
-	 * This method should be called if we attempt to create an event with old parents.
-	 *
-	 * This is introduced as a fix for problems seen while recovering from the mainnet hardware
-	 * crash on 3 June 2019. Then, 3 out of 10 nodes went offline (due to hardware problems) and had only
-	 * old events in the state. When the nodes started back up,
-	 * nodes that previously crashed synced with other nodes that crashed. This created events where both
-	 * parents are old, and these events could not be entered into the hashgraph on the nodes that created
-	 * them, and they were not gossipped out. This fix prevents these events from being created.
-	 * this exception is acceptable when more than one nodes reconnects, after the last events created by
-	 * them have been stale.
-	 */
-	protected void handleOldParents() {
-		log.error(EXCEPTION.getMarker(),
-				"New event on node {} has both old parents, will not be created",
-				selfId);
+		// them, and they were not gossipped out.
+		// Update 15 November 2021: The code has since changed and creating ancient events no longer breaks the system.
+		// But it does not make sense create an ancient event, so this rule is still in place.
+		final GraphGenerations generations = graphGenerationsSupplier.get();
+		if (!generations.areAnyEventsAncient()) {
+			// if there are no ancient event yet, we return immediately. This is to account for genesis, where both
+			// parents will be null
+			return false;
+		}
+		// if a parent is null, it's the same as if it were ancient
+		return (selfParent == null || generations.isAncient(selfParent))
+				&& (otherParent == null || generations.isAncient(otherParent));
 	}
 
 	/**

@@ -18,13 +18,15 @@ import com.swirlds.common.FastCopyable;
 import com.swirlds.common.crypto.Hashable;
 import com.swirlds.common.io.SerializableDet;
 import com.swirlds.common.merkle.exceptions.MerkleRouteException;
+import com.swirlds.common.merkle.io.SerializationStrategy;
 import com.swirlds.common.merkle.iterators.MerkleDepthFirstIterator;
-import com.swirlds.common.merkle.iterators.MerkleInternalIterator;
 import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.common.merkle.route.MerkleRouteIterator;
 import com.swirlds.common.merkle.route.ReverseMerkleRouteIterator;
+import com.swirlds.common.merkle.synchronization.views.CustomReconnectRoot;
 
 import java.util.Iterator;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -45,6 +47,25 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 	 * @return true if this is a leaf node in a merkle tree.
 	 */
 	boolean isLeaf();
+
+	/**
+	 * Return true if this node is the root of a subtree that has a custom view for reconnect. Nodes that return
+	 * true must implement the interface {@link CustomReconnectRoot}.
+	 *
+	 * @return true if the node has a custom view to be used during reconnect
+	 */
+	default boolean hasCustomReconnectView() {
+		return false;
+	}
+
+	/**
+	 * Get the types of serialization supported by a given version of this class.
+	 *
+	 * @param version
+	 * 		the version in question
+	 * @return a set of supported strategies
+	 */
+	Set<SerializationStrategy> supportedSerialization(int version);
 
 	/**
 	 * Blindly cast this merkle node into a leaf node, will fail if node is not actually a leaf node.
@@ -71,7 +92,7 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 		return (T) this;
 	}
 
-	/***
+	/**
 	 * Returns the value specified by setRoute(), i.e. the route from the root of the tree down to this node.
 	 *
 	 * If setRoute() has not yet been called, this method should return an empty merkle route.
@@ -183,6 +204,7 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 	/**
 	 * {@inheritDoc}
 	 */
+	@SuppressWarnings("unchecked")
 	@Override
 	MerkleNode copy();
 
@@ -204,12 +226,5 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 				operation.accept(next);
 			}
 		}
-	}
-
-	/**
-	 * Utility method for initializing an entire tree.
-	 */
-	default void initializeTree() {
-		forEachNode(MerkleInternalIterator::new, MerkleInternal::initialize);
 	}
 }

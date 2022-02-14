@@ -17,8 +17,8 @@ package com.swirlds.platform;
 import com.swirlds.blob.BinaryObjectException;
 import com.swirlds.blob.internal.db.BlobStoragePipeline;
 import com.swirlds.blob.internal.db.DbManager;
-import com.swirlds.common.StatEntry;
-import com.swirlds.common.internal.AbstractStatistics;
+import com.swirlds.common.statistics.internal.AbstractStatistics;
+import com.swirlds.common.statistics.StatEntry;
 
 import java.sql.SQLException;
 import java.util.concurrent.locks.StampedLock;

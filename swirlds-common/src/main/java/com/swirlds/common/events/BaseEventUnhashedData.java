@@ -35,10 +35,18 @@ public class BaseEventUnhashedData implements SelfSerializable {
 	private static final long CLASS_ID = 0x33cb9d4ae38c9e91L;
 	private static final int CLASS_VERSION = 1;
 	private static final int MAX_SIG_LENGTH = 384;
+	private static final long SEQUENCE_UNUSED = -1;
 
 	///////////////////////////////////////
 	// immutable, sent during normal syncs, does NOT affect the hash that is signed:
 	///////////////////////////////////////
+
+	//--------------- NOTE -------------------------------------------------------------------------------------------
+	// Sequence number fields are no longer in use, so when an object is constructed, they are set to SEQUENCE_UNUSED
+	// These fields are still kept because there are a lot of downstream consequences of changing the event stream
+	// format, so they will be removed along with other fields that should not be part of the stream.
+	// otherId is also probably not needed anymore, so at some point this class can be replaced with just a Signature
+	//----------------------------------------------------------------------------------------------------------------
 
 	/** sequence number for this by its creator (0 is first) */
 	private long creatorSeq;
@@ -52,11 +60,11 @@ public class BaseEventUnhashedData implements SelfSerializable {
 	public BaseEventUnhashedData() {
 	}
 
-	public BaseEventUnhashedData(long creatorSeq, long otherId, long otherSeq, byte[] signature) {
-		this.creatorSeq = creatorSeq;
+	public BaseEventUnhashedData(final long otherId, final byte[] signature) {
+		this.creatorSeq = SEQUENCE_UNUSED;
 		this.otherId = otherId;
-		this.otherSeq = otherSeq;
 		this.signature = signature;
+		this.otherSeq = SEQUENCE_UNUSED;
 	}
 
 	@Override
@@ -126,16 +134,8 @@ public class BaseEventUnhashedData implements SelfSerializable {
 		return CLASS_VERSION;
 	}
 
-	public long getCreatorSeq() {
-		return creatorSeq;
-	}
-
 	public long getOtherId() {
 		return otherId;
-	}
-
-	public long getOtherSeq() {
-		return otherSeq;
 	}
 
 	public byte[] getSignature() {

@@ -50,20 +50,6 @@ public class SerializableDataInputStream extends ExtendedDataInputStream {
 	}
 
 	/**
-	 * Verify that the flag written at the end of an operation matches the expected value.
-	 */
-	protected void validateFlag(SelfSerializable object) throws IOException {
-		if (SerializableDataOutputStream.debug) {
-			long flag = readLong();
-			if (flag != (object.getClassId() * -1)) {
-				throw new IOException(String.format(
-						"Invalid flag at end of serializable object %s (class ID %d(0x%08X)).",
-						object.getClass(), object.getClassId(), object.getClassId()));
-			}
-		}
-	}
-
-	/**
 	 * Reads the protocol version written by {@link SerializableDataOutputStream#writeProtocolVersion()} and saves it
 	 * internally. From this point on, it will use this version number to deserialize.
 	 *
@@ -142,7 +128,6 @@ public class SerializableDataInputStream extends ExtendedDataInputStream {
 		T serializable = serializableConstructor.apply(classId);
 		validateVersion(serializable, version);
 		serializable.deserialize(this, version);
-		validateFlag(serializable);
 		return serializable;
 	}
 

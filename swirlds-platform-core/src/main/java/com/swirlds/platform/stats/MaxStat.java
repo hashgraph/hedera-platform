@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.StatEntry;
+import com.swirlds.common.statistics.StatEntry;
 
 public class MaxStat {
 	private final AtomicMax max;
@@ -63,7 +63,7 @@ public class MaxStat {
 	}
 
 	/**
-	 * @return a {@link StatEntry} of the max number to provide to {@link com.swirlds.common.Statistics}
+	 * @return a {@link StatEntry} of the max number to provide to {@link com.swirlds.common.statistics.Statistics}
 	 */
 	public StatEntry getStatEntry() {
 		return statEntry;

@@ -15,6 +15,9 @@
 package com.swirlds.platform.eventhandling;
 
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.StateSettings;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
 
@@ -25,26 +28,33 @@ import java.util.List;
  * logic once the refactoring of EventFlow starts.
  */
 public class SignedStateEventsAndGenerations {
-	private final int roundsAncient;
+	private final StateSettings settings;
 	private final SignedStateEventStorage events;
 	private final MinGenQueue generations;
 
-	private long lastRoundReceived = 0;
-
-	public SignedStateEventsAndGenerations(final int roundsAncient, final int numMembers) {
-		this.roundsAncient = roundsAncient;
-		events = new SignedStateEventStorage(numMembers);
+	public SignedStateEventsAndGenerations(final StateSettings settings) {
+		this.settings = settings;
+		events = new SignedStateEventStorage();
 		generations = new MinGenQueue();
 	}
 
+	public long getLastRoundReceived() {
+		return events.getLatestRoundReceived();
+	}
+
 	public void addEvents(final List<EventImpl> events) {
+		if (events.isEmpty()) {
+			return;
+		}
 		this.events.add(events);
-		lastRoundReceived = events.get(events.size() - 1).getRoundReceived();
 	}
 
 	public void addEvent(final EventImpl event) {
 		this.events.add(event);
-		lastRoundReceived = event.getRoundReceived();
+	}
+
+	public int getNumberOfEvents() {
+		return events.getQueueSize();
 	}
 
 	public void addRoundGeneration(final long round, final long minGeneration) {
@@ -52,22 +62,43 @@ public class SignedStateEventsAndGenerations {
 	}
 
 	public void expire() {
-		long staleRound = lastRoundReceived - roundsAncient;
-		// if we dont have stale rounds yet, no need to do anything
-		/* starting round is now 1, so anything less than one will be discounted */
-		if (staleRound < 1) {
+		if (events.getQueueSize() == 0) {
+			//nothing to expire
 			return;
 		}
+		// the round whose min generation we need
+		final long oldestNonAncientRound = settings.getOldestNonAncientRound(getLastRoundReceived());
 
 		// we need to keep all events that are non-ancient
-		final long minGenerationNonAncient = generations.getRoundGeneration(staleRound);
+		final long minGenerationNonAncient = generations.getRoundGeneration(oldestNonAncientRound);
 		events.expireEvents(minGenerationNonAncient);
-		// sometimes we will have events that have a round created lower than staleRound, so we need to keep more than
-		// the specified number of rounds. At other times, we might have round generation numbers that are not
-		// increasing, so we might have no events in the staleRound.
-		// we want to keep at least roundsAncient number of rounds, sometimes more
-		final long expireRoundsBelow = Math.min(staleRound, events.getMinRoundCreatedInQueue());
+		// sometimes we will have events that have a round created lower than oldestNonAncientRound, so we need to keep
+		// more than the specified number of rounds. At other times, we might have round generation numbers that are not
+		// increasing, so we might have no events in the oldestNonAncientRound.
+		// we want to keep at least roundsNonAncient number of rounds, sometimes more
+		final long expireRoundsBelow = Math.min(oldestNonAncientRound, events.getMinRoundCreatedInQueue());
 		generations.expire(expireRoundsBelow);
+	}
 
+	public EventImpl[] getEventsForSignedState() {
+		return events.getEventsForLatestRound();
+	}
+
+	public List<Pair<Long, Long>> getMinGenForSignedState() {
+		return generations.getList(getLastRoundReceived());
+	}
+
+	public void clear() {
+		events.clear();
+		generations.clear();
+	}
+
+	public void loadDataFromSignedState(final SignedState signedState) {
+		generations.addAll(signedState.getMinGenInfo());
+
+		final long minGenNonAncient = settings.getMinGenNonAncient(
+				signedState.getLastRoundReceived(), generations::getRoundGeneration
+		);
+		events.loadDataFromSignedState(signedState.getEvents(), minGenNonAncient);
 	}
 }

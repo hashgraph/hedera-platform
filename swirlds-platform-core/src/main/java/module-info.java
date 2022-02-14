@@ -80,6 +80,6 @@ module com.swirlds.platform {
 	requires com.fasterxml.jackson.databind;
 	requires com.fasterxml.jackson.datatype.jsr310;
 	requires com.swirlds.fchashmap;
-
-
+	requires com.swirlds.jasperdb;
+	requires com.swirlds.virtualmap;
 }

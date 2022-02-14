@@ -25,15 +25,5 @@ public enum InsertableStatus {
 	/** The event cannot be inserted into the shadow graph because it is already in the shadow graph. */
 	DUPLICATE_SHADOW_EVENT,
 	/** The event cannot be inserted into the shadow graph because it belongs to an expired generation. */
-	EXPIRED_EVENT,
-	/**
-	 * The event cannot be inserted into the shadow graph because its self parent is unknown to this graph and is not
-	 * expired.
-	 */
-	UNKNOWN_CURRENT_SELF_PARENT,
-	/**
-	 * The event cannot be inserted into the shadow graph because its other parent is unknown to this graph and is not
-	 * expired.
-	 */
-	UNKNOWN_CURRENT_OTHER_PARENT
+	EXPIRED_EVENT
 }

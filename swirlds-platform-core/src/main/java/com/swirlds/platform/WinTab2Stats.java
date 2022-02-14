@@ -13,7 +13,7 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.internal.StatsBuffer;
+import com.swirlds.common.statistics.internal.StatsBuffer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

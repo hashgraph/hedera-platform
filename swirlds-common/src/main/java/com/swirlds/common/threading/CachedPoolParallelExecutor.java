@@ -75,6 +75,9 @@ public class CachedPoolParallelExecutor implements ParallelExecutor {
 		try {
 			result = future1.get();
 		} catch (InterruptedException | ExecutionException e) {
+			if (e instanceof InterruptedException) {
+				Thread.currentThread().interrupt();
+			}
 			if (toThrow == null) {
 				toThrow = new ParallelExecutionException(e);
 			} else {

@@ -21,7 +21,7 @@
 	<!-- Project Configuration -->
 	<groupId>com.swirlds</groupId>
 	<artifactId>swirlds-platform</artifactId>
-	<version>0.21.0-orvw.1</version>
+	<version>0.22.0-orvw.1</version>
 
 	<packaging>pom</packaging>
 
@@ -84,8 +84,8 @@
 	<properties>
 		<!-- Maven and Java Configuration -->
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<maven.compiler.source>12</maven.compiler.source>
-		<maven.compiler.target>12</maven.compiler.target>
+		<maven.compiler.source>17</maven.compiler.source>
+		<maven.compiler.target>17</maven.compiler.target>
 
 		<!-- Local Repository Variables -->
 		<app.repo>${project.baseUri}sdk/data/repos/app/</app.repo>
@@ -93,8 +93,8 @@
 		<!-- Plugin Versions -->
 
 		<!-- Code Analysis Plugins -->
-		<plugin.sonar.version>3.7.0.1746</plugin.sonar.version>
-		<plugin.jacoco.version>0.8.6</plugin.jacoco.version>
+		<plugin.sonar.version>3.9.1.2184</plugin.sonar.version>
+		<plugin.jacoco.version>0.8.7</plugin.jacoco.version>
 
 		<!-- VCS Information Plugins -->
 		<plugin.git.commitid.version>4.0.5</plugin.git.commitid.version>
@@ -106,19 +106,19 @@
 		<plugin.maven.install.version>2.5.2</plugin.maven.install.version>
 		<plugin.maven.resources.version>3.2.0</plugin.maven.resources.version>
 		<plugin.maven.site.version>3.9.1</plugin.maven.site.version>
-		<plugin.maven.surefire.version>2.22.2</plugin.maven.surefire.version>
+		<plugin.maven.surefire.version>3.0.0-M5</plugin.maven.surefire.version>
 		<plugin.maven.jar.version>3.2.0</plugin.maven.jar.version>
 		<plugin.maven.source.version>3.2.1</plugin.maven.source.version>
-		<plugin.maven.javadoc.version>3.2.0</plugin.maven.javadoc.version>
-		<plugin.maven.dependency.version>3.1.2</plugin.maven.dependency.version>
+		<plugin.maven.javadoc.version>3.3.1</plugin.maven.javadoc.version>
+		<plugin.maven.dependency.version>3.2.0</plugin.maven.dependency.version>
 		<plugin.maven.release.version>2.5.3</plugin.maven.release.version>
 		<plugin.maven.shade.version>3.2.4</plugin.maven.shade.version>
-		<plugin.maven.gpg.version>1.6</plugin.maven.gpg.version>
+		<plugin.maven.gpg.version>3.0.1</plugin.maven.gpg.version>
 
 
 		<!-- Maven CI/CD Utilities -->
 		<plugin.versions.maven.version>2.8.1</plugin.versions.maven.version>
-		<plugin.dependency.check.version>6.1.5</plugin.dependency.check.version>
+		<plugin.dependency.check.version>6.5.0</plugin.dependency.check.version>
 		<plugin.license.maven.version>4.0.rc2</plugin.license.maven.version>
 		<plugin.build.helper.version>3.2.0</plugin.build.helper.version>
 		<plugin.nexus.staging.version>1.6.8</plugin.nexus.staging.version>
@@ -126,8 +126,8 @@
 		<!-- Dependency Versions -->
 
 		<!-- Compile Time Dependencies -->
-		<dep.ow2.asm.version>8.0.1</dep.ow2.asm.version>
-		<dep.log4j2.version>2.13.2</dep.log4j2.version>
+		<dep.ow2.asm.version>9.2</dep.ow2.asm.version>
+		<dep.log4j2.version>2.17.1</dep.log4j2.version>
 		<dep.jackson.version>2.11.2</dep.jackson.version>
 		<dep.portmapper.version>2.0.4</dep.portmapper.version>
 		<dep.commons.io.version>2.9.0</dep.commons.io.version>
@@ -136,20 +136,19 @@
 		<dep.commons.codec.version>1.15</dep.commons.codec.version>
 		<dep.commons.compress.version>1.21</dep.commons.compress.version>
 		<dep.slf4j.version>1.8.0-beta2</dep.slf4j.version>
-		<dep.bouncy.castle.version>1.68</dep.bouncy.castle.version>
+		<dep.bouncy.castle.version>1.70</dep.bouncy.castle.version>
 		<dep.hikaricp.version>3.3.1</dep.hikaricp.version>
 		<dep.postgresql.version>42.2.16</dep.postgresql.version>
 		<dep.flywaydb.version>5.2.4</dep.flywaydb.version>
-		<dep.javafx.version>12.0.2</dep.javafx.version>
+		<dep.javafx.version>17</dep.javafx.version>
 		<dep.lazysodium.version>5.1.1</dep.lazysodium.version>
-		<dep.jna.version>5.8.0</dep.jna.version>
-		<dep.jocl.version>2.0.2</dep.jocl.version>
+		<dep.jna.version>5.10.0</dep.jna.version>
 		<dep.classgraph.version>4.8.65</dep.classgraph.version>
 		<dep.picocli.version>4.6.1</dep.picocli.version>
 
 		<!-- Test Dependencies -->
 		<dep.junit.jupiter.version>5.5.0-M1</dep.junit.jupiter.version>
-		<dep.mockito.version>3.11.0</dep.mockito.version>
+		<dep.mockito.version>4.1.0</dep.mockito.version>
 
 		
 	</properties>
@@ -596,6 +595,12 @@
 				<version>${dep.javafx.version}</version>
 			</dependency>
 
+			<dependency>
+				<groupId>org.openjfx</groupId>
+				<artifactId>javafx-util</artifactId>
+				<version>${dep.javafx.version}</version>
+			</dependency>
+
 			<!-- LazySodium -->
 			<dependency>
 				<groupId>com.goterl</groupId>
@@ -607,13 +612,6 @@
 				<groupId>net.java.dev.jna</groupId>
 				<artifactId>jna</artifactId>
 				<version>${dep.jna.version}</version>
-			</dependency>
-
-			<!-- JOCL -->
-			<dependency>
-				<groupId>org.jocl</groupId>
-				<artifactId>jocl</artifactId>
-				<version>${dep.jocl.version}</version>
 			</dependency>
 
 			<!-- Classgraph -->

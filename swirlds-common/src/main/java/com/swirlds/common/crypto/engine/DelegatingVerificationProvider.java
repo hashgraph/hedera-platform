@@ -20,6 +20,11 @@ import com.swirlds.common.crypto.TransactionSignature;
 
 import java.security.NoSuchAlgorithmException;
 
+/**
+ * For Internal Use Only. This class will be deprecated and removed once the Platform transitions to a minimum
+ * version requirement of JDK 15 or higher. This is short term stop gap solution to address the lack of ED25519 support
+ * in older version of the JDK.
+ */
 public class DelegatingVerificationProvider
 		extends OperationProvider<TransactionSignature, Void, Boolean, Object, SignatureType> {
 
@@ -32,6 +37,9 @@ public class DelegatingVerificationProvider
 		this.ecdsaSecp256k1VerificationProvider = ecdsaSecp256k1VerificationProvider;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	protected Object loadAlgorithm(final SignatureType algorithmType) throws NoSuchAlgorithmException {
 		switch (algorithmType) {
@@ -44,6 +52,9 @@ public class DelegatingVerificationProvider
 		}
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	protected Boolean handleItem(final Object algorithm, final SignatureType algorithmType,
 			final TransactionSignature item, final Void unused) throws NoSuchAlgorithmException {

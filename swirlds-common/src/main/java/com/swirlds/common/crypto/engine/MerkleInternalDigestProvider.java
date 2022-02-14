@@ -26,6 +26,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
+/**
+ * A {@link CachingOperationProvider} implementation that is capable of computing a hash for a supplied {@link
+ * MerkleInternal} instance.
+ */
 public class MerkleInternalDigestProvider extends
 		CachingOperationProvider<MerkleInternal, List<Hash>, Hash, HashBuilder, DigestType> {
 

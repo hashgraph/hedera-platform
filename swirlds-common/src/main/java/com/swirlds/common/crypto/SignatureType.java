@@ -29,6 +29,31 @@ public enum SignatureType {
 	ECDSA_SECP256K1("NONEwithECDSA", "EC", "BC", 64, "secp256k1");
 
 	/**
+	 * An array of enumeration values used for the purposes of a fast lookup by index.
+	 */
+	private static final SignatureType[] ORDINAL_LOOKUP = values();
+	/**
+	 * the JCE name for the signing algorithm
+	 */
+	private final String signingAlgorithm;
+	/**
+	 * the JCE name for the key generation algorithm
+	 */
+	private final String keyAlgorithm;
+	/**
+	 * the JCE name for the cryptography provider
+	 */
+	private final String provider;
+	/**
+	 * The length of the signature in bytes
+	 */
+	private final int signatureLength;
+	/**
+	 * The elliptical curve to be used. Only applies to EC algorithms and may be null or an empty string for all others.
+	 */
+	private final String ellipticalCurve;
+
+	/**
 	 * Enum constructor used to initialize the values with the algorithm characteristics.
 	 *
 	 * @param signingAlgorithm
@@ -67,43 +92,20 @@ public enum SignatureType {
 	}
 
 	/**
-	 * the JCE name for the signing algorithm
+	 * Translates an ordinal position into an enumeration value.
+	 *
+	 * @param ordinal
+	 * 		the ordinal value to be translated into an enumeration value.
+	 * @param defaultValue
+	 * 		the default enumeration value to return if the {@code ordinal} cannot be found.
+	 * @return the enumeration value related to the given ordinal or the default value if the ordinal is not found.
 	 */
-	private final String signingAlgorithm;
-
-	/**
-	 * the JCE name for the key generation algorithm
-	 */
-	private final String keyAlgorithm;
-
-	/**
-	 * the JCE name for the cryptography provider
-	 */
-	private final String provider;
-
-	/**
-	 * The length of the signature in bytes
-	 */
-	private final int signatureLength;
-
-	/**
-	 * The elliptical curve to be used. Only applies to EC algorithms and may be null or an empty string for all others.
-	 */
-	private final String ellipticalCurve;
-
-	private static final SignatureType[] ORDINAL_LOOKUP = values();
-
-	/**
-	 * the max length of digest output in bytes among all SignatureType
-	 */
-	private static final int maxLength;
-
-	static {
-		int maxLengthTmp = 0;
-		for (final SignatureType signatureType : SignatureType.values()) {
-			maxLengthTmp = Math.max(maxLengthTmp, signatureType.signatureLength);
+	public static SignatureType from(final int ordinal, final SignatureType defaultValue) {
+		if (ordinal < 0 || ordinal >= ORDINAL_LOOKUP.length) {
+			return defaultValue;
 		}
-		maxLength = maxLengthTmp;
+
+		return ORDINAL_LOOKUP[ordinal];
 	}
 
 	/**
@@ -145,38 +147,10 @@ public enum SignatureType {
 	/**
 	 * Getter to retrieve the elliptical curve to be used in the transformation.
 	 *
-	 * @return the elliptical curve spec
+	 * @return the elliptical curve spec name as required by the {@link java.security.spec.ECParameterSpec}
+	 * 		implementation.
 	 */
 	public String ellipticalCurve() {
 		return ellipticalCurve;
-	}
-
-
-	/**
-	 * Translates an ordinal position into an enumeration value.
-	 *
-	 * @param ordinal
-	 * 		the ordinal value to be translated
-	 * @param defaultValue
-	 * 		the default enumeration value to return if the {@code ordinal} cannot be found
-	 * @return the enumeration value related to the given ordinal or the default value if the ordinal is not
-	 * 		found
-	 */
-	public static SignatureType from(final int ordinal,
-			final SignatureType defaultValue) {
-		if (ordinal < 0 || ordinal >= ORDINAL_LOOKUP.length) {
-			return defaultValue;
-		}
-
-		return ORDINAL_LOOKUP[ordinal];
-	}
-
-	/**
-	 * Getter to retrieve the max length of digest output in bytes among all SignatureType
-	 *
-	 * @return the max length of digest output in bytes among all SignatureType
-	 */
-	public static int getMaxLength() {
-		return maxLength;
 	}
 }

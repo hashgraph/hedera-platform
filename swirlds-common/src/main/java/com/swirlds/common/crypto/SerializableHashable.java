@@ -25,7 +25,7 @@ public interface SerializableHashable extends Hashable, SelfSerializable {
 	 * If the class wants to implement its own hashing, this method should never return null. The class should
 	 * calculate its own hash, which should include the class ID and version, and return that hash by this method.
 	 *
-	 * @return the hash of the object
+	 * @return the hash of the object.
 	 */
 	@Override
 	Hash getHash();

@@ -22,6 +22,7 @@ import java.io.OutputStream;
 import java.time.Instant;
 import java.util.List;
 
+import static com.swirlds.common.io.SerializableStreamConstants.DEFAULT_CHECKSUM;
 import static com.swirlds.common.io.SerializableStreamConstants.NULL_INSTANT_EPOCH_SECOND;
 import static com.swirlds.common.io.SerializableStreamConstants.NULL_LIST_ARRAY_LENGTH;
 
@@ -33,13 +34,6 @@ public class ExtendedDataOutputStream extends DataOutputStream {
 	public ExtendedDataOutputStream(OutputStream out) {
 		super(out);
 	}
-
-	/**
-	 * Causes extra bytes/flags/checksums to be written/read to/from the stream. Useful for identifying
-	 * the root cause of serialization bugs. Note: code with this flag activated cannot deserialize
-	 * data serialized with the flag turned off (and vice versa).
-	 */
-	protected static final boolean debug = false;
 
 	/**
 	 * Writes a byte array to the stream. Can be null.
@@ -67,13 +61,14 @@ public class ExtendedDataOutputStream extends DataOutputStream {
 	/**
 	 * Writes a byte array to the stream. Can be null.
 	 * Same as {@link #writeByteArray(byte[], boolean)} with {@code writeChecksum} set to false
+	 *
 	 * @param data
 	 * 		the array to write
 	 * @throws IOException
 	 * 		thrown if any IO problems occur
 	 */
 	public void writeByteArray(byte[] data) throws IOException {
-		writeByteArray(data, debug);
+		writeByteArray(data, DEFAULT_CHECKSUM);
 	}
 
 	/**
@@ -350,7 +345,7 @@ public class ExtendedDataOutputStream extends DataOutputStream {
 	 * 		the array to write
 	 */
 	public static int getArraySerializedLength(final byte[] data) {
-		return getArraySerializedLength(data, debug);
+		return getArraySerializedLength(data, DEFAULT_CHECKSUM);
 	}
 
 	/**
@@ -362,7 +357,7 @@ public class ExtendedDataOutputStream extends DataOutputStream {
 	 * 		whether to read the checksum or not
 	 */
 	public static int getArraySerializedLength(final byte[] data, final boolean writeChecksum) {
-		int totalByteLength = Integer.BYTES;	// add the the size of array length field
+		int totalByteLength = Integer.BYTES;    // add the the size of array length field
 		if (writeChecksum) {
 			totalByteLength += Integer.BYTES; // add the length of checksum
 		}

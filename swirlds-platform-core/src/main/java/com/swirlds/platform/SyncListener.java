@@ -13,10 +13,9 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.AutoCloseableWrapper;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.io.BadIOException;
-import com.swirlds.platform.reconnect.ReconnectSender;
+import com.swirlds.platform.reconnect.ReconnectTeacher;
 import com.swirlds.platform.reconnect.ReconnectThrottle;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.StateDumpSource;
@@ -322,23 +321,21 @@ class SyncListener implements Runnable {
 		} else if (b == SyncConstants.COMM_STATE_REQUEST) {
 			log.info(RECONNECT.getMarker(), "{} got COMM_STATE_REQUEST from {}", platform.getSelfId(), otherId);
 
-			try (final AutoCloseableWrapper<SignedState> stateWrapper =
-						 platform.getSignedStateManager().getLastCompleteSignedState()) {
+			final SignedState state = platform.getSignedStateManager().getLastCompleteSignedState().get();
 
-				// This was added to support writing signed state JSON files after every reconnect
-				// This is enabled/disabled via settings and is disabled by default
-				platform.getSignedStateManager().jsonifySignedState(stateWrapper.get(), StateDumpSource.RECONNECT);
+			// This was added to support writing signed state JSON files after every reconnect
+			// This is enabled/disabled via settings and is disabled by default
+			platform.getSignedStateManager().jsonifySignedState(state, StateDumpSource.RECONNECT);
 
-				new ReconnectSender(
-						conn,
-						stateWrapper.get(),
-						Settings.reconnect.getAsyncInputStreamTimeoutMilliseconds(),
-						reconnectThrottle,
-						platform.getSelfId().getId(),
-						otherId.getId(),
-						stateWrapper.get().getLastRoundReceived(),
-						platform.getStats().getReconnectStats()).execute();
-			}
+			new ReconnectTeacher(
+					conn,
+					state,
+					Settings.reconnect.getAsyncStreamTimeoutMilliseconds(),
+					reconnectThrottle,
+					platform.getSelfId().getId(),
+					otherId.getId(),
+					state.getLastRoundReceived(),
+					platform.getStats().getReconnectStats()).execute();
 
 			return true;
 		} else { // b is neither a heartbeat, a COMM_STATE_REQUEST nor a COMM_SYNC_REQUEST, so it's an error

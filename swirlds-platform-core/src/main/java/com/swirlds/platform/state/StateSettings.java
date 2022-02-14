@@ -15,7 +15,11 @@
 package com.swirlds.platform.state;
 
 import com.swirlds.platform.SignedStateFileManager;
+import com.swirlds.platform.consensus.GraphGenerations;
+import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.internal.SubSetting;
+
+import java.util.function.LongUnaryOperator;
 
 /**
  * Settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors.
@@ -46,10 +50,13 @@ public class StateSettings extends SubSetting {
 	public int roundsExpired = 500;
 
 	/**
-	 * Events this many rounds old are ancient, so if they don't have consensus yet, they're stale, and will
-	 * never have their transactions handled.
+	 * The number of consensus rounds that are defined to be non-ancient. There can be more non-ancient rounds, but
+	 * these rounds will not have reached consensus. Once consensus is reached on a new round
+	 * (i.e.,fame is decided for all its witnesses), another round will become ancient. Events, whose generation is
+	 * older than the last non-ancient round generation, are ancient. If they don't have consensus yet, they're stale,
+	 * and will never reach consensus and never have their transactions handled.
 	 */
-	public int roundsStale = 25;
+	public int roundsNonAncient = 26;
 
 	/**
 	 * Enabling the process of recovering signed state by playing back event files
@@ -84,11 +91,6 @@ public class StateSettings extends SubSetting {
 	public boolean saveLocalEvents = false;
 
 	/**
-	 * Used for debugging the ISS that appears due to concurrent modification of the SignedStateLeaf
-	 */
-	public static volatile boolean compareSSLeafSnapshots = true;
-
-	/**
 	 * If true then a single background thread is used to do validation of signed state hashes. Validation is on
 	 * a best effort basis. If it takes too long to validate a state then new states will be skipped.
 	 */
@@ -98,11 +100,11 @@ public class StateSettings extends SubSetting {
 
 	}
 
-	public StateSettings(int saveStatePeriod, int signedStateKeep, int signedStateDisk, int roundsStale) {
+	public StateSettings(int saveStatePeriod, int signedStateKeep, int signedStateDisk, int roundsNonAncient) {
 		this.saveStatePeriod = saveStatePeriod;
 		this.signedStateKeep = signedStateKeep;
 		this.signedStateDisk = signedStateDisk;
-		this.roundsStale = roundsStale;
+		this.roundsNonAncient = roundsNonAncient;
 	}
 
 	/**
@@ -133,15 +135,6 @@ public class StateSettings extends SubSetting {
 	}
 
 	/**
-	 * getter for number of rounds that are old are stale in events and will never have their transactions handled
-	 *
-	 * @return number of rounds that are old are stale
-	 */
-	public int getRoundsStale() {
-		return roundsStale;
-	}
-
-	/**
 	 * getter if recovering signed state by playing back event files is enabled
 	 *
 	 * @return true if state recovery is enabled
@@ -158,5 +151,36 @@ public class StateSettings extends SubSetting {
 	 */
 	public void setEnableStateRecovery(boolean enableStateRecovery) {
 		this.enableStateRecovery = enableStateRecovery;
+	}
+
+	/**
+	 * Returns the oldest round that is non-ancient. If no round is ancient, then it will return the first round ever
+	 *
+	 * @param lastRoundDecided
+	 * 		the last round that has fame decided
+	 * @return oldest non-ancient number
+	 */
+	public long getOldestNonAncientRound(final long lastRoundDecided) {
+		// if we have N non-ancient consensus rounds, and the last one is M, then the oldest non-ancient round is
+		// M-(N-1) which is equal to M-N+1
+		// if no rounds are ancient yet, then the oldest non-ancient round is the first round ever
+		return Math.max(lastRoundDecided - roundsNonAncient + 1, EventConstants.MINIMUM_ROUND_CREATED);
+	}
+
+	/**
+	 * Returns the minimum generation below which all events are ancient
+	 *
+	 * @param lastRoundDecided
+	 * 		the last round that has fame decided
+	 * @param roundGenerationProvider
+	 * 		returns a round generation number for a given round number
+	 * @return minimum non-ancient generation
+	 */
+	public long getMinGenNonAncient(final long lastRoundDecided, final LongUnaryOperator roundGenerationProvider) {
+		// if a round generation is not defined for the oldest round, it will be EventConstants.GENERATION_UNDEFINED,
+		// which is -1. in this case we will return FIRST_GENERATION, which is 0
+		return Math.max(
+				roundGenerationProvider.applyAsLong(getOldestNonAncientRound(lastRoundDecided)),
+				GraphGenerations.FIRST_GENERATION);
 	}
 }

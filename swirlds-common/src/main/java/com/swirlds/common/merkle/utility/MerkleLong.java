@@ -74,14 +74,6 @@ public class MerkleLong extends AbstractMerkleLeaf {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean isDataExternal() {
-		return false;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public MerkleLong copy() {
 		throwIfImmutable();
 		return new MerkleLong(this);

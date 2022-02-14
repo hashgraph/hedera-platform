@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +33,7 @@ import java.util.Objects;
  * read-only for apps.
  * When enableEventStreaming is set to be true, the memo field is required and should be unique.
  */
-public class AddressBook extends AbstractMerkleLeaf {
+public class AddressBook extends AbstractMerkleLeaf implements Iterable<Address> {
 	public static final long CLASS_ID = 0x4ee5498ef623fbe0L;
 
 	private static class ClassVersion {
@@ -331,6 +332,11 @@ public class AddressBook extends AbstractMerkleLeaf {
 	@Override
 	public int getMinimumSupportedVersion() {
 		return ClassVersion.AD_HOC_SERIALIZATION;
+	}
+
+	@Override
+	public Iterator<Address> iterator() {
+		return addresses.iterator();
 	}
 
 	@Override

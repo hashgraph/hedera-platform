@@ -28,7 +28,25 @@ import java.security.NoSuchAlgorithmException;
 public class RunningHashProvider extends
 		CachingOperationProvider<Hash, Hash, Hash, HashBuilder, DigestType> {
 
-	public static final String NEW_HASH_NULL = "RunningHashProvider :: newHashToAdd is null";
+	/**
+	 * A constant log message used to indicate that a {@code null} value was added as a hash which results in a {@link
+	 * IllegalArgumentException} being thrown.
+	 */
+	private static final String NEW_HASH_NULL = "RunningHashProvider :: newHashToAdd is null";
+
+	/**
+	 * update the digest using the given hash
+	 *
+	 * @param hashBuilder
+	 * 		for building hash
+	 * @param hash
+	 * 		a hash to be digested
+	 */
+	private static void updateForHash(final HashBuilder hashBuilder, final Hash hash) {
+		hashBuilder.update(hash.getClassId());
+		hashBuilder.update(hash.getVersion());
+		hashBuilder.update(hash);
+	}
 
 	/**
 	 * {@inheritDoc}
@@ -70,19 +88,5 @@ public class RunningHashProvider extends
 			final DigestType algorithmType)
 			throws NoSuchAlgorithmException {
 		return handleItem(loadAlgorithm(algorithmType), algorithmType, runningHash, newHashToAdd);
-	}
-
-	/**
-	 * update the digest using the given hash
-	 *
-	 * @param hashBuilder
-	 * 		for building hash
-	 * @param hash
-	 * 		a hash to be digested
-	 */
-	private static void updateForHash(final HashBuilder hashBuilder, final Hash hash) {
-		hashBuilder.update(hash.getClassId());
-		hashBuilder.update(hash.getVersion());
-		hashBuilder.update(hash);
 	}
 }

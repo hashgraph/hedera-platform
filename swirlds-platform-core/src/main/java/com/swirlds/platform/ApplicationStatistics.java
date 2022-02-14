@@ -14,8 +14,8 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.StatEntry;
-import com.swirlds.common.internal.AbstractStatistics;
+import com.swirlds.common.statistics.internal.AbstractStatistics;
+import com.swirlds.common.statistics.StatEntry;
 
 import java.util.LinkedList;
 import java.util.List;

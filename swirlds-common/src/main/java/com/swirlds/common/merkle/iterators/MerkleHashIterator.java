@@ -14,6 +14,7 @@
 
 package com.swirlds.common.merkle.iterators;
 
+import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 
 /**
@@ -58,5 +59,20 @@ public class MerkleHashIterator extends MerkleDepthFirstIterator<MerkleNode, Mer
 		}
 
 		return node.getHash() == null;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	protected void addChildren(final MerkleNode merkleNode) {
+		final MerkleInternal node = merkleNode.cast();
+
+		for (int childIndex = node.getNumberOfChildren() - 1; childIndex >= 0; childIndex--) {
+			final MerkleNode child = node.getChild(childIndex);
+			if (child != null && !child.isSelfHashing()) {
+				pushNode(child);
+			}
+		}
 	}
 }

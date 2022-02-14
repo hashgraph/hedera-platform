@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.StatEntry;
+import com.swirlds.common.statistics.StatEntry;
 
 public class AverageStat {
 	/** does not change very quickly */
@@ -80,7 +80,7 @@ public class AverageStat {
 	}
 
 	/**
-	 * @return a {@link StatEntry} of the average number to provide to {@link com.swirlds.common.Statistics}
+	 * @return a {@link StatEntry} of the average number to provide to {@link com.swirlds.common.statistics.Statistics}
 	 */
 	public StatEntry getStatEntry() {
 		return statEntry;

@@ -20,7 +20,6 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -28,35 +27,18 @@ import java.util.List;
 
 /**
  * Keeps events that need to be stored in the signed state when it is created. It makes sure it has last {@code
- * staleRound} number of rounds created at all times. It also makes sure there is at least one event from each node. If
- * the rounds that are kept do not contain events from a particular node, it will hold on to older events.
+ * staleRound} number of rounds created at all times.
  */
 public class SignedStateEventStorage {
-	/** number of members in the network */
-	private final int numMembers;
 	/** a queue of all the latest events that need to be saved in state */
 	private final Deque<EventImpl> queue = new LinkedList<>();
-	/**
-	 * an array that keeps the last consensus event by each member
-	 */
-	private final EventImpl[] lastConsEventByMember;
-	/**
-	 * an array that keeps track of whose last event is in the queue
-	 */
-	private final boolean[] lastConsEventInQueue;
-
 	/** the latest round received */
 	private long latestRoundReceived;
 
 	/** the minimum round created in the queue */
 	private long minRoundCreatedInQueue;
 
-
-	public SignedStateEventStorage(final int numMembers) {
-		this.numMembers = numMembers;
-		lastConsEventByMember = new EventImpl[numMembers];
-		lastConsEventInQueue = new boolean[numMembers];
-
+	public SignedStateEventStorage() {
 		clear();
 	}
 
@@ -68,41 +50,28 @@ public class SignedStateEventStorage {
 
 	public synchronized void add(final EventImpl event) {
 		queue.add(event);
-		// keep track of the last event created by each member
-		lastConsEventByMember[(int) event.getCreatorId()] = event;
-		lastConsEventInQueue[(int) event.getCreatorId()] = true;
-
 		latestRoundReceived = event.getRoundReceived();
 		updateMinRoundCreated(event);
 	}
 
 	public synchronized EventImpl[] getEventsForLatestRound() {
-		// the saved state should contain at least one event by each member. if the member doesnt have an
-		// event in the queue, we need to add an older event in the signed state
-		final List<EventImpl> ssEventList = new ArrayList<>(queue.size() + lastConsEventByMember.length);
-		for (int i = 0; i < lastConsEventInQueue.length; i++) {
-			if (!lastConsEventInQueue[i] && lastConsEventByMember[i] != null) {
-				ssEventList.add(lastConsEventByMember[i]);
-			}
-		}
-
-		ssEventList.addAll(queue);
-		return ssEventList.toArray(new EventImpl[] { });
+		return queue.toArray(new EventImpl[] { });
 	}
 
+	/**
+	 * Remove all events older than {@code minGenerationNonAncient} from storage
+	 *
+	 * @param minGenerationNonAncient
+	 * 		generation below which all events are ancient
+	 */
 	public synchronized void expireEvents(final long minGenerationNonAncient) {
 		minRoundCreatedInQueue = Long.MAX_VALUE;
 		// we traverse the queue from newest events to oldest
 		final Iterator<EventImpl> i = queue.iterator();
 		while (i.hasNext()) {
 			final EventImpl event = i.next();
-			// once we reach an event whose round is stale, we remove all events before it
+			// remove all events whose generation is older than minGenerationNonAncient
 			if (event.getGeneration() < minGenerationNonAncient) {
-				// if we are deleting the last event created by this member, we must keep track of it so we add it to
-				// the saved state
-				if (event == lastConsEventByMember[(int) event.getCreatorId()]) {
-					lastConsEventInQueue[(int) event.getCreatorId()] = false;
-				}
 				i.remove();
 			} else {
 				updateMinRoundCreated(event);
@@ -115,10 +84,6 @@ public class SignedStateEventStorage {
 	}
 
 	public synchronized void clear() {
-		for (int i = 0; i < numMembers; i++) {
-			lastConsEventByMember[i] = null;
-			lastConsEventInQueue[i] = false;
-		}
 		latestRoundReceived = -1;
 		minRoundCreatedInQueue = Long.MAX_VALUE;
 	}
@@ -136,10 +101,16 @@ public class SignedStateEventStorage {
 		return queue.size();
 	}
 
+	/**
+	 * @return the highest round received in storage
+	 */
 	public synchronized long getLatestRoundReceived() {
 		return latestRoundReceived;
 	}
 
+	/**
+	 * @return the lowest round number a stored event was created in
+	 */
 	public synchronized long getMinRoundCreatedInQueue() {
 		return minRoundCreatedInQueue;
 	}
@@ -154,24 +125,20 @@ public class SignedStateEventStorage {
 
 		final SignedStateEventStorage that = (SignedStateEventStorage) o;
 
-		return new EqualsBuilder().append(numMembers, that.numMembers).append(
-				latestRoundReceived, that.latestRoundReceived).append(queue, that.queue).append(lastConsEventByMember,
-				that.lastConsEventByMember).append(lastConsEventInQueue, that.lastConsEventInQueue).isEquals();
+		return new EqualsBuilder()
+				.append(latestRoundReceived, that.latestRoundReceived).append(queue, that.queue).isEquals();
 	}
 
 	@Override
 	public int hashCode() {
-		return new HashCodeBuilder(17, 37).append(numMembers).append(queue).append(lastConsEventByMember).append(
-				lastConsEventInQueue).append(latestRoundReceived).toHashCode();
+		return new HashCodeBuilder(17, 37)
+				.append(queue).append(latestRoundReceived).toHashCode();
 	}
 
 	@Override
 	public String toString() {
 		return new ToStringBuilder(this, ToStringStyle.MULTI_LINE_STYLE)
-				.append("numMembers", numMembers)
 				.append("queue", queue)
-				.append("lastConsEventByMember", lastConsEventByMember)
-				.append("lastConsEventInQueue", lastConsEventInQueue)
 				.append("latestRoundReceived", latestRoundReceived)
 				.toString();
 	}

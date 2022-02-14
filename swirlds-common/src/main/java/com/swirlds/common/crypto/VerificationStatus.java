@@ -15,13 +15,15 @@
 package com.swirlds.common.crypto;
 
 /**
- * An indicator as to whether a Signature is awaiting verification, valid, or invalid.
+ * Indicates whether a Signature is awaiting verification, valid, or invalid.
  */
 public enum VerificationStatus {
 	/** A signature that has not yet been verified or is pending verification */
 	UNKNOWN,
+
 	/** A valid signature */
 	VALID,
-	/** A invalid signature, possibly due to payload corruption or signature tampering */
+
+	/** An invalid signature, possibly due to payload corruption or signature tampering */
 	INVALID
 }

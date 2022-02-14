@@ -14,13 +14,15 @@
 
 package com.swirlds.platform.reconnect;
 
-import com.swirlds.common.merkle.synchronization.AsyncInputStream;
+import com.swirlds.common.merkle.synchronization.streams.AsyncInputStream;
+import com.swirlds.common.merkle.synchronization.settings.ReconnectSettings;
+import com.swirlds.common.merkle.synchronization.streams.AsyncOutputStream;
 import com.swirlds.platform.internal.SubSetting;
 
 import java.time.Duration;
 
 public class ReconnectSettingsImpl extends SubSetting
-		implements com.swirlds.common.merkle.synchronization.ReconnectSettings {
+		implements ReconnectSettings {
 
 	/**
 	 * Determines what a node will do when it falls behind. If true, it will attempt a reconnect, if false, it will die.
@@ -40,16 +42,18 @@ public class ReconnectSettingsImpl extends SubSetting
 	public double fallenBehindThreshold = 0.50;
 
 	/**
-	 * The amount of time that an {@link AsyncInputStream} will wait for a message before aborting the reconnect.
+	 * The amount of time that an {@link AsyncInputStream} and
+	 * {@link AsyncOutputStream} will wait before throwing a timeout.
 	 */
-	public static int asyncInputStreamTimeoutMilliseconds = 10_000;
+	public static int asyncStreamTimeoutMilliseconds = 100_000;
 
 	/**
 	 * In order to ensure that data is not languishing in the asyncOutputStream buffer a periodic flush
-	 * is performed. The maximum amount of time between these periodic flushes is specified as a fraction
-	 * of {@link ReconnectSettingsImpl#asyncInputStreamTimeoutMilliseconds}.
+	 * is performed.
 	 */
-	public static double asyncOutputStreamFlushFraction = 0.01;
+	public static int asyncOutputStreamFlushMilliseconds = 100;
+
+	public static int asyncStreamBufferSize = 10_000;
 
 	/**
 	 * If false then the async streams behave as if they were synchronous. Significantly effects performance, should
@@ -58,20 +62,10 @@ public class ReconnectSettingsImpl extends SubSetting
 	public boolean asyncStreams = true;
 
 	/**
-	 * The number of threads used by the receiving synchronizer to handle responses.
-	 */
-	public int sendingSynchronizerResponseThreadPoolSize = 4;
-
-	/**
 	 * The maximum amount of time to wait for an ACK message. If no ACK is received
 	 * and sufficient time passes then send the potentially redundant node.
 	 */
 	public int maxAckDelayMilliseconds = 10;
-
-	/**
-	 * The number of threads to use for validating hashes during a reconnect.
-	 */
-	public int hashValidationThreadPoolSize = 40;
 
 	/**
 	 * The maximum number of failed reconnects in a row before shutdown.
@@ -114,32 +108,24 @@ public class ReconnectSettingsImpl extends SubSetting
 	 * {@inheritDoc}
 	 */
 	@Override
-	public int getAsyncInputStreamTimeoutMilliseconds() {
-		return asyncInputStreamTimeoutMilliseconds;
+	public int getAsyncStreamTimeoutMilliseconds() {
+		return asyncStreamTimeoutMilliseconds;
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public double getAsyncOutputStreamFlushFraction() {
-		return asyncOutputStreamFlushFraction;
+	public int getAsyncOutputStreamFlushMilliseconds() {
+		return asyncOutputStreamFlushMilliseconds;
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean isAsyncStreams() {
-		return asyncStreams;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getSendingSynchronizerResponseThreadPoolSize() {
-		return sendingSynchronizerResponseThreadPoolSize;
+	public int getAsyncStreamBufferSize() {
+		return asyncStreamBufferSize;
 	}
 
 	/**
@@ -156,14 +142,6 @@ public class ReconnectSettingsImpl extends SubSetting
 	@Override
 	public int getMaximumReconnectFailuresBeforeShutdown() {
 		return maximumReconnectFailuresBeforeShutdown;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getHashValidationThreadPoolSize() {
-		return hashValidationThreadPoolSize;
 	}
 
 	/**

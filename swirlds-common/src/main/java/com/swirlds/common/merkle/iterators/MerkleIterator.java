@@ -44,6 +44,23 @@ public abstract class MerkleIterator<T extends MerkleNode, R extends T> implemen
 	protected boolean hasNext;
 
 	public MerkleIterator(final T root) {
+		setup(root);
+	}
+
+	/**
+	 * Default constructor to allow work to be done by a subclass before the call to {@link #setup(MerkleNode)}
+	 */
+	protected MerkleIterator() {
+
+	}
+
+	/**
+	 * This method must be called in the constructor.
+	 *
+	 * @param root
+	 * 		the root of the tree (or subtree) to be iterated
+	 */
+	protected void setup(final T root) {
 		init();
 		if (root != null) {
 			pushNode(root);
@@ -155,12 +172,12 @@ public abstract class MerkleIterator<T extends MerkleNode, R extends T> implemen
 	@SuppressWarnings("unchecked")
 	protected void addChildren(final T node) {
 		final MerkleInternal internalNode = node.cast();
-		boolean reverseChildren = reverseChildren();
+		final boolean reverseChildren = reverseChildren();
 
 		// If needed, iterate through the children from last to first
-		int startIndex = reverseChildren ? internalNode.getNumberOfChildren() - 1 : 0;
-		int endIndex = reverseChildren ? -1 : internalNode.getNumberOfChildren();
-		int delta = reverseChildren ? -1 : 1;
+		final int startIndex = reverseChildren ? (internalNode.getNumberOfChildren() - 1) : 0;
+		final int endIndex = reverseChildren ? -1 : internalNode.getNumberOfChildren();
+		final int delta = reverseChildren ? -1 : 1;
 
 		for (int childIndex = startIndex; childIndex != endIndex; childIndex += delta) {
 			final MerkleNode child = internalNode.getChild(childIndex);

@@ -18,7 +18,9 @@ import com.swirlds.common.AddressBook;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.Platform;
 import com.swirlds.common.io.BadIOException;
+import com.swirlds.platform.sync.SyncConnectionState;
 import com.swirlds.platform.sync.SyncConstants;
+import com.swirlds.platform.sync.SyncException;
 import com.swirlds.platform.sync.SyncInputStream;
 import com.swirlds.platform.sync.SyncOutputStream;
 import org.apache.logging.log4j.LogManager;
@@ -32,6 +34,7 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
@@ -59,6 +62,8 @@ public class SocketSyncConnection implements SyncConnection {
 	private final AtomicBoolean connected = new AtomicBoolean(true);
 	private final boolean outbound;
 	private final String description;
+	/** the current state of this connection */
+	private final AtomicReference<SyncConnectionState> currentState;
 
 	/**
 	 * return the total number of bytes written to all the given connections since the last time this was
@@ -164,6 +169,7 @@ public class SocketSyncConnection implements SyncConnection {
 		close(socket);
 		close(dis);
 		close(dos);
+		currentState.set(SyncConnectionState.DISCONNECTED);
 	}
 
 	private static void close(final Closeable closeable) {
@@ -208,6 +214,7 @@ public class SocketSyncConnection implements SyncConnection {
 		this.dis = dis;
 		this.dos = dos;
 
+		this.currentState = new AtomicReference<>(SyncConnectionState.NEW_CONNECTION);
 		platform.newConnectionOpened();
 	}
 
@@ -360,6 +367,12 @@ public class SocketSyncConnection implements SyncConnection {
 		getDos().getSyncByteCounter().resetCount();
 
 		this.setTimeout(Settings.timeoutSyncClientSocket);
+		currentState.set(SyncConnectionState.SYNC_STARTED);
+	}
+
+	@Override
+	public void syncDone() {
+		currentState.set(SyncConnectionState.SYNC_ENDED);
 	}
 
 	@Override
@@ -370,5 +383,35 @@ public class SocketSyncConnection implements SyncConnection {
 	@Override
 	public String getDescription() {
 		return description;
+	}
+
+
+	/**
+	 * @return the current state of this connection, never null
+	 */
+	public SyncConnectionState getCurrentState() {
+		return currentState.get();
+	}
+
+	/**
+	 * Sends and receives a heartbeat
+	 *
+	 * @throws IOException
+	 * 		if a problem with the connection occurs
+	 * @throws SyncException
+	 * 		if we don't receive a HEARTBEAT_ACK
+	 */
+	public void heartbeat() throws IOException, SyncException {
+		dos.write(SyncConstants.HEARTBEAT);
+		currentState.set(SyncConnectionState.HEARTBEAT_SENT);
+		dos.flush();
+		getSocket().setSoTimeout(Settings.timeoutSyncClientSocket);
+		final byte b = dis.readByte();
+		if (b != SyncConstants.HEARTBEAT_ACK) {
+			throw new SyncException(String.format(
+					"received %02x but expected %02x (heartbeatACK)",
+					b, SyncConstants.HEARTBEAT_ACK));
+		}
+		currentState.set(SyncConnectionState.HEARTBEAT_ACKNOWLEDGED);
 	}
 }

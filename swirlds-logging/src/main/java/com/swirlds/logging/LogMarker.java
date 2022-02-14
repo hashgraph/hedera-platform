@@ -253,9 +253,14 @@ public enum LogMarker {
 	EVENT_CONTENT(LogMarkerType.INFO),
 
 	/**
-	 * Detail information about .
+	 * Detail information about JasperDb.
 	 */
-	JASPER_DB(LogMarkerType.INFO);
+	JASPER_DB(LogMarkerType.INFO),
+
+	/**
+	 * Logs stats related to Virtual Merkle (nodes, map, etc).
+	 */
+	VIRTUAL_MERKLE_STATS(LogMarkerType.INFO);
 
 	private final LogMarkerType type;
 	private final Marker marker;

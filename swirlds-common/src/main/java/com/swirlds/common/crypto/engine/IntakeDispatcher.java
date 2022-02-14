@@ -14,13 +14,21 @@
 
 package com.swirlds.common.crypto.engine;
 
+import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.logging.LogMarker;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
+
+import static com.swirlds.common.crypto.engine.CryptoEngine.THREAD_COMPONENT_NAME;
 
 /**
  * Implementation of a reusable background thread that dispatches asynchronous work items to the provided {@link
@@ -28,25 +36,51 @@ import java.util.function.BiFunction;
  */
 public class IntakeDispatcher<Element, Provider extends OperationProvider, Handler extends AsyncOperationHandler> {
 
-	private final CryptoEngine engine;
+	/**
+	 * use this for all logging, as controlled by the optional data/log4j2.xml file
+	 */
+	private static final Logger LOG = LogManager.getLogger(IntakeDispatcher.class);
+
+	/**
+	 * The thread used for polling the {@code backingQueue} and submitting tasks to the {@code executorService} thread
+	 * pool.
+	 */
 	private final Thread worker;
+
+	/**
+	 * The queue of incoming items to be processed by the {@code worker} thread.
+	 */
 	private final BlockingQueue<List<Element>> backingQueue;
+
+	/**
+	 * The underlying {@link OperationProvider} to use for handling the work items.
+	 */
 	private final Provider provider;
+
+	/**
+	 * A {@link BiFunction} that accepts an {@link OperationProvider} and a list of work items then returns an {@link
+	 * AsyncOperationHandler} instance.
+	 */
 	private final BiFunction<Provider, List<Element>, Handler> handlerSupplier;
 
-	private ExecutorService executorService;
+	/**
+	 * The {@link ExecutorService} that provides the thread pool on which the {@link OperationProvider} does its work.
+	 */
+	private final ExecutorService executorService;
 
+	/**
+	 * Flag indicating the current execution state of the {@code worker} thread.
+	 */
 	private volatile boolean running = true;
 
 	/**
 	 * Constructor that initializes all internal variables and launches the background thread. All background threads
-	 * are launched with a {@link ThreadExceptionHandler} to handle and log all exceptions thrown by the thread.
+	 * are launched with a {@link java.lang.Thread.UncaughtExceptionHandler} to handle and log all exceptions thrown by
+	 * the thread.
 	 *
 	 * All threads constructed by this class are launched with the {@link Thread#setDaemon(boolean)} value specified as
 	 * {@code true}. This class will launch a total of {@code parallelism + 1} threads.
 	 *
-	 * @param engine
-	 * 		the {@link CryptoEngine} object for calculating Hash and verifying signatures
 	 * @param elementType
 	 * 		the type of Element
 	 * @param backingQueue
@@ -58,22 +92,32 @@ public class IntakeDispatcher<Element, Provider extends OperationProvider, Handl
 	 * @param handlerSupplier
 	 * 		the supplier of the handler
 	 */
-	public IntakeDispatcher(final CryptoEngine engine, final Class<Element> elementType,
-			final BlockingQueue<List<Element>> backingQueue, final Provider provider, final int parallelism, final
-	BiFunction<Provider, List<Element>, Handler> handlerSupplier) {
-		this.engine = engine;
+	public IntakeDispatcher(final Class<Element> elementType, final BlockingQueue<List<Element>> backingQueue,
+			final Provider provider, final int parallelism,
+			final BiFunction<Provider, List<Element>, Handler> handlerSupplier) {
 		this.backingQueue = backingQueue;
 		this.provider = provider;
 		this.handlerSupplier = handlerSupplier;
 
-		this.executorService = Executors.newFixedThreadPool(parallelism,
-				new CryptoThreadFactory(elementType.getSimpleName(),
-						new ThreadExceptionHandler(IntakeDispatcher.class)));
+		final ThreadFactory threadFactory = new ThreadConfiguration()
+				.setDaemon(true)
+				.setPriority(Thread.NORM_PRIORITY)
+				.setComponent(THREAD_COMPONENT_NAME)
+				.setThreadName(String.format("%s tp worker", elementType.getSimpleName()))
+				.setExceptionHandler(this::handleThreadException)
+				.buildFactory();
 
-		this.worker = new Thread(this::execute);
-		this.worker.setName(String.format("< adv crypto: %s intake dispatcher >", elementType.getSimpleName()));
-		this.worker.setDaemon(true);
-		this.worker.setUncaughtExceptionHandler(new ThreadExceptionHandler(this.getClass()));
+		this.executorService = Executors.newFixedThreadPool(parallelism, threadFactory);
+
+		this.worker = new ThreadConfiguration()
+				.setDaemon(true)
+				.setPriority(Thread.NORM_PRIORITY)
+				.setComponent(THREAD_COMPONENT_NAME)
+				.setThreadName(String.format("%s intake dispatcher", elementType.getSimpleName()))
+				.setExceptionHandler(this::handleThreadException)
+				.setRunnable(this::execute)
+				.build();
+
 		this.worker.start();
 	}
 
@@ -114,4 +158,12 @@ public class IntakeDispatcher<Element, Provider extends OperationProvider, Handl
 		}
 	}
 
+	/**
+	 * An {@link java.lang.Thread.UncaughtExceptionHandler} implementation to ensure that all uncaught exceptions on the
+	 * dispatcher threads are properly logged.
+	 */
+	private void handleThreadException(final Thread thread, final Throwable ex) {
+		LOG.error(LogMarker.EXCEPTION.getMarker(),
+				String.format("Intercepted Uncaught Exception [ threadName = '%s' ]", thread.getName()), ex);
+	}
 }

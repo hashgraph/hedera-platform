@@ -35,7 +35,6 @@ public final class MerkleHashChecker {
 	private static final Logger LOGGER = LogManager.getLogger();
 
 	private MerkleHashChecker() {
-
 	}
 
 	/**

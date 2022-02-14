@@ -17,8 +17,10 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.StatEntry;
-import com.swirlds.common.internal.AbstractStatistics;
+import com.swirlds.common.statistics.internal.AbstractStatistics;
+import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.statistics.StatsRunningAverage;
+import com.swirlds.common.statistics.StatsSpeedometer;
 
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -115,427 +117,427 @@ public class CryptoStatistics extends AbstractStatistics {
 
 	@Override
 	public StatEntry[] getStatEntriesArray() {
-		return new StatEntry[] {//
-				new StatEntry(//
-						CATEGORY,//
-						"DigQuDepth",//
-						"average digest queue depth",//
-						"%,11.3f",//
-						null,//
+		return new StatEntry[] {
+				new StatEntry(
+						CATEGORY,
+						"DigQuDepth",
+						"average digest queue depth",
+						"%,11.3f",
+						null,
 						(h) -> {
 							avgDigestQueueDepth = new StatsRunningAverage(h);
 							return avgDigestQueueDepth;
-						},//
-						null,//
+						},
+						null,
 						() -> avgDigestQueueDepth.getWeightedMean()),
-				new StatEntry(//
-						CATEGORY,//
-						"SigQuDepth",//
-						"average signature queue depth",//
-						"%,11.3f",//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"SigQuDepth",
+						"average signature queue depth",
+						"%,11.3f",
+						null,
 						(h) -> {
 							avgSigQueueDepth = new StatsRunningAverage(h);
 							return avgSigQueueDepth;
-						},//
-						null,//
+						},
+						null,
 						() -> avgSigQueueDepth.getWeightedMean()),
-				new StatEntry(//
-						CATEGORY,//
-						"DigBatchSz",//
-						"average digest batch size",//
-						"%,11.3f",//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"DigBatchSz",
+						"average digest batch size",
+						"%,11.3f",
+						null,
 						(h) -> {
 							avgDigestBatchSize = new StatsRunningAverage(h);
 							return avgDigestBatchSize;
-						},//
-						null,//
+						},
+						null,
 						() -> avgDigestBatchSize.getWeightedMean()),
-				new StatEntry(//
-						CATEGORY,//
-						"MinDigBatchSz",//
-						"minimum digest batch size",//
-						"%,d",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"MinDigBatchSz",
+						"minimum digest batch size",
+						"%,d",
+						null,
+						null,
+						null,
 						() -> minDigestBatchSize.longValue()),
-				new StatEntry(//
-						CATEGORY,//
-						"MaxDigBatchSz",//
-						"maximum digest batch size",//
-						"%,d",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"MaxDigBatchSz",
+						"maximum digest batch size",
+						"%,d",
+						null,
+						null,
+						null,
 						() -> maxDigestBatchSize.longValue()),
-				new StatEntry(//
-						CATEGORY,//
-						"SigBatchSz",//
-						"average signature batch size",//
-						"%,11.3f",//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"SigBatchSz",
+						"average signature batch size",
+						"%,11.3f",
+						null,
 						(h) -> {
 							avgSigBatchSize = new StatsRunningAverage(h);
 							return avgSigBatchSize;
-						},//
-						null,//
+						},
+						null,
 						() -> avgSigBatchSize.getWeightedMean()),
-				new StatEntry(//
-						CATEGORY,//
-						"MinSigBatchSz",//
-						"minimum signature batch size",//
-						"%,d",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"MinSigBatchSz",
+						"minimum signature batch size",
+						"%,d",
+						null,
+						null,
+						null,
 						() -> minSigBatchSize.longValue()),
-				new StatEntry(//
-						CATEGORY,//
-						"MaxSigBatchSz",//
-						"maximum signature batch size",//
-						"%,d",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"MaxSigBatchSz",
+						"maximum signature batch size",
+						"%,d",
+						null,
+						null,
+						null,
 						() -> maxSigBatchSize.longValue()),
-				new StatEntry(//
-						CATEGORY,//
-						"DigPulse/sec",//
-						"average digest worker pulses per second",//
-						"%,11.3f",//
-						digWorkPulsePerSecond,//
+				new StatEntry(
+						CATEGORY,
+						"DigPulse/sec",
+						"average digest worker pulses per second",
+						"%,11.3f",
+						digWorkPulsePerSecond,
 						(h) -> {
 							digWorkPulsePerSecond = new StatsSpeedometer(h);
 							return digWorkPulsePerSecond;
-						},//
-						null,//
-						() -> digWorkPulsePerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigPulse/sec",//
-						"average Signature worker pulses per second",//
-						"%,11.3f",//
-						sigWorkPulsePerSecond,//
+						},
+						null,
+						() -> digWorkPulsePerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"SigPulse/sec",
+						"average Signature worker pulses per second",
+						"%,11.3f",
+						sigWorkPulsePerSecond,
 						(h) -> {
 							sigWorkPulsePerSecond = new StatsSpeedometer(h);
 							return sigWorkPulsePerSecond;
-						},//
-						null,//
-						() -> sigWorkPulsePerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"DigWrkTime",//
-						"average: time spent (in millis) in digest worker pulses",//
-						"%,11.3f",//
-						null,//
+						},
+						null,
+						() -> sigWorkPulsePerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"DigWrkTime",
+						"average: time spent (in millis) in digest worker pulses",
+						"%,11.3f",
+						null,
 						(h) -> {
 							avgDigestTime = new StatsRunningAverage(h);
 							return avgDigestTime;
-						},//
-						null,//
+						},
+						null,
 						() -> avgDigestTime.getWeightedMean()),
-				new StatEntry(//
-						CATEGORY,//
-						"SigWrkTime",//
-						"average: time spent (in millis) in signature worker pulses",//
-						"%,11.3f",//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"SigWrkTime",
+						"average: time spent (in millis) in signature worker pulses",
+						"%,11.3f",
+						null,
 						(h) -> {
 							avgSigTime = new StatsRunningAverage(h);
 							return avgSigTime;
-						},//
-						null,//
+						},
+						null,
 						() -> avgSigTime.getWeightedMean()),
-				new StatEntry(//
-						CATEGORY,//
-						"DigSubWrkItmTime",//
-						"average: time spent (in millis) in digest submission",//
-						"%,11.3f",//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"DigSubWrkItmTime",
+						"average: time spent (in millis) in digest submission",
+						"%,11.3f",
+						null,
 						(h) -> {
 							avgDigestWorkItemSubmitTime = new StatsRunningAverage(h);
 							return avgDigestWorkItemSubmitTime;
-						},//
-						null,//
+						},
+						null,
 						() -> avgDigestWorkItemSubmitTime.getWeightedMean()),
-				new StatEntry(//
-						CATEGORY,//
-						"SigSubWrkItmTime",//
-						"average: time spent (in millis) in signature verification submission",//
-						"%,11.3f",//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"SigSubWrkItmTime",
+						"average: time spent (in millis) in signature verification submission",
+						"%,11.3f",
+						null,
 						(h) -> {
 							avgSigWorkItemSubmitTime = new StatsRunningAverage(h);
 							return avgSigWorkItemSubmitTime;
-						},//
-						null,//
+						},
+						null,
 						() -> avgSigWorkItemSubmitTime.getWeightedMean()),
-				new StatEntry(//
-						CATEGORY,//
-						"DigLockUp/sec",//
-						"average digest lock upgrades per second",//
-						"%,11.3f",//
-						digLockUpgradesPerSecond,//
+				new StatEntry(
+						CATEGORY,
+						"DigLockUp/sec",
+						"average digest lock upgrades per second",
+						"%,11.3f",
+						digLockUpgradesPerSecond,
 						(h) -> {
 							digLockUpgradesPerSecond = new StatsSpeedometer(h);
 							return digLockUpgradesPerSecond;
-						},//
-						null,//
-						() -> digLockUpgradesPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigLockUp/sec",//
-						"average Signature lock upgrades per second",//
-						"%,11.3f",//
-						sigLockUpgradesPerSecond,//
+						},
+						null,
+						() -> digLockUpgradesPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"SigLockUp/sec",
+						"average Signature lock upgrades per second",
+						"%,11.3f",
+						sigLockUpgradesPerSecond,
 						(h) -> {
 							sigLockUpgradesPerSecond = new StatsSpeedometer(h);
 							return sigLockUpgradesPerSecond;
-						},//
-						null,//
-						() -> sigLockUpgradesPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"DigSpans/sec",//
-						"average: digest batch spans per second",//
-						"%,11.3f",//
-						digSpansPerSecond,//
+						},
+						null,
+						() -> sigLockUpgradesPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"DigSpans/sec",
+						"average: digest batch spans per second",
+						"%,11.3f",
+						digSpansPerSecond,
 						(h) -> {
 							digSpansPerSecond = new StatsSpeedometer(h);
 							return digSpansPerSecond;
-						},//
-						null,//
-						() -> digSpansPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigSpans/sec",//
-						"average: signature verification batch spans per second",//
-						"%,11.3f",//
-						sigSpansPerSecond,//
+						},
+						null,
+						() -> digSpansPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"SigSpans/sec",
+						"average: signature verification batch spans per second",
+						"%,11.3f",
+						sigSpansPerSecond,
 						(h) -> {
 							sigSpansPerSecond = new StatsSpeedometer(h);
 							return sigSpansPerSecond;
-						},//
-						null,//
-						() -> sigSpansPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"DigBatches/sec",//
-						"average: digest batches created per second",//
-						"%,11.3f",//
-						digBatchesPerSecond,//
+						},
+						null,
+						() -> sigSpansPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"DigBatches/sec",
+						"average: digest batches created per second",
+						"%,11.3f",
+						digBatchesPerSecond,
 						(h) -> {
 							digBatchesPerSecond = new StatsSpeedometer(h);
 							return digBatchesPerSecond;
-						},//
-						null,//
-						() -> digBatchesPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigBatches/sec",//
-						"average: signature verification batches created per second",//
-						"%,11.3f",//
-						sigBatchesPerSecond,//
+						},
+						null,
+						() -> digBatchesPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"SigBatches/sec",
+						"average: signature verification batches created per second",
+						"%,11.3f",
+						sigBatchesPerSecond,
 						(h) -> {
 							sigBatchesPerSecond = new StatsSpeedometer(h);
 							return sigBatchesPerSecond;
-						},//
-						null,//
-						() -> sigBatchesPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"DigSliceSz",//
-						"average digest slice size",//
-						"%,11.3f",//
-						null,//
+						},
+						null,
+						() -> sigBatchesPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"DigSliceSz",
+						"average digest slice size",
+						"%,11.3f",
+						null,
 						(h) -> {
 							avgDigestSliceSize = new StatsRunningAverage(h);
 							return avgDigestSliceSize;
-						},//
-						null,//
+						},
+						null,
 						() -> avgDigestSliceSize.getWeightedMean()),
-				new StatEntry(//
-						CATEGORY,//
-						"SigSliceSz",//
-						"average signature slice size",//
-						"%,11.3f",//
-						null,//
+				new StatEntry(
+						CATEGORY,
+						"SigSliceSz",
+						"average signature slice size",
+						"%,11.3f",
+						null,
 						(h) -> {
 							avgSigSliceSize = new StatsRunningAverage(h);
 							return avgSigSliceSize;
-						},//
-						null,//
+						},
+						null,
 						() -> avgSigSliceSize.getWeightedMean()),
-				new StatEntry(//
-						CATEGORY,//
-						"Dig/sec",//
-						"number of digests per second (complete)",//
-						"%,11.3f",//
-						digPerSec,//
+				new StatEntry(
+						CATEGORY,
+						"Dig/sec",
+						"number of digests per second (complete)",
+						"%,11.3f",
+						digPerSec,
 						(h) -> {
 							digPerSec = new StatsSpeedometer(h);
 							return digPerSec;
-						},//
-						null,//
-						() -> digPerSec.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"Sig/sec",//
-						"number of signature verifications per second (complete)",//
-						"%,11.3f",//
-						sigPerSec,//
+						},
+						null,
+						() -> digPerSec.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"Sig/sec",
+						"number of signature verifications per second (complete)",
+						"%,11.3f",
+						sigPerSec,
 						(h) -> {
 							sigPerSec = new StatsSpeedometer(h);
 							return sigPerSec;
-						},//
-						null,//
-						() -> sigPerSec.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigVal/sec",//
-						"number of valid signatures per second",//
-						"%,11.3f",//
-						sigValidPerSec,//
+						},
+						null,
+						() -> sigPerSec.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"SigVal/sec",
+						"number of valid signatures per second",
+						"%,11.3f",
+						sigValidPerSec,
 						(h) -> {
 							sigValidPerSec = new StatsSpeedometer(h);
 							return sigValidPerSec;
-						},//
-						null,//
-						() -> sigValidPerSec.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigInval/sec",//
-						"number of invalid signatures per second",//
-						"%,11.3f",//
-						sigInvalidPerSec,//
+						},
+						null,
+						() -> sigValidPerSec.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"SigInval/sec",
+						"number of invalid signatures per second",
+						"%,11.3f",
+						sigInvalidPerSec,
 						(h) -> {
 							sigInvalidPerSec = new StatsSpeedometer(h);
 							return sigInvalidPerSec;
-						},//
-						null,//
-						() -> sigInvalidPerSec.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigIntakeQueueDepth",//
-						"depth of the signature intake queue",//
-						"%,11.3f",//
-						avgSigIntakeQueueDepth,//
+						},
+						null,
+						() -> sigInvalidPerSec.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"SigIntakeQueueDepth",
+						"depth of the signature intake queue",
+						"%,11.3f",
+						avgSigIntakeQueueDepth,
 						(h) -> {
 							avgSigIntakeQueueDepth = new StatsRunningAverage(h);
 							return avgSigIntakeQueueDepth;
-						},//
-						null,//
-						() -> avgSigIntakeQueueDepth.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigIntakePulse/sec",//
-						"number of times the signature intake worker thread is executed per second",//
-						"%,11.3f",//
-						sigIntakePulsePerSecond,//
+						},
+						null,
+						() -> avgSigIntakeQueueDepth.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"SigIntakePulse/sec",
+						"number of times the signature intake worker thread is executed per second",
+						"%,11.3f",
+						sigIntakePulsePerSecond,
 						(h) -> {
 							sigIntakePulsePerSecond = new StatsSpeedometer(h);
 							return sigIntakePulsePerSecond;
-						},//
-						null,//
-						() -> sigIntakePulsePerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigIntakePulseTime",//
-						"average time spent (in millis) of each signature intake execution",//
-						"%,11.3f",//
-						avgSigIntakePulseTime,//
+						},
+						null,
+						() -> sigIntakePulsePerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"SigIntakePulseTime",
+						"average time spent (in millis) of each signature intake execution",
+						"%,11.3f",
+						avgSigIntakePulseTime,
 						(h) -> {
 							avgSigIntakePulseTime = new StatsRunningAverage(h);
 							return avgSigIntakePulseTime;
-						},//
-						null,//
-						() -> avgSigIntakePulseTime.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigIntakeEnqueueTime",//
-						"average time spent (in millis) of each intake enqueue call",//
-						"%,11.3f",//
-						avgSigIntakeEnqueueTime,//
+						},
+						null,
+						() -> avgSigIntakePulseTime.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"SigIntakeEnqueueTime",
+						"average time spent (in millis) of each intake enqueue call",
+						"%,11.3f",
+						avgSigIntakeEnqueueTime,
 						(h) -> {
 							avgSigIntakeEnqueueTime = new StatsRunningAverage(h);
 							return avgSigIntakeEnqueueTime;
-						},//
-						null,//
-						() -> avgSigIntakeEnqueueTime.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SigIntakeListSize",//
-						"average size of each list sent to the intake worker",//
-						"%,11.3f",//
-						avgSigIntakeListSize,//
+						},
+						null,
+						() -> avgSigIntakeEnqueueTime.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"SigIntakeListSize",
+						"average size of each list sent to the intake worker",
+						"%,11.3f",
+						avgSigIntakeListSize,
 						(h) -> {
 							avgSigIntakeListSize = new StatsRunningAverage(h);
 							return avgSigIntakeListSize;
-						},//
-						null,//
-						() -> avgSigIntakeListSize.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"PlatSigEnqueueTime",//
-						"average time spent (in millis) by the platform enqueuing signatures",//
-						"%,11.3f",//
-						avgPlatformEnqueueTime,//
+						},
+						null,
+						() -> avgSigIntakeListSize.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"PlatSigEnqueueTime",
+						"average time spent (in millis) by the platform enqueuing signatures",
+						"%,11.3f",
+						avgPlatformEnqueueTime,
 						(h) -> {
 							avgPlatformEnqueueTime = new StatsRunningAverage(h);
 							return avgPlatformEnqueueTime;
-						},//
-						null,//
-						() -> avgPlatformEnqueueTime.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"PlatSigExpandTime",//
-						"average time spent (in millis) by the platform calling the expandSignatures method",//
-						"%,11.3f",//
-						avgPlatformExpandTime,//
+						},
+						null,
+						() -> avgPlatformEnqueueTime.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"PlatSigExpandTime",
+						"average time spent (in millis) by the platform calling the expandSignatures method",
+						"%,11.3f",
+						avgPlatformExpandTime,
 						(h) -> {
 							avgPlatformExpandTime = new StatsRunningAverage(h);
 							return avgPlatformExpandTime;
-						},//
-						null,//
-						() -> avgPlatformExpandTime.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"TtlDig",//
-						"running total: digests computed",//
-						"%,d",//
-						null,//
-						null,//
-						null,//
-						() -> totalDigests.longValue()),//
-				new StatEntry(//
-						CATEGORY,//
-						"TtlSig",//
-						"running total: Signatures Verified",//
-						"%,d",//
-						null,//
-						null,//
-						null,//
-						() -> totalSig.longValue()),//
-				new StatEntry(//
-						CATEGORY,//
-						"TtlSigVal",//
-						"running total: valid signatures verified",//
-						"%,d",//
-						null,//
-						null,//
-						null,//
-						() -> totalSigValid.longValue()),//
-				new StatEntry(//
-						CATEGORY,//
-						"TtlSigInval",//
-						"running total: invalid signatures verified",//
-						"%,d",//
-						null,//
-						null,//
-						null,//
-						() -> totalSigInvalid.longValue()),//
+						},
+						null,
+						() -> avgPlatformExpandTime.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"TtlDig",
+						"running total: digests computed",
+						"%,d",
+						null,
+						null,
+						null,
+						() -> totalDigests.longValue()),
+				new StatEntry(
+						CATEGORY,
+						"TtlSig",
+						"running total: Signatures Verified",
+						"%,d",
+						null,
+						null,
+						null,
+						() -> totalSig.longValue()),
+				new StatEntry(
+						CATEGORY,
+						"TtlSigVal",
+						"running total: valid signatures verified",
+						"%,d",
+						null,
+						null,
+						null,
+						() -> totalSigValid.longValue()),
+				new StatEntry(
+						CATEGORY,
+						"TtlSigInval",
+						"running total: invalid signatures verified",
+						"%,d",
+						null,
+						null,
+						null,
+						() -> totalSigInvalid.longValue()),
 		};
 	}
 

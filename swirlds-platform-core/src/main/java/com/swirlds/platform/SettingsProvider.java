@@ -57,4 +57,29 @@ public interface SettingsProvider {
 
 	/** indicates if throttle7 is enabled or not */
 	boolean isThrottle7Enabled();
+
+	/**
+	 * @see Settings#maxEventQueueForCons
+	 */
+	int getMaxEventQueueForCons();
+
+	/**
+	 * @see Settings#transactionMaxBytes
+	 */
+	int getTransactionMaxBytes();
+
+	/**
+	 * @see com.swirlds.platform.state.StateSettings#signedStateKeep
+	 */
+	int getSignedStateKeep();
+
+	/**
+	 * @see Settings#signedStateFreq
+	 */
+	int getSignedStateFreq();
+
+	/**
+	 * @see Settings#delayShuffle
+	 */
+	long getDelayShuffle();
 }

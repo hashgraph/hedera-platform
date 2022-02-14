@@ -15,15 +15,16 @@
 package com.swirlds.common.threading;
 
 import com.swirlds.common.futures.ConcurrentFuturePool;
-import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.Marker;
 
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 /**
  * A group of {@link Thread}s designed to support the following paradigm:
@@ -35,18 +36,37 @@ import java.util.concurrent.TimeUnit;
  */
 public class StandardWorkGroup {
 
+	private static final Logger LOG = LogManager.getLogger(StandardWorkGroup.class);
+
 	private static final String DEFAULT_TASK_NAME = "IDLE";
 
 	private final String groupName;
 	private final ExecutorService executorService;
 
-	private volatile ConcurrentFuturePool futures;
-	private volatile Queue<Throwable> exceptions;
+	private final ConcurrentFuturePool<Void> futures;
 
-	public StandardWorkGroup(final String groupName) {
+	private volatile boolean hasExceptions;
+
+	private final AtomicBoolean firstException = new AtomicBoolean(true);
+	private final Runnable onException;
+
+	/**
+	 * Create a new work group.
+	 *
+	 * @param groupName
+	 * 		the name of the group
+	 * @param abortAction
+	 * 		if an exception is encountered, execute this method.
+	 * 		All threads in the work group are interrupted, but
+	 * 		if there is additional cleanup required then this method
+	 * 		can be used to perform that cleanup. Method is called at most
+	 * 		one time. If argument is null then no additional action is taken.
+	 */
+	public StandardWorkGroup(final String groupName, final Runnable abortAction) {
 		this.groupName = groupName;
-		this.exceptions = new ConcurrentLinkedQueue<>();
 		this.futures = new ConcurrentFuturePool<>(this::handleError);
+
+		this.onException = abortAction;
 
 		final ThreadConfiguration configuration = new ThreadConfiguration()
 				.setComponent("work group " + groupName).setThreadName(DEFAULT_TASK_NAME);
@@ -55,43 +75,51 @@ public class StandardWorkGroup {
 	}
 
 
-	/**
-	 * {@inheritDoc}
-	 */
 	public void shutdown() {
 		executorService.shutdown();
 	}
 
 
-	/**
-	 * {@inheritDoc}
-	 */
 	public boolean isShutdown() {
 		return executorService.isShutdown();
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
 	public boolean isTerminated() {
 		return executorService.isTerminated();
 	}
 
+
 	/**
-	 * {@inheritDoc}
+	 * Perform an action on a thread managed by the work group. Any uncaught exception
+	 * (excluding {@link InterruptedException}) will be caught by the work group and will result
+	 * in the termination of all threads in the work group.
+	 *
+	 * @param operation
+	 * 		the method to run on the thread
 	 */
-	public void execute(final Runnable command) {
-		futures.add(executorService.submit(command));
+	@SuppressWarnings("unchecked")
+	public void execute(final Runnable operation) {
+		futures.add((Future<Void>) executorService.submit(operation));
 	}
 
-	public void execute(final String taskName, final Runnable command) {
+	/**
+	 * Perform an action on a thread managed by the work group. Any uncaught exception
+	 * (excluding {@link InterruptedException}) will be caught by the work group and will result
+	 * in the termination of all threads in the work group.
+	 *
+	 * @param taskName
+	 * 		used when naming the thread used by the work group
+	 * @param operation
+	 * 		the method to run on the thread
+	 */
+	public void execute(final String taskName, final Runnable operation) {
 		final Runnable wrapper = () -> {
 			final String originalThreadName = Thread.currentThread().getName();
 			final String newThreadName = originalThreadName.replaceFirst(DEFAULT_TASK_NAME, taskName);
 
 			try {
 				Thread.currentThread().setName(newThreadName);
-				command.run();
+				operation.run();
 			} finally {
 				Thread.currentThread().setName(originalThreadName);
 			}
@@ -100,12 +128,8 @@ public class StandardWorkGroup {
 		execute(wrapper);
 	}
 
-	public Queue<Throwable> getExceptions() {
-		return exceptions;
-	}
-
 	public boolean hasExceptions() {
-		return !exceptions.isEmpty();
+		return hasExceptions;
 	}
 
 	public void waitForTermination() throws InterruptedException {
@@ -119,15 +143,17 @@ public class StandardWorkGroup {
 		}
 	}
 
-	public synchronized void logAllExceptions(final Logger logger, final Marker marker, final Level level) {
-		for (final Throwable ex : exceptions) {
-			logger.log(level, marker, "Work Group Exception [ groupName = {} ]", groupName, ex);
-		}
-	}
-
 	private void handleError(final Throwable ex) {
-		exceptions.add(ex);
-		executorService.shutdownNow();
+
+		if (onException != null && firstException.getAndSet(false)) {
+			onException.run();
+		}
+
+		if (!(ex instanceof InterruptedException)) {
+			LOG.error(EXCEPTION.getMarker(), "Work Group Exception [ groupName = {} ]", groupName, ex);
+			hasExceptions = true;
+			executorService.shutdownNow();
+		}
 	}
 
 }

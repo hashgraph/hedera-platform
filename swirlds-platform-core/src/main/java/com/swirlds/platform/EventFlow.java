@@ -13,6 +13,8 @@
  */
 package com.swirlds.platform;
 
+import com.swirlds.common.AddressBook;
+import com.swirlds.common.NodeId;
 import com.swirlds.common.SwirldState;
 import com.swirlds.common.SwirldState.SwirldState2;
 import com.swirlds.common.SwirldTransaction;
@@ -28,11 +30,13 @@ import com.swirlds.common.stream.EventStreamManager;
 import com.swirlds.common.threading.StoppableThread;
 import com.swirlds.common.threading.StoppableThreadConfiguration;
 import com.swirlds.logging.LogMarker;
-import com.swirlds.platform.eventhandling.MinGenQueue;
-import com.swirlds.platform.eventhandling.SignedStateEventStorage;
+import com.swirlds.platform.components.SystemTransactionHandler;
+import com.swirlds.platform.eventhandling.SignedStateEventsAndGenerations;
 import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.SignedStateManager;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateInfo;
+import com.swirlds.platform.stats.EventFlowStats;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -54,6 +58,7 @@ import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 import static com.swirlds.common.Units.NANOSECONDS_TO_MICROSECONDS;
 import static com.swirlds.common.Units.NANOSECONDS_TO_MILLISECONDS;
@@ -73,17 +78,23 @@ import static com.swirlds.platform.event.EventUtils.toShortString;
  * the Events flowing between them, and the 4 threads that cause those events to flow between the states.
  */
 class EventFlow extends AbstractEventFlow {
+
+	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
+	private static final Logger log = LogManager.getLogger();
+
+	/** how many of {threadCons, threadCurr, threadWork} exist in SwirldState2 */
+	private static final int THREAD_NUM_SWIRLD_STATE_TWO = 2;
+
+	/** how many of {threadCons, threadCurr, threadWork} exist in non-SwirldState2 */
+	private static final int THREAD_NUM_SWIRLD_STATE = 3;
+
+	private static final String COMPONENT_NAME = "event-flow";
+
 	/** used to make threadCons, threadCurr, threadWork all wait during a shuffle */
 	private final CyclicBarrier shuffleBarrier;
 
 	/** lists of transactions by self (both system and non-system). See docs for TransLists. */
 	private final TransLists transLists;
-
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
-	private static final Logger log = LogManager.getLogger();
-
-	/** Platform that instantiates/uses this */
-	private final AbstractPlatform platform;
 
 	/**
 	 * a RunningHash object which calculates running hash of all consensus events so far
@@ -146,11 +157,8 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	private boolean savedStateInFreeze = false;
 
-	/** Filters out consensus events that need to be stored in state */
-	private final SignedStateEventStorage signedStateEvents;
-
-	/** A deque used by doCons to store the minimum generation of famous witnesses per round */
-	private final MinGenQueue minGenQueue = new MinGenQueue();
+	/** Stores consensus events and round generations that need to be saved in state */
+	private final SignedStateEventsAndGenerations eventsAndGenerations;
 
 	/** A queue that holds only 1 object about a state that needs to be hashed and signed. */
 	private final BlockingQueue<SignedState> stateToHashSign = new ArrayBlockingQueue<>(1);
@@ -158,13 +166,50 @@ class EventFlow extends AbstractEventFlow {
 	/** how many of {threadCons, threadCurr, threadWork} exist (either 2 or 3) */
 	private final int numThreads;
 
-	/** how many of {threadCons, threadCurr, threadWork} exist in SwirldState2 */
-	private static final int THREAD_NUM_SWIRLD_STATE_TWO = 2;
+	/**
+	 * This node's id.
+	 */
+	private final NodeId selfId;
 
-	/** how many of {threadCons, threadCurr, threadWork} exist in non-SwirldState2 */
-	private static final int THREAD_NUM_SWIRLD_STATE = 3;
+	/**
+	 * Statistics required by and updated by {@link EventFlow}.
+	 */
+	private final EventFlowStats stats;
 
-	private static final String COMPONENT_NAME = "event-flow";
+	/**
+	 * Stores consensus events in the event stream.
+	 */
+	private final EventStreamManager<EventImpl> eventStreamManager;
+
+	/**
+	 * Indicates if this node is a zero staked node.
+	 */
+	private final boolean isZeroStakedNode;
+
+	/**
+	 * Handles all system transactions.
+	 */
+	private final SystemTransactionHandler systemTransactionHandler;
+
+	/**
+	 * The address book of every known member in the swirld.
+	 */
+	private final AddressBook addressBook;
+
+	/**
+	 * Writes signed states to disk.
+	 */
+	private final SignedStateManager signedStateManager;
+
+	/**
+	 * A supplier of an estimated consensus time.
+	 */
+	private final Supplier<Instant> consEstimateSupplier;
+
+	/**
+	 * A provider of settings required by {@link EventFlow}
+	 */
+	private final SettingsProvider settings;
 
 	/**
 	 * is used for unit testing.
@@ -172,14 +217,22 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	EventFlow() {
 		shuffleBarrier = null;
-		platform = null;
 		transLists = null;
 		forCurr = null;
 		forCons = null;
 		cryptography = null;
 		swirldState2 = true;
 		numThreads = THREAD_NUM_SWIRLD_STATE_TWO;
-		signedStateEvents = null;
+		eventsAndGenerations = null;
+		selfId = null;
+		stats = null;
+		eventStreamManager = null;
+		isZeroStakedNode = false;
+		systemTransactionHandler = null;
+		addressBook = null;
+		signedStateManager = null;
+		consEstimateSupplier = null;
+		settings = null;
 	}
 
 	/**
@@ -187,16 +240,51 @@ class EventFlow extends AbstractEventFlow {
 	 * which creates the 3 states and 6 queues and 3 threads. Then the Platform should call startAll to
 	 * start the 3 threads.
 	 *
-	 * @param platform
-	 * 		the Platform that instantiated this, and that this should call
+	 * @param selfId
+	 * 		the id of this node
+	 * @param stats
+	 * 		statistics updated by {@link EventFlow}
+	 * @param addressBook
+	 * 		a supplier of the address book for the network
+	 * @param consEstimateSupplier
+	 * 		a supplier for the estimated consensus time of a transaction created at the time of invocation
+	 * @param eventStreamManager
+	 * 		the event stream manager to send consensus events to
+	 * @param isZeroStakedNode
+	 * 		true if this node is a zero-stake node
+	 * @param signedStateManager
+	 * 		the signed state manager responsible for handling new signed states
+	 * @param systemTransactionHandler
+	 * 		the handler for all system transactions
 	 * @param initialState
 	 * 		the SwirldState that should be used (along with 2 fast copies of it) to initialize all 3
 	 * 		of the states stored here. This initial state will be used by EventFlow internally, so it
 	 * 		should not be used after being passed to it
 	 */
-	EventFlow(AbstractPlatform platform, State initialState) {
-		this.platform = platform;
+	EventFlow(
+			final NodeId selfId,
+			final EventFlowStats stats,
+			final AddressBook addressBook,
+			final EventStreamManager<EventImpl> eventStreamManager,
+			final boolean isZeroStakedNode,
+			final SystemTransactionHandler systemTransactionHandler,
+			final SignedStateManager signedStateManager,
+			final Supplier<Instant> consEstimateSupplier,
+			final SettingsProvider settings,
+			final State initialState) {
+
+		this.selfId = selfId;
+		this.stats = stats;
+		this.eventStreamManager = eventStreamManager;
+		this.isZeroStakedNode = isZeroStakedNode;
+		this.systemTransactionHandler = systemTransactionHandler;
+		this.addressBook = addressBook;
+		this.signedStateManager = signedStateManager;
+		this.consEstimateSupplier = consEstimateSupplier;
+		this.settings = settings;
+
 		this.swirldState2 = (initialState.getSwirldState() instanceof SwirldState2);
+
 		this.transLists = new TransLists(this);
 		lastShuffle = Instant.now(); // wait a while before first shuffle, so maybe queues aren't empty
 
@@ -212,9 +300,9 @@ class EventFlow extends AbstractEventFlow {
 		};
 
 		forCurr = new PriorityBlockingQueue<>(100, cmp);
-		forCons = Settings.maxEventQueueForCons == 0
+		forCons = settings.getMaxEventQueueForCons() == 0
 				? new LinkedBlockingQueue<>()
-				: new ArrayBlockingQueue<>(Settings.maxEventQueueForCons);
+				: new ArrayBlockingQueue<>(settings.getMaxEventQueueForCons());
 
 		if (!swirldState2) {
 			forWork = new PriorityBlockingQueue<>(100, cmp);
@@ -236,7 +324,7 @@ class EventFlow extends AbstractEventFlow {
 			}
 		});
 
-		signedStateEvents = new SignedStateEventStorage(platform.getNumMembers());
+		eventsAndGenerations = new SignedStateEventsAndGenerations(Settings.state);
 
 		cryptography = CryptoFactory.getInstance();
 	}
@@ -342,8 +430,8 @@ class EventFlow extends AbstractEventFlow {
 	 * {@inheritDoc}
 	 */
 	@Override
-	int getForSigsSize() {
-		return signedStateEvents.getQueueSize();
+	int getSignedStateEventsSize() {
+		return eventsAndGenerations.getNumberOfEvents();
 	}
 
 	/**
@@ -378,14 +466,14 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	@Override
 	void forCurrPut(EventImpl event) {
-		if (!event.isEmpty() && !isCreatedBySelf(event)) {
+		if (event.isEmpty() || isCreatedBySelf(event)) {
 			// stateCurr / stateWork don't need the empty events.
 			// and they don't need events by self (since those transactions are in transLists)
 			return;
 		}
 		try {
-			event.estimateTime(platform.getSelfId(), platform.getStats().avgSelfCreatedTimestamp.getWeightedMean(),
-					platform.getStats().avgOtherReceivedTimestamp.getWeightedMean());
+			event.estimateTime(selfId, stats.getAvgSelfCreatedTimestamp(),
+					stats.getAvgOtherReceivedTimestamp());
 			// update the estimate now, so the queue can sort on it
 			forCurr.put(event);
 		} catch (InterruptedException e) {
@@ -398,7 +486,7 @@ class EventFlow extends AbstractEventFlow {
 	 * check whether this event is created by current node
 	 */
 	private boolean isCreatedBySelf(final EventImpl event) {
-		return platform.getSelfId().equalsMain(event.getCreatorId());
+		return selfId.equalsMain(event.getCreatorId());
 	}
 
 	/**
@@ -432,7 +520,7 @@ class EventFlow extends AbstractEventFlow {
 		try {
 			// adds this consensus event to eventStreamHelper,
 			// which will put it into a queue for calculating runningHash, and a queue for event streaming when enabled
-			platform.getEventStreamManager().addEvent(event);
+			eventStreamManager.addEvent(event);
 			// this may block until the queue isn't full
 			forCons.put(event);
 		} catch (InterruptedException e) {
@@ -442,25 +530,37 @@ class EventFlow extends AbstractEventFlow {
 	}
 
 	/**
+	 * Stop the provided threads, and block until they have all stopped.
+	 *
+	 * @param threadsToStop
+	 * 		an array of threads to stop. Must not be null.
+	 */
+	private static void stopThreads(final StoppableThread... threadsToStop) throws InterruptedException {
+		for (final StoppableThread thread : threadsToStop) {
+			if (thread != null) {
+				log.info(RECONNECT.getMarker(), "stopping thread {}", thread.getName());
+				thread.stop();
+			}
+		}
+
+		for (final StoppableThread thread : threadsToStop) {
+			if (thread != null) {
+				log.info(RECONNECT.getMarker(), "joining thread {}", thread.getName());
+				thread.join();
+			}
+		}
+		log.info(RECONNECT.getMarker(), "threads are now terminated");
+	}
+
+	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	synchronized void stopAndClear() {
+	synchronized void stopAndClear() throws InterruptedException {
 		// stopAndClear() is currently only used to reconnect. when reconnecting, we need the consensus state to do
 		// the reconnect, that's why it will not be cleared.
 
-		// tell the threads they should stop
-		log.info(RECONNECT.getMarker(), "stopAndClear: stopping threadStateHashSign");
-		threadStateHashSign.stop();
-		log.info(RECONNECT.getMarker(), "stopAndClear: stopping threadCons");
-		threadCons.stop();
-		log.info(RECONNECT.getMarker(), "stopAndClear: stopping threadCurr");
-		threadCurr.stop();
-
-		if (!swirldState2) {
-			log.info(RECONNECT.getMarker(), "stopAndClear: stopping threadWork");
-			threadWork.stop();
-		}
+		stopThreads(threadStateHashSign, threadCons, threadCurr, threadWork);
 
 		log.info(RECONNECT.getMarker(), "stopAndClear: releasing states");
 
@@ -509,8 +609,7 @@ class EventFlow extends AbstractEventFlow {
 		numEventsCons.set(0);
 
 		// used by doCons
-		signedStateEvents.clear();
-		minGenQueue.clear();
+		eventsAndGenerations.clear();
 
 		log.info(RECONNECT.getMarker(), "stopAndClear: event flow is now cleared");
 	}
@@ -520,15 +619,10 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	@Override
 	void loadDataFromSignedState(SignedState signedState, boolean isReconnect) {
-		minGenQueue.addAll(signedState.getMinGenInfo());
-
-		final long staleRound = signedState.getLastRoundReceived() - Settings.state.roundsStale;
-		// if we dont have stale rounds yet, there is nothing to expire
-		long minGenNonAncient = RoundInfo.MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
-		if (staleRound >= 1) {
-			minGenNonAncient = minGenQueue.getRoundGeneration(staleRound);
-		}
-		signedStateEvents.loadDataFromSignedState(signedState.getEvents(), minGenNonAncient);
+		eventsAndGenerations.loadDataFromSignedState(signedState);
+		// nodes not reconnecting expired eventsAndGenerations right after creating a signed state
+		// we expire here right after receiving it to align ourselves with other nodes for the next round
+		eventsAndGenerations.expire();
 
 		// set initialHash of the RunningHash to be the hash loaded from signed state
 		eventsConsRunningHash = new RunningHash(signedState.getHashEventsCons());
@@ -541,10 +635,10 @@ class EventFlow extends AbstractEventFlow {
 
 		// get startRunningHash from signedState
 		Hash initialHash = new Hash(signedState.getHashEventsCons());
-		platform.getEventStreamManager().setInitialHash(initialHash);
+		eventStreamManager.setInitialHash(initialHash);
 
 		log.info(STARTUP.getMarker(), " initialHash after startup {}", () -> initialHash);
-		platform.getEventStreamManager().setStartWriteAtCompleteWindow(isReconnect);
+		eventStreamManager.setStartWriteAtCompleteWindow(isReconnect);
 	}
 
 	/**
@@ -623,7 +717,7 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	boolean createTransaction(final Transaction transaction) {
 		// Refuse to create any type of transaction if the beta mirror is enabled and this node has zero stake
-		if (Settings.enableBetaMirror && platform.isZeroStakeNode()) {
+		if (settings.isEnableBetaMirror() && isZeroStakedNode) {
 			return false;
 		}
 
@@ -632,7 +726,7 @@ class EventFlow extends AbstractEventFlow {
 		}
 
 		// check if system transaction serialized size is above the required threshold
-		if (transaction.getSize() > Settings.transactionMaxBytes) {
+		if (transaction.getSize() > settings.getTransactionMaxBytes()) {
 			return false;
 		}
 
@@ -645,19 +739,19 @@ class EventFlow extends AbstractEventFlow {
 	@Override
 	void startAll() {
 		threadStateHashSign = new StoppableThreadConfiguration()
-				.setNodeId(platform.getSelfId().getId())
+				.setNodeId(selfId.getId())
 				.setComponent(COMPONENT_NAME)
 				.setThreadName("state-hash")
 				.setWork(this::stateHashSign)
 				.build();
 		threadCons = new StoppableThreadConfiguration()
-				.setNodeId(platform.getSelfId().getId())
+				.setNodeId(selfId.getId())
 				.setComponent(COMPONENT_NAME)
 				.setThreadName("thread-cons")
 				.setWork(this::doCons)
 				.build();
 		threadCurr = new StoppableThreadConfiguration()
-				.setNodeId(platform.getSelfId().getId())
+				.setNodeId(selfId.getId())
 				.setComponent(COMPONENT_NAME)
 				.setThreadName("thread-curr")
 				.setWork(this::doCurr)
@@ -665,7 +759,7 @@ class EventFlow extends AbstractEventFlow {
 
 		if (!swirldState2) {
 			threadWork = new StoppableThreadConfiguration()
-					.setNodeId(platform.getSelfId().getId())
+					.setNodeId(selfId.getId())
 					.setComponent(COMPONENT_NAME)
 					.setThreadName("thread-work")
 					.setWork(this::doWork)
@@ -686,7 +780,7 @@ class EventFlow extends AbstractEventFlow {
 				forCons == null ? null : forCons.size(),
 				forCurr == null ? null : forCurr.size(),
 				forNext == null ? null : forNext.size(),
-				signedStateEvents.getQueueSize(),
+				eventsAndGenerations.getNumberOfEvents(),
 				forWork == null ? null : forWork.size());
 	}
 
@@ -710,8 +804,9 @@ class EventFlow extends AbstractEventFlow {
 	 * timestamp will be baseTime plus timeInc nanoseconds. This is used to ensure that each transaction in
 	 * consensus order is at least one nanosecond later than previous one.
 	 *
-	 * @param platform
-	 * 		the platform managing this event, state, and hashgraph
+	 * @param selfId
+	 * @param stats
+	 * @param systemTransactionHandler
 	 * @param ignoreSystem
 	 * 		should we ignore system transactions and not handle them?
 	 * @param isSystem
@@ -731,7 +826,9 @@ class EventFlow extends AbstractEventFlow {
 	 * 		number of nanoseconds to add to baseTime, before passing it to the user as the estimated
 	 * 		or actual timestamp
 	 */
-	private static void handleTransaction(AbstractPlatform platform, boolean ignoreSystem,
+	private static void handleTransaction(final NodeId selfId, final EventFlowStats stats,
+			final SystemTransactionHandler systemTransactionHandler,
+			boolean ignoreSystem,
 			boolean isSystem, StateInfo state, boolean isConsensus, EventImpl event,
 			Transaction trans, Instant baseTime, long timeInc) {
 		if (ignoreSystem && isSystem) { // don't handle system transactions if they should be ignored
@@ -747,7 +844,7 @@ class EventFlow extends AbstractEventFlow {
 		// let the state handle this transaction
 		try {// guard against bad apps crashing the browser
 			/** the creator of the event containing this transaction */
-			long creator = event == null ? platform.getSelfId().getId() // selfId assumed to be main
+			long creator = event == null ? selfId.getId() // selfId assumed to be main
 					: event.getCreatorId();
 
 			/** The claimed creation time of the event holding this transaction (or now, if no event) */
@@ -763,11 +860,11 @@ class EventFlow extends AbstractEventFlow {
 			Instant estConsTime = baseTime.plusNanos(timeInc);
 
 			if (isSystem) {// send system transactions to Platform (they come from doCons)
-				platform.getSystemTransactionHandler().handleSystemTransaction(creator, isConsensus,
+				systemTransactionHandler.handleSystemTransaction(creator, isConsensus,
 						timeCreated, estConsTime, trans);
 				if (event != null && event.getReachedConsTimestamp() != null) {
 					// we only add this stat for transactions that have reached consensus
-					platform.getStats().avgConsHandleTime.recordValue(
+					stats.consensusToHandleTime(
 							event.getReachedConsTimestamp().until(Instant.now(),
 									ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 				}
@@ -789,10 +886,9 @@ class EventFlow extends AbstractEventFlow {
 
 				// we only add these stats for transactions that have reached consensus
 				if (event != null && event.getReachedConsTimestamp() != null) {
-					platform.getStats().avgSecTransHandled.recordValue(
-							(System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
-					platform.getStats().transHandledPerSecond.cycle();
-					platform.getStats().avgConsHandleTime.recordValue(
+					stats.consensusTransHandleTime((System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
+					stats.consensusTransHandled();
+					stats.consensusToHandleTime(
 							event.getReachedConsTimestamp().until(Instant.now(),
 									ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 				}
@@ -801,7 +897,7 @@ class EventFlow extends AbstractEventFlow {
 			log.info(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(),
 					"EventFlow::handleTransaction Interrupted [ nodeId = {} ]. " +
 							"This should happen only during a reconnect",
-					platform.getSelfId().getId());
+					selfId.getId());
 			Thread.currentThread().interrupt();
 		} catch (Exception ex) {
 			log.error(EXCEPTION.getMarker(),
@@ -819,7 +915,7 @@ class EventFlow extends AbstractEventFlow {
 
 	@Override
 	void addMinGenInfo(long round, long minGeneration) {
-		minGenQueue.add(round, minGeneration);
+		eventsAndGenerations.addRoundGeneration(round, minGeneration);
 	}
 
 	/**
@@ -861,8 +957,7 @@ class EventFlow extends AbstractEventFlow {
 			return;
 		}
 
-		platform.getStats().avgConsShuffleMicros.recordValue(
-				(System.nanoTime() - startTakeHandle) * NANOSECONDS_TO_MICROSECONDS);
+		stats.consShuffleMicros((System.nanoTime() - startTakeHandle) * NANOSECONDS_TO_MICROSECONDS);
 
 		final long startSignedState = System.nanoTime();
 
@@ -870,7 +965,7 @@ class EventFlow extends AbstractEventFlow {
 			log.error(EXCEPTION.getMarker(), "EventFlow forCons had nonconensus event {}", event);
 		}
 
-		signedStateEvents.add(event);
+		eventsAndGenerations.addEvent(event);
 
 		// count events that have had all their transactions handled by stateCons
 		numEventsCons.incrementAndGet();
@@ -883,16 +978,15 @@ class EventFlow extends AbstractEventFlow {
 		// update the running hash object
 		eventsConsRunningHash = event.getRunningHash();
 
-		platform.getStats().avgConsEventHashMicros.recordValue(
-				(System.nanoTime() - startEventHash) * NANOSECONDS_TO_MICROSECONDS);
+		stats.consEventHashMicros((System.nanoTime() - startEventHash) * NANOSECONDS_TO_MICROSECONDS);
 
 		if (event.isLastOneBeforeShutdown() || // if eventstream is shuting down
 				event.isLastInRoundReceived()  // if we have a new shared state to sign
-						&& Settings.state.getSignedStateKeep() > 0 // we are keeping states
-						&& Settings.signedStateFreq > 0 // and we are signing states
+						&& settings.getSignedStateKeep() > 0 // we are keeping states
+						&& settings.getSignedStateFreq() > 0 // and we are signing states
 						&& (event.getRoundReceived() == 1 // the first round should be signed
 						// and every Nth should be signed, where N is signedStateFreq
-						|| event.getRoundReceived() % Settings.signedStateFreq == 0)) {
+						|| event.getRoundReceived() % settings.getSignedStateFreq() == 0)) {
 
 			// the consensus timestamp for the signed state should be the timestamp of the last transaction
 			// in the last event. if the last event has no transactions, then it will be the timestamp of
@@ -932,8 +1026,8 @@ class EventFlow extends AbstractEventFlow {
 					stateCons.setState(stateCons.getState().copy());
 				}
 
-				platform.getStats().avgStateCopyMicros.recordValue(
-						(System.nanoTime() - startCopy) * NANOSECONDS_TO_MICROSECONDS);
+				stats.stateCopyMicros((System.nanoTime() - startCopy) * NANOSECONDS_TO_MICROSECONDS);
+
 				// this state will be saved, so there will be no more transactions sent to it
 				try {
 					immutableStateCons.getSwirldState().noMoreTransactions();
@@ -942,11 +1036,11 @@ class EventFlow extends AbstractEventFlow {
 					log.error(EXCEPTION.getMarker(), "exception in app during noMoreTransactions:", e);
 				}
 
-				EventImpl[] events = signedStateEvents.getEventsForLatestRound();
+				EventImpl[] events = eventsAndGenerations.getEventsForSignedState();
 
 				log.info(SIGNED_STATE.getMarker(), "finished adding events, about to create a minGen list");
 				// create a minGen list with only the rounds up until this round received
-				final List<Pair<Long, Long>> minGen = minGenQueue.getList(event.getRoundReceived());
+				final List<Pair<Long, Long>> minGen = eventsAndGenerations.getMinGenForSignedState();
 
 				// The doCons thread will not wait for a state to be signed, it will put it into this queue to be done
 				// in the background. If the hashing cannot be done before the next state needs to be signed, doCons
@@ -960,15 +1054,14 @@ class EventFlow extends AbstractEventFlow {
 
 				final Hash runningHash = eventsConsRunningHash.getFutureHash().get();
 
-				platform.getStats().avgConsRunningHashMicros.recordValue(
-						(System.nanoTime() - startRunningHash) * NANOSECONDS_TO_MICROSECONDS);
+				stats.consRunningHashMicros((System.nanoTime() - startRunningHash) * NANOSECONDS_TO_MICROSECONDS);
 
 				final SignedState signedState = new SignedState(
 						immutableStateCons,
 						event.getRoundReceived(),
 						numEventsCons.get(),
 						runningHash,
-						platform.getAddressBook().copy(),
+						addressBook.copy(),
 						events,
 						ssConsTime,
 						savedStateInFreeze,
@@ -979,42 +1072,21 @@ class EventFlow extends AbstractEventFlow {
 
 				stateToHashSign.put(signedState);
 
-				platform.getStats().avgConsStateSignAdmitMicros.recordValue(
-						(System.nanoTime() - startStateHashAdmit) * NANOSECONDS_TO_MICROSECONDS);
+				stats.consStateSignAdmitMicros((System.nanoTime() - startStateHashAdmit) * NANOSECONDS_TO_MICROSECONDS);
 
 
 				immutableStateCons.decrementReferenceCount();
 			}
 		}
 
-		platform.getStats().avgConsBuildStateMicros.recordValue(
-				(System.nanoTime() - startSignedState) * NANOSECONDS_TO_MICROSECONDS);
+		stats.consBuildStateMicros((System.nanoTime() - startSignedState) * NANOSECONDS_TO_MICROSECONDS);
 
-		final long startForSigClean = System.nanoTime();
-		// the next part removes events from forSigs that are not neede
-
-		// the latest round received
-		long roundReceived = event.getRoundReceived();
-		// the round whose min generation we need
-		long staleRound = roundReceived - Settings.state.roundsStale;
-		// if we dont have stale rounds yet, no need to do anything
-		/* starting round is now 1, so anything less than one will be discounted */
-		if (staleRound < 1) {
-			return;
+		if (event.isLastInRoundReceived()) {
+			final long startForSigClean = System.nanoTime();
+			// the next part removes events and generations that are not needed
+			eventsAndGenerations.expire();
+			stats.consForSigCleanMicros((System.nanoTime() - startForSigClean) * NANOSECONDS_TO_MICROSECONDS);
 		}
-
-		// we need to keep all events that are non-ancient
-		final long minGenerationNonAncient = minGenQueue.getRoundGeneration(staleRound);
-		signedStateEvents.expireEvents(minGenerationNonAncient);
-		// sometimes we will have events that have a round created lower than staleRound, so we need to keep more than
-		// the specified number of rounds. At other times, we might have round generation numbers that are not
-		// increasing, so we might have no events in the staleRound.
-		// we want to keep at least roundsAncient number of rounds, sometimes more
-		final long expireRoundsBelow = Math.min(staleRound, signedStateEvents.getMinRoundCreatedInQueue());
-		minGenQueue.expire(expireRoundsBelow);
-
-		platform.getStats().avgConsForSigCleanMicros.recordValue(
-				(System.nanoTime() - startForSigClean) * NANOSECONDS_TO_MICROSECONDS);
 	}
 
 	private void stateHashSign() throws InterruptedException {
@@ -1039,12 +1111,11 @@ class EventFlow extends AbstractEventFlow {
 
 		log.info(LogMarker.MERKLE_HASHING.getMarker(), "Done hashing SignedState, starting newSelfSigned");
 
-		platform.getSignedStateManager().newSelfSigned(
-				platform,
+		signedStateManager.newSelfSigned(
 				signedState
 		);
 		log.info(LogMarker.MERKLE_HASHING.getMarker(), "Done newSelfSigned");
-		platform.getStats().avgSecNewSignedState.recordValue((System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
+		stats.recordNewSignedStateTime((System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
 	}
 
 	/**
@@ -1124,7 +1195,7 @@ class EventFlow extends AbstractEventFlow {
 		EventImpl event = null;
 
 		// time to wait until the next shuffle
-		long wait = Settings.delayShuffle
+		long wait = settings.getDelayShuffle()
 				- lastShuffle.until(Instant.now(), ChronoUnit.MILLIS);
 
 		if (stateInfo.getState().getSwirldState() instanceof SwirldState2) {
@@ -1175,7 +1246,7 @@ class EventFlow extends AbstractEventFlow {
 
 		// the timestamp that we estimate the transactions will have after
 		// being put into an event and having consensus reached on them
-		baseTime = platform.estimateTime();
+		baseTime = consEstimateSupplier.get();
 
 		for (int i = 0; i < numTrans; i++) {
 			Transaction trans =
@@ -1191,7 +1262,10 @@ class EventFlow extends AbstractEventFlow {
 
 			synchronized (stateInfo) {
 				// handle this self-transaction that isn't yet in an event
-				handleTransaction(platform, // platform: the platform that made this EventFlow
+				handleTransaction(
+						selfId,
+						stats,
+						systemTransactionHandler,
 						true, // ignoreSystem: yes, though there won't be any
 						trans.isSystem(), // isSystem: always false (system transactions aren't in the queue)
 						stateInfo, // state: contains the state that will handle the transaction
@@ -1222,8 +1296,7 @@ class EventFlow extends AbstractEventFlow {
 			baseTime = event.getConsensusTimestamp();
 		} else {
 			// estimate the timestamp that this event will have
-			event.estimateTime(platform.getSelfId(), platform.getStats().avgSelfCreatedTimestamp.getWeightedMean(),
-					platform.getStats().avgOtherReceivedTimestamp.getWeightedMean());
+			event.estimateTime(selfId, stats.getAvgSelfCreatedTimestamp(), stats.getAvgOtherReceivedTimestamp());
 			baseTime = event.getEstimatedTime();
 		}
 
@@ -1251,7 +1324,7 @@ class EventFlow extends AbstractEventFlow {
 		// list of transactions that will be sent to the new stateWork to handle
 		// after the next shuffle.
 		boolean selfConsTrans = stateInfo == stateCons
-				&& platform.getSelfId().equalsMain(event.getCreatorId());
+				&& selfId.equalsMain(event.getCreatorId());
 		synchronized (stateInfo) {
 			for (int i = 0; i < transactions.length; i++) {
 				boolean isConsensus = isConsensusEvent && allowIsConsensusTrue;
@@ -1259,7 +1332,9 @@ class EventFlow extends AbstractEventFlow {
 				// this is the only place where handleTransaction is called on system
 				// transactions with ignoreSystem == false
 				handleTransaction(//
-						platform, // platform: the platform that made this EventFlow
+						selfId,
+						stats,
+						systemTransactionHandler,
 						fromQueue != forCons,// All system transactions are handled twice, once with consensus
 						// false, and once with true. This is the second time a system
 						// transaction is handled when its consensus is known. The
@@ -1279,8 +1354,7 @@ class EventFlow extends AbstractEventFlow {
 			}
 		}
 		if (toQueue != null) {
-			event.estimateTime(platform.getSelfId(), platform.getStats().avgSelfCreatedTimestamp.getWeightedMean(),
-					platform.getStats().avgOtherReceivedTimestamp.getWeightedMean());
+			event.estimateTime(selfId, stats.getAvgSelfCreatedTimestamp(), stats.getAvgOtherReceivedTimestamp());
 			// update the estimate now, so the queue can sort on it
 			if (!toQueue.offer(event)) {
 				// this should never happen, because the queue passed

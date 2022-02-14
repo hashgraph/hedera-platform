@@ -14,11 +14,8 @@
 
 package com.swirlds.common.crypto;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swirlds.common.internal.HashUtils;
 import com.swirlds.common.io.BadIOException;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -38,42 +35,38 @@ import java.util.concurrent.Future;
  */
 public class TransactionSignature implements Comparable<TransactionSignature> {
 
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
-	private static final Logger log = LogManager.getLogger();
-
-	/** Pointer to the transaction contents */
+	/** Pointer to the transaction contents. */
 	private final byte[] contents;
 
-	/** (Optional) Pointer to actual public key */
+	/** (Optional) Pointer to actual public key. */
 	private final byte[] expandedPublicKey;
 
-	/** The offset of the message contained in the contents array */
+	/** The offset of the message contained in the contents array. */
 	private final int messageOffset;
 
-	/** The length of the message contained in the contents array */
+	/** The length of the message contained in the contents array. */
 	private final int messageLength;
 
-	/** The offset of the public key contained in the contents array */
+	/** The offset of the public key contained in the contents array. */
 	private final int publicKeyOffset;
 
-	/** The length of the public key contained in the contents array */
+	/** The length of the public key contained in the contents array. */
 	private final int publicKeyLength;
 
-	/** The offset of the signature contained in the contents array */
+	/** The offset of the signature contained in the contents array. */
 	private final int signatureOffset;
 
-	/** The length of the signature contained in the contents array */
+	/** The length of the signature contained in the contents array. */
 	private final int signatureLength;
 
-	/** The type of cryptographic algorithm used to create the signature */
+	/** The type of cryptographic algorithm used to create the signature. */
 	private final SignatureType signatureType;
 
-	/** Indicates whether the signature is valid/invalid or has yet to be verified */
+	/** Indicates whether the signature is valid/invalid or has yet to be verified. */
 	private VerificationStatus signatureStatus;
 
-	/** An internal future used to provide synchronization after the event has reached consensus */
-	@JsonIgnore
-	private volatile Future<Void> future;
+	/** An internal future used to provide synchronization after the event has reached consensus. */
+	private transient volatile Future<Void> future;
 
 	/**
 	 * Constructs an immutable Ed25519 signature using the provided signature pointer, public key pointer, and original
@@ -97,7 +90,7 @@ public class TransactionSignature implements Comparable<TransactionSignature> {
 	 * 		if the {@code contents} array is null or zero length
 	 * @throws IllegalArgumentException
 	 * 		if any of the offsets or lengths fall outside the bounds of the {@code contents}
-	 * 		array
+	 * 		array.
 	 */
 	public TransactionSignature(final byte[] contents, final int signatureOffset, final int signatureLength,
 			final int publicKeyOffset, final int publicKeyLength, final int messageOffset, final int messageLength) {

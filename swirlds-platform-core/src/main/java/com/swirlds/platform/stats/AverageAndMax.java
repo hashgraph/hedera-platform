@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.StatEntry;
+import com.swirlds.common.statistics.StatEntry;
 
 import java.util.List;
 

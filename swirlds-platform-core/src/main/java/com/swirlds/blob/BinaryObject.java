@@ -16,15 +16,21 @@ package com.swirlds.blob;
 
 import com.swirlds.blob.internal.db.BlobStoragePipeline;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.io.ExternalSelfSerializable;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
-import com.swirlds.common.merkle.MerkleExternalLeaf;
+import com.swirlds.common.merkle.io.SerializationStrategy;
 import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
+import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Set;
+
+import static com.swirlds.common.merkle.io.SerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
+import static com.swirlds.common.merkle.io.SerializationStrategy.SELF_SERIALIZATION;
 
 /**
  * {@link BinaryObject} instances are created by and used with the {@link BinaryObjectStore} API methods. These
@@ -35,7 +41,7 @@ import java.sql.SQLException;
  * {@link BinaryObject} instances are immutable, with the exception of deletions.
  * </p>
  */
-public class BinaryObject extends AbstractMerkleLeaf implements MerkleExternalLeaf {
+public class BinaryObject extends AbstractMerkleLeaf implements ExternalSelfSerializable {
 
 	public static final class ClassVersion {
 		private ClassVersion() {
@@ -46,6 +52,9 @@ public class BinaryObject extends AbstractMerkleLeaf implements MerkleExternalLe
 
 	/** class identifier for the purposes of serialization */
 	public static final long CLASS_ID = 0x12CAC1L;
+
+	private static final Set<SerializationStrategy> STRATEGIES =
+			Set.of(SELF_SERIALIZATION, EXTERNAL_SELF_SERIALIZATION);
 
 	/** the database identifier which is not serialized and does not impact the hash */
 	private Long id;
@@ -198,14 +207,6 @@ public class BinaryObject extends AbstractMerkleLeaf implements MerkleExternalLe
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean isDataExternal() {
-		return true;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public boolean equals(final Object o) {
 		if (this == o) {
 			return true;
@@ -252,15 +253,19 @@ public class BinaryObject extends AbstractMerkleLeaf implements MerkleExternalLe
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void serializeAbbreviated(SerializableDataOutputStream out) {
-
+	public void serializeExternal(final SerializableDataOutputStream out, final File outputDirectory) {
+		// remaining data is written by postgres
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void deserializeAbbreviated(SerializableDataInputStream in, Hash hash, int version) {
+	public void deserializeExternal(
+			final SerializableDataInputStream in,
+			final File inputDirectory,
+			final Hash hash,
+			final int version) {
 		this.hash = hash;
 		BinaryObjectStore.getInstance().registerForRecovery(this);
 	}
@@ -273,8 +278,19 @@ public class BinaryObject extends AbstractMerkleLeaf implements MerkleExternalLe
 		BinaryObjectStore.getInstance().delete(this);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public boolean isSelfHashing() {
 		return true;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Set<SerializationStrategy> supportedSerialization(final int version) {
+		return STRATEGIES;
 	}
 }

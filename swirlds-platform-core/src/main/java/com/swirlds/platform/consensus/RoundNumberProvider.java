@@ -26,6 +26,13 @@ public interface RoundNumberProvider {
 	long getFameDecidedBelow();
 
 	/**
+	 * @return the latest round for which fame has been decided
+	 */
+	default long getLastRoundDecided() {
+		return getFameDecidedBelow() - 1;
+	}
+
+	/**
 	 * Return the max round number for which we have an event. If there are none yet, return {@link #ROUND_UNDEFINED}.
 	 *
 	 * @return the max round number, or {@link #ROUND_UNDEFINED} if none.

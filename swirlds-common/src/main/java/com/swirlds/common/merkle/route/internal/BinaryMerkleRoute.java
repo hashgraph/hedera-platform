@@ -14,11 +14,15 @@
 
 package com.swirlds.common.merkle.route.internal;
 
+import com.swirlds.common.io.SerializableDataInputStream;
+import com.swirlds.common.io.SerializableDataOutputStream;
 import com.swirlds.common.merkle.exceptions.MerkleRouteException;
 import com.swirlds.common.merkle.route.MerkleRoute;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 
 /**
  * A collection of methods for manipulating binary merkle routes.
@@ -47,6 +51,12 @@ import java.util.Iterator;
  */
 public class BinaryMerkleRoute extends AbstractMerkleRoute {
 
+	private static final long CLASS_ID = 0xa424ff16af1380feL;
+
+	private static final class ClassVersion {
+		public static final int ORIGINAL = 1;
+	}
+
 	/**
 	 * The number of binary steps that can be stored in each integer.
 	 */
@@ -63,15 +73,54 @@ public class BinaryMerkleRoute extends AbstractMerkleRoute {
 
 	private static final int[] emptyData = new int[0];
 
-	private final int[] data;
+	private int[] data;
 
 	public BinaryMerkleRoute() {
 		data = emptyData;
 	}
 
-	protected BinaryMerkleRoute(final BinaryMerkleRoute baseRoute, final int step) {
+	/**
+	 * Copy a route and extend it with a step.
+	 *
+	 * @param baseRoute
+	 * 		the route to copy
+	 * @param step
+	 * 		the new step
+	 */
+	private BinaryMerkleRoute(final BinaryMerkleRoute baseRoute, final int step) {
 		data = copyAndExpandIfNeeded(baseRoute.data, step);
-		addStepToRouteData(data, step);
+		addStepToRouteData(data, data.length - 1, step);
+	}
+
+	/**
+	 * Copy a route and extend it with steps.
+	 *
+	 * @param baseRoute
+	 * 		the route to copy
+	 * @param steps
+	 * 		the new steps
+	 */
+	private BinaryMerkleRoute(final BinaryMerkleRoute baseRoute, final List<Integer> steps) {
+		final int expansion = getExpansionRequiredToHoldSteps(baseRoute.data, steps);
+		data = Arrays.copyOf(baseRoute.data, baseRoute.data.length + expansion);
+		final int index = baseRoute.data.length == 0 ? 0 : (baseRoute.data.length - 1);
+		addStepsToRouteData(data, index, steps.iterator());
+	}
+
+	/**
+	 * Copy a route and extend it with steps.
+	 *
+	 * @param baseRoute
+	 * 		the route to copy
+	 * @param steps
+	 * 		the new steps
+	 */
+	private BinaryMerkleRoute(final BinaryMerkleRoute baseRoute, final int[] steps) {
+		final int expansion = getExpansionRequiredToHoldSteps(baseRoute.data, steps);
+		data = Arrays.copyOf(baseRoute.data, baseRoute.data.length + expansion);
+		final Iterable<Integer> it = () -> Arrays.stream(steps).iterator();
+		final int index = baseRoute.data.length == 0 ? 0 : (baseRoute.data.length - 1);
+		addStepsToRouteData(data, index, it.iterator());
 	}
 
 	/**
@@ -109,7 +158,30 @@ public class BinaryMerkleRoute extends AbstractMerkleRoute {
 	}
 
 	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public MerkleRoute extendRoute(final List<Integer> steps) {
+		if (steps == null || steps.isEmpty()) {
+			return this;
+		}
+		return new BinaryMerkleRoute(this, steps);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public MerkleRoute extendRoute(final int... steps) {
+		if (steps == null || steps.length == 0) {
+			return this;
+		}
+		return new BinaryMerkleRoute(this, steps);
+	}
+
+	/**
 	 * Get the bit at a particular index within an integer.
+	 *
 	 * @param data
 	 * 		an int value
 	 * @param index
@@ -173,6 +245,70 @@ public class BinaryMerkleRoute extends AbstractMerkleRoute {
 	}
 
 	/**
+	 * Count the number of integers that need to be added to the array in order to hold all of the steps.
+	 *
+	 * @param routeData
+	 * 		the route that will need to hold the steps
+	 * @param steps
+	 * 		the steps that will be added
+	 * @return the number of integers that need to be added to the array to hold the required list of steps
+	 */
+	private static int getExpansionRequiredToHoldSteps(final int[] routeData, final int[] steps) {
+		final Iterable<Integer> it = () -> Arrays.stream(steps).iterator();
+		return getExpansionRequiredToHoldSteps(routeData, it.iterator());
+	}
+
+	/**
+	 * Count the number of integers that need to be added to the array in order to hold all of the steps.
+	 *
+	 * @param routeData
+	 * 		the route that will need to hold the steps
+	 * @param steps
+	 * 		the steps that will be added
+	 * @return the number of integers that need to be added to the array to hold the required list of steps
+	 */
+	private static int getExpansionRequiredToHoldSteps(final int[] routeData, final List<Integer> steps) {
+		return getExpansionRequiredToHoldSteps(routeData, steps.iterator());
+	}
+
+	/**
+	 * Count the number of integers that need to be added to the array in order to hold all of the steps.
+	 *
+	 * @param routeData
+	 * 		the route that will need to hold the steps
+	 * @param steps
+	 * 		an iterator for the steps that will be added
+	 * @return the number of integers that need to be added to the array to hold the required list of steps
+	 */
+	private static int getExpansionRequiredToHoldSteps(final int[] routeData, final Iterator<Integer> steps) {
+		int expansionCount = 0;
+		int availableBinaryCapacity;
+
+		if (routeData.length == 0) {
+			availableBinaryCapacity = 0;
+		} else {
+			availableBinaryCapacity = getRemainingCapacityInInt(routeData[routeData.length - 1]);
+		}
+
+		while (steps.hasNext()) {
+			final int step = steps.next();
+
+			if (availableBinaryCapacity == 0 || (step > 1 && availableBinaryCapacity < CAPACITY_PER_INT)) {
+				expansionCount++;
+				availableBinaryCapacity = CAPACITY_PER_INT;
+			}
+
+			if (step <= 1) {
+				availableBinaryCapacity--;
+			} else {
+				availableBinaryCapacity = 0;
+			}
+		}
+
+		return expansionCount;
+	}
+
+	/**
 	 * Determine the remaining capacity for steps in an integer.
 	 *
 	 * @param intData
@@ -180,7 +316,7 @@ public class BinaryMerkleRoute extends AbstractMerkleRoute {
 	 * @return remaining capacity for steps in an integer
 	 */
 	private static int getRemainingCapacityInInt(int intData) {
-		if (intData == 0) {
+		if (intData == 0 || intData == NEW_BINARY_DATA_INT) {
 			// The first bit is reserved for the negative sign, the last bit is used to show the number of steps
 			return CAPACITY_PER_INT;
 		}
@@ -224,26 +360,28 @@ public class BinaryMerkleRoute extends AbstractMerkleRoute {
 	 *
 	 * @param routeData
 	 * 		the route data to add a step to. Will be modified by this function.
+	 * @param index
+	 * 		the index within the route array where the step will be placed
 	 * @param step
 	 * 		the binary step to add to the route data.
 	 */
-	private static void addBinaryStepToRouteData(final int[] routeData, final int step) {
-		int lastIntInData = routeData[routeData.length - 1];
+	private static void addBinaryStepToRouteData(final int[] routeData, final int index, final int step) {
+		int datum = routeData[index];
 
 		// Ensure left flag is properly set
-		if (lastIntInData == 0) {
-			lastIntInData = NEW_BINARY_DATA_INT;
+		if (datum == 0) {
+			datum = NEW_BINARY_DATA_INT;
 		}
 
-		final int index = CAPACITY_PER_INT - getRemainingCapacityInInt(routeData[routeData.length - 1]) + 1;
+		final int bitIndex = CAPACITY_PER_INT - getRemainingCapacityInInt(datum) + 1;
 
 		// Set the bit
-		lastIntInData = setBitAtIndex(lastIntInData, index, step);
+		datum = setBitAtIndex(datum, bitIndex, step);
 
 		// Set the right-most flag bit
-		lastIntInData = setBitAtIndex(lastIntInData, index + 1, 1);
+		datum = setBitAtIndex(datum, bitIndex + 1, 1);
 
-		routeData[routeData.length - 1] = lastIntInData;
+		routeData[index] = datum;
 	}
 
 	/**
@@ -251,27 +389,64 @@ public class BinaryMerkleRoute extends AbstractMerkleRoute {
 	 *
 	 * @param routeData
 	 * 		the route data to add a step to. Will be modified by this function.
+	 * @param index
+	 * 		the index within the route array where the step will be placed
 	 * @param step
 	 * 		the n-ary step to add to the route data.
 	 */
-	private static void addNaryStepToRouteData(final int[] routeData, final int step) {
-		routeData[routeData.length - 1] = step;
+	private static void addNaryStepToRouteData(final int[] routeData, final int index, final int step) {
+		routeData[index] = step;
 	}
 
 	/**
 	 * Add a step to a binary route. Assumes that the binary route has capacity for the step.
+	 *
 	 * @param route
 	 * 		the route to add a step to. Will be modified by this function.
+	 * @param index
+	 * 		the index within the route array where the step will be placed
 	 * @param step
 	 * 		the step to add to the route.
 	 */
-	private static void addStepToRouteData(final int[] route, final int step) {
+	private static void addStepToRouteData(final int[] route, final int index, final int step) {
 		if (step < 0) {
 			throw new MerkleRouteException("Binary route steps can not be negative.");
 		} else if (step < 2) {
-			addBinaryStepToRouteData(route, step);
+			addBinaryStepToRouteData(route, index, step);
 		} else {
-			addNaryStepToRouteData(route, step);
+			addNaryStepToRouteData(route, index, step);
+		}
+	}
+
+	/**
+	 * Add steps to a binary route. Assumes that the binary route has capacity for the steps.
+	 *
+	 * @param route
+	 * 		the route to add a step to. Will be modified by this function.
+	 * @param initialIndex
+	 * 		the index within the route array where the first step will be placed
+	 * @param steps
+	 * 		an iterator for the steps that will be added
+	 */
+	private static void addStepsToRouteData(final int[] route, final int initialIndex, final Iterator<Integer> steps) {
+		int availableBinaryCapacity = getRemainingCapacityInInt(route[initialIndex]);
+		int index = initialIndex;
+
+		while(steps.hasNext()) {
+			final int step = steps.next();
+
+			if (availableBinaryCapacity == 0 || (step > 1 && availableBinaryCapacity < CAPACITY_PER_INT)) {
+				index++;
+				availableBinaryCapacity = CAPACITY_PER_INT;
+			}
+
+			if (step <= 1) {
+				addBinaryStepToRouteData(route, index, step);
+				availableBinaryCapacity--;
+			} else {
+				addNaryStepToRouteData(route, index, step);
+				availableBinaryCapacity = 0;
+			}
 		}
 	}
 
@@ -308,5 +483,37 @@ public class BinaryMerkleRoute extends AbstractMerkleRoute {
 	@Override
 	public int hashCode() {
 		return Arrays.hashCode(data);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public long getClassId() {
+		return CLASS_ID;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void serialize(final SerializableDataOutputStream out) throws IOException {
+		out.writeIntArray(data);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
+		data = in.readIntArray(MerkleRoute.MAX_ROUTE_LENGTH);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getVersion() {
+		return ClassVersion.ORIGINAL;
 	}
 }

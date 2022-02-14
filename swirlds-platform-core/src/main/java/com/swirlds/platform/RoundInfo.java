@@ -41,14 +41,9 @@ public class RoundInfo {
 	protected static final long MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED = EventConstants.GENERATION_UNDEFINED;
 
 	/**
-	 * The first round number at genesis is zero.
+	 * the round this is about ({@link EventConstants#MINIMUM_ROUND_CREATED} is first)
 	 */
-	protected static final long GENESIS_FIRST_ROUND_NUMBER = 0;
-
-	/**
-	 * the round this is about ({@link RoundInfo#GENESIS_FIRST_ROUND_NUMBER} is first)
-	 */
-	private long round = GENESIS_FIRST_ROUND_NUMBER;
+	private final long round;
 
 	/**
 	 * are all the famous witnesses known for this round?
@@ -106,7 +101,7 @@ public class RoundInfo {
 	private volatile long minGeneration = MIN_FAMOUS_WITNESS_GENERATION_UNDEFINED;
 
 	/**
-	 * @return the round this is about ({@link RoundInfo#GENESIS_FIRST_ROUND_NUMBER} is first)
+	 * @return the round number
 	 */
 	protected long getRound() {
 		return round;

@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.reconnect;
 
-import com.swirlds.common.merkle.synchronization.ReconnectSettings;
+import com.swirlds.common.merkle.synchronization.settings.ReconnectSettings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

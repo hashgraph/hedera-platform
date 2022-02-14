@@ -94,4 +94,29 @@ public final class StaticSettingsProvider implements SettingsProvider {
 	public boolean isThrottle7Enabled() {
 		return Settings.throttle7;
 	}
+
+	@Override
+	public int getMaxEventQueueForCons() {
+		return Settings.maxEventQueueForCons;
+	}
+
+	@Override
+	public int getTransactionMaxBytes() {
+		return Settings.transactionMaxBytes;
+	}
+
+	@Override
+	public int getSignedStateKeep() {
+		return Settings.state.getSignedStateKeep();
+	}
+
+	@Override
+	public int getSignedStateFreq() {
+		return Settings.signedStateFreq;
+	}
+
+	@Override
+	public long getDelayShuffle() {
+		return Settings.delayShuffle;
+	}
 }

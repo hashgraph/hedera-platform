@@ -15,7 +15,7 @@
 package com.swirlds.platform;
 
 import com.swirlds.common.NodeId;
-import com.swirlds.common.internal.AbstractStatistics;
+import com.swirlds.common.statistics.internal.AbstractStatistics;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

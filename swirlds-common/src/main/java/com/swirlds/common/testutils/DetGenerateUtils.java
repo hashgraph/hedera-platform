@@ -53,9 +53,7 @@ public abstract class DetGenerateUtils {
 
 	public static BaseEventUnhashedData generateBaseEventUnhashedData(Random random) {
 		return new BaseEventUnhashedData(
-				nextLong(random, 0), // creatorSeq, must be positive
 				nextLong(random, 0), // otherId, must be positive
-				nextLong(random, 0), // otherSeq, must be positive
 				generateRandomByteArray(random, DEFAULT_SIGNATURE_SIZE)); // signature
 	}
 

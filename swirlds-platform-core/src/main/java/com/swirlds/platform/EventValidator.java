@@ -46,7 +46,7 @@ public class EventValidator {
 	 * A predicate to determine whether a task's event data is a duplicate of an event's
 	 * data that is already in the hashgraph
 	 */
-	private final Predicate<EventImpl> isDuplicateInHashgraph;
+	private final Predicate<Hash> isDuplicateInHashgraph;
 	private final Function<Long, EventImpl> mostRecentEvent;
 
 	/**
@@ -99,7 +99,7 @@ public class EventValidator {
 	 */
 	EventValidator(
 			final long selfId,
-			final Predicate<EventImpl> isDuplicateInHashgraph,
+			final Predicate<Hash> isDuplicateInHashgraph,
 			final Predicate<Long> isZeroStateNode,
 			final Predicate<EventImpl> hasValidSignature,
 			final Supplier<Consensus> consensusSupplier,
@@ -131,7 +131,7 @@ public class EventValidator {
 	 */
 	EventValidator(
 			final NodeId selfId,
-			final Predicate<EventImpl> isDuplicateInHashgraph,
+			final Predicate<Hash> isDuplicateInHashgraph,
 			final Function<Long, EventImpl> mostRecentEvent,
 			final Predicate<Long> isZeroStateNode,
 			final Function<EventImpl, PublicKey> publicKey,
@@ -277,7 +277,7 @@ public class EventValidator {
 			return EventStatus.INVALID_TRANSACTIONS_SIZE;
 		}
 
-		if (isDuplicateInHashgraph.test(event)) {
+		if (isDuplicateInHashgraph.test(event.getBaseHash())) {
 			return EventStatus.INVALID_DUPLICATE_EVENT;
 		}
 

@@ -15,8 +15,8 @@
 package com.swirlds.fcqueue;
 
 import com.swirlds.common.Platform;
-import com.swirlds.common.StatEntry;
-import com.swirlds.platform.StatsRunningAverage;
+import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.statistics.StatsRunningAverage;
 
 /**
  * Singleton factory for loading and registering {@link FCQueue} statistics. This is the primary entry point for all

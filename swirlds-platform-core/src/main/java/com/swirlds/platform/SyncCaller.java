@@ -29,7 +29,7 @@ import com.swirlds.logging.payloads.UnableToReconnectPayload;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.internal.SystemExitReason;
 import com.swirlds.platform.reconnect.ReconnectException;
-import com.swirlds.platform.reconnect.ReconnectReceiver;
+import com.swirlds.platform.reconnect.ReconnectLearner;
 import com.swirlds.platform.state.SigInfo;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.State;
@@ -422,7 +422,7 @@ class SyncCaller implements Runnable {
 	 *
 	 * @return true if the reconnect attempt completed successfully; otherwise false
 	 */
-	private boolean doReconnect() {
+	private boolean doReconnect() throws InterruptedException {
 		exitIfReconnectIsDisabled();
 
 		log.info(RECONNECT.getMarker(),
@@ -571,12 +571,12 @@ class SyncCaller implements Runnable {
 				neighborId.intValue(),
 				platform.getSignedStateManager().getLastCompleteRound()).toString());
 
-		final ReconnectReceiver reconnect =
-				new ReconnectReceiver(conn,
+		ReconnectLearner reconnect =
+				new ReconnectLearner(conn,
 						addressBook,
 						initialState,
 						platform.getCrypto(),
-						Settings.reconnect.getAsyncInputStreamTimeoutMilliseconds(),
+						Settings.reconnect.getAsyncStreamTimeoutMilliseconds(),
 						platform.getStats().getReconnectStats());
 
 		final boolean reconnectWasAttempted = reconnect.execute();
@@ -629,7 +629,8 @@ class SyncCaller implements Runnable {
 			final State consState = signedState.getState().copy();
 			platform.getEventFlow().setState(consState);
 
-			consState.getSwirldState().init(platform, addressBook.copy(), signedState.getState().getSwirldDualState());
+			consState.getSwirldState().init(
+					platform, addressBook.copy(), signedState.getState().getSwirldDualState());
 
 			platform.getSignedStateManager().addCompleteSignedState(signedState, false);
 			platform.loadIntoConsensusAndEventIntake(signedState);

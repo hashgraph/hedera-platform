@@ -51,7 +51,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.swirlds.common.CommonUtils.hex;
-import static com.swirlds.common.Units.BITS_TO_BYTES;
+import static com.swirlds.common.Units.BYTES_TO_BITS;
 import static com.swirlds.common.Units.MILLISECONDS_TO_SECONDS;
 import static com.swirlds.common.Units.SECONDS_TO_MILLISECONDS;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
@@ -491,12 +491,10 @@ public class SignedStateManager implements StateSignatureRecorder {
 	/**
 	 * Keep a new signed state, signed only by self, and start collecting signatures for it.
 	 *
-	 * @param platform
-	 * 		the platform creating this signed state
 	 * @param ss
 	 * 		the signed state to be kept by the manager
 	 */
-	public SigSet newSelfSigned(AbstractPlatform platform, SignedState ss) {
+	public SigSet newSelfSigned(SignedState ss) {
 		// The last state saved before the freeze period is always saved to disk
 		// the first round should be saved to disk and every round which is about saveStatePeriod seconds after the
 		// previous one should be saved.
@@ -540,7 +538,7 @@ public class SignedStateManager implements StateSignatureRecorder {
 				final long[] avgBitsPerSecSent = new long[platform.getStats().avgBytePerSecSent.length];
 				for (int i = 0; i < platform.getStats().avgBytePerSecSent.length; i++) {
 					avgBitsPerSecSent[i] =
-							(long) platform.getStats().avgBytePerSecSent[i].getCyclesPerSecond() * BITS_TO_BYTES;
+							(long) platform.getStats().avgBytePerSecSent[i].getCyclesPerSecond() * BYTES_TO_BITS;
 				}
 				final Transaction systemTransaction = new SystemTransactionBitsPerSecond(avgBitsPerSecSent);
 				final boolean good = platform.createSystemTransaction(systemTransaction);
@@ -1099,10 +1097,6 @@ public class SignedStateManager implements StateSignatureRecorder {
 			notifySignedStateListeners(signedState, sigInfo);
 		} finally {
 			signedState.releaseState();
-		}
-
-		if (!firstISSLogged) {
-			platformState.compareSnapshot();
 		}
 
 		firstISSLogged = true;

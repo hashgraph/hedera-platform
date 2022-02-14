@@ -22,16 +22,23 @@ import com.swirlds.common.crypto.internal.CryptographySettings;
  */
 public final class CryptoFactory {
 
+	/**
+	 * The singleton instance of the {@link Cryptography} interface.
+	 */
 	private static volatile Cryptography cryptography;
-	private static volatile CryptographySettings engineSettings = CryptographySettings.getDefaultSettings();
 
-	private static volatile byte[] nullHash;
+	/**
+	 * The current settings used to create the {@link Cryptography} instance. Changes made after the first call to the
+	 * {@link #getInstance()} method will be silently ignored.
+	 */
+	private static volatile CryptographySettings engineSettings = CryptographySettings.getDefaultSettings();
 
 	/**
 	 * Private constructor to prevent instantiation.
 	 */
 	private CryptoFactory() {
-
+		// throw here to ensure we never instantiate this static factory class
+		throw new UnsupportedOperationException();
 	}
 
 	/**

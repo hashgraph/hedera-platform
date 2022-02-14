@@ -19,6 +19,7 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 
+import java.util.Iterator;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -29,19 +30,20 @@ public final class MerkleUtils {
 	}
 
 	/**
-	 * Invalidate the hashes of an entire tree (or subtree) rooted at the given node.
+	 * Invalidate the hashes of an entire tree (or subtree) rooted at the given node. Does not perform invalidation
+	 * for parts of the merkle tree that are self hashing.
 	 *
 	 * @param root
 	 * 		the root of the tree (or subtree)
 	 */
 	public static void invalidateTree(final MerkleNode root) {
-		if (root != null) {
-			root.forEachNode(MerkleNode::invalidateHash);
-		}
+		final Iterator<MerkleNode> iterator = new MerkleInvalidationIterator(root);
+		iterator.forEachRemaining(MerkleNode::invalidateHash);
 	}
 
 	/**
 	 * Rehash the entire tree, discarding any hashes that are already computed.
+	 * Does not rehash virtual parts of the tree that are self hashing.
 	 *
 	 * @param root
 	 * 		the root of the tree to hash

@@ -817,22 +817,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * {@inheritDoc}
 	 */
-	@Override
-	public long getCreatorSeq() {
-		return baseEventUnhashedData.getCreatorSeq();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public long getOtherSeq() {
-		return baseEventUnhashedData.getOtherSeq();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
 	@JsonIgnore
 	@Override
 	public EventImpl getSelfParent() {
@@ -878,14 +862,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	@Override
 	public long getCreatorId() {
 		return baseEventHashedData.getCreatorId();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public long getSeq() {
-		return baseEventUnhashedData.getCreatorSeq();
 	}
 
 	/**

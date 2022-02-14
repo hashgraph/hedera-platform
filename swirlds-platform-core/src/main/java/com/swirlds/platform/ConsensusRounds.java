@@ -28,8 +28,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.swirlds.platform.event.EventConstants.MINIMUM_ROUND_CREATED;
-
 /**
  * Stores all hashgraph round information in a single place.
  *
@@ -180,6 +178,17 @@ class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
 		updateMinGenNonAncient();
 	}
 
+	/**
+	 * Return {@link RoundInfo#getMinGeneration()} for the requested round
+	 *
+	 * @param round
+	 * 		the round number
+	 * @return the round generation of the requested round
+	 */
+	public long getRoundGeneration(final long round) {
+		return rounds.get(round).getMinGeneration();
+	}
+
 	@Override
 	public long getMinRoundGeneration() {
 		return minRoundGeneration;
@@ -240,18 +249,14 @@ class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
 	 * Executed only on consensus thread.
 	 */
 	private void updateMinGenNonAncient() {
-		final long nonAncientRound = fameDecidedBelow.get() - Settings.state.roundsStale;
-		if (nonAncientRound < MINIMUM_ROUND_CREATED) {
-			// none of our rounds are ancient yet
-			return;
-		}
+		final long nonAncientRound = Settings.state.getOldestNonAncientRound(fameDecidedBelow.get());
 		final RoundInfo ri = rounds.get(nonAncientRound);
-		if (ri != null) {
-			minGenNonAncient = ri.getMinGeneration();
-		} else {
+		if (ri == null) {
 			// should never happen
 			LOG.error(LogMarker.EXCEPTION.getMarker(), "nonAncientRound is null in updateMinGenNonAncient()");
+			return;
 		}
+		minGenNonAncient = ri.getMinGeneration();
 	}
 
 	/**

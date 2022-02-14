@@ -33,7 +33,7 @@ import static com.swirlds.common.merkle.utility.MerkleUtils.merkleDebugString;
  * Merkle classes should not directly inherit this class. They should instead inherit either
  * {@link AbstractMerkleLeaf} or {@link AbstractBinaryMerkleInternal} or {@link AbstractNaryMerkleInternal}.
  */
-abstract class AbstractMerkleNode extends AbstractHashable implements MerkleNode {
+public abstract class AbstractMerkleNode extends AbstractHashable implements MerkleNode {
 
 	private boolean immutable;
 
@@ -105,6 +105,12 @@ abstract class AbstractMerkleNode extends AbstractHashable implements MerkleNode
 		return immutable;
 	}
 
+	/**
+	 * Specify the immutability status of the node.
+	 *
+	 * @param immutable
+	 * 		if this node should be immutable
+	 */
 	@Transient
 	protected final void setImmutable(final boolean immutable) {
 		this.immutable = immutable;
@@ -165,7 +171,7 @@ abstract class AbstractMerkleNode extends AbstractHashable implements MerkleNode
 	 * {@inheritDoc}
 	 */
 	@Override
-	public final int getReferenceCount() {
+	public int getReferenceCount() {
 		return referenceCount.get();
 	}
 

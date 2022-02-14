@@ -33,6 +33,10 @@ import static com.swirlds.common.CommonUtils.hex;
 public class Ed25519VerificationProvider
 		extends OperationProvider<TransactionSignature, Void, Boolean, Sign.Native, SignatureType> {
 
+	/**
+	 * The JNI interface to the underlying native libSodium dynamic library. This variable is initialized when this
+	 * class is loaded and initialized by the {@link ClassLoader}.
+	 */
 	private static final Sign.Native algorithm;
 
 	static {

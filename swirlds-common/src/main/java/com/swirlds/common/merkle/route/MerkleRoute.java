@@ -14,17 +14,36 @@
 
 package com.swirlds.common.merkle.route;
 
+import com.swirlds.common.io.SelfSerializable;
+
 import java.util.Iterator;
+import java.util.List;
 
 /**
+ * <p>
  * A MerkleRoute describes a path through a merkle tree.
  * Each "step" in the route describes the child index to traverse next within the tree.
+ * </p>
  *
- * MerkleRoute objects are immutable after creation. No operation should be capable of modifying an existing route.
+ * <p>
+ * MerkleRoute objects are immutable after creation (with the exception of deserialization).
+ * No operation should be capable of modifying an existing route.
+ * </p>
+ *
+ * <p>
+ * Although merkle routes are capable of being serialized, it is strongly advised that routes are not included
+ * in the serialization of the state. The binary format of merkle routes is subject to change at a future date,
+ * and the inclusion of a route in the state could lead to complications during migration.
+ * </p>
  *
  * Implementations of MerkleRoute are expected to override equals() and hashCode().
  */
-public interface MerkleRoute extends Comparable<MerkleRoute>, Iterable<Integer> {
+public interface MerkleRoute extends Comparable<MerkleRoute>, Iterable<Integer>, SelfSerializable {
+
+	/**
+	 * The maximum length that a route is permitted to be.
+	 */
+	int MAX_ROUTE_LENGTH = 1024;
 
 	/**
 	 * @return an iterator that walks over the steps in the route
@@ -48,6 +67,24 @@ public interface MerkleRoute extends Comparable<MerkleRoute>, Iterable<Integer> 
 	 * @return a new route
 	 */
 	MerkleRoute extendRoute(final int step);
+
+	/**
+	 * Create a new route that shares all steps of this route but with additional steps at the end.
+	 *
+	 * @param steps
+	 * 		the steps to add to the new route
+	 * @return a new route
+	 */
+	MerkleRoute extendRoute(final List<Integer> steps);
+
+	/**
+	 * Create a new route that shares all steps of this route but with additional steps at the end.
+	 *
+	 * @param steps
+	 * 		teh steps to add to the new route
+	 * @return a new route
+	 */
+	MerkleRoute extendRoute(final int... steps);
 
 	/**
 	 * Compare this route to another. Will return -1 if this route is "to the left" of the other route, 1 if this route

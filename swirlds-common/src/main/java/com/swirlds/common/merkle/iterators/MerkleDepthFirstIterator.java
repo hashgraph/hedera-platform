@@ -37,6 +37,13 @@ public class MerkleDepthFirstIterator<T extends MerkleNode, R extends T> extends
 		super(root);
 	}
 
+	/**
+	 * Default constructor to allow work to be done by a subclass before the call to {@link #setup(MerkleNode)}
+	 */
+	protected MerkleDepthFirstIterator() {
+
+	}
+
 	@Override
 	protected void init() {
 		stack = new Stack<>();

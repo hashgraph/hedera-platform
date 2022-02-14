@@ -28,7 +28,6 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.Event;
 import com.swirlds.common.merkle.io.MerkleDataInputStream;
 import com.swirlds.common.merkle.io.MerkleDataOutputStream;
-import com.swirlds.common.merkle.io.MerkleTreeSerializationOptions;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteListener;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteNotification;
@@ -154,7 +153,7 @@ public class SignedStateFileManager implements Runnable {
 			}
 
 			try {
-				writeAndRename(stateFile, tmpStateFile, (out) -> {
+				writeAndRename(dir, stateFile, tmpStateFile, out -> {
 					out.write(VERSIONED_FILE_BYTE);
 					out.writeInt(FILE_VERSION);
 					out.writeProtocolVersion();
@@ -168,7 +167,7 @@ public class SignedStateFileManager implements Runnable {
 						signedState::getHashEventsCons);
 
 				if (Settings.state.saveLocalEvents) {
-					writeAndRename(events, tmpEvents, (out) -> {
+					writeAndRename(dir, events, tmpEvents, out -> {
 						out.writeInt(FILE_VERSION);
 						out.writeProtocolVersion();
 						out.writeSerializable(signedState.getLocalStateEvents(), true);
@@ -220,12 +219,17 @@ public class SignedStateFileManager implements Runnable {
 		}
 	}
 
-	public static void writeAndRename(File file, File tmpFile,
+	public static void writeAndRename(
+			final File directory,
+			final File file,
+			final File tmpFile,
 			WritingConsumer<MerkleDataOutputStream> writeMethod) throws Exception {
-		final MerkleTreeSerializationOptions options = MerkleTreeSerializationOptions.builder().setAbbreviated(true);
+
 		try (FileOutputStream fileOut = new FileOutputStream(tmpFile);
 			 BufferedOutputStream bufOut = new BufferedOutputStream(fileOut);
-			 MerkleDataOutputStream out = new MerkleDataOutputStream(bufOut, options)) {
+			 MerkleDataOutputStream out = new MerkleDataOutputStream(bufOut)
+					 .setExternal(true)
+					 .setExternalDirectory(directory)) {
 
 			writeMethod.write(out);
 
@@ -292,7 +296,7 @@ public class SignedStateFileManager implements Runnable {
 		Pair<Hash, SignedState> returnState;
 		try (FileInputStream fileIn = new FileInputStream(info.getStateFile());
 			 BufferedInputStream bufIn = new BufferedInputStream(fileIn);
-			 MerkleDataInputStream in = new MerkleDataInputStream(bufIn, true)) {
+			 MerkleDataInputStream in = new MerkleDataInputStream(bufIn, info.getDir())) {
 
 			byte versionByte = in.readByte();
 			if (versionByte != VERSIONED_FILE_BYTE) {
@@ -324,7 +328,7 @@ public class SignedStateFileManager implements Runnable {
 
 		try (FileInputStream fileIn = new FileInputStream(info.getEvents());
 			 BufferedInputStream bufIn = new BufferedInputStream(fileIn);
-			 MerkleDataInputStream in = new MerkleDataInputStream(bufIn, true)) {
+			 MerkleDataInputStream in = new MerkleDataInputStream(bufIn, info.getDir())) {
 			in.readInt();// file version
 			in.readProtocolVersion();
 			returnState.getValue().setLocalStateEvents(in.readSerializable());

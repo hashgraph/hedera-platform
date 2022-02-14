@@ -137,14 +137,6 @@ public class DualStateImpl extends AbstractMerkleLeaf implements PlatformDualSta
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean isDataExternal() {
-		return false;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public DualStateImpl copy() {
 		return new DualStateImpl(this);
 	}

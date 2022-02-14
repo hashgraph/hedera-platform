@@ -159,8 +159,6 @@ public class SignedStateGarbageCollector implements Runnable {
 				watch.stop();
 				statsSupplier.get().updateDeletionTime(watch.getTime(TimeUnit.MICROSECONDS));
 				statsSupplier.get().updateDeletionQueue(deletionQueue.size());
-
-				forDelete.getState().getPlatformState().compareSnapshot();
 			}
 		}
 		return deletePerformed;

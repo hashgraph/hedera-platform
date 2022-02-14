@@ -20,7 +20,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
-import java.util.function.Supplier;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
@@ -104,40 +103,6 @@ public class ThreadConfiguration {
 	}
 
 	/**
-	 * Build a new thread.
-	 */
-	public Thread build() {
-		if (runnable == null) {
-			throw new NullPointerException("runnable must not be null");
-		}
-
-		final Thread thread = new Thread(getThreadGroup(), runnable, buildNextThreadName());
-
-		thread.setDaemon(isDaemon());
-		thread.setPriority(getPriority());
-		thread.setUncaughtExceptionHandler(getExceptionHandler());
-		if (getContextClassLoader() != null) {
-			thread.setContextClassLoader(getContextClassLoader());
-		}
-
-		return thread;
-	}
-
-	/**
-	 * Get a {@link ThreadFactory} that contains the configuration specified by this object.
-	 */
-	public ThreadFactory buildFactory() {
-		return new ThreadConfigurationFactory(
-				() -> buildNextThreadName(
-						getComponent(), getThreadName(), getNodeId(), getOtherNodeId(), threadNumber::getAndIncrement),
-				getPriority(),
-				getThreadGroup(),
-				isDaemon(),
-				getContextClassLoader(),
-				getExceptionHandler());
-	}
-
-	/**
 	 * Get the default thread group that will be used if there is no user provided thread group
 	 */
 	private static ThreadGroup defaultThreadGroup() {
@@ -147,13 +112,6 @@ public class ThreadConfiguration {
 		} else {
 			return securityManager.getThreadGroup();
 		}
-	}
-
-	/**
-	 * Construct the full thread name.
-	 */
-	public String buildNextThreadName() {
-		return buildNextThreadName(component, threadName, nodeId, otherNodeId, threadNumber::getAndIncrement);
 	}
 
 	/**
@@ -178,17 +136,26 @@ public class ThreadConfiguration {
 	 * &lt;COMPONENT_NAME: THREAD_NAME NODE_ID to OTHER_NODE_ID #THREAD_NUMBER&gt;
 	 * </p>
 	 */
-	protected static String buildNextThreadName(
-			final String component,
-			final String threadName,
-			final long nodeId,
-			final long otherNodeId,
-			final IntSupplier threadNumber) {
-
+	protected static String buildNextThreadName(final String component, final String threadName, final long nodeId,
+			final long otherNodeId, final IntSupplier threadNumber) {
 		final StringBuilder sb = new StringBuilder();
 
 		sb.append("<");
-		sb.append(component).append(": ").append(threadName).append(" ");
+
+		if (component != null && !component.isBlank()) {
+			sb.append(component);
+
+			if (threadName != null && !threadName.isBlank()) {
+				sb.append(": ");
+			} else {
+				sb.append(" ");
+			}
+		}
+
+		if (threadName != null && !threadName.isBlank()) {
+			sb.append(threadName).append(" ");
+		}
+
 		if (nodeId == -1) {
 			sb.append("?");
 		} else {
@@ -210,6 +177,51 @@ public class ThreadConfiguration {
 	private static Thread.UncaughtExceptionHandler buildDefaultExceptionHandler() {
 		return (Thread t, Throwable e) ->
 				defaultLogger.error(EXCEPTION.getMarker(), "exception on thread {}", t.getName(), e);
+	}
+
+	/**
+	 * Build a new thread.
+	 */
+	public Thread build() {
+		if (runnable == null) {
+			throw new NullPointerException("runnable must not be null");
+		}
+
+		final Thread thread = new Thread(getThreadGroup(), runnable, buildNextThreadName());
+
+		thread.setDaemon(isDaemon());
+		thread.setPriority(getPriority());
+		thread.setUncaughtExceptionHandler(getExceptionHandler());
+		if (getContextClassLoader() != null) {
+			thread.setContextClassLoader(getContextClassLoader());
+		}
+
+		return thread;
+	}
+
+	/**
+	 * Get a {@link ThreadFactory} that contains the configuration specified by this object.
+	 */
+	public ThreadFactory buildFactory() {
+		validateConfiguration();
+
+		return new ThreadConfigurationFactory(
+				() -> buildNextThreadName(
+						getComponent(), getThreadName(), getNodeId(), getOtherNodeId(), threadNumber::getAndIncrement),
+				getPriority(),
+				getThreadGroup(),
+				isDaemon(),
+				getContextClassLoader(),
+				getExceptionHandler());
+	}
+
+	/**
+	 * Construct the full thread name.
+	 */
+	public String buildNextThreadName() {
+		validateConfiguration();
+
+		return buildNextThreadName(component, threadName, nodeId, otherNodeId, threadNumber::getAndIncrement);
 	}
 
 	/**
@@ -380,5 +392,12 @@ public class ThreadConfiguration {
 	public ThreadConfiguration setRunnable(final Runnable runnable) {
 		this.runnable = runnable;
 		return this;
+	}
+
+	protected void validateConfiguration() {
+		if ((component == null || component.isBlank()) && (threadName == null || threadName.isBlank())) {
+			throw new IllegalArgumentException(
+					"Component and threadName may not both be null/empty, one or both must be provided.");
+		}
 	}
 }

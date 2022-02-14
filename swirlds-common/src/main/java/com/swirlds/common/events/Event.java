@@ -64,20 +64,6 @@ public interface Event {
 	long getOtherId();
 
 	/**
-	 * Sequence number for this event by its creator (0 is first)
-	 *
-	 * @return sequence number for this event
-	 */
-	long getCreatorSeq();
-
-	/**
-	 * Sequence number for otherParent event of this event. -1 if otherParent doesn't exist.
-	 *
-	 * @return Sequence number of otherParent event
-	 */
-	long getOtherSeq();
-
-	/**
 	 * This event's parent event. null if none exists.
 	 *
 	 * @return The parent event of this event
@@ -111,13 +97,6 @@ public interface Event {
 	 * @return ID of this event's creator
 	 */
 	long getCreatorId();
-
-	/**
-	 * Sequence number for this event by its creator (0 is first)
-	 *
-	 * @return sequence number for this event by its creator
-	 */
-	long getSeq();
 
 	/**
 	 * If isConsensus is true, the round where all unique famous witnesses see this event.

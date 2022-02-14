@@ -25,16 +25,6 @@ import com.swirlds.common.crypto.SerializableHashable;
  */
 public interface MerkleLeaf extends MerkleNode, SerializableHashable {
 
-	/**
-	 * Determine if the object has external memory stored
-	 * like in a database, that is part of the state
-	 *
-	 * @return Whether the data is external or not
-	 */
-	default boolean isDataExternal() {
-		return false;
-	}
-
 	@Override
 	default boolean isLeaf() {
 		return true;

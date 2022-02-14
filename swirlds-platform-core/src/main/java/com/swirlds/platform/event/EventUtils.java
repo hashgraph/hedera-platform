@@ -15,18 +15,22 @@
 package com.swirlds.platform.event;
 
 import com.swirlds.common.events.Event;
+import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.EventStrings;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 public abstract class EventUtils {
+	private static final Logger LOG = LogManager.getLogger();
+
 	/**
 	 * A method that does a XOR on all the event hashes in an array
 	 *
@@ -101,58 +105,46 @@ public abstract class EventUtils {
 		// shadow graph expects them to be sorted
 		Arrays.sort(events, EventUtils::generationComparator);
 		final List<EventImpl> forShadowGraph = Arrays.asList(events);
-		return lastContiguousEvents(forShadowGraph);
+		try {
+			checkForGenerationGaps(forShadowGraph);
+		} catch (IllegalArgumentException e) {
+			LOG.error(LogMarker.EXCEPTION.getMarker(),
+					"Issue found when checking event to provide to the Shadowgraph." +
+							"This issue might not be fatal, so loading of the state will proceed.", e);
+		}
+
+		return forShadowGraph;
 	}
 
 	/**
-	 * <p>Returns the subset of events that are in the latest (youngest) contiguous set of generations. If there is a
-	 * generation difference of more than 1 between events, all events older than the gap are excluded from the returned
-	 * list.</p>
-	 *
-	 * <p>{@code events} must be ordered by generation in ascending order (smallest to largest). The resulting list
-	 * maintains the order of {@code events}.</p>
+	 * Checks if there is a generation difference of more than 1 between events, if there is, throws an exception
 	 *
 	 * @param events
 	 * 		events to look for generation gaps in, sorted in ascending order by generation
-	 * @return the list of events that are the subset of {@code events} that are in the latest contiguous set of
-	 * 		generations.
+	 * @throws IllegalArgumentException
+	 * 		if any problem is found with the signed state events
 	 */
-	public static List<EventImpl> lastContiguousEvents(final List<EventImpl> events) {
-		if (events == null) {
-			throw new IllegalArgumentException("Event list should not be null.");
+	public static void checkForGenerationGaps(final List<EventImpl> events) {
+		if (events == null || events.isEmpty()) {
+			throw new IllegalArgumentException("Signed state events list should not be null or empty");
 		}
-		if (events.isEmpty()) {
-			return Collections.emptyList();
-		}
-		LinkedList<EventImpl> lastContiguousEvents = new LinkedList<>();
 		ListIterator<EventImpl> listIterator = events.listIterator(events.size());
 
 		// Iterate through the list from back to front, evaluating the youngest events first
 		EventImpl prev = listIterator.previous();
 
 		while (listIterator.hasPrevious()) {
-
-			// No gap found yet, so add the previous event.
-			// Add to the front to maintain the original order.
-			lastContiguousEvents.addFirst(prev);
-
 			EventImpl event = listIterator.previous();
 			final long diff = prev.getGeneration() - event.getGeneration();
 			if (diff > 1 || diff < 0) {
-				// There is a gap in generations. We don't include any
-				// events lower than the gap, so stop iterating.
-				break;
+				// There is a gap in generations
+				throw new IllegalArgumentException(
+						String.format("Found gap between %s and %s", event.toMediumString(), prev.toMediumString())
+				);
 			}
 
 			prev = event;
 		}
-
-		// If no gaps were found, prev will be the first event in the list,
-		// in which case it should be included because there were no gaps
-		if (prev == events.get(0)) {
-			lastContiguousEvents.addFirst(prev);
-		}
-		return lastContiguousEvents;
 	}
 
 }

@@ -98,12 +98,14 @@ class Settings {
 	///////////////////////////////////////////
 	// settings from settings.txt file
 
-	static String about = "Swirlds browser v. 0.21.0\n"
-			+ "(c)2016-2021 Swirlds Inc\n" + "This is an early alpha version. \n"
-			+ "The Swirlds™ software is covered by one or more patents \n"
-			+ "(see www.swirlds.com/ip). The browser is free to download, \n"
-			+ "to experiment with, and to test in building apps. To deploy \n"
-			+ "or use those apps, contact sales@swirlds.com";
+	static String about = """
+			Swirlds browser v. 0.22.1
+			(c)2016-2021 Swirlds Inc
+			This is an early alpha version.
+			The Swirlds™ software is covered by one or more patents
+			(see www.swirlds.com/ip). The browser is free to download,
+			to experiment with, and to test in building apps. To deploy
+			or use those apps, contact sales@swirlds.com""";
 
 	/** use RSA-3072 instead of ECDSA-p384 for signatures? */
 	static boolean useRSA = true;
@@ -308,6 +310,16 @@ class Settings {
 	 * Settings controlling FCHashMap.
 	 */
 	static FCHashMapSettingsImpl fcHashMap = new FCHashMapSettingsImpl();
+
+	/**
+	 * Settings controlling VirtualMap.
+	 */
+	static VirtualMapSettingsImpl virtualMap = new VirtualMapSettingsImpl();
+
+	/**
+	 * Settings controlling JasperDB.
+	 */
+	static JasperDbSettingsImpl jasperDb = new JasperDbSettingsImpl();
 
 	/** settings related to database connectivity */
 	static DatabaseSettings dbConnection = new DatabaseSettings();

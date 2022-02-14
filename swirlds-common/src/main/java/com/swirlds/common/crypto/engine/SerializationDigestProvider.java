@@ -26,6 +26,10 @@ import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+/**
+ * A {@link CachingOperationProvider} capable of computing hashes for {@link SelfSerializable} objects by hashing the
+ * serialized bytes of the object.
+ */
 public class SerializationDigestProvider extends
 		CachingOperationProvider<SelfSerializable, Void, Hash, HashingOutputStream, DigestType> {
 	/**

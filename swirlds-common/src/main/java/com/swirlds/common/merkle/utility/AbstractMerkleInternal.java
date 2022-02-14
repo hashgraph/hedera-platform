@@ -16,16 +16,18 @@ package com.swirlds.common.merkle.utility;
 
 import com.swirlds.common.MutabilityException;
 import com.swirlds.common.ReferenceCountException;
-import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildBoundsException;
 import com.swirlds.common.merkle.exceptions.IllegalChildTypeException;
+import com.swirlds.common.merkle.io.SerializationStrategy;
 import com.swirlds.common.merkle.route.MerkleRoute;
 
 import java.util.List;
+import java.util.Set;
 
 import static com.swirlds.common.io.SerializableStreamConstants.NULL_CLASS_ID;
+import static com.swirlds.common.merkle.io.SerializationStrategy.DEFAULT_MERKLE_INTERNAL;
 import static com.swirlds.common.merkle.utility.MerkleUtils.merkleDebugString;
 
 /**
@@ -35,6 +37,8 @@ import static com.swirlds.common.merkle.utility.MerkleUtils.merkleDebugString;
  * in order to avoid re-implementation of this code.
  */
 public abstract class AbstractMerkleInternal extends AbstractMerkleNode implements MerkleInternal {
+
+	private static final Set<SerializationStrategy> DEFAULT_STRATEGIES = Set.of(DEFAULT_MERKLE_INTERNAL);
 
 	/**
 	 * Constructor for AbstractMerkleInternal.  Optional bounds testing.
@@ -97,7 +101,7 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 	 * {@inheritDoc}
 	 */
 	@Override
-	public final void setChild(final int index, final MerkleNode child) {
+	public void setChild(final int index, final MerkleNode child) {
 		setChild(index, child, null);
 	}
 
@@ -106,29 +110,11 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 	 */
 	@Override
 	public final void setChild(final int index, final MerkleNode child, final MerkleRoute childRoute) {
-		if (isImmutable()) {
-			throw new MutabilityException("Can not set child on immutable parent. " + merkleDebugString(this));
-		}
-		if (isReleased()) {
-			throw new ReferenceCountException("Can not set child on released parent. " + merkleDebugString(this));
-		}
+		throwIfInvalidState();
 
 		checkChildIndexIsValid(index);
 
-		long classId = NULL_CLASS_ID;
-
-		if (child != null) {
-			classId = child.getClassId();
-
-			if (child.isImmutable()) {
-				throw new MutabilityException("Immutable child can not be added to parent. parent = "
-						+ merkleDebugString(this) + ", child = " + merkleDebugString(child));
-			}
-		}
-
-		if (!childHasExpectedType(index, classId, getVersion())) {
-			throw new IllegalChildTypeException(index, classId, getVersion(), getClassId());
-		}
+		throwIfInvalidChild(index, child);
 
 		allocateSpaceForChild(index);
 
@@ -136,8 +122,11 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 		if (oldChild == child) {
 			return;
 		}
-		// When children change the hash needs to be invalidated
-		invalidateHash();
+		// When children change the hash needs to be invalidated.
+		// Self hashing nodes are required to manage their own hash invalidation.
+		if (!isSelfHashing()) {
+			invalidateHash();
+		}
 
 		// Decrement the reference count of the original child
 		if (oldChild != null) {
@@ -156,6 +145,32 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 		}
 
 		setChildInternal(index, child);
+	}
+
+	private void throwIfInvalidChild(final int index, final MerkleNode child) {
+		long classId = NULL_CLASS_ID;
+
+		if (child != null) {
+			classId = child.getClassId();
+
+			if (child.isImmutable()) {
+				throw new MutabilityException("Immutable child can not be added to parent. parent = "
+						+ merkleDebugString(this) + ", child = " + merkleDebugString(child));
+			}
+		}
+
+		if (!childHasExpectedType(index, classId, getVersion())) {
+			throw new IllegalChildTypeException(index, classId, getVersion(), getClassId());
+		}
+	}
+
+	private void throwIfInvalidState() {
+		if (isImmutable()) {
+			throw new MutabilityException("Can not set child on immutable parent. " + merkleDebugString(this));
+		}
+		if (isReleased()) {
+			throw new ReferenceCountException("Can not set child on released parent. " + merkleDebugString(this));
+		}
 	}
 
 	/**
@@ -214,32 +229,16 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 	 * {@inheritDoc}
 	 */
 	@Override
-	public final Hash getHash() {
-		return super.getHash();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public final void setHash(Hash hash) {
-		super.setHash(hash);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public final void invalidateHash() {
+	public void invalidateHash() {
 		setHash(null);
 	}
 
 	/**
-	 * Merkle internal nodes are never self hashing.
+	 * {@inheritDoc}
 	 */
 	@Override
-	public final boolean isSelfHashing() {
-		return false;
+	public Set<SerializationStrategy> supportedSerialization(final int version) {
+		return DEFAULT_STRATEGIES;
 	}
 
 	/**

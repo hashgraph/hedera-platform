@@ -14,17 +14,18 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.StatEntry;
 import com.swirlds.common.notification.NotificationEngine;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteListener;
+import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.statistics.StatsRunningAverage;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.swirlds.common.internal.AbstractStatistics.INTERNAL_CATEGORY;
+import static com.swirlds.common.statistics.internal.AbstractStatistics.INTERNAL_CATEGORY;
 
 
 /**

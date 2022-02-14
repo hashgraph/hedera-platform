@@ -14,18 +14,24 @@
 
 package com.swirlds.common.merkle.io;
 
-import com.swirlds.common.io.SerializableAbbreviated;
+import com.swirlds.common.io.ExternalSelfSerializable;
+import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.iterators.MerkleBreadthFirstIterator;
+import com.swirlds.common.merkle.io.internal.MerkleSerializationIterator;
+import com.swirlds.common.merkle.io.internal.MerkleTreeSerializationOptions;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Iterator;
 
 import static com.swirlds.common.io.SerializableStreamConstants.MerkleSerializationProtocolVersion.CURRENT;
+import static com.swirlds.common.merkle.io.SerializationStrategy.DEFAULT_MERKLE_INTERNAL;
+import static com.swirlds.common.merkle.io.SerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
+import static com.swirlds.common.merkle.io.SerializationStrategy.SELF_SERIALIZATION;
 
 /**
  * A SerializableDataOutputStream that also handles merkle trees.
@@ -33,72 +39,146 @@ import static com.swirlds.common.io.SerializableStreamConstants.MerkleSerializat
 public class MerkleDataOutputStream extends SerializableDataOutputStream {
 
 	private final MerkleTreeSerializationOptions options;
+	private File externalDirectory;
 
 	/**
-	 * Creates a new output stream to write data to the specified
-	 * underlying output stream.
+	 * Create a new merkle stream.
 	 *
 	 * @param out
-	 * 		the underlying output stream, to be saved for later use.
-	 * @param abbreviated
-	 * 		If true then this stream will emit abbreviated data.
-	 * @deprecated use {@link #MerkleDataOutputStream(OutputStream, MerkleTreeSerializationOptions)} instead
+	 * 		the output stream
 	 */
-	@Deprecated
-	public MerkleDataOutputStream(OutputStream out, boolean abbreviated) {
-		this(out, MerkleTreeSerializationOptions.defaults().setAbbreviated(abbreviated));
-	}
-
-	/**
-	 * Creates a new output stream to write data to the specified
-	 * underlying output stream.
-	 *
-	 * @param out
-	 * 		the underlying output stream, to be saved for later use.
-	 * @param options
-	 * 		all options for writing the tree
-	 */
-	public MerkleDataOutputStream(OutputStream out, MerkleTreeSerializationOptions options) {
+	public MerkleDataOutputStream(final OutputStream out) {
 		super(out);
-		this.options = options;
+
+		options = MerkleTreeSerializationOptions.defaults();
 	}
 
 	/**
-	 * Writes a MerkleInternal node to the stream.
+	 * Does this stream allow external writes?
+	 *
+	 * @return true if external serialization is enabled
 	 */
-	private void writeMerkleInternal(MerkleInternal node) throws IOException {
+	public boolean isExternal() {
+		return options.isExternal();
+	}
+
+	/**
+	 * Set if external serialization is enabled.
+	 *
+	 * @param external
+	 * 		if true then enable external serialization, else disable it
+	 * @return this object
+	 */
+	public MerkleDataOutputStream setExternal(final boolean external) {
+		options.setExternal(external);
+		return this;
+	}
+
+	/**
+	 * Does this stream write the hashes nodes?
+	 *
+	 * @return true if hashes are written
+	 */
+	public boolean getWriteHashes() {
+		return options.getWriteHashes();
+	}
+
+	/**
+	 * Set if this stream writes the hashes of nodes.
+	 *
+	 * @param writeHashes
+	 * 		if true then write hashes of nodes to the stream
+	 * @return this object
+	 */
+	public MerkleDataOutputStream setWriteHashes(final boolean writeHashes) {
+		options.setWriteHashes(writeHashes);
+		return this;
+	}
+
+	/**
+	 * Get the external directory used for external serialization.
+	 *
+	 * @return the external directory, or null if no directory has been specified
+	 */
+	public File getExternalDirectory() {
+		return externalDirectory;
+	}
+
+	/**
+	 * Set the external directory used for external serialization.
+	 *
+	 * @param externalDirectory
+	 * 		the directory to use for serialization
+	 * @return this object
+	 */
+	public MerkleDataOutputStream setExternalDirectory(final File externalDirectory) {
+		if (externalDirectory != null && !externalDirectory.exists() && externalDirectory.isDirectory()) {
+			throw new IllegalArgumentException("invalid external directory " + externalDirectory.getAbsolutePath());
+		}
+		this.externalDirectory = externalDirectory;
+		return this;
+	}
+
+	/**
+	 * Write a node that implements the type {@link ExternalSelfSerializable}.
+	 */
+	private void writeExternalSelfSerializableNode(final MerkleNode node) throws IOException {
+		writeClassIdVersion(node, true);
+		writeSerializable(node.getHash(), true);
+		((ExternalSelfSerializable) node).serializeExternal(this, externalDirectory);
+	}
+
+	/**
+	 * Write a node that implements the type {@link SelfSerializable}.
+	 */
+	private void writeSerializableNode(final MerkleNode node) throws IOException {
+		writeSerializable((SelfSerializable) node, true);
+	}
+
+	/**
+	 * Default serialization algorithm for internal nodes that do not implement their own serializaiton.
+	 */
+	private void writeDefaultInternalNode(final MerkleInternal node) throws IOException {
 		writeLong(node.getClassId());
 		writeInt(node.getVersion());
 		writeInt(node.getNumberOfChildren());
 	}
 
 	/**
-	 * Write a serializable object in abbreviated form.
-	 *
-	 * @param serializable
-	 * 		The object to serialize. Does not accept null values.
-	 * @param writeClassId
-	 * 		whether to write the class ID or not
-	 * @throws IOException
-	 * 		thrown if any IO problems occur
+	 * Writes a MerkleInternal node to the stream.
 	 */
-	protected void writeSerializableAbbreviated(SerializableAbbreviated serializable, boolean writeClassId)
-			throws IOException {
-		if (serializable == null) {
-			throw new NullPointerException();
+	private void writeInternal(final MerkleInternal node) throws IOException {
+		final int version = node.getVersion();
+		if (options.isExternal() && node.supportedSerialization(version).contains(EXTERNAL_SELF_SERIALIZATION)) {
+			writeExternalSelfSerializableNode(node);
+		} else if (node.supportedSerialization(version).contains(SELF_SERIALIZATION)) {
+			writeSerializable(node.cast(), true);
+		} else if (node.supportedSerialization(version).contains(DEFAULT_MERKLE_INTERNAL)) {
+			writeDefaultInternalNode(node);
+		} else {
+			throw new MerkleSerializationException("illegal serialization strategy requested", node);
 		}
-		writeClassIdVersion(serializable, writeClassId);
-		writeSerializable(serializable.getHash(), true);
-		serializable.serializeAbbreviated(this);
-		writeFlag(serializable.getClassId());
 	}
 
-	private void writeMerkleLeaf(MerkleLeaf leaf) throws IOException {
-		if (options.isAbbreviated() && leaf != null && leaf.isDataExternal()) {
-			writeSerializableAbbreviated((SerializableAbbreviated) leaf, true);
+	/**
+	 * Write a leaf node to the stream.
+	 */
+	private void writeLeaf(final MerkleLeaf node) throws IOException {
+		final int version = node.getVersion();
+		if (options.isExternal() && node.supportedSerialization(version).contains(EXTERNAL_SELF_SERIALIZATION)) {
+			writeExternalSelfSerializableNode(node);
+		} else if (node.supportedSerialization(version).contains(SELF_SERIALIZATION)) {
+			writeSerializableNode(node);
 		} else {
-			writeSerializable(leaf, true);
+			throw new MerkleSerializationException("illegal serialization strategy requested", node);
 		}
+	}
+
+	/**
+	 * Write a null leaf to the stream.
+	 */
+	private void writeNull() throws IOException {
+		writeSerializable(null, true);
 	}
 
 	/**
@@ -109,19 +189,19 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
 	 * @throws IOException
 	 * 		thrown if any IO problems occur
 	 */
-	public void writeMerkleTree(MerkleNode root) throws IOException {
+	public void writeMerkleTree(final MerkleNode root) throws IOException {
 		writeInt(CURRENT);
 		writeSerializable(options, false);
 		writeBoolean(root == null);
-		Iterator<MerkleNode> it = new MerkleBreadthFirstIterator<>(root);
+		final Iterator<MerkleNode> it = new MerkleSerializationIterator(root);
 		while (it.hasNext()) {
-			MerkleNode node = it.next();
+			final MerkleNode node = it.next();
 			if (node == null) {
-				writeMerkleLeaf(null);
+				writeNull();
 			} else if (node.isLeaf()) {
-				writeMerkleLeaf(node.asLeaf());
+				writeLeaf(node.asLeaf());
 			} else {
-				writeMerkleInternal(node.asInternal());
+				writeInternal(node.asInternal());
 			}
 			if (node != null && options.getWriteHashes()) {
 				writeSerializable(node.getHash(), false);

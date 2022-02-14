@@ -20,12 +20,12 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
+import static com.swirlds.common.io.SerializableStreamConstants.BOOLEAN_BYTES;
+import static com.swirlds.common.io.SerializableStreamConstants.CLASS_ID_BYTES;
 import static com.swirlds.common.io.SerializableStreamConstants.NULL_CLASS_ID;
 import static com.swirlds.common.io.SerializableStreamConstants.NULL_LIST_ARRAY_LENGTH;
 import static com.swirlds.common.io.SerializableStreamConstants.NULL_VERSION;
 import static com.swirlds.common.io.SerializableStreamConstants.SERIALIZATION_PROTOCOL_VERSION;
-import static com.swirlds.common.io.SerializableStreamConstants.BOOLEAN_BYTES;
-import static com.swirlds.common.io.SerializableStreamConstants.CLASS_ID_BYTES;
 import static com.swirlds.common.io.SerializableStreamConstants.VERSION_BYTES;
 
 /**
@@ -33,9 +33,6 @@ import static com.swirlds.common.io.SerializableStreamConstants.VERSION_BYTES;
  * It is designed for use with the SerializableDet interface, and its use is described there.
  */
 public class SerializableDataOutputStream extends ExtendedDataOutputStream {
-	// Use {@inheritDoc} when it starts working--not working 9/26/19
-
-	// also the comment about written needs to be verfiied
 
 	/**
 	 * Creates a new data output stream to write data to the specified
@@ -49,18 +46,6 @@ public class SerializableDataOutputStream extends ExtendedDataOutputStream {
 	 */
 	public SerializableDataOutputStream(OutputStream out) {
 		super(out);
-	}
-
-	/**
-	 * Write some bytes following an operation. These bytes will be read and verified by the debug input stream.
-	 *
-	 * @param classId
-	 * 		A long that uniquely identifies the type of operation being performed.
-	 */
-	protected void writeFlag(long classId) throws IOException {
-		if (debug) {
-			writeLong(classId * -1);
-		}
 	}
 
 	/**
@@ -86,7 +71,6 @@ public class SerializableDataOutputStream extends ExtendedDataOutputStream {
 		}
 		writeClassIdVersion(serializable, writeClassId);
 		serializeMethod.serialize(this);
-		writeFlag(serializable.getClassId());
 	}
 
 	/**
@@ -297,12 +281,11 @@ public class SerializableDataOutputStream extends ExtendedDataOutputStream {
 		return totalByteLength;
 	}
 
-	//
-	//      Private methods
-	//
-
 	/** This method assumes serializable is not null */
-	protected void writeClassIdVersion(SelfSerializable serializable, boolean writeClassId) throws IOException {
+	protected void writeClassIdVersion(
+			final SerializableDet serializable,
+			final boolean writeClassId) throws IOException {
+
 		if (writeClassId) {
 			this.writeLong(serializable.getClassId());
 		}

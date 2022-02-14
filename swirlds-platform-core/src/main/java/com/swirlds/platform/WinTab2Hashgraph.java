@@ -120,8 +120,6 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 	private Checkbox labelGenerationCheckbox;
 	// the ID number of the member who created the event
 	private Checkbox labelCreatorCheckbox;
-	// the sequence number for that creator (starts at 0)
-	private Checkbox labelSeqCheckbox;
 
 	// only draw this many events, at most
 	private TextField eventLimit;
@@ -166,7 +164,6 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 				"Labels: Timestamp (consensus)");
 		labelGenerationCheckbox = cb.apply(p++, "Labels: Generation");
 		labelCreatorCheckbox = cb.apply(p++, "Labels: Creator ID");
-		labelSeqCheckbox = cb.apply(p++, "Labels: Creator Seq");
 
 		expandCheckbox.setState(platform.getAddressBook().getSize() <= 6); // expand if not many members
 
@@ -194,7 +191,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 				simpleColorsCheckbox, expandCheckbox, labelRoundCheckbox,
 				labelRoundRecCheckbox, labelConsOrderCheckbox,
 				labelConsTimestampCheckbox, labelGenerationCheckbox,
-				labelCreatorCheckbox, labelSeqCheckbox };
+				labelCreatorCheckbox };
 
 		/////////////////// create checkboxesPanel ///////////////////
 
@@ -234,9 +231,9 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 		checkboxesPanel.add(new Label(" "), constr);
 		constr.gridy++;
 		checkboxesPanel.add(WinBrowser.newJTextArea(Utilities.wrap(50,
-				"Witnesses are colored circles, non-witnesses are black/gray. "
-						+ "Dark circles are part of the consensus, light are not. "
-						+ "Fame is true for green, false for blue, unknown for red. ")),
+						"Witnesses are colored circles, non-witnesses are black/gray. "
+								+ "Dark circles are part of the consensus, light are not. "
+								+ "Fame is true for green, false for blue, unknown for red. ")),
 				constr);
 		constr.gridy++;
 		constr.weighty = 1.0; // give this spacer all the leftover vertical space in column
@@ -446,6 +443,8 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 				if (events == null) { // in case a screen refresh happens before any events
 					return;
 				}
+				// in case the state has events from creators that don't exist, don't show them
+				events = Arrays.stream(events).filter(e -> e.getCreatorId() < numMem).toArray(Event[]::new);
 				int maxEvents;
 				try {
 					maxEvents = Math.max(0,
@@ -478,6 +477,11 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 					g.setColor(eventColor(event));
 					Event e1 = event.getSelfParent();
 					Event e2 = event.getOtherParent();
+					if (e2 != null && e2.getCreatorId() >= numMem) {
+						// if the creator of the other parent has been removed,
+						// treat it as if there is no other parent
+						e2 = null;
+					}
 					if (e1 != null && e1.getGeneration() >= minGen) {
 						g.drawLine(xpos(e2, event), ypos(event),
 								xpos(e2, event), ypos(e1));
@@ -522,9 +526,6 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 					}
 					if (labelCreatorCheckbox.getState()) {
 						s += " " + event.getCreatorId(); // ID number of member who created it
-					}
-					if (labelSeqCheckbox.getState()) {
-						s += " " + event.getSeq(); // sequence number for the creator (starts at 0)
 					}
 					if (s.isEmpty()) {
 						Rectangle2D rect = fm.getStringBounds(s, g);

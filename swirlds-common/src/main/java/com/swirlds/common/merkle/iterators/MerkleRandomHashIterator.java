@@ -47,15 +47,19 @@ public class MerkleRandomHashIterator extends MerkleHashIterator {
 	 */
 	@Override
 	protected void addChildren(final MerkleNode merkleNode) {
+
 		final MerkleInternal node = merkleNode.cast();
-		List<Integer> iterationOrder = new ArrayList<>(node.getNumberOfChildren());
+		final List<Integer> iterationOrder = new ArrayList<>(node.getNumberOfChildren());
 		for (int childIndex = 0; childIndex < node.getNumberOfChildren(); childIndex++) {
 			iterationOrder.add(childIndex);
 		}
 
 		Collections.shuffle(iterationOrder, random);
-		for (int childIndex : iterationOrder) {
-			pushNode(node.getChild(childIndex));
+		for (final int childIndex : iterationOrder) {
+			final MerkleNode child = node.getChild(childIndex);
+			if (child != null && !child.isSelfHashing()) {
+				pushNode(child);
+			}
 		}
 	}
 }

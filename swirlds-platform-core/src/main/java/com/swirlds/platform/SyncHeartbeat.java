@@ -15,17 +15,17 @@ package com.swirlds.platform;
 
 
 import com.swirlds.common.NodeId;
-import com.swirlds.platform.sync.SyncConstants;
+import com.swirlds.platform.sync.SyncConnectionState;
+import com.swirlds.platform.sync.SyncException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.HEARTBEAT;
+import static com.swirlds.logging.LogMarker.SOCKET_EXCEPTIONS;
 
 /**
  * Periodically send a heartbeat through the same channel the SyncCaller uses, to keep it alive.
@@ -100,9 +100,7 @@ class SyncHeartbeat implements Runnable {
 				"about to lock platform[{}].syncServer.lockCallHeartbeat[{}]",
 				platform.getSelfId(), otherId);
 		final ReentrantLock lock = platform.getSyncServer().lockCallHeartbeat.get(otherId.getIdAsInt());
-		final DataOutputStream dos = conn.getDos();
-		final DataInputStream dis = conn.getDis();
-		if (dis == null || dos == null) {
+		if (!conn.connected()) {
 			return;
 		}
 		// Ensure SyncCaller and heartbeat takes turns on this socket.
@@ -114,24 +112,22 @@ class SyncHeartbeat implements Runnable {
 					platform.getSelfId(), otherId);
 			log.debug(HEARTBEAT.getMarker(), "about to send heartbeat");
 
+			final SyncConnectionState prevState = conn.getCurrentState();
 			final long startTime = System.nanoTime();
-			dos.write((int) SyncConstants.HEARTBEAT);
-			dos.flush();
-			conn.getSocket().setSoTimeout(Settings.timeoutSyncClientSocket);
-			final byte b = dis.readByte();
-			platform.getStats().avgPingMilliseconds[otherId.getIdAsInt()].recordValue(
-					(System.nanoTime() - startTime) / 1_000_000.0);
-			if (b != SyncConstants.HEARTBEAT_ACK) {
-				log.error(HEARTBEAT.getMarker(),
-						"received {} but expected {} (heartbeatACK)", b,
-						SyncConstants.HEARTBEAT_ACK);
-				conn.disconnect(true, 12);
-				platform.getSyncClient().getCallerConnOrConnectOnce(otherId); // try once to reconnect
+			conn.heartbeat();
+			// we don't record ping times for every heartbeat, explained in #4533
+			if (prevState == SyncConnectionState.HEARTBEAT_ACKNOWLEDGED) {
+				platform.getStats().avgPingMilliseconds[otherId.getIdAsInt()].recordValue(
+						(System.nanoTime() - startTime) / 1_000_000.0);
 			}
+		} catch (SyncException e) {
+			log.error(EXCEPTION.getMarker(), "error while doing heartbeat", e);
+			conn.disconnect(true, 12);
+			platform.getSyncClient().getCallerConnOrConnectOnce(otherId); // try once to reconnect
 		} catch (final IOException e) {
 			// this is either a timeout because nothing was received for a long time (e.g., 15 seconds),
 			// or an error that happened during the read or write (e.g., because the socket closed)
-			log.error(HEARTBEAT.getMarker(), "error while sending or receiving the heartbeat:", e);
+			log.error(SOCKET_EXCEPTIONS.getMarker(), "error while sending or receiving the heartbeat:", e);
 			conn.disconnect(true, 13);
 			platform.getSyncClient().getCallerConnOrConnectOnce(otherId); // try once to reconnect
 		} finally { // release the lock, because done sending/receiving heartbeats/ACKs

@@ -125,8 +125,6 @@ public class SignedState implements Releasable, SignedStateInfo {
 		return addressBook;
 	}
 
-	private StateSettings stateSettings;
-
 	/**
 	 * Instantiate a signed state, storing the information passed as parameters in it. Also calculate and
 	 * store its hash, which can then be retrieved with getHash().
@@ -184,9 +182,6 @@ public class SignedState implements Releasable, SignedStateInfo {
 
 		this.freezeState = freezeState;
 		sigSet = new SigSet(addressBook);
-
-		// create a snapshot of the leaf to compare it later and see if its modified
-		state.getPlatformState().createSnapshot();
 	}
 
 	/**

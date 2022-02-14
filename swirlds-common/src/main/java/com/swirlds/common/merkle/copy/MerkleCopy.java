@@ -23,6 +23,8 @@ import com.swirlds.common.merkle.route.MerkleRoute;
 import java.util.LinkedList;
 import java.util.Queue;
 
+import static com.swirlds.common.merkle.copy.MerkleInitialize.initializeTreeAfterCopy;
+
 /**
  * A collection of utility methods for performing copies of a merkle tree.
  */
@@ -85,10 +87,19 @@ public final class MerkleCopy {
 	}
 
 	/**
+	 * <p>
 	 * Copy each node in a subtree to a given location.
+	 * </p>
 	 *
+	 * <p>
+	 * This algorithm does not work on data structures that do not support being copied node-by node
+	 * (e.g. virtual data structures).
+	 * </p>
+	 *
+	 * <p>
 	 * Warning: This method may leave behind a partially immutable tree in the original location. It is the
 	 * responsibility of the caller to appropriately clean up the original tree.
+	 * </p>
 	 *
 	 * @param parent
 	 * 		the destination parent where that will hold the subree
@@ -133,7 +144,7 @@ public final class MerkleCopy {
 
 		// Since we have obtained new instances of internal nodes without calling copy on them we must initialize them
 		if (rootOfSubtree != null) {
-			rootOfSubtree.initializeTree();
+			initializeTreeAfterCopy(rootOfSubtree);
 		}
 
 		// Release hold on original tree.

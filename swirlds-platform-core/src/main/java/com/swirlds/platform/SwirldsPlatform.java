@@ -25,7 +25,6 @@ import com.swirlds.common.Console;
 import com.swirlds.common.InvalidSignedStateListener;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.PlatformStatus;
-import com.swirlds.common.StatEntry;
 import com.swirlds.common.SwirldMain;
 import com.swirlds.common.SwirldState;
 import com.swirlds.common.SwirldTransaction;
@@ -34,10 +33,11 @@ import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.Event;
-import com.swirlds.common.internal.AbstractStatistics;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskNotification;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteListener;
+import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.statistics.internal.AbstractStatistics;
 import com.swirlds.common.stream.EventStreamManager;
 import com.swirlds.common.threading.QueueThread;
 import com.swirlds.common.threading.QueueThreadConfiguration;
@@ -106,7 +106,6 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.PLATFORM_STATUS;
 import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.platform.Browser.exitSystem;
-import static com.swirlds.platform.EventStrings.dumpEventInfo;
 import static com.swirlds.platform.internal.SystemExitReason.SAVED_STATE_NOT_LOADED;
 import static com.swirlds.platform.internal.SystemExitReason.SWIRLD_MAIN_THREW_EXCEPTION;
 
@@ -337,7 +336,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 		// set here, then given to the state in run(). A copy of it is given to hashgraph.
 		this.initialAddressBook = initialAddressBook;
 
-		this.eventMapper = new EventMapper(selfId, initialAddressBook.getSize());
+		this.eventMapper = new EventMapper(selfId);
 
 		this.stats = new Statistics(
 				this,
@@ -570,21 +569,14 @@ public class SwirldsPlatform extends AbstractPlatform {
 				consensusRef.get().getMinRoundGeneration());
 
 		// Data that is needed for the intake system to work
-		for (int i = 0; i < signedState.getEvents().length; i++) {
-			final EventImpl e = signedState.getEvents()[i];
-
-			try {
-				eventMapper.eventAdded(e);
-			} catch (final Exception ex) {
-				dumpEventInfo(signedState.getEvents());
-				throw new RuntimeException(ex);
-			}
+		for (EventImpl e : signedState.getEvents()) {
+			eventMapper.eventAdded(e);
 		}
 
 		transactionTracker.reset();
 
-		log.info(STARTUP.getMarker(), "Last known sequence numbers after restart are {}",
-				eventMapper.getLastSeqByCreator());
+		log.info(STARTUP.getMarker(), "Last known events after restart are {}",
+				eventMapper.getMostRecentEventsByEachCreator());
 	}
 
 	/**
@@ -845,7 +837,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 				this,
 				selfId,
 				this,
-				event -> consensusRef.get().isEventOld(event),
+				consensusRef::get,
 				eventFlow,
 				eventIntake::addEvent,
 				eventMapper,
@@ -856,7 +848,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 		/** validates events received from gossip */
 		final EventValidator eventValidator = new EventValidator(
 				selfId,
-				eventMapper::isDuplicateInHashgraph,
+				shadowGraph::isHashInGraph,
 				eventMapper::getMostRecentEvent,
 				// zero-stake node predicate
 				(Long id) -> Settings.enableBetaMirror && initialAddressBook.isZeroStakeNode(id),
@@ -914,7 +906,9 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 			// newEventFlow will get a copy of the state loaded, that copy will become stateCons.
 			// The original state will be saved in the SignedStateMgr and will be deleted when it becomes old
-			newEventFlow = new EventFlow(this, initialState);
+			newEventFlow = new EventFlow(selfId, stats, initialAddressBook, eventStreamManager, isZeroStakeNode(),
+					systemTransactionHandler, signedStateManager, this::estimateTime,
+					PlatformConstructor.settingsProvider(), initialState);
 			newEventFlow.loadDataFromSignedState(signedState, false);
 		} else {
 			final State state = new State();
@@ -928,7 +922,9 @@ public class SwirldsPlatform extends AbstractPlatform {
 			state.getSwirldState().genesisInit(this, initialAddressBook.copy(), state.getSwirldDualState());
 			// addressBook
 			// this state passed will become stateCons
-			newEventFlow = new EventFlow(this, state);
+			newEventFlow = new EventFlow(selfId, stats, initialAddressBook, eventStreamManager, isZeroStakeNode(),
+					systemTransactionHandler, signedStateManager, this::estimateTime,
+					PlatformConstructor.settingsProvider(), state);
 			// if we are not starting from a saved state, don't freeze on startup
 			startUpEventFrozenManager.setStartUpEventFrozenEndTime(null);
 		}
@@ -1077,6 +1073,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 		if (Settings.enableStateRecovery) {
 			stateRecover();
 		}
+
 		synchronized (this) {
 			if (signedState != null) {
 				signedState = null;// we won't need this after this point
@@ -1503,7 +1500,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 		double c2c = 1.0 / Math.max(0.5,
 				stats.eventsCreatedPerSecond.getCyclesPerSecond());
 		/** seconds from self creating an event to the consensus timestamp that event receives */
-		double c2t = stats.avgSelfCreatedTimestamp.getWeightedMean();
+		double c2t = stats.getAvgSelfCreatedTimestamp();
 
 		// for now, just use 0. A more sophisticated formula could be used
 		c2c = 0;
@@ -1548,14 +1545,8 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** {@inheritDoc} */
 	@Override
-	public long[] getLastSeqByCreator() {
-		return eventMapper.getLastSeqByCreator();
-	}
-
-	/** {@inheritDoc} */
-	@Override
-	public long getLastSeq(final long creatorId) {
-		return eventMapper.getSequenceNumber(creatorId);
+	public long getLastGen(final long creatorId) {
+		return eventMapper.getHighestGenerationNumber(creatorId);
 	}
 
 	/** {@inheritDoc} */

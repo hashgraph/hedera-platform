@@ -93,6 +93,13 @@ public interface SyncConnection {
 	void initForSync() throws IOException;
 
 	/**
+	 * Called on the connection at the end of a sync
+	 */
+	default void syncDone(){
+		// do nothing by default
+	}
+
+	/**
 	 * Is this an outbound or an inbound connection. For outbound connections, we initiate the creation of the
 	 * connection, as well as all communication (sync, heartbeat, reconnect). The reverse is true for inbound
 	 * connections.

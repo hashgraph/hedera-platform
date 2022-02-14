@@ -53,6 +53,15 @@ module com.swirlds.common {
 	opens com.swirlds.common.throttle to com.fasterxml.jackson.databind;
 	exports com.swirlds.common.merkle.copy;
 	opens com.swirlds.common.stream to com.fasterxml.jackson.databind;
+	exports com.swirlds.common.merkle.synchronization.views;
+	exports com.swirlds.common.merkle.synchronization.settings;
+	exports com.swirlds.common.merkle.synchronization.streams;
+	exports com.swirlds.common.merkle.synchronization.utility;
+	exports com.swirlds.common.statistics;
+	exports com.swirlds.common.statistics.internal to com.swirlds.common.test, com.swirlds.demo.platform,
+			com.swirlds.platform, com.swirlds.platform.test, com.swirlds.regression;
+	opens com.swirlds.common.merkle.copy to com.fasterxml.jackson.databind;
+	exports com.swirlds.common.merkle.synchronization.internal;
 
 	requires com.swirlds.logging;
 
@@ -60,7 +69,6 @@ module com.swirlds.common {
 
 	/* Cryptography Libraries */
 	requires lazysodium.java;
-	requires jocl;
 	requires org.bouncycastle.provider;
 
 	/* Logging Libraries */

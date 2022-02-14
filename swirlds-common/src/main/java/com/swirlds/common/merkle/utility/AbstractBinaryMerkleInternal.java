@@ -102,7 +102,7 @@ public abstract class AbstractBinaryMerkleInternal extends AbstractMerkleInterna
 	 */
 	@SuppressWarnings("unchecked")
 	@Override
-	public final <T extends MerkleNode> T getChild(final int index) {
+	public <T extends MerkleNode> T getChild(final int index) {
 		if (index == ChildIndices.LEFT) {
 			return (T) left;
 		} else if (index == ChildIndices.RIGHT) {
@@ -202,7 +202,8 @@ public abstract class AbstractBinaryMerkleInternal extends AbstractMerkleInterna
 	 */
 	@Override
 	protected final void checkChildIndexIsValid(final int index) {
-		//the index is actually being tested in getChild(), which will throw if not ChildIndices.LEFT or ChildIndices.RIGHT
+		// the index is actually being tested in getChild(),
+		// which will throw if not ChildIndices.LEFT or ChildIndices.RIGHT
 	}
 
 	/**

@@ -16,12 +16,11 @@ package com.swirlds.common.merkle.hash;
 
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.crypto.engine.CryptoThreadFactory;
-import com.swirlds.common.crypto.engine.ThreadExceptionHandler;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildHashException;
 import com.swirlds.common.merkle.iterators.MerkleHashIterator;
 import com.swirlds.common.merkle.iterators.MerkleRandomHashIterator;
+import com.swirlds.common.threading.ThreadConfiguration;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,8 +28,10 @@ import org.apache.logging.log4j.Logger;
 import java.util.Iterator;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.swirlds.common.crypto.engine.CryptoEngine.THREAD_COMPONENT_NAME;
 import static com.swirlds.common.merkle.utility.MerkleConstants.MERKLE_DIGEST_TYPE;
 
 /**
@@ -56,14 +57,19 @@ public class MerkleHashBuilder {
 	public MerkleHashBuilder(final Cryptography cryptography, final int cpuThreadCount) {
 		this.cryptography = cryptography;
 		this.cpuThreadCount = cpuThreadCount;
-		this.threadPool = Executors.newFixedThreadPool(cpuThreadCount,
-				new CryptoThreadFactory("merkle_hash_builder", new ThreadExceptionHandler(this.getClass()) {
-					@Override
-					public void uncaughtException(final Thread t, final Throwable ex) {
-						log.error(LogMarker.EXCEPTION.getMarker(),
-								"Uncaught exception in MerkleHashBuilder thread pool", ex);
-					}
-				}));
+
+		final ThreadFactory threadFactory = new ThreadConfiguration()
+				.setDaemon(true)
+				.setComponent(THREAD_COMPONENT_NAME)
+				.setThreadName("merkle hash")
+				.setPriority(Thread.NORM_PRIORITY)
+				.setExceptionHandler((t, ex) -> {
+					log.error(LogMarker.EXCEPTION.getMarker(),
+							"Uncaught exception in MerkleHashBuilder thread pool", ex);
+				})
+				.buildFactory();
+
+		this.threadPool = Executors.newFixedThreadPool(cpuThreadCount, threadFactory);
 	}
 
 	/**
@@ -172,7 +178,7 @@ public class MerkleHashBuilder {
 	 */
 	private void hashSubtree(Iterator<MerkleNode> it, AtomicInteger activeThreadCount) {
 		while (it.hasNext()) {
-			MerkleNode node = it.next();
+			final MerkleNode node = it.next();
 			// Potential optimization: if this node is currently locked, do not wait here. Skip it and continue.
 			// This would require a lock object that support the "try lock" paradigm.
 			synchronized (node) {
@@ -185,10 +191,12 @@ public class MerkleHashBuilder {
 					continue;
 				}
 
-				if (node.isLeaf()) {
-					cryptography.digestSync(node.asLeaf(), MERKLE_DIGEST_TYPE);
-				} else {
-					cryptography.digestSync(node.asInternal(), MERKLE_DIGEST_TYPE);
+				if (!node.isSelfHashing()) {
+					if (node.isLeaf()) {
+						cryptography.digestSync(node.asLeaf(), MERKLE_DIGEST_TYPE);
+					} else {
+						cryptography.digestSync(node.asInternal(), MERKLE_DIGEST_TYPE);
+					}
 				}
 			}
 		}

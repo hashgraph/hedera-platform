@@ -69,7 +69,7 @@ abstract class AbstractEventFlow implements
 	/**
 	 * @return return the number of events in the forSigs queue
 	 */
-	abstract int getForSigsSize();
+	abstract int getSignedStateEventsSize();
 
 	/**
 	 * @return the number of events in the forCons queue
@@ -89,7 +89,7 @@ abstract class AbstractEventFlow implements
 	/**
 	 * Stops all the threads in EventFlow and clears out all the data
 	 */
-	abstract void stopAndClear();
+	abstract void stopAndClear() throws InterruptedException;
 
 	/**
 	 * Set the {@link State} to be used by {@link EventFlow}. This should be called on an object that

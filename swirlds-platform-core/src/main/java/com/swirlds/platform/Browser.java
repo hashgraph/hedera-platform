@@ -27,12 +27,13 @@ import com.swirlds.common.crypto.SerializablePublicKey;
 import com.swirlds.common.internal.ApplicationDefinition;
 import com.swirlds.common.internal.ConfigurationException;
 import com.swirlds.common.internal.SettingsCommon;
-import com.swirlds.common.merkle.synchronization.ReconnectSettingsFactory;
+import com.swirlds.common.merkle.synchronization.settings.ReconnectSettingsFactory;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskCompleteListener;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskNotification;
 import com.swirlds.common.threading.ThreadConfiguration;
 import com.swirlds.fchashmap.FCHashMapSettingsFactory;
+import com.swirlds.jasperdb.settings.JasperDbSettingsFactory;
 import com.swirlds.logging.payloads.NodeStartPayload;
 import com.swirlds.logging.payloads.SystemExitPayload;
 import com.swirlds.p2p.portforwarding.PortForwarder;
@@ -46,6 +47,7 @@ import com.swirlds.platform.internal.SignedStateLoadingException;
 import com.swirlds.platform.internal.SystemExitReason;
 import com.swirlds.platform.swirldapp.AppLoaderException;
 import com.swirlds.platform.swirldapp.SwirldAppLoader;
+import com.swirlds.virtualmap.VirtualMapSettingsFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
@@ -1086,5 +1088,7 @@ public abstract class Browser {
 		CryptoFactory.configure(Settings.crypto);
 		ReconnectSettingsFactory.configure(Settings.reconnect);
 		FCHashMapSettingsFactory.configure(Settings.fcHashMap);
+		VirtualMapSettingsFactory.configure(Settings.virtualMap);
+		JasperDbSettingsFactory.configure(Settings.jasperDb);
 	}
 }

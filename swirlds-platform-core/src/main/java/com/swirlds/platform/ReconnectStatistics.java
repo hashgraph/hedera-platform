@@ -14,7 +14,7 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.StatEntry;
+import com.swirlds.common.statistics.StatEntry;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;

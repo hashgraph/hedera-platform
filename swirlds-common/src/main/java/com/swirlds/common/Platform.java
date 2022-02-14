@@ -18,6 +18,8 @@ package com.swirlds.common;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.events.Event;
 import com.swirlds.common.internal.SettingsCommon;
+import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.statistics.Statistics;
 import com.swirlds.common.stream.Signer;
 
 import javax.swing.JFrame;
@@ -137,26 +139,13 @@ public interface Platform extends Signer {
 	Event[] getAllEvents();
 
 	/**
-	 * Return the sequence numbers of the last event created by each member. This is a copy, so it is OK for
-	 * the caller to modify it.
-	 *
-	 * The returned array values may be slightly out of date, and different elements of the array may be out
-	 * of date by different amounts. If it needs to be up to date, then call this method from inside a
-	 * hashgraph.lock.lock("location") block.
-	 *
-	 * @return an array of sequence numbers indexed by member id number
-	 */
-	long[] getLastSeqByCreator();
-
-	/**
-	 * get the highest sequence number of all events with the given creator
+	 * get the highest generation number of all events with the given creator
 	 *
 	 * @param creatorID
-	 * 	the ID of the node in question
-	 * @return
-	 *  the last sequence number known stored for the given creator ID
+	 * 		the ID of the node in question
+	 * @return the highest generation number known stored for the given creator ID
 	 */
-	long getLastSeq(long creatorID);
+	long getLastGen(long creatorID);
 
 	/**
 	 * Get the number of participating members. This is the size of the current address book.
@@ -305,7 +294,8 @@ public interface Platform extends Signer {
 	 * The {#link SwirldState} is returned in a {#link AutoCloseableWrapper} that <b>must</b> be use with
 	 * a try-with-resources
 	 *
-	 * @param <T> A type extending from {#link SwirldState}
+	 * @param <T>
+	 * 		A type extending from {#link SwirldState}
 	 * @return the latest complete signed swirld state, or null if none are complete
 	 */
 	<T extends SwirldState> AutoCloseableWrapper<T> getLastCompleteSwirldState();

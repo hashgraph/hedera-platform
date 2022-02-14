@@ -17,6 +17,8 @@ package com.swirlds.common.merkle.route;
 import com.swirlds.common.merkle.route.internal.BinaryMerkleRoute;
 import com.swirlds.common.merkle.route.internal.UncompressedMerkleRoute;
 
+import java.util.List;
+
 /**
  * A factory for new merkle routes.
  */
@@ -63,6 +65,20 @@ public final class MerkleRouteFactory {
 	 */
 	public static MerkleRoute getEmptyRoute() {
 		return emptyRoute;
+	}
+
+	/**
+	 * Build a route out of a sequence of steps.
+	 */
+	public static MerkleRoute buildRoute(final List<Integer> steps) {
+		return getEmptyRoute().extendRoute(steps);
+	}
+
+	/**
+	 * Build a route out of a sequence of steps.
+	 */
+	public static MerkleRoute buildRoute(final int... steps) {
+		return getEmptyRoute().extendRoute(steps);
 	}
 
 }

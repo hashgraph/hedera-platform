@@ -14,9 +14,6 @@
 
 package com.swirlds.common.crypto;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public enum DigestType {
 	/** 384-bit SHA2 message digest meeting current CNSA standards */
 	SHA_384(0x58ff811b, "SHA-384", "SUN", 48),
@@ -44,28 +41,9 @@ public enum DigestType {
 	}
 
 	/**
-	 * lookup map used to translate the {@code id} to an enumeration type in {@code O(1)} time
-	 */
-	private static Map<Integer, DigestType> idLookupMap;
-	/**
 	 * the max length of digest output in bytes among all DigestType
 	 */
-	private static final int maxLength;
-
-	static {
-		idLookupMap = new HashMap<>();
-
-		int maxLengthTmp = 0;
-		for (DigestType t : DigestType.values()) {
-			if (idLookupMap.containsKey(t.id())) {
-				throw new IllegalStateException("Duplicate identifiers are not supported");
-			}
-
-			idLookupMap.put(t.id(), t);
-			maxLengthTmp = Math.max(maxLengthTmp, t.outputLength);
-		}
-		maxLength = maxLengthTmp;
-	}
+	private static final int MAX_LENGTH = 64;
 
 	/**
 	 * The unique identifier for this algorithm. Used when serializing this enumerations values.
@@ -93,7 +71,14 @@ public enum DigestType {
 	 * @return a valid DigestType or null if the provided id is not valid
 	 */
 	public static DigestType valueOf(final int id) {
-		return idLookupMap.getOrDefault(id, null);
+		switch (id) {
+			case 0x58ff811b:
+				return SHA_384;
+			case 0x8fc9497e:
+				return SHA_512;
+			default:
+				return null;
+		}
 	}
 
 	/**
@@ -138,6 +123,6 @@ public enum DigestType {
 	 * @return the max length of digest output in bytes among all DigestType
 	 */
 	public static int getMaxLength() {
-		return maxLength;
+		return MAX_LENGTH;
 	}
 }

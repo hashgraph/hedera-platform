@@ -15,14 +15,11 @@
 package com.swirlds.platform.state;
 
 import com.swirlds.common.AddressBook;
-import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.EventSerializationOptions;
-import com.swirlds.common.io.SelfSerializableByteSnapshot;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
 import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
-import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.Utilities;
 import org.apache.commons.lang3.builder.EqualsBuilder;
@@ -30,8 +27,6 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -44,15 +39,9 @@ import java.util.List;
  * State written and used by the platform.
  */
 public class PlatformState extends AbstractMerkleLeaf {
-	private static final Logger log = LogManager.getLogger();
-
 	public static final long CLASS_ID = 0x5bcd37c8b3dd97f5L;
 
 	private static final class ClassVersion {
-		private static final int ORIGINAL = 1;
-		private static final int ADD_LAST_TRANS_TIME = 2;
-		/** modify hashEventsCons from byte array to Hash type */
-		public static final int CONSENSUS_EVENT_RUNNING_HASH = 3;
 		/** start using mingen when loading consensus */
 		public static final int LOAD_MINGEN_INTO_CONSENSUS = 4;
 	}
@@ -84,8 +73,6 @@ public class PlatformState extends AbstractMerkleLeaf {
 	private List<Pair<Long, Long>> minGenInfo;
 	/** the timestamp of the last transactions handled by this state */
 	private Instant lastTransactionTimestamp;
-	/** a snapshot of the data in the leaf, used for debugging */
-	private SelfSerializableByteSnapshot<PlatformState> snapshot;
 
 	public PlatformState() {
 		this.events = new EventImpl[0];
@@ -132,11 +119,8 @@ public class PlatformState extends AbstractMerkleLeaf {
 		round = in.readLong();
 		numEventsCons = in.readLong();
 
-		if (version < ClassVersion.CONSENSUS_EVENT_RUNNING_HASH) {
-			hashEventsCons = new Hash(in.readByteArray(DigestType.SHA_384.digestLength()));
-		} else {
-			hashEventsCons = in.readSerializable(false, Hash::new);
-		}
+		hashEventsCons = in.readSerializable(false, Hash::new);
+
 
 		addressBook = in.readSerializable(false, AddressBook::new);
 
@@ -157,11 +141,7 @@ public class PlatformState extends AbstractMerkleLeaf {
 
 		State.linkParents(events);
 
-		if (version < ClassVersion.ADD_LAST_TRANS_TIME) {
-			lastTransactionTimestamp = events[events.length - 1].getLastTransTime();
-		} else {
-			lastTransactionTimestamp = in.readInstant();
-		}
+		lastTransactionTimestamp = in.readInstant();
 	}
 
 	public long getRound() {
@@ -239,29 +219,6 @@ public class PlatformState extends AbstractMerkleLeaf {
 		}
 	}
 
-	public void createSnapshot() {
-		if (StateSettings.compareSSLeafSnapshots) {
-			snapshot = SelfSerializableByteSnapshot.createSnapshot(this);
-		}
-	}
-
-	public boolean compareSnapshot() {
-		if (!StateSettings.compareSSLeafSnapshots || snapshot == null) {
-			return false;
-		}
-		SelfSerializableByteSnapshot<PlatformState> current = SelfSerializableByteSnapshot.createSnapshot(this);
-		if (!current.getHash().equals(snapshot.getHash())) {
-			log.error(LogMarker.EXCEPTION.getMarker(),
-					"PlatformState has been altered!\nCurrent state:\n{}\nPrevious state:\n{}",
-					current.getBytesAsHexString(),
-					snapshot.getBytesAsHexString());
-			// Log the mismatch only once
-			StateSettings.compareSSLeafSnapshots = false;
-			return true;
-		}
-		return false;
-	}
-
 	@Override
 	public long getClassId() {
 		return CLASS_ID;
@@ -273,8 +230,8 @@ public class PlatformState extends AbstractMerkleLeaf {
 	}
 
 	@Override
-	public boolean isDataExternal() {
-		return false;
+	public int getMinimumSupportedVersion() {
+		return ClassVersion.LOAD_MINGEN_INTO_CONSENSUS;
 	}
 
 	@Override

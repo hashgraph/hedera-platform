@@ -46,4 +46,9 @@ public abstract class SerializableStreamConstants {
 		public static final int ADDED_OPTIONS = 2;
 		public static final int CURRENT = ADDED_OPTIONS;
 	}
+
+	/**
+	 * Should stream methods that use checksums use checksums by default?
+	 */
+	public static final boolean DEFAULT_CHECKSUM = false;
 }

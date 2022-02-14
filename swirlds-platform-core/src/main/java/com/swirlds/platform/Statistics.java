@@ -13,12 +13,15 @@
  */
 package com.swirlds.platform;
 
+import com.sun.management.HotSpotDiagnosticMXBean;
 import com.sun.management.OperatingSystemMXBean;
 import com.swirlds.common.PlatformStatNames;
-import com.swirlds.common.StatEntry;
 import com.swirlds.common.Transaction;
 import com.swirlds.common.Units;
-import com.swirlds.common.internal.AbstractStatistics;
+import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.statistics.StatsRunningAverage;
+import com.swirlds.common.statistics.StatsSpeedometer;
+import com.swirlds.common.statistics.internal.AbstractStatistics;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.EventCounter;
 import com.swirlds.platform.observers.EventAddedObserver;
@@ -26,6 +29,7 @@ import com.swirlds.platform.state.StateInfo;
 import com.swirlds.platform.stats.AverageAndMax;
 import com.swirlds.platform.stats.AverageStat;
 import com.swirlds.platform.stats.ConsensusStats;
+import com.swirlds.platform.stats.EventFlowStats;
 import com.swirlds.platform.stats.HashgraphStats;
 import com.swirlds.platform.stats.MaxStat;
 import com.swirlds.platform.stats.PlatformStatistics;
@@ -37,6 +41,7 @@ import com.swirlds.platform.sync.SyncResult;
 import com.swirlds.platform.sync.SyncTiming;
 
 import java.io.File;
+import java.lang.management.BufferPoolMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.time.Instant;
@@ -67,6 +72,8 @@ import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
  * <li><b>cEvents/sec</b> - number of events per second created by this node *
  * <li><b>conns</b> - number of times a TLS connections was created *
  * <li><b>cpuLoadSys</b> - the CPU load of the whole system *
+ * <li><b>directMemInMB</b> - total megabytes of off-heap (direct) memory in the JVM *
+ * <li><b>directMemPercent</b> - off-heap (direct) memory used as a percentage of -XX:MaxDirectMemorySize param *
  * <li><b>dupEv%</b> - percentage of events received that are already known *
  * <li><b>ev/syncS</b> - number of events sent per successful sync *
  * <li><b>ev/syncR</b> - number of events received per successful sync *
@@ -120,7 +127,8 @@ public class Statistics extends AbstractStatistics implements
 		HashgraphStats,
 		EventAddedObserver,
 		PlatformStatistics,
-		SyncStats {
+		SyncStats,
+		EventFlowStats {
 
 	/** which Platform to watch */
 	protected AbstractPlatform platform;
@@ -170,7 +178,8 @@ public class Statistics extends AbstractStatistics implements
 	/** time for a member, from receiving to knowing consensus */
 	StatsRunningAverage avgReceivedConsensusTime;
 	/** time for a member, from knowing consensus to handling that consensus transaction */
-	StatsRunningAverage avgConsHandleTime;
+	private StatsRunningAverage avgConsHandleTime;
+
 	private final AverageStat knownSetSize = new AverageStat(
 			CATEGORY,
 			"knownSetSize",
@@ -253,9 +262,9 @@ public class Statistics extends AbstractStatistics implements
 	/** average percentage of received events that are already known */
 	StatsRunningAverage avgDuplicatePercent;
 	/** self event consensus timestamp minus time created */
-	StatsRunningAverage avgSelfCreatedTimestamp;
+	private StatsRunningAverage avgSelfCreatedTimestamp;
 	/** other event consensus timestamp minus time received */
-	StatsRunningAverage avgOtherReceivedTimestamp;
+	private StatsRunningAverage avgOtherReceivedTimestamp;
 	/** INTERNAL: number of app transactions (from self and others) per second */
 	StatsSpeedometer transactionsPerSecondSys;
 	/**
@@ -289,13 +298,13 @@ public class Statistics extends AbstractStatistics implements
 	StatsRunningAverage avgBytesPerSecSync;
 
 	/** number of consensus transactions per second handled by SwirldState.handleTransaction() */
-	StatsSpeedometer transHandledPerSecond;
+	private StatsSpeedometer transHandledPerSecond;
 	/** avg time to handle a consensus transaction in SwirldState.handleTransaction (in seconds) */
-	StatsRunningAverage avgSecTransHandled;
+	private StatsRunningAverage avgSecTransHandled;
 	/** average time it takes the copy() method in SwirldState to finish (in microseconds) */
-	StatsRunningAverage avgStateCopyMicros;
+	private StatsRunningAverage avgStateCopyMicros;
 	/** average time it takes to create a new SignedState (in seconds) */
-	StatsRunningAverage avgSecNewSignedState;
+	private StatsRunningAverage avgSecNewSignedState;
 
 	/** boolean result of function {@link SyncManager#shouldCreateEvent(SyncResult)} */
 	StatsRunningAverage shouldCreateEvent;
@@ -304,7 +313,7 @@ public class Statistics extends AbstractStatistics implements
 	StatsRunningAverage numCoinRounds;
 
 
-	//////////////////// these are updated in Statistics.updateOthers() ///////////////
+	//////////////////// these are updated in Statistics.updateOthers() /////////////
 
 	/** number of app transactions received so far */
 	AtomicLong numTrans = new AtomicLong(0);
@@ -318,6 +327,16 @@ public class Statistics extends AbstractStatistics implements
 	StatsRunningAverage memTot;
 	/** maximum bytes that the JVM might use */
 	StatsRunningAverage memMax;
+	/** maximum amount of off-heap (direct) memory being used by the JVM, in megabytes */
+	private StatsRunningAverage directMemInMB;
+	/** off-heap (direct) memory being used by the JVM, as a percentage of -XX:MaxDirectMemorySize param */
+	private StatsRunningAverage directMemPercent;
+	/**
+	 * helper variables (set once, when the directMemory StatsRunningAverage variables are created) used to
+	 * refresh those values whenever the stats are created
+	 */
+	private BufferPoolMXBean directMemMXBean;
+	private double maximumDirectMemSizeInMB = -1;
 	/** number of processors (cores) available to the JVM */
 	StatsRunningAverage avgNumProc;
 	/** the CPU load of the whole system */
@@ -342,8 +361,8 @@ public class Statistics extends AbstractStatistics implements
 	StatsRunningAverage avgQ1forCurr;
 	/** number of consensus events waiting to be handled [forCons.size()] */
 	StatsRunningAverage avgQ2forCons;
-	/** number of handled events waiting to be deleted [forSigs.size()] */
-	StatsRunningAverage avgQ3forSigs;
+	/** number of handled consensus events that will be part of the next signed state */
+	StatsRunningAverage avgQSignedStateEvents;
 	/** number of events received waiting to be processed, or events waiting to be created [forSigs.size()] */
 	StatsRunningAverage avgQ4forHash;
 	/** number of SignedStates waiting to be hashed and signed in the queue [stateToHashSign.size()] */
@@ -429,7 +448,7 @@ public class Statistics extends AbstractStatistics implements
 	 * {@link EventFlow#takeHandlePut(boolean, BlockingQueue, StateInfo, BlockingQueue)} by the {@code
 	 * EventFlow#doCons()} method (in microseconds)
 	 */
-	StatsRunningAverage avgConsShuffleMicros;
+	private StatsRunningAverage avgConsShuffleMicros;
 
 	/**
 	 * average time spent in the {@code EventFlow#doCons()} method building the {@link
@@ -440,24 +459,24 @@ public class Statistics extends AbstractStatistics implements
 	/**
 	 * average time spent by the {@code EventFlow#doCons()} method cleaning up the forSigs queue (in microseconds)
 	 */
-	StatsRunningAverage avgConsForSigCleanMicros;
+	private StatsRunningAverage avgConsForSigCleanMicros;
 
 	/**
 	 * average time spent by the {@code EventFlow#doCons()} method waiting on the running hash future (in microseconds)
 	 */
-	StatsRunningAverage avgConsRunningHashMicros;
+	private StatsRunningAverage avgConsRunningHashMicros;
 
 	/**
 	 * average time spent by the {@code EventFlow#doCons()} method hashing the event returned from {@code
 	 * EventFlow.takeHandlePut()} (in microseconds)
 	 */
-	StatsRunningAverage avgConsEventHashMicros;
+	private StatsRunningAverage avgConsEventHashMicros;
 
 	/**
 	 * average time spent by the {@code EventFlow#doCons()} method placing the SignedState into the signing queue (in
 	 * microseconds)
 	 */
-	StatsRunningAverage avgConsStateSignAdmitMicros;
+	private StatsRunningAverage avgConsStateSignAdmitMicros;
 
 	/**
 	 * avg length of the state archival queue
@@ -487,10 +506,12 @@ public class Statistics extends AbstractStatistics implements
 	private static final String FLOAT_FORMAT_10_3 = "%,10.3f";
 	private static final String FLOAT_FORMAT_13_0 = "%,13.0f";
 	private static final String FLOAT_FORMAT_15_3 = "%,15.3f";
+	private static final String FLOAT_FORMAT_16_0 = "%,16.0f";
 	private static final String FLOAT_FORMAT_16_2 = "%,16.2f";
 	private static final String FLOAT_FORMAT_8_1 = "%,8.1f";
 	private static final String FLOAT_FORMAT_1_3 = "%,1.3f";
 	private static final String FLOAT_FORMAT_5_3 = "%,5.3f";
+	private static final double WHOLE_PERCENT = 100.0;    // all of something is to be reported as 100.0%
 
 	/** once a second, update all the statistics that aren't updated by any other class */
 	@Override
@@ -518,6 +539,7 @@ public class Statistics extends AbstractStatistics implements
 				memFree.recordValue(Runtime.getRuntime().freeMemory());
 				memTot.recordValue(Runtime.getRuntime().totalMemory());
 				memMax.recordValue(Runtime.getRuntime().maxMemory());
+				updateDirectMemoryStatistics();
 				avgNumProc.recordValue(
 						Runtime.getRuntime().availableProcessors());
 				cpuLoadSys.recordValue(osBean.getSystemCpuLoad());
@@ -533,7 +555,7 @@ public class Statistics extends AbstractStatistics implements
 				avgSimListenSyncs.recordValue(platform.getSyncServer().numListenerSyncs.get());
 				avgQ1forCurr.recordValue(platform.getEventFlow().getForCurrSize());
 				avgQ2forCons.recordValue(platform.getEventFlow().getForConsSize());
-				avgQ3forSigs.recordValue(platform.getEventFlow().getForSigsSize());
+				avgQSignedStateEvents.recordValue(platform.getEventFlow().getSignedStateEventsSize());
 				eventStreamQueueSize.recordValue(platform.getEventStreamManager() != null ?
 						platform.getEventStreamManager().getEventStreamingQueueSize() : 0);
 				hashQueueSize.recordValue(platform.getEventStreamManager() != null ?
@@ -556,6 +578,32 @@ public class Statistics extends AbstractStatistics implements
 			}
 		} catch (final Exception e) {
 			// ignore exceptions
+		}
+	}
+
+	/**
+	 * Update additional statistics that aren't updated by any other class. Split out of {link #updateOthers()}
+	 * to stop SonarCloud from complaining that it's Cognitive Complexity was 1 too high.
+	 */
+	private void updateDirectMemoryStatistics() {
+		if (directMemMXBean == null) {
+			return;
+		}
+
+		final long bytesUsed = directMemMXBean.getMemoryUsed();
+		// recording the value of -1 as (-1) / (1024 * 1024) makes it too close to 0; treat it as -1 megabytes
+		// for visibility
+		if (bytesUsed == -1) {
+			directMemInMB.recordValue(bytesUsed);
+			if (maximumDirectMemSizeInMB > 0) {
+				directMemPercent.recordValue(bytesUsed);
+			}
+			return;
+		}
+		final double megabytesUsed = bytesUsed * Units.BYTES_TO_MEBIBYTES;
+		directMemInMB.recordValue(megabytesUsed);
+		if (maximumDirectMemSizeInMB > 0) {
+			directMemPercent.recordValue(megabytesUsed * WHOLE_PERCENT / maximumDirectMemSizeInMB);
 		}
 	}
 
@@ -657,331 +705,355 @@ public class Statistics extends AbstractStatistics implements
 	 * 		additional stat entries to be added
 	 */
 	private void createStatEntriesArray(final AbstractPlatform platform, final List<StatEntry> additionalEntries) {
-		statEntries = new StatEntry[] {//
-				new StatEntry(//
-						INFO_CATEGORY,//
-						"time",//
-						"the current time",//
-						"%25s",//
-						null,//
-						null,//
-						null,//
+		statEntries = new StatEntry[] {
+				new StatEntry(
+						INFO_CATEGORY,
+						"time",
+						"the current time",
+						"%25s",
+						null,
+						null,
+						null,
 						() -> DateTimeFormatter
 								.ofPattern("yyyy-MM-dd HH:mm:ss z")
 								.format(Instant.now()
 										.atZone(ZoneId.of("UTC")))),
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"trans",//
-						"number of transactions received so far",//
-						"%d",//
-						null,//
-						null,//
-						null,//
-						() -> numTrans.get()),//
-				new StatEntry(//
-						CATEGORY,//
-						"secR2C",//
-						"time from receiving an event to knowing its consensus (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgReceivedConsensusTime,//
-						(h) -> {
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"trans",
+						"number of transactions received so far",
+						"%d",
+						null,
+						null,
+						null,
+						() -> numTrans.get()),
+				new StatEntry(
+						CATEGORY,
+						"secR2C",
+						"time from receiving an event to knowing its consensus (in seconds)",
+						FLOAT_FORMAT_10_3,
+						avgReceivedConsensusTime,
+						h -> {
 							avgReceivedConsensusTime = new StatsRunningAverage(h);
 							return avgReceivedConsensusTime;
-						},//
-						null,//
-						() -> avgReceivedConsensusTime.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"secC2C",//
-						"time from creating an event to knowing its consensus (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgCreatedConsensusTime,//
-						(h) -> {
+						},
+						null,
+						() -> avgReceivedConsensusTime.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"secC2C",
+						"time from creating an event to knowing its consensus (in seconds)",
+						FLOAT_FORMAT_10_3,
+						avgCreatedConsensusTime,
+						h -> {
 							avgCreatedConsensusTime = new StatsRunningAverage(h);
 							return avgCreatedConsensusTime;
-						},//
-						null,//
-						() -> avgCreatedConsensusTime.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"SecC2H",//
-						"time from knowing consensus for a transaction to handling it (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgConsHandleTime,//
-						(h) -> {
+						},
+						null,
+						() -> avgCreatedConsensusTime.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"SecC2H",
+						"time from knowing consensus for a transaction to handling it (in seconds)",
+						FLOAT_FORMAT_10_3,
+						avgConsHandleTime,
+						h -> {
 							avgConsHandleTime = new StatsRunningAverage(h);
 							return avgConsHandleTime;
-						},//
-						null,//
-						() -> avgConsHandleTime.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"rounds/sec",//
-						"average number of rounds per second",//
-						"%,11.3f",//
-						roundsPerSecond,//
+						},
+						null,
+						() -> avgConsHandleTime.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"rounds/sec",
+						"average number of rounds per second",
+						"%,11.3f",
+						roundsPerSecond,
 						(h) -> {
 							roundsPerSecond = new StatsSpeedometer(h);
 							return roundsPerSecond;
-						},//
-						null,//
-						() -> roundsPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"ping",//
-						"average time for a round trip message between 2 computers (in milliseconds)",//
-						"%,7.0f",//
-						avgPing,//
-						(h) -> {
+						},
+						null,
+						() -> roundsPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"ping",
+						"average time for a round trip message between 2 computers (in milliseconds)",
+						"%,7.0f",
+						avgPing,
+						h -> {
 							avgPing = new StatsRunningAverage(h);
 							return avgPing;
-						},//
-						null,//
-						() -> avgPing.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"bytes/sec_trans",//
-						"number of bytes in the transactions received per second (from unique events created " + //
-								"by self and others)", //
-						FLOAT_FORMAT_16_2,//
-						bytesPerSecondTrans,//
-						(h) -> {
+						},
+						null,
+						() -> avgPing.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"bytes/sec_trans",
+						"number of bytes in the transactions received per second (from unique events created " +
+								"by self and others)",
+						FLOAT_FORMAT_16_2,
+						bytesPerSecondTrans,
+						h -> {
 							bytesPerSecondTrans = new StatsSpeedometer(h);
 							return bytesPerSecondTrans;
-						},//
-						null,//
-						() -> bytesPerSecondTrans.getCyclesPerSecond()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"bytes/sec_sent",//
-						"number of bytes sent per second over the network (total for this member)",//
-						FLOAT_FORMAT_16_2,//
-						bytesPerSecondSent,//
-						(h) -> {
+						},
+						null,
+						() -> bytesPerSecondTrans.getCyclesPerSecond()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"bytes/sec_sent",
+						"number of bytes sent per second over the network (total for this member)",
+						FLOAT_FORMAT_16_2,
+						bytesPerSecondSent,
+						h -> {
 							bytesPerSecondSent = new StatsSpeedometer(6 * h);
 							return bytesPerSecondSent;
-						},//
-						(h) -> bytesPerSecondSent.reset(6 * h),//
-						() -> bytesPerSecondSent.getCyclesPerSecond()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"bytes/sec_catchup",//
-						"number of bytes sent per second to help others catch up",//
-						FLOAT_FORMAT_16_2,//
-						bytesPerSecondCatchupSent,//
-						(h) -> {
+						},
+						h -> bytesPerSecondSent.reset(6 * h),
+						() -> bytesPerSecondSent.getCyclesPerSecond()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"bytes/sec_catchup",
+						"number of bytes sent per second to help others catch up",
+						FLOAT_FORMAT_16_2,
+						bytesPerSecondCatchupSent,
+						h -> {
 							bytesPerSecondCatchupSent = new StatsSpeedometer(h);
 							return bytesPerSecondCatchupSent;
-						},//
-						null,//
-						() -> bytesPerSecondCatchupSent.getCyclesPerSecond()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"bytes/sec_sys",//
+						},
+						null,
+						() -> bytesPerSecondCatchupSent.getCyclesPerSecond()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"bytes/sec_sys",
 						"number of bytes in the system transactions received per second (from unique events " +
 								"created by self and others)",
-//
-						FLOAT_FORMAT_16_2,//
-						bytesPerSecondSys,//
-						(h) -> {
+
+						FLOAT_FORMAT_16_2,
+						bytesPerSecondSys,
+						h -> {
 							bytesPerSecondSys = new StatsSpeedometer(h);
 							return bytesPerSecondSys;
-						},//
-						null,//
-						() -> bytesPerSecondSys.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"trans/sec",//
+						},
+						null,
+						() -> bytesPerSecondSys.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"trans/sec",
 						"number of app transactions received per second (from unique events created by self and " +
 								"others)",
-//
-						"%,13.2f",//
-						transactionsPerSecond,//
-						(h) -> {
+
+						"%,13.2f",
+						transactionsPerSecond,
+						h -> {
 							transactionsPerSecond = new StatsSpeedometer(h);
 							return transactionsPerSecond;
-						},//
-						null,//
-						() -> transactionsPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"events/sec",//
-						"number of unique events received per second (created by self and others)",//
-						FLOAT_FORMAT_16_2,//
-						eventsPerSecond,//
-						(h) -> {
+						},
+						null,
+						() -> transactionsPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"events/sec",
+						"number of unique events received per second (created by self and others)",
+						FLOAT_FORMAT_16_2,
+						eventsPerSecond,
+						h -> {
 							eventsPerSecond = new StatsSpeedometer(h);
 							return eventsPerSecond;
-						},//
-						null,//
-						() -> eventsPerSecond.getCyclesPerSecond()),// },//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"dupEv/sec",//
-						"number of events received per second that are already known",//
-						"%,14.2f",//
-						duplicateEventsPerSecond,//
-						(h) -> {
+						},
+						null,
+						() -> eventsPerSecond.getCyclesPerSecond()),// },
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"dupEv/sec",
+						"number of events received per second that are already known",
+						"%,14.2f",
+						duplicateEventsPerSecond,
+						h -> {
 							duplicateEventsPerSecond = new StatsSpeedometer(h);
 							return duplicateEventsPerSecond;
-						},//
-						null,//
-						() -> duplicateEventsPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"dupEv%",//
-						"percentage of events received that are already known",//
-						"%,10.2f",//
-						avgDuplicatePercent,//
-						(h) -> {
+						},
+						null,
+						() -> duplicateEventsPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"dupEv%",
+						"percentage of events received that are already known",
+						"%,10.2f",
+						avgDuplicatePercent,
+						h -> {
 							avgDuplicatePercent = new StatsRunningAverage(h);
 							return avgDuplicatePercent;
-						},//
-						null,//
-						() -> avgDuplicatePercent.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"badEv/sec",//
-						"number of corrupted events received per second",//
-						"%,14.7f",//
-						badEventsPerSecond,//
-						(h) -> {
+						},
+						null,
+						() -> avgDuplicatePercent.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"badEv/sec",
+						"number of corrupted events received per second",
+						"%,14.7f",
+						badEventsPerSecond,
+						h -> {
 							badEventsPerSecond = new StatsSpeedometer(h);
 							return badEventsPerSecond;
-						},//
-						null,//
-						() -> badEventsPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"sync/secC",//
-						"(call syncs) syncs completed per second initiated by this member",//
-						"%,14.7f",//
-						callSyncsPerSecond,//
-						(h) -> {
+						},
+						null,
+						() -> badEventsPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"sync/secC",
+						"(call syncs) syncs completed per second initiated by this member",
+						"%,14.7f",
+						callSyncsPerSecond,
+						h -> {
 							callSyncsPerSecond = new StatsSpeedometer(h);
 							return callSyncsPerSecond;
-						},//
-						null,//
-						() -> callSyncsPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"sync/secR",//
-						"(receive syncs) syncs completed per second initiated by other member",//
-						"%,14.7f",//
-						recSyncsPerSecond,//
-						(h) -> {
+						},
+						null,
+						() -> callSyncsPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"sync/secR",
+						"(receive syncs) syncs completed per second initiated by other member",
+						"%,14.7f",
+						recSyncsPerSecond,
+						h -> {
 							recSyncsPerSecond = new StatsSpeedometer(h);
 							return recSyncsPerSecond;
-						},//
-						null,//
-						() -> recSyncsPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"icSync/sec",//
-						"(interrupted call syncs) syncs interrupted per second initiated by this member",//
-						"%,14.7f",//
-						interruptedCallSyncsPerSecond,//
-						(h) -> {
+						},
+						null,
+						() -> recSyncsPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"icSync/sec",
+						"(interrupted call syncs) syncs interrupted per second initiated by this member",
+						"%,14.7f",
+						interruptedCallSyncsPerSecond,
+						h -> {
 							interruptedCallSyncsPerSecond = new StatsSpeedometer(h);
 							return interruptedCallSyncsPerSecond;
-						},//
-						null,//
+						},
+						null,
 						() -> interruptedCallSyncsPerSecond
-								.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"irSync/sec",//
-						"(interrupted receive syncs) syncs interrupted per second initiated by other member",//
-						"%,14.7f",//
-						interruptedRecSyncsPerSecond,//
-						(h) -> {
+								.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"irSync/sec",
+						"(interrupted receive syncs) syncs interrupted per second initiated by other member",
+						"%,14.7f",
+						interruptedRecSyncsPerSecond,
+						h -> {
 							interruptedRecSyncsPerSecond = new StatsSpeedometer(h);
 							return interruptedRecSyncsPerSecond;
-						},//
-						null,//
+						},
+						null,
 						() -> interruptedRecSyncsPerSecond
-								.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"memFree",//
-						"bytes of free memory (which can increase after a garbage collection)",//
-						"%,16.0f",//
-						memFree,//
-						(h) -> {
+								.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"memFree",
+						"bytes of free memory (which can increase after a garbage collection)",
+						FLOAT_FORMAT_16_0,
+						memFree,
+						h -> {
 							memFree = new StatsRunningAverage(0);
 							return memFree;
 						},// zero lambda for no smoothing
-						(h) -> memFree.reset(0),// zero lambda for no smoothing
-						() -> memFree.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"memTot",//
-						"total bytes in the Java Virtual Machine",//
-						"%,16.0f",//
-						memTot,//
-						(h) -> {
+						h -> memFree.reset(0),// zero lambda for no smoothing
+						() -> memFree.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"memTot",
+						"total bytes in the Java Virtual Machine",
+						FLOAT_FORMAT_16_0,
+						memTot,
+						h -> {
 							memTot = new StatsRunningAverage(0);
 							return memTot;
 						},// zero lambda for no smoothing
-						(h) -> memTot.reset(0),// zero lambda for no smoothing
-						() -> memTot.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"memMax",//
-						"maximum bytes that the JVM might use",//
-						"%,16.0f",//
-						memMax,//
-						(h) -> {
+						h -> memTot.reset(0),// zero lambda for no smoothing
+						() -> memTot.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"memMax",
+						"maximum bytes that the JVM might use",
+						FLOAT_FORMAT_16_0,
+						memMax,
+						h -> {
 							memMax = new StatsRunningAverage(0);
 							return memMax;
 						},// zero lambda for no smoothing
-						(h) -> memMax.reset(0),// zero lambda for no smoothing
-						() -> memMax.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"proc",//
-						"number of processors (cores) available to the JVM",//
-						"%,8.0f",//
-						avgNumProc,//
-						(h) -> {
+						h -> memMax.reset(0),// zero lambda for no smoothing
+						() -> memMax.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"directMemInMB",
+						"megabytes of off-heap (direct) memory being used by the JVM",
+						FLOAT_FORMAT_16_2,
+						directMemInMB,
+						h -> {
+							directMemInMB = new StatsRunningAverage(0);
+							return directMemInMB;
+						},// zero lambda for no smoothing
+						h -> directMemInMB.reset(0),// zero lambda for no smoothing
+						() -> directMemInMB.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"directMemPercent",
+						"off-heap (direct) memory used, as a percent of MaxDirectMemorySize",
+						FLOAT_FORMAT_16_2,
+						directMemPercent,
+						h -> {
+							directMemPercent = new StatsRunningAverage(0);
+							return directMemPercent;
+						},// zero lambda for no smoothing
+						h -> directMemPercent.reset(0),// zero lambda for no smoothing
+						() -> directMemPercent.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"proc",
+						"number of processors (cores) available to the JVM",
+						"%,8.0f",
+						avgNumProc,
+						h -> {
 							avgNumProc = new StatsRunningAverage(h);
 							return avgNumProc;
-						},//
-						null,//
-						() -> avgNumProc.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"cpuLoadSys",//
-						"the CPU load of the whole system",//
-						"%,1.4f",//
-						cpuLoadSys,//
-						(h) -> {
+						},
+						null,
+						() -> avgNumProc.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"cpuLoadSys",
+						"the CPU load of the whole system",
+						"%,1.4f",
+						cpuLoadSys,
+						h -> {
 							cpuLoadSys = new StatsRunningAverage(h);
 							return cpuLoadSys;
-						},//
-						null,//
-						() -> cpuLoadSys.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"threads",//
-						"the current number of live threads",//
-						"%,6.0f",//
-						threads,//
-						(h) -> {
+						},
+						null,
+						() -> cpuLoadSys.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"threads",
+						"the current number of live threads",
+						"%,6.0f",
+						threads,
+						h -> {
 							threads = new StatsRunningAverage(h);
 							return threads;
-						},//
-						null,//
-						() -> threads.getWeightedMean()),//
-				new StatEntry(//
-						INFO_CATEGORY,//
-						"name",//
-						"name of this member",//
-						"%8s",//
-						null,//
-						null,//
-						null,//
+						},
+						null,
+						() -> threads.getWeightedMean()),
+				new StatEntry(
+						INFO_CATEGORY,
+						"name",
+						"name of this member",
+						"%8s",
+						null,
+						null,
+						null,
 						() -> {
 							if (platform.isMirrorNode()) {
 								return "Mirror-" + platform.getSelfId().getId();
@@ -989,648 +1061,651 @@ public class Statistics extends AbstractStatistics implements
 							return platform.getAddressBook()
 									.getAddress(platform.getSelfId().getId())
 									.getSelfName();
-						}),//
-				new StatEntry(//
-						INFO_CATEGORY,//
-						"memberID",//
-						"ID number of this member",//
-						"%3.0f",//
-						avgSelfId,//
-						(h) -> {
+						}),
+				new StatEntry(
+						INFO_CATEGORY,
+						"memberID",
+						"ID number of this member",
+						"%3.0f",
+						avgSelfId,
+						h -> {
 							avgSelfId = new StatsRunningAverage(h);
 							return avgSelfId;
-						},//
-						null,//
-						() -> avgSelfId.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"members",// //
-						"total number of members participating",//
-						"%,10.0f",//
-						avgNumMembers,//
-						(h) -> {
+						},
+						null,
+						() -> avgSelfId.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"members",// 
+						"total number of members participating",
+						"%,10.0f",
+						avgNumMembers,
+						h -> {
 							avgNumMembers = new StatsRunningAverage(h);
 							return avgNumMembers;
-						},//
-						null,//
-						() -> avgNumMembers.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"local",// //
-						"number of members running on this local machine",//
-						"%,8.0f",//
-						avgNumLocal,//
-						(h) -> {
+						},
+						null,
+						() -> avgNumMembers.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"local",// 
+						"number of members running on this local machine",
+						"%,8.0f",
+						avgNumLocal,
+						h -> {
 							avgNumLocal = new StatsRunningAverage(h);
 							return avgNumLocal;
-						},//
-						null,//
-						() -> avgNumLocal.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"write",// //
-						"the app claimed to log statistics every this many milliseconds",//
-						"%,8.0f",//
-						avgWrite,//
-						(h) -> {
+						},
+						null,
+						() -> avgNumLocal.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"write",// 
+						"the app claimed to log statistics every this many milliseconds",
+						"%,8.0f",
+						avgWrite,
+						h -> {
 							avgWrite = new StatsRunningAverage(h);
 							return avgWrite;
-						},//
-						null,//
-						() -> avgWrite.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"bytes/trans",// //
-						"number of bytes in each transactions",//
-						"%,16.0f",//
-						avgBytesPerTransaction,//
-						(h) -> {
+						},
+						null,
+						() -> avgWrite.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"bytes/trans",// 
+						"number of bytes in each transactions",
+						FLOAT_FORMAT_16_0,
+						avgBytesPerTransaction,
+						h -> {
 							avgBytesPerTransaction = new StatsRunningAverage(h);
 							return avgBytesPerTransaction;
-						},//
-						null,//
-						() -> avgBytesPerTransaction.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"trans/event",// //
-						"number of app transactions in each event",//
-						"%,17.1f",//
-						avgTransactionsPerEvent,//
-						(h) -> {
+						},
+						null,
+						() -> avgBytesPerTransaction.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"trans/event",// 
+						"number of app transactions in each event",
+						"%,17.1f",
+						avgTransactionsPerEvent,
+						h -> {
 							avgTransactionsPerEvent = new StatsRunningAverage(h);
 							return avgTransactionsPerEvent;
-						},//
-						null,//
-						() -> avgTransactionsPerEvent.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"simCallSyncsMax",// //
-						"max number of syncs this can initiate simultaneously",//
-						"%,2.0f",//
-						avgSimCallSyncsMax,//
-						(h) -> {
+						},
+						null,
+						() -> avgTransactionsPerEvent.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"simCallSyncsMax",// 
+						"max number of syncs this can initiate simultaneously",
+						"%,2.0f",
+						avgSimCallSyncsMax,
+						h -> {
 							avgSimCallSyncsMax = new StatsRunningAverage(h);
 							return avgSimCallSyncsMax;
-						},//
-						null,//
-						() -> avgSimCallSyncsMax.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"simSyncs",// //
-						"avg number of simultaneous syncs happening at any given time",//
-						"%,9.6f",//
-						avgSimSyncs,//
-						(h) -> {
+						},
+						null,
+						() -> avgSimCallSyncsMax.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"simSyncs",// 
+						"avg number of simultaneous syncs happening at any given time",
+						"%,9.6f",
+						avgSimSyncs,
+						h -> {
 							avgSimSyncs = new StatsRunningAverage(h);
 							return avgSimSyncs;
-						},//
-						null,//
-						() -> avgSimSyncs.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"simListenSyncs",// //
-						"avg number of simultaneous listening syncs happening at any given time",//
-						"%,9.6f",//
-						avgSimListenSyncs,//
-						(h) -> {
+						},
+						null,
+						() -> avgSimSyncs.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"simListenSyncs",// 
+						"avg number of simultaneous listening syncs happening at any given time",
+						"%,9.6f",
+						avgSimListenSyncs,
+						h -> {
 							avgSimListenSyncs = new StatsRunningAverage(h);
 							return avgSimListenSyncs;
-						},//
-						null,//
-						() -> avgSimListenSyncs.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"cEvents/sec",//
-						"number of events per second created by this node",//
-						FLOAT_FORMAT_16_2,//
-						eventsCreatedPerSecond,//
-						(h) -> {
+						},
+						null,
+						() -> avgSimListenSyncs.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"cEvents/sec",
+						"number of events per second created by this node",
+						FLOAT_FORMAT_16_2,
+						eventsCreatedPerSecond,
+						h -> {
 							eventsCreatedPerSecond = new StatsSpeedometer(h);
 							return eventsCreatedPerSecond;
-						},//
-						null,//
-						() -> eventsCreatedPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						CATEGORY,//
-						"secC2R",//
-						"time from another member creating an event to receiving it and veryfing the " + //
-								"signature (in seconds)", //
-						FLOAT_FORMAT_10_3,//
-						avgCreatedReceivedTime,//
-						(h) -> {
+						},
+						null,
+						() -> eventsCreatedPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						CATEGORY,
+						"secC2R",
+						"time from another member creating an event to receiving it and veryfing the " +
+								"signature (in seconds)",
+						FLOAT_FORMAT_10_3,
+						avgCreatedReceivedTime,
+						h -> {
 							avgCreatedReceivedTime = new StatsRunningAverage(h);
 							return avgCreatedReceivedTime;
-						},//
-						null,//
-						() -> avgCreatedReceivedTime.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"secC2RC",//
-						"time from another member creating an event to it being received and and knowing  " + //
-								"consensus for it (in seconds)", //
-						FLOAT_FORMAT_10_3,//
-						avgCreatedReceivedConsensusTime,//
-						(h) -> {
+						},
+						null,
+						() -> avgCreatedReceivedTime.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"secC2RC",
+						"time from another member creating an event to it being received and and knowing  " +
+								"consensus for it (in seconds)",
+						FLOAT_FORMAT_10_3,
+						avgCreatedReceivedConsensusTime,
+						h -> {
 							avgCreatedReceivedConsensusTime = new StatsRunningAverage(h);
 							return avgCreatedReceivedConsensusTime;
-						},//
-						null,//
+						},
+						null,
 						() -> avgCreatedReceivedConsensusTime
-								.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"secR2nR",//
-						"time from first event received in one round, to first event received in the " + //
-								"next round (in seconds)", //
-						FLOAT_FORMAT_10_3,//
-						avgFirstEventInRoundReceivedTime,//
-						(h) -> {
+								.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"secR2nR",
+						"time from first event received in one round, to first event received in the " +
+								"next round (in seconds)",
+						FLOAT_FORMAT_10_3,
+						avgFirstEventInRoundReceivedTime,
+						h -> {
 							avgFirstEventInRoundReceivedTime = new StatsRunningAverage(h);
 							return avgFirstEventInRoundReceivedTime;
-						},//
-						null,//
+						},
+						null,
 						() -> avgFirstEventInRoundReceivedTime
-								.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"secR2F",//
+								.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"secR2F",
 						"time from a round's first received event to all the famous witnesses being known (in seconds)",
-						FLOAT_FORMAT_10_3,//
-						avgReceivedFamousTime,//
-						(h) -> {
+						FLOAT_FORMAT_10_3,
+						avgReceivedFamousTime,
+						h -> {
 							avgReceivedFamousTime = new StatsRunningAverage(h);
 							return avgReceivedFamousTime;
-						},//
-						null,//
-						() -> avgReceivedFamousTime.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"q1",//
-						"number of non-consensus events in queue waiting to be handled",//
-						FLOAT_FORMAT_10_3,//
-						avgQ1forCurr,//
-						(h) -> {
+						},
+						null,
+						() -> avgReceivedFamousTime.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"q1",
+						"number of non-consensus events in queue waiting to be handled",
+						FLOAT_FORMAT_10_3,
+						avgQ1forCurr,
+						h -> {
 							avgQ1forCurr = new StatsRunningAverage(h);
 							return avgQ1forCurr;
-						},//
-						null,//
-						() -> avgQ1forCurr.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"q2",//
-						"number of consensus events in queue waiting to be handled",//
-						FLOAT_FORMAT_10_3,//
-						avgQ2forCons,//
-						(h) -> {
+						},
+						null,
+						() -> avgQ1forCurr.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"q2",
+						"number of consensus events in queue waiting to be handled",
+						FLOAT_FORMAT_10_3,
+						avgQ2forCons,
+						h -> {
 							avgQ2forCons = new StatsRunningAverage(h);
 							return avgQ2forCons;
-						},//
-						null,//
-						() -> avgQ2forCons.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"q3",//
-						"number of handled events in queue waiting to be deleted",//
-						"%,10.1f",//
-						avgQ3forSigs,//
+						},
+						null,
+						() -> avgQ2forCons.getWeightedMean()),
+
+
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"queueSignedStateEvents",
+						"number of handled consensus events that will be part of the next signed state",
+						"%,10.1f",
+						avgQSignedStateEvents,
 						(h) -> {
-							avgQ3forSigs = new StatsRunningAverage(h);
-							return avgQ3forSigs;
-						},//
-						null,//
-						() -> avgQ3forSigs.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"q4",//
-						"number events in receiving queue waiting to be processed or created",//
-						"%,10.1f",//
-						avgQ4forHash,//
-						(h) -> {
+							avgQSignedStateEvents = new StatsRunningAverage(h);
+							return avgQSignedStateEvents;
+						},
+						null,
+						() -> avgQSignedStateEvents.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"q4",
+						"number events in receiving queue waiting to be processed or created",
+						"%,10.1f",
+						avgQ4forHash,
+						h -> {
 							avgQ4forHash = new StatsRunningAverage(h);
 							return avgQ4forHash;
-						},//
-						null,//
-						() -> avgQ4forHash.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"roundSup",//
-						"latest round with state signed by a supermajority",//
-						"%,10.0f",//
-						avgRoundSupermajority,//
-						(h) -> {
+						},
+						null,
+						() -> avgQ4forHash.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"roundSup",
+						"latest round with state signed by a supermajority",
+						"%,10.0f",
+						avgRoundSupermajority,
+						h -> {
 							avgRoundSupermajority = new StatsRunningAverage(h);
 							return avgRoundSupermajority;
-						},//
-						null,//
-						() -> avgRoundSupermajority.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"secSC2T",//
-						"self event consensus timestamp minus time created (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgSelfCreatedTimestamp,//
+						},
+						null,
+						() -> avgRoundSupermajority.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"secSC2T",
+						"self event consensus timestamp minus time created (in seconds)",
+						FLOAT_FORMAT_10_3,
+						avgSelfCreatedTimestamp,
 						(h) -> {
 							avgSelfCreatedTimestamp = new StatsRunningAverage(h);
 							return avgSelfCreatedTimestamp;
-						},//
-						null,//
-						() -> avgSelfCreatedTimestamp.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"secOR2T",//
-						"other event consensus timestamp minus time received (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgOtherReceivedTimestamp,//
-						(h) -> {
+						},
+						null,
+						() -> avgSelfCreatedTimestamp.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"secOR2T",
+						"other event consensus timestamp minus time received (in seconds)",
+						FLOAT_FORMAT_10_3,
+						avgOtherReceivedTimestamp,
+						h -> {
 							avgOtherReceivedTimestamp = new StatsRunningAverage(h);
 							return avgOtherReceivedTimestamp;
-						},//
-						null,//
-						() -> avgOtherReceivedTimestamp.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"eventsInMem",//
-						"total number of events in memory, for all members on the local machine together",//
-						FLOAT_FORMAT_16_2,//
-						avgEventsInMem,//
-						(h) -> {
+						},
+						null,
+						() -> avgOtherReceivedTimestamp.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"eventsInMem",
+						"total number of events in memory, for all members on the local machine together",
+						FLOAT_FORMAT_16_2,
+						avgEventsInMem,
+						h -> {
 							avgEventsInMem = new StatsRunningAverage(h);
 							return avgEventsInMem;
-						},//
-						null,//
-						() -> avgEventsInMem.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"trans/sec_sys",//
+						},
+						null,
+						() -> avgEventsInMem.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"trans/sec_sys",
 						"number of system transactions received per second (from unique events created by self and " +
 								"others)",
-//
-						"%,13.2f",//
-						transactionsPerSecondSys,//
-						(h) -> {
+
+						"%,13.2f",
+						transactionsPerSecondSys,
+						h -> {
 							transactionsPerSecondSys = new StatsSpeedometer(h);
 							return transactionsPerSecondSys;
-						},//
-						null,//
-						() -> transactionsPerSecondSys.getCyclesPerSecond()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"bytes/trans_sys",// //
-						"number of bytes in each system transaction",//
-						"%,16.0f",//
-						avgBytesPerTransactionSys,//
-						(h) -> {
+						},
+						null,
+						() -> transactionsPerSecondSys.getCyclesPerSecond()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"bytes/trans_sys",
+						"number of bytes in each system transaction",
+						FLOAT_FORMAT_16_0,
+						avgBytesPerTransactionSys,
+						h -> {
 							avgBytesPerTransactionSys = new StatsRunningAverage(h);
 							return avgBytesPerTransactionSys;
-						},//
-						null,//
-						() -> avgBytesPerTransactionSys.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"trans/event_sys",// //
-						"number of system transactions in each event",//
-						"%,17.1f",//
-						avgTransactionsPerEventSys,//
-						(h) -> {
+						},
+						null,
+						() -> avgBytesPerTransactionSys.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"trans/event_sys",
+						"number of system transactions in each event",
+						"%,17.1f",
+						avgTransactionsPerEventSys,
+						h -> {
 							avgTransactionsPerEventSys = new StatsRunningAverage(h);
 							return avgTransactionsPerEventSys;
-						},//
-						null,//
-						() -> avgTransactionsPerEventSys.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"conns",//
-						"number of times a TLS connections was created",//
-						"%,10.0f",//
-						avgConnsCreated,//
-						(h) -> {
+						},
+						null,
+						() -> avgTransactionsPerEventSys.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"conns",
+						"number of times a TLS connections was created",
+						"%,10.0f",
+						avgConnsCreated,
+						h -> {
 							avgConnsCreated = new StatsRunningAverage(0);
 							return avgConnsCreated;
 						},// no smoothing
-						(h) -> avgConnsCreated.reset(0),// zero lambda for no smoothing
+						h -> avgConnsCreated.reset(0),// zero lambda for no smoothing
 						() -> avgConnsCreated.getWeightedMean()),
-				new StatEntry(//
-						INFO_CATEGORY,//
-						"TLS",//
-						"1 if using TLS, 0 if not",//
-						"%6d",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						INFO_CATEGORY,
+						"TLS",
+						"1 if using TLS, 0 if not",
+						"%6d",
+						null,
+						null,
+						null,
 						() -> Settings.useTLS ? 1 : 0),
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"fracSyncSlowed",//
-						"fraction of syncs that are slowed to let others catch up",//
-						"%,9.6f",//
-						fracSyncSlowed,//
-						(h) -> {
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"fracSyncSlowed",
+						"fraction of syncs that are slowed to let others catch up",
+						"%,9.6f",
+						fracSyncSlowed,
+						h -> {
 							fracSyncSlowed = new StatsRunningAverage(h);
 							return fracSyncSlowed;
-						},//
-						null,//
+						},
+						null,
 						() -> fracSyncSlowed.getWeightedMean()),
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"timeFracDot",//
-						"fraction of each second spent on dot products",//
-						"%,9.6f",//
-						timeFracDot,//
-						(h) -> {
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"timeFracDot",
+						"fraction of each second spent on dot products",
+						"%,9.6f",
+						timeFracDot,
+						h -> {
 							timeFracDot = new StatsSpeedometer(h);
 							return timeFracDot;
-						},//
-						null,//
+						},
+						null,
 						() -> timeFracDot.getCyclesPerSecond()),
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"timeFracAdd",//
-						"fraction of each second spent adding an event to the hashgraph and finding consensus",//
-						"%,9.6f",//
-						timeFracAdd,//
-						(h) -> {
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"timeFracAdd",
+						"fraction of each second spent adding an event to the hashgraph and finding consensus",
+						"%,9.6f",
+						timeFracAdd,
+						h -> {
 							timeFracAdd = new StatsSpeedometer(h);
 							return timeFracAdd;
-						},//
-						null,//
+						},
+						null,
 						() -> timeFracAdd.getCyclesPerSecond()),
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"sleep1/sec",//
-						"sleeps per second because caller thread had too many failed connects",//
-						"%,9.6f",//
-						sleep1perSecond,//
-						(h) -> {
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"sleep1/sec",
+						"sleeps per second because caller thread had too many failed connects",
+						"%,9.6f",
+						sleep1perSecond,
+						h -> {
 							sleep1perSecond = new StatsSpeedometer(h);
 							return sleep1perSecond;
-						},//
-						null,//
+						},
+						null,
 						() -> sleep1perSecond.getCyclesPerSecond()),
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"sleep2/sec",//
-						"sleeps per second because listener thread had a closed socket",//
-						"%,9.6f",//
-						sleep2perSecond,//
-						(h) -> {
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"sleep2/sec",
+						"sleeps per second because listener thread had a closed socket",
+						"%,9.6f",
+						sleep2perSecond,
+						h -> {
 							sleep2perSecond = new StatsSpeedometer(h);
 							return sleep2perSecond;
-						},//
-						null,//
+						},
+						null,
 						() -> sleep2perSecond.getCyclesPerSecond()),
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"sleep3/sec",//
-						"sleeps per second because server thread failed to bind to a port",//
-						"%,9.6f",//
-						sleep3perSecond,//
-						(h) -> {
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"sleep3/sec",
+						"sleeps per second because server thread failed to bind to a port",
+						"%,9.6f",
+						sleep3perSecond,
+						h -> {
 							sleep3perSecond = new StatsSpeedometer(h);
 							return sleep3perSecond;
-						},//
-						null,//
-						() -> sleep3perSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						PlatformStatNames.TRANSACTIONS_HANDLED_PER_SECOND,//
-						"number of consensus transactions per second handled by SwirldState.handleTransaction()",//
-						"%,9.6f",//
-						transHandledPerSecond,//
-						(h) -> {
+						},
+						null,
+						() -> sleep3perSecond.getCyclesPerSecond()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						PlatformStatNames.TRANSACTIONS_HANDLED_PER_SECOND,
+						"number of consensus transactions per second handled by SwirldState.handleTransaction()",
+						"%,9.6f",
+						transHandledPerSecond,
+						h -> {
 							transHandledPerSecond = new StatsSpeedometer(h);
 							return transHandledPerSecond;
-						},//
-						null,//
-						() -> transHandledPerSecond.getCyclesPerSecond()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"secTransH",//
-						"avg time to handle a consensus transaction in SwirldState.handleTransaction (in seconds)",//
-						"%,10.6f",//
-						avgSecTransHandled,//
-						(h) -> {
+						},
+						null,
+						() -> transHandledPerSecond.getCyclesPerSecond()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"secTransH",
+						"avg time to handle a consensus transaction in SwirldState.handleTransaction (in seconds)",
+						"%,10.6f",
+						avgSecTransHandled,
+						h -> {
 							avgSecTransHandled = new StatsRunningAverage(h);
 							return avgSecTransHandled;
-						},//
-						null,//
-						() -> avgSecTransHandled.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"stateCopyMicros",//
+						},
+						null,
+						() -> avgSecTransHandled.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"stateCopyMicros",
 						"average time it takes the SwirldState.copy() method in SwirldState to finish (in " +
-								"microseconds)",//
-						FLOAT_FORMAT_16_2,//
-						avgStateCopyMicros,//
-						(h) -> {
+								"microseconds)",
+						FLOAT_FORMAT_16_2,
+						avgStateCopyMicros,
+						h -> {
 							avgStateCopyMicros = new StatsRunningAverage(h);
 							return avgStateCopyMicros;
-						},//
-						null,//
-						() -> avgStateCopyMicros.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						SIGNED_STATE_HASHING_TIME,//
-						"average time it takes to create a new SignedState (in seconds)",//
-						FLOAT_FORMAT_10_3,//
-						avgSecNewSignedState,//
-						(h) -> {
+						},
+						null,
+						() -> avgStateCopyMicros.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						SIGNED_STATE_HASHING_TIME,
+						"average time it takes to create a new SignedState (in seconds)",
+						FLOAT_FORMAT_10_3,
+						avgSecNewSignedState,
+						h -> {
 							avgSecNewSignedState = new StatsRunningAverage(h);
 							return avgSecNewSignedState;
-						},//
-						null,//
-						() -> avgSecNewSignedState.getWeightedMean()),//
-				new StatEntry(//
-						CATEGORY,//
-						"bytes/sec_sync",//
-						"average number of bytes per second transfered during a sync",//
-						FLOAT_FORMAT_16_2,//
-						avgBytesPerSecSync,//
-						(h) -> {
+						},
+						null,
+						() -> avgSecNewSignedState.getWeightedMean()),
+				new StatEntry(
+						CATEGORY,
+						"bytes/sec_sync",
+						"average number of bytes per second transfered during a sync",
+						FLOAT_FORMAT_16_2,
+						avgBytesPerSecSync,
+						h -> {
 							avgBytesPerSecSync = new StatsRunningAverage(h);
 							return avgBytesPerSecSync;
-						},//
-						null,//
-						() -> avgBytesPerSecSync.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"stateSigs",//
-						"number of signatures collected on each signed state",//
-						"%,10.2f",//
-						avgStateSigs,//
-						(h) -> {
+						},
+						null,
+						() -> avgBytesPerSecSync.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"stateSigs",
+						"number of signatures collected on each signed state",
+						"%,10.2f",
+						avgStateSigs,
+						h -> {
 							avgStateSigs = new StatsRunningAverage(h);
 							return avgStateSigs;
-						},//
-						null,//
-						() -> avgStateSigs.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"coinR",// //
-						"number of coin rounds that have occurred so far",//
-						"%,10.0f",//
-						numCoinRounds,//
-						(h) -> {
+						},
+						null,
+						() -> avgStateSigs.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"coinR",
+						"number of coin rounds that have occurred so far",
+						"%,10.0f",
+						numCoinRounds,
+						h -> {
 							numCoinRounds = new StatsRunningAverage(h);
 							return numCoinRounds;
-						},//
-						null,//
-						() -> numCoinRounds.getWeightedMean()),//
+						},
+						null,
+						() -> numCoinRounds.getWeightedMean()),
 
-				new StatEntry(//
-						INFO_CATEGORY,//
-						"lastSeq",//
-						"last event number generated by me",//
-						"%d",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						INFO_CATEGORY,
+						"lastGen",
+						"last event generation number by me",
+						"%d",
+						null,
+						null,
+						null,
+
 						() -> {
 							if (platform.isMirrorNode()) {
 								return -1;
 							}
-							return platform.getLastSeq(platform.getSelfId().getId());
-						}),//
+							return platform.getLastGen(platform.getSelfId().getId());
+						}),
 
 
-				new StatEntry(//
-						INFO_CATEGORY,//
-						"transEvent",//
-						"transEvent queue size",//
-						"%d",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						INFO_CATEGORY,
+						"transEvent",
+						"transEvent queue size",
+						"%d",
+						null,
+						null,
+						null,
 						() -> platform.getEventFlow() == null ? 0 :
-								platform.getEventFlow().getTransLists().getEventSize()),//
+								platform.getEventFlow().getTransLists().getEventSize()),
 
-				new StatEntry(//
-						INFO_CATEGORY,//
-						"transCons",//
-						"transCons queue size",//
-						"%d",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						INFO_CATEGORY,
+						"transCons",
+						"transCons queue size",
+						"%d",
+						null,
+						null,
+						null,
 						() -> platform.getEventFlow() == null ? 0 :
-								platform.getEventFlow().getTransLists().getConsSize()),//
+								platform.getEventFlow().getTransLists().getConsSize()),
 
 				// Statistics for monitoring transaction and event creation logic
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"isEvFrozen",//
-						"isEventCreationFrozen",//
-						"%b",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"isEvFrozen",
+						"isEventCreationFrozen",
+						"%b",
+						null,
+						null,
+						null,
 						() -> platform.getFreezeManager().isEventCreationFrozen()
-								|| platform.getStartUpEventFrozenManager().isEventCreationPausedAfterStartUp()),//
+								|| platform.getStartUpEventFrozenManager().isEventCreationPausedAfterStartUp()),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"isStrongMinorityInMaxRound",//
-						"isStrongMinorityInMaxRound",//
-						"%b",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"isStrongMinorityInMaxRound",
+						"isStrongMinorityInMaxRound",
+						"%b",
+						null,
+						null,
+						null,
 						() -> {
 							if (platform.isMirrorNode()) {
 								return false;
 							}
 							return platform.getCriticalQuorum().isInCriticalQuorum(platform.getSelfId().getId());
-						}),//
+						}),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"transThrottleCallAndCreate",//
-						"transThrottleCallAndCreate",//
-						"%b",//
-						null,//
-						null,//
-						null,//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"transThrottleCallAndCreate",
+						"transThrottleCallAndCreate",
+						"%b",
+						null,
+						null,
+						null,
 						() -> platform.getSyncManager() == null ? 0 :
-								platform.getSyncManager().transThrottleCallAndCreate()),//
+								platform.getSyncManager().transThrottleCallAndCreate()),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"getNumUserTransEvents",//
-						"getNumUserTransEvents",//
-						"%d",//
-						null,//
-						null,//
-						null,//
-						() -> platform.getTransactionTracker().getNumUserTransEvents()),//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"getNumUserTransEvents",
+						"getNumUserTransEvents",
+						"%d",
+						null,
+						null,
+						null,
+						() -> platform.getTransactionTracker().getNumUserTransEvents()),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"hasFallenBehind",//
-						"hasFallenBehind",//
-						"%b",//
-						null,//
-						null,//
-						null,//
-						() -> platform.getSyncManager() == null ? 0 : platform.getSyncManager().hasFallenBehind()),//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"hasFallenBehind",
+						"hasFallenBehind",
+						"%b",
+						null,
+						null,
+						null,
+						() -> platform.getSyncManager() == null ? 0 : platform.getSyncManager().hasFallenBehind()),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"shouldCreateEvent",//
-						"shouldCreateEvent",//
-						"%,10.1f",//
-						shouldCreateEvent,//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"shouldCreateEvent",
+						"shouldCreateEvent",
+						"%,10.1f",
+						shouldCreateEvent,
 						(h) -> {
 							shouldCreateEvent = new StatsRunningAverage(h);
 							return shouldCreateEvent;
-						},//
-						null,//
-						() -> shouldCreateEvent.getWeightedMean()),//
+						},
+						null,
+						() -> shouldCreateEvent.getWeightedMean()),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"numReportFallenBehind",//
-						"numReportFallenBehind",//
-						"%d",//
-						null,//
-						null,//
-						null,//
-						() -> platform.getSyncManager() == null ? 0 : platform.getSyncManager().numReportFallenBehind),//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"numReportFallenBehind",
+						"numReportFallenBehind",
+						"%d",
+						null,
+						null,
+						null,
+						() -> platform.getSyncManager() == null ? 0 : platform.getSyncManager().numReportFallenBehind),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"staleEv/sec",//
-						"number of stale events per second",//
-						FLOAT_FORMAT_16_2,//
-						staleEventsPerSecond,//
-						(h) -> {
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"staleEv/sec",
+						"number of stale events per second",
+						FLOAT_FORMAT_16_2,
+						staleEventsPerSecond,
+						h -> {
 							staleEventsPerSecond = new StatsSpeedometer(h);
 							return staleEventsPerSecond;
-						},//
-						null,//
-						() -> staleEventsPerSecond.getCyclesPerSecond()),//
+						},
+						null,
+						() -> staleEventsPerSecond.getCyclesPerSecond()),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"staleEvTot",//
-						"total number of stale events ever",//
-						"%d",//
-						null,//
-						null,//
-						null,//
-						() -> staleEventsTotal.get()),//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"staleEvTot",
+						"total number of stale events ever",
+						"%d",
+						null,
+						null,
+						null,
+						() -> staleEventsTotal.get()),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"rescuedEv/sec",//
-						"number of events per second generated to prevent stale events",//
-						FLOAT_FORMAT_16_2,//
-						rescuedEventsPerSecond,//
-						(h) -> {
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"rescuedEv/sec",
+						"number of events per second generated to prevent stale events",
+						FLOAT_FORMAT_16_2,
+						rescuedEventsPerSecond,
+						h -> {
 							rescuedEventsPerSecond = new StatsSpeedometer(h);
 							return rescuedEventsPerSecond;
-						},//
-						null,//
-						() -> rescuedEventsPerSecond.getCyclesPerSecond()),//
+						},
+						null,
+						() -> rescuedEventsPerSecond.getCyclesPerSecond()),
 
 				new StatEntry(
 						INTERNAL_CATEGORY,
@@ -1678,119 +1753,119 @@ public class Statistics extends AbstractStatistics implements
 						null,
 						() -> hashQueueSize.getWeightedMean()),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"currShuffleMicros",//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"currShuffleMicros",
 						"average time spent in EventFlow.takeHandlePut() by the EventFlow.doCurr() method (in " +
 								"microseconds)",
-						FLOAT_FORMAT_16_2,//
-						avgCurrShuffleMicros,//
-						(h) -> {
+						FLOAT_FORMAT_16_2,
+						avgCurrShuffleMicros,
+						h -> {
 							avgCurrShuffleMicros = new StatsRunningAverage(h);
 							return avgCurrShuffleMicros;
-						},//
-						null,//
-						() -> avgCurrShuffleMicros.getWeightedMean()),//
+						},
+						null,
+						() -> avgCurrShuffleMicros.getWeightedMean()),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"consShuffleMicros",//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"consShuffleMicros",
 						"average time spent in EventFlow.takeHandlePut() by the EventFlow.doCons() method (in " +
 								"microseconds)",
-						FLOAT_FORMAT_16_2,//
-						avgConsShuffleMicros,//
-						(h) -> {
+						FLOAT_FORMAT_16_2,
+						avgConsShuffleMicros,
+						h -> {
 							avgConsShuffleMicros = new StatsRunningAverage(h);
 							return avgConsShuffleMicros;
-						},//
-						null,//
-						() -> avgConsShuffleMicros.getWeightedMean()),//
+						},
+						null,
+						() -> avgConsShuffleMicros.getWeightedMean()),
 
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"consBuildStateMicros",//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"consBuildStateMicros",
 						"average time spent in the EventFlow.doCons() method building the SignedState (in " +
 								"microseconds)",
-						FLOAT_FORMAT_16_2,//
-						avgConsBuildStateMicros,//
-						(h) -> {
+						FLOAT_FORMAT_16_2,
+						avgConsBuildStateMicros,
+						h -> {
 							avgConsBuildStateMicros = new StatsRunningAverage(h);
 							return avgConsBuildStateMicros;
-						},//
-						null,//
-						() -> avgConsBuildStateMicros.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"consForSigCleanMicros",//
+						},
+						null,
+						() -> avgConsBuildStateMicros.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"consForSigCleanMicros",
 						"average time spent by the EventFlow.doCons() method cleaning up the forSigs queue (in " +
 								"microseconds)",
-						FLOAT_FORMAT_16_2,//
-						avgConsForSigCleanMicros,//
-						(h) -> {
+						FLOAT_FORMAT_16_2,
+						avgConsForSigCleanMicros,
+						h -> {
 							avgConsForSigCleanMicros = new StatsRunningAverage(h);
 							return avgConsForSigCleanMicros;
-						},//
-						null,//
-						() -> avgConsForSigCleanMicros.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"consRunningHashMicros",//
+						},
+						null,
+						() -> avgConsForSigCleanMicros.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"consRunningHashMicros",
 						"average time spent by the EventFlow.doCons() method waiting on the running hash future (in " +
 								"microseconds)",
-						FLOAT_FORMAT_16_2,//
-						avgConsRunningHashMicros,//
-						(h) -> {
+						FLOAT_FORMAT_16_2,
+						avgConsRunningHashMicros,
+						h -> {
 							avgConsRunningHashMicros = new StatsRunningAverage(h);
 							return avgConsRunningHashMicros;
-						},//
-						null,//
-						() -> avgConsRunningHashMicros.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"consEventHashMicros",//
+						},
+						null,
+						() -> avgConsRunningHashMicros.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"consEventHashMicros",
 						"average time spent by the EventFlow.doCons() method hashing the event returned from {@code " +
 								"EventFlow.takeHandlePut()} (in microseconds)",
-						FLOAT_FORMAT_16_2,//
-						avgConsEventHashMicros,//
-						(h) -> {
+						FLOAT_FORMAT_16_2,
+						avgConsEventHashMicros,
+						h -> {
 							avgConsEventHashMicros = new StatsRunningAverage(h);
 							return avgConsEventHashMicros;
-						},//
-						null,//
-						() -> avgConsEventHashMicros.getWeightedMean()),//
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"consStateSignAdmitMicros",//
+						},
+						null,
+						() -> avgConsEventHashMicros.getWeightedMean()),
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"consStateSignAdmitMicros",
 						"average time spent by the EventFlow.doCons() method placing the SignedState into the signing" +
 								" " +
 								"queue (in microseconds)",
-						FLOAT_FORMAT_16_2,//
-						avgConsStateSignAdmitMicros,//
-						(h) -> {
+						FLOAT_FORMAT_16_2,
+						avgConsStateSignAdmitMicros,
+						h -> {
 							avgConsStateSignAdmitMicros = new StatsRunningAverage(h);
 							return avgConsStateSignAdmitMicros;
-						},//
-						null,//
+						},
+						null,
 						() -> avgConsStateSignAdmitMicros.getWeightedMean()),
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						"stateToHashSignDepth",//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						"stateToHashSignDepth",
 						"average depth of the stateToHashSign queue (number of SignedStates)",
-						FLOAT_FORMAT_16_2,//
-						avgStateToHashSignDepth,//
-						(h) -> {
+						FLOAT_FORMAT_16_2,
+						avgStateToHashSignDepth,
+						h -> {
 							avgStateToHashSignDepth = new StatsRunningAverage(h);
 							return avgStateToHashSignDepth;
-						},//
-						null,//
-						() -> avgStateToHashSignDepth.getWeightedMean()),//
+						},
+						null,
+						() -> avgStateToHashSignDepth.getWeightedMean()),
 				new StatEntry(
 						INTERNAL_CATEGORY,
 						"stateArchivalQueueAvg",
 						"avg length of the state archival queue",
-						FLOAT_FORMAT_15_3,//
+						FLOAT_FORMAT_15_3,
 						stateArchivalQueueAvg,
-						(h) -> {
+						h -> {
 							stateArchivalQueueAvg = new StatsRunningAverage(h);
 							return stateArchivalQueueAvg;
 						},
@@ -1800,9 +1875,9 @@ public class Statistics extends AbstractStatistics implements
 						INTERNAL_CATEGORY,
 						"stateArchivalTimeAvg",
 						"avg time to archive a signed state (in microseconds)",
-						FLOAT_FORMAT_15_3,//
+						FLOAT_FORMAT_15_3,
 						stateArchivalTimeAvg,
-						(h) -> {
+						h -> {
 							stateArchivalTimeAvg = new StatsRunningAverage(h);
 							return stateArchivalTimeAvg;
 						},
@@ -1812,9 +1887,9 @@ public class Statistics extends AbstractStatistics implements
 						INTERNAL_CATEGORY,
 						"stateDeletionQueueAvg",
 						"avg length of the state deletion queue",
-						FLOAT_FORMAT_15_3,//
+						FLOAT_FORMAT_15_3,
 						stateDeletionQueueAvg,
-						(h) -> {
+						h -> {
 							stateDeletionQueueAvg = new StatsRunningAverage(h);
 							return stateDeletionQueueAvg;
 						},
@@ -1824,26 +1899,26 @@ public class Statistics extends AbstractStatistics implements
 						INTERNAL_CATEGORY,
 						"stateDeletionTimeAvg",
 						"avg time it takes to delete a signed state (in microseconds)",
-						FLOAT_FORMAT_15_3,//
+						FLOAT_FORMAT_15_3,
 						stateDeletionTimeAvg,
-						(h) -> {
+						h -> {
 							stateDeletionTimeAvg = new StatsRunningAverage(h);
 							return stateDeletionTimeAvg;
 						},
 						null,
 						() -> stateDeletionTimeAvg.getWeightedMean()),
-				new StatEntry(//
-						INTERNAL_CATEGORY,//
-						PlatformStatNames.TIPS_PER_SYNC,//
-						"the average number of tips per sync at the start of each sync",//
-						FLOAT_FORMAT_15_3,//
-						tipsPerSync,//
+				new StatEntry(
+						INTERNAL_CATEGORY,
+						PlatformStatNames.TIPS_PER_SYNC,
+						"the average number of tips per sync at the start of each sync",
+						FLOAT_FORMAT_15_3,
+						tipsPerSync,
 						h -> {
 							tipsPerSync = new StatsRunningAverage(h);
 							return tipsPerSync;
-						},//
-						null,//
-						() -> tipsPerSync.getWeightedMean()),//
+						},
+						null,
+						() -> tipsPerSync.getWeightedMean()),
 		};
 		final List<StatEntry> entryList = new ArrayList<>(Arrays.asList(statEntries));
 
@@ -1874,31 +1949,65 @@ public class Statistics extends AbstractStatistics implements
 		for (int i = 0; i < avgPingMilliseconds.length; i++) {
 			final int ii = i; //make the current value of i into a constant inside each lambda generated here
 			entryList.add(new StatEntry(
-					PING_CATEGORY,//
-					String.format("ping_ms_%02d", i),//
-					String.format("milliseconds to send node %02d a byte and receive a reply", ii),//
-					"%,4.2f",//
-					avgPingMilliseconds[i] = new StatsRunningAverage(Settings.halfLife),//
-					(h) -> (avgPingMilliseconds[ii] = new StatsRunningAverage(h)),//
-					null,//
+					PING_CATEGORY,
+					String.format("ping_ms_%02d", i),
+					String.format("milliseconds to send node %02d a byte and receive a reply", ii),
+					"%,4.2f",
+					avgPingMilliseconds[i] = new StatsRunningAverage(Settings.halfLife),
+					h -> (avgPingMilliseconds[ii] = new StatsRunningAverage(h)),
+					null,
 					() -> avgPingMilliseconds[ii].getWeightedMean()));
 			avgPingMilliseconds[i] = new StatsRunningAverage(Settings.halfLife);
 		}
 		for (int i = 0; i < avgBytePerSecSent.length; i++) {
 			final int ii = i; //make the current value of i into a constant inside each lambda generated here
 			entryList.add(new StatEntry(
-					BPSS_CATEGORY,//
-					String.format("bytes/sec_sent_%02d", i),//
-					String.format("bytes per second sent to node %02d", ii),//
-					FLOAT_FORMAT_16_2,//
-					avgBytePerSecSent[i] = new StatsSpeedometer(Settings.halfLife),//
-					(h) -> (avgBytePerSecSent[ii] = new StatsSpeedometer(h)),//
-					null,//
+					BPSS_CATEGORY,
+					String.format("bytes/sec_sent_%02d", i),
+					String.format("bytes per second sent to node %02d", ii),
+					FLOAT_FORMAT_16_2,
+					avgBytePerSecSent[i] = new StatsSpeedometer(Settings.halfLife),
+					h -> (avgBytePerSecSent[ii] = new StatsSpeedometer(h)),
+					null,
 					() -> avgBytePerSecSent[ii].getCyclesPerSecond()));
 		}
 
 		reconnectStatistics.registerStats(entryList);
+		setDirectMemMXBean();
+		setMaximumDirectMemSizeInMB();
+
 		statEntries = entryList.toArray(statEntries);
+	}
+
+	//
+	// direct memory stats methods below
+	//
+
+	private void setDirectMemMXBean() {
+		// scan through PlatformMXBeans to find the one responsible for direct memory used
+		final List<BufferPoolMXBean> pools = ManagementFactory.getPlatformMXBeans(BufferPoolMXBean.class);
+		for (final BufferPoolMXBean pool : pools) {
+			if (pool.getName().equals("direct")) {
+				directMemMXBean = pool;
+				return;
+			}
+		}
+	}
+
+	private void setMaximumDirectMemSizeInMB() {
+		final HotSpotDiagnosticMXBean hsdiag = ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class);
+		long maxDirectMemoryInBytes = Runtime.getRuntime().maxMemory();
+		if (hsdiag != null) {
+			try {
+				long value = Long.parseLong(hsdiag.getVMOption("MaxDirectMemorySize").getValue());
+				if (value > 0) {
+					maxDirectMemoryInBytes = value;
+				}
+			} catch (NumberFormatException ex) {
+				// just use the present value, namely Runtime.getRuntime().maxMemory().
+			}
+		}
+		maximumDirectMemSizeInMB = maxDirectMemoryInBytes * Units.BYTES_TO_MEBIBYTES;
 	}
 
 	//
@@ -2251,5 +2360,109 @@ public class Statistics extends AbstractStatistics implements
 	@Override
 	public void eventCreation(boolean shouldCreateEvent) {
 		this.shouldCreateEvent.recordValue(shouldCreateEvent ? 1 : 0);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void recordNewSignedStateTime(double seconds) {
+		avgSecNewSignedState.recordValue(seconds);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void consensusTransHandleTime(final double seconds) {
+		avgSecTransHandled.recordValue(seconds);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void consensusToHandleTime(final double seconds) {
+		avgConsHandleTime.recordValue(seconds);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void consensusTransHandled() {
+		transHandledPerSecond.cycle();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void consShuffleMicros(final double micros) {
+		avgConsShuffleMicros.recordValue(micros);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void consEventHashMicros(final double micros) {
+		avgConsEventHashMicros.recordValue(micros);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void stateCopyMicros(final double micros) {
+		avgStateCopyMicros.recordValue(micros);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void consRunningHashMicros(final double micros) {
+		avgConsRunningHashMicros.recordValue(micros);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void consStateSignAdmitMicros(final double micros) {
+		avgConsStateSignAdmitMicros.recordValue(micros);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void consBuildStateMicros(final double micros) {
+		avgConsBuildStateMicros.recordValue(micros);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void consForSigCleanMicros(final double micros) {
+		avgConsForSigCleanMicros.recordValue(micros);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public double getAvgSelfCreatedTimestamp() {
+		return avgSelfCreatedTimestamp.getWeightedMean();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public double getAvgOtherReceivedTimestamp() {
+		return avgOtherReceivedTimestamp.getWeightedMean();
 	}
 }

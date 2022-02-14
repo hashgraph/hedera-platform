@@ -22,8 +22,6 @@ public final class EventConstants {
 	private EventConstants() {
 	}
 
-	/** the sequence number used to represent that sequence is not defined */
-	public static final long SEQUENCE_UNDEFINED = -1;
 	/**
 	 * the generation number used to represent that the generation is not defined.
 	 * an event's computed generation number is always non-negative.

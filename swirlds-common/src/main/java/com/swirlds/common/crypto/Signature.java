@@ -150,7 +150,7 @@ public class Signature implements SelfSerializable {
 	 */
 	@Override
 	public int hashCode() {
-		return Objects.hash(signatureType, sigBytes);
+		return Objects.hash(signatureType, Arrays.hashCode(sigBytes));
 	}
 
 	/**
