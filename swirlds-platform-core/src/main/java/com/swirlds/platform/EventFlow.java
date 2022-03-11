@@ -20,7 +20,6 @@ import com.swirlds.common.SwirldState.SwirldState2;
 import com.swirlds.common.SwirldTransaction;
 import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.CryptoFactory;
-import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
@@ -29,11 +28,9 @@ import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.stream.EventStreamManager;
 import com.swirlds.common.threading.StoppableThread;
 import com.swirlds.common.threading.StoppableThreadConfiguration;
-import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.eventhandling.SignedStateEventsAndGenerations;
 import com.swirlds.platform.state.SignedState;
-import com.swirlds.platform.state.SignedStateManager;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateInfo;
 import com.swirlds.platform.stats.EventFlowStats;
@@ -51,7 +48,6 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -77,7 +73,7 @@ import static com.swirlds.platform.event.EventUtils.toShortString;
  * An EventFlow object is created by a Platform to manage its 3 SwirldState objects, the 7 queues that hold
  * the Events flowing between them, and the 4 threads that cause those events to flow between the states.
  */
-class EventFlow extends AbstractEventFlow {
+public class EventFlow extends AbstractEventFlow {
 
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
@@ -139,11 +135,6 @@ class EventFlow extends AbstractEventFlow {
 	private StoppableThread threadCons;
 	/** forWork --> stateWork */
 	private StoppableThread threadWork;
-	/** A thread that hashes and signs a state as a background task */
-	private StoppableThread threadStateHashSign;
-
-	/** Used for hashing the signed state */
-	private final Cryptography cryptography;
 
 	/** when the last shuffle happened */
 	private volatile Instant lastShuffle;
@@ -159,9 +150,6 @@ class EventFlow extends AbstractEventFlow {
 
 	/** Stores consensus events and round generations that need to be saved in state */
 	private final SignedStateEventsAndGenerations eventsAndGenerations;
-
-	/** A queue that holds only 1 object about a state that needs to be hashed and signed. */
-	private final BlockingQueue<SignedState> stateToHashSign = new ArrayBlockingQueue<>(1);
 
 	/** how many of {threadCons, threadCurr, threadWork} exist (either 2 or 3) */
 	private final int numThreads;
@@ -197,11 +185,6 @@ class EventFlow extends AbstractEventFlow {
 	private final AddressBook addressBook;
 
 	/**
-	 * Writes signed states to disk.
-	 */
-	private final SignedStateManager signedStateManager;
-
-	/**
 	 * A supplier of an estimated consensus time.
 	 */
 	private final Supplier<Instant> consEstimateSupplier;
@@ -210,6 +193,9 @@ class EventFlow extends AbstractEventFlow {
 	 * A provider of settings required by {@link EventFlow}
 	 */
 	private final SettingsProvider settings;
+
+	/** A queue that accepts signed states for hashing and signature collection. */
+	private final BlockingQueue<SignedState> stateHashSignQueue;
 
 	/**
 	 * is used for unit testing.
@@ -220,7 +206,6 @@ class EventFlow extends AbstractEventFlow {
 		transLists = null;
 		forCurr = null;
 		forCons = null;
-		cryptography = null;
 		swirldState2 = true;
 		numThreads = THREAD_NUM_SWIRLD_STATE_TWO;
 		eventsAndGenerations = null;
@@ -230,9 +215,9 @@ class EventFlow extends AbstractEventFlow {
 		isZeroStakedNode = false;
 		systemTransactionHandler = null;
 		addressBook = null;
-		signedStateManager = null;
 		consEstimateSupplier = null;
 		settings = null;
+		stateHashSignQueue = null;
 	}
 
 	/**
@@ -245,15 +230,15 @@ class EventFlow extends AbstractEventFlow {
 	 * @param stats
 	 * 		statistics updated by {@link EventFlow}
 	 * @param addressBook
-	 * 		a supplier of the address book for the network
+	 * 		the address book for the network
 	 * @param consEstimateSupplier
 	 * 		a supplier for the estimated consensus time of a transaction created at the time of invocation
 	 * @param eventStreamManager
 	 * 		the event stream manager to send consensus events to
 	 * @param isZeroStakedNode
 	 * 		true if this node is a zero-stake node
-	 * @param signedStateManager
-	 * 		the signed state manager responsible for handling new signed states
+	 * @param stateHashSignQueue
+	 * 		the queue that handles hashing and collecting signatures of new self-signed states
 	 * @param systemTransactionHandler
 	 * 		the handler for all system transactions
 	 * @param initialState
@@ -261,14 +246,14 @@ class EventFlow extends AbstractEventFlow {
 	 * 		of the states stored here. This initial state will be used by EventFlow internally, so it
 	 * 		should not be used after being passed to it
 	 */
-	EventFlow(
+	public EventFlow(
 			final NodeId selfId,
 			final EventFlowStats stats,
 			final AddressBook addressBook,
 			final EventStreamManager<EventImpl> eventStreamManager,
 			final boolean isZeroStakedNode,
 			final SystemTransactionHandler systemTransactionHandler,
-			final SignedStateManager signedStateManager,
+			final BlockingQueue<SignedState> stateHashSignQueue,
 			final Supplier<Instant> consEstimateSupplier,
 			final SettingsProvider settings,
 			final State initialState) {
@@ -279,11 +264,10 @@ class EventFlow extends AbstractEventFlow {
 		this.isZeroStakedNode = isZeroStakedNode;
 		this.systemTransactionHandler = systemTransactionHandler;
 		this.addressBook = addressBook;
-		this.signedStateManager = signedStateManager;
 		this.consEstimateSupplier = consEstimateSupplier;
 		this.settings = settings;
-
 		this.swirldState2 = (initialState.getSwirldState() instanceof SwirldState2);
+		this.stateHashSignQueue = stateHashSignQueue;
 
 		this.transLists = new TransLists(this);
 		lastShuffle = Instant.now(); // wait a while before first shuffle, so maybe queues aren't empty
@@ -325,8 +309,6 @@ class EventFlow extends AbstractEventFlow {
 		});
 
 		eventsAndGenerations = new SignedStateEventsAndGenerations(Settings.state);
-
-		cryptography = CryptoFactory.getInstance();
 	}
 
 	/** is the app's state extending SwirldState2 (as opposed to SwirldState)? */
@@ -340,7 +322,7 @@ class EventFlow extends AbstractEventFlow {
 	 *
 	 * @return the current app state
 	 */
-	SwirldState getCurrStateAndKeep() {
+	public SwirldState getCurrStateAndKeep() {
 		if (swirldState2) {
 			return stateCurr.getState().getSwirldState();
 		}
@@ -365,7 +347,7 @@ class EventFlow extends AbstractEventFlow {
 	 * Releases the state that was previously returned, so that another one can be obtained from getCurrStateAndKeep(),
 	 * also deletes it if it's not the current state being used
 	 */
-	synchronized void releaseStateCurr() {
+	public synchronized void releaseStateCurr() {
 		if (swirldState2) {
 			return;
 		}
@@ -406,7 +388,7 @@ class EventFlow extends AbstractEventFlow {
 	 * {@inheritDoc}
 	 */
 	@Override
-	State getConsensusState() {
+	public State getConsensusState() {
 		return stateCons.getState();
 	}
 
@@ -414,7 +396,7 @@ class EventFlow extends AbstractEventFlow {
 	 * {@inheritDoc}
 	 */
 	@Override
-	int getForConsSize() {
+	public int getForConsSize() {
 		return forCons.size();
 	}
 
@@ -422,7 +404,7 @@ class EventFlow extends AbstractEventFlow {
 	 * {@inheritDoc}
 	 */
 	@Override
-	TransLists getTransLists() {
+	public TransLists getTransLists() {
 		return transLists;
 	}
 
@@ -438,7 +420,7 @@ class EventFlow extends AbstractEventFlow {
 	 * {@inheritDoc}
 	 */
 	@Override
-	int getForCurrSize() {
+	public int getForCurrSize() {
 		return forCurr.size();
 	}
 
@@ -447,7 +429,7 @@ class EventFlow extends AbstractEventFlow {
 	 */
 	@Override
 	int getStateToHashSignSize() {
-		return stateToHashSign.size();
+		return stateHashSignQueue.size();
 	}
 
 	@Override
@@ -559,8 +541,7 @@ class EventFlow extends AbstractEventFlow {
 	synchronized void stopAndClear() throws InterruptedException {
 		// stopAndClear() is currently only used to reconnect. when reconnecting, we need the consensus state to do
 		// the reconnect, that's why it will not be cleared.
-
-		stopThreads(threadStateHashSign, threadCons, threadCurr, threadWork);
+		stopThreads(threadCons, threadCurr, threadWork);
 
 		log.info(RECONNECT.getMarker(), "stopAndClear: releasing states");
 
@@ -586,15 +567,19 @@ class EventFlow extends AbstractEventFlow {
 
 
 		// clear all the queues
-		log.info(RECONNECT.getMarker(), "stopAndClear: clearing stateToHashSign");
-		stateToHashSign.clear();
+		log.info(RECONNECT.getMarker(), "stopAndClear: clearing stateHashSignQueueThread");
+		clearStateHashSignQueueThread();
+
 		log.info(RECONNECT.getMarker(), "stopAndClear: clearing forCurr");
 		forCurr.clear();
+
 		log.info(RECONNECT.getMarker(), "stopAndClear: clearing forCons");
 		forCons.clear();
+
 		if (!swirldState2) {
 			log.info(RECONNECT.getMarker(), "stopAndClear: clearing forWork");
 			forWork.clear();
+
 			log.info(RECONNECT.getMarker(), "stopAndClear: clearing forNext");
 			forNext.clear();
 		}
@@ -612,6 +597,17 @@ class EventFlow extends AbstractEventFlow {
 		eventsAndGenerations.clear();
 
 		log.info(RECONNECT.getMarker(), "stopAndClear: event flow is now cleared");
+	}
+
+	/**
+	 * Clears and releases any signed states in the {@code stateHashSignQueueThread} queue.
+	 */
+	private void clearStateHashSignQueueThread() {
+		SignedState signedState = stateHashSignQueue.poll();
+		while (signedState != null) {
+			signedState.release();
+			signedState = stateHashSignQueue.poll();
+		}
 	}
 
 	/**
@@ -659,11 +655,11 @@ class EventFlow extends AbstractEventFlow {
 			if (stateCurr != null) {
 				stateCurr.release();
 			}
-			stateCurr = new StateInfo(state, null, false);
+			stateCurr = new StateInfo(state.copy(), null, false);
 			if (stateWork != null) {
 				stateWork.release();
 			}
-			stateWork = new StateInfo(state, null, false);
+			stateWork = new StateInfo(state.copy(), null, false);
 		}
 	}
 
@@ -715,7 +711,7 @@ class EventFlow extends AbstractEventFlow {
 	 * 		concatenate)
 	 * @return true if successful
 	 */
-	boolean createTransaction(final Transaction transaction) {
+	public boolean createTransaction(final Transaction transaction) {
 		// Refuse to create any type of transaction if the beta mirror is enabled and this node has zero stake
 		if (settings.isEnableBetaMirror() && isZeroStakedNode) {
 			return false;
@@ -737,13 +733,7 @@ class EventFlow extends AbstractEventFlow {
 	 * {@inheritDoc}
 	 */
 	@Override
-	void startAll() {
-		threadStateHashSign = new StoppableThreadConfiguration()
-				.setNodeId(selfId.getId())
-				.setComponent(COMPONENT_NAME)
-				.setThreadName("state-hash")
-				.setWork(this::stateHashSign)
-				.build();
+	public void startAll() {
 		threadCons = new StoppableThreadConfiguration()
 				.setNodeId(selfId.getId())
 				.setComponent(COMPONENT_NAME)
@@ -767,7 +757,6 @@ class EventFlow extends AbstractEventFlow {
 		}
 
 		lastShuffle = Instant.now();
-		threadStateHashSign.start();
 		threadCons.start();
 		threadCurr.start();
 
@@ -914,7 +903,7 @@ class EventFlow extends AbstractEventFlow {
 	}
 
 	@Override
-	void addMinGenInfo(long round, long minGeneration) {
+	public void addMinGenInfo(long round, long minGeneration) {
 		eventsAndGenerations.addRoundGeneration(round, minGeneration);
 	}
 
@@ -1013,7 +1002,6 @@ class EventFlow extends AbstractEventFlow {
 			}
 
 			if (signThisState) {
-				log.info(SIGNED_STATE.getMarker(), "about to sign a state");
 				// create a new signed state, sign it, and send out a new transaction with the signature
 				// the signed state keeps a copy that never changes.
 				final long startCopy = System.nanoTime();
@@ -1070,7 +1058,7 @@ class EventFlow extends AbstractEventFlow {
 
 				final long startStateHashAdmit = System.nanoTime();
 
-				stateToHashSign.put(signedState);
+				stateHashSignQueue.put(signedState);
 
 				stats.consStateSignAdmitMicros((System.nanoTime() - startStateHashAdmit) * NANOSECONDS_TO_MICROSECONDS);
 
@@ -1089,34 +1077,6 @@ class EventFlow extends AbstractEventFlow {
 		}
 	}
 
-	private void stateHashSign() throws InterruptedException {
-		log.info(SIGNED_STATE.getMarker(), "stateHashSign:: about to hash and sign the state");
-		// get the state to be hashed and signed, wait if necessary
-		SignedState signedState = stateToHashSign.take();
-
-		// hash a new signed state, signed only by self so far,
-		// create a transaction with self signature (and gossip to other members),
-		// and start collecting signatures on it from other members.
-		long startTime = System.nanoTime();
-		log.info(LogMarker.MERKLE_HASHING.getMarker(), "Starting hashing of SignedState");
-
-		// Use digestTreeAsync because it is significantly (10x+) faster for large trees
-		final Future<Hash> hashFuture = cryptography.digestTreeAsync(signedState.getState());
-		// wait for the hash to be computed
-		try {
-			hashFuture.get();
-		} catch (ExecutionException ex) {
-			log.warn(LogMarker.MERKLE_HASHING.getMarker(), "Exception Occurred during SignedState hashing", ex);
-		}
-
-		log.info(LogMarker.MERKLE_HASHING.getMarker(), "Done hashing SignedState, starting newSelfSigned");
-
-		signedStateManager.newSelfSigned(
-				signedState
-		);
-		log.info(LogMarker.MERKLE_HASHING.getMarker(), "Done newSelfSigned");
-		stats.recordNewSignedStateTime((System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
-	}
 
 	/**
 	 * do a shuffle, where stateCurr is discarded and replaced with stateWork, and stateWork is replaced

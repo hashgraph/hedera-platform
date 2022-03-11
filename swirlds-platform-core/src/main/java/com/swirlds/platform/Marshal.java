@@ -15,6 +15,7 @@
 package com.swirlds.platform;
 
 import com.swirlds.common.CommonUtils;
+import com.swirlds.platform.crypto.CryptoConstants;
 import com.swirlds.platform.internal.DatabaseBackupSettings;
 import com.swirlds.platform.internal.DatabaseRestoreSettings;
 import com.swirlds.platform.internal.DatabaseSettings;
@@ -26,7 +27,7 @@ import java.io.File;
  * fix for bigger potential changes.
  */
 public class Marshal {
-	public static final int HASH_SIZE_BYTES = Crypto.HASH_SIZE_BYTES;
+	public static final int HASH_SIZE_BYTES = CryptoConstants.HASH_SIZE_BYTES;
 
 	private Marshal() {
 

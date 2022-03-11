@@ -16,6 +16,7 @@ package com.swirlds.platform;
 import com.sun.management.HotSpotDiagnosticMXBean;
 import com.sun.management.OperatingSystemMXBean;
 import com.swirlds.common.PlatformStatNames;
+import com.swirlds.common.ThresholdLimitingHandler;
 import com.swirlds.common.Transaction;
 import com.swirlds.common.Units;
 import com.swirlds.common.statistics.StatEntry;
@@ -31,6 +32,7 @@ import com.swirlds.platform.stats.AverageStat;
 import com.swirlds.platform.stats.ConsensusStats;
 import com.swirlds.platform.stats.EventFlowStats;
 import com.swirlds.platform.stats.HashgraphStats;
+import com.swirlds.platform.stats.IssStats;
 import com.swirlds.platform.stats.MaxStat;
 import com.swirlds.platform.stats.PlatformStatistics;
 import com.swirlds.platform.stats.SignedStateStats;
@@ -39,6 +41,8 @@ import com.swirlds.platform.stats.TimeStat;
 import com.swirlds.platform.sync.SyncManager;
 import com.swirlds.platform.sync.SyncResult;
 import com.swirlds.platform.sync.SyncTiming;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.lang.management.BufferPoolMXBean;
@@ -53,10 +57,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.swirlds.common.PlatformStatNames.SIGNED_STATE_HASHING_TIME;
 import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
+import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 /**
  * This class collects and reports various statistics about network operation. A statistic such as
@@ -123,21 +129,31 @@ import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
  */
 public class Statistics extends AbstractStatistics implements
 		ConsensusStats,
-		SignedStateStats,
-		HashgraphStats,
 		EventAddedObserver,
+		EventFlowStats,
+		HashgraphStats,
+		IssStats,
 		PlatformStatistics,
-		SyncStats,
-		EventFlowStats {
+		SignedStateStats,
+		SyncStats {
+
+	private static final Logger LOG = LogManager.getLogger(Statistics.class);
+
+	/** The maximum number of times an exception should be logged before being suppressed. */
+	private static final long EXCEPTION_RATE_THRESHOLD = 10;
 
 	/** which Platform to watch */
 	protected AbstractPlatform platform;
 	/** an object used to get OS stats */
 	private final OperatingSystemMXBean osBean;
 
+	private final ThresholdLimitingHandler<Throwable> exceptionRateLimiter = new ThresholdLimitingHandler<>(
+			EXCEPTION_RATE_THRESHOLD);
+
 	private final SavedFileStatistics savedFileStatistics;
 
 	private final ReconnectStatistics reconnectStatistics;
+
 
 	/** an object to get thread stats */
 	ThreadMXBean thbean;
@@ -309,6 +325,8 @@ public class Statistics extends AbstractStatistics implements
 	/** boolean result of function {@link SyncManager#shouldCreateEvent(SyncResult)} */
 	StatsRunningAverage shouldCreateEvent;
 
+	private final AtomicInteger issCount = new AtomicInteger();
+
 	/** number of coin rounds that have occurred so far */
 	StatsRunningAverage numCoinRounds;
 
@@ -454,7 +472,7 @@ public class Statistics extends AbstractStatistics implements
 	 * average time spent in the {@code EventFlow#doCons()} method building the {@link
 	 * com.swirlds.platform.state.SignedState} (in microseconds)
 	 */
-	StatsRunningAverage avgConsBuildStateMicros;
+	private StatsRunningAverage avgConsBuildStateMicros;
 
 	/**
 	 * average time spent by the {@code EventFlow#doCons()} method cleaning up the forSigs queue (in microseconds)
@@ -551,8 +569,9 @@ public class Statistics extends AbstractStatistics implements
 						platform.getAddressBook().getOwnHostCount());
 				avgWrite.recordValue(statsWritePeriod);
 				avgSimCallSyncsMax.recordValue(Settings.maxOutgoingSyncs);
-				avgSimSyncs.recordValue(platform.getSyncServer().numSyncs.get());
-				avgSimListenSyncs.recordValue(platform.getSyncServer().numListenerSyncs.get());
+				avgSimSyncs.recordValue(platform.getSyncServer() != null ? platform.getSyncServer().numSyncs.get() : 0);
+				avgSimListenSyncs.recordValue(
+						platform.getSyncServer() != null ? platform.getSyncServer().numListenerSyncs.get() : 0);
 				avgQ1forCurr.recordValue(platform.getEventFlow().getForCurrSize());
 				avgQ2forCons.recordValue(platform.getEventFlow().getForConsSize());
 				avgQSignedStateEvents.recordValue(platform.getEventFlow().getSignedStateEventsSize());
@@ -577,7 +596,8 @@ public class Statistics extends AbstractStatistics implements
 				freeDiskspace = rootDirectory.getFreeSpace();
 			}
 		} catch (final Exception e) {
-			// ignore exceptions
+			exceptionRateLimiter.handle(e,
+					(error) -> LOG.error(EXCEPTION.getMarker(), "Exception while updating statistics.", error));
 		}
 	}
 
@@ -1919,6 +1939,14 @@ public class Statistics extends AbstractStatistics implements
 						},
 						null,
 						() -> tipsPerSync.getWeightedMean()),
+				new StatEntry(INTERNAL_CATEGORY,
+						"issCount",
+						"the number nodes that currently disagree with the hash of this node's state",
+						"%d",
+						null,
+						null,
+						null,
+						issCount::get)
 		};
 		final List<StatEntry> entryList = new ArrayList<>(Arrays.asList(statEntries));
 
@@ -2464,5 +2492,13 @@ public class Statistics extends AbstractStatistics implements
 	@Override
 	public double getAvgOtherReceivedTimestamp() {
 		return avgOtherReceivedTimestamp.getWeightedMean();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void setIssCount(final int issCount) {
+		this.issCount.set(issCount);
 	}
 }

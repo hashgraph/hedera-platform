@@ -20,18 +20,19 @@ import com.swirlds.common.io.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.io.internal.MerkleSerializationIterator;
 import com.swirlds.common.merkle.io.internal.MerkleTreeSerializationOptions;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Iterator;
+import java.util.function.Predicate;
 
 import static com.swirlds.common.io.SerializableStreamConstants.MerkleSerializationProtocolVersion.CURRENT;
 import static com.swirlds.common.merkle.io.SerializationStrategy.DEFAULT_MERKLE_INTERNAL;
 import static com.swirlds.common.merkle.io.SerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
 import static com.swirlds.common.merkle.io.SerializationStrategy.SELF_SERIALIZATION;
+import static com.swirlds.common.merkle.iterators.MerkleIterationOrder.BREADTH_FIRST;
 
 /**
  * A SerializableDataOutputStream that also handles merkle trees.
@@ -193,7 +194,25 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
 		writeInt(CURRENT);
 		writeSerializable(options, false);
 		writeBoolean(root == null);
-		final Iterator<MerkleNode> it = new MerkleSerializationIterator(root);
+
+		if (root == null) {
+			return;
+		}
+
+		final Predicate<MerkleInternal> descendantFilter;
+		if (options.isExternal()) {
+			descendantFilter = node ->
+					!node.supportedSerialization(node.getVersion()).contains(SELF_SERIALIZATION) &&
+							!node.supportedSerialization(node.getVersion()).contains(EXTERNAL_SELF_SERIALIZATION);
+		} else {
+			descendantFilter = node -> !node.supportedSerialization(node.getVersion()).contains(SELF_SERIALIZATION);
+		}
+
+		final Iterator<MerkleNode> it = root.treeIterator()
+				.setOrder(BREADTH_FIRST)
+				.setDescendantFilter(descendantFilter)
+				.ignoreNull(false);
+
 		while (it.hasNext()) {
 			final MerkleNode node = it.next();
 			if (node == null) {

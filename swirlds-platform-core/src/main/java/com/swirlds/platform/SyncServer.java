@@ -28,11 +28,14 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Stream;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.SOCKET_EXCEPTIONS;
@@ -53,8 +56,6 @@ class SyncServer implements Runnable {
 	private static final byte[] listenIP = new byte[] { 0, 0, 0, 0 };
 	/** the Platform running this SyncServer server */
 	private final AbstractPlatform platform;
-	/** the number of members in the address book. Many arrays etc are this size */
-	private final int numMembers;
 	/** the IP address that this server listens on for establishing new connections */
 	private final byte[] ip;
 	/** the port that this server listens on for establishing new connections */
@@ -62,28 +63,16 @@ class SyncServer implements Runnable {
 	/** listenerConn.get(i) is the connection used by listener thread i for syncs initiated by member i */
 	private final AtomicReferenceArray<SocketSyncConnection> listenerConn;
 	/** number of listener threads currently in a sync */
-	AtomicInteger numListenerSyncs = new AtomicInteger(0);
+	final AtomicInteger numListenerSyncs = new AtomicInteger(0);
 	/** number of syncs currently happening (both caller and listener) */
-	AtomicInteger numSyncs = new AtomicInteger(0);
+	final AtomicInteger numSyncs = new AtomicInteger(0);
 
 	/** lock per each other member, each one is used by all caller threads and the heartbeat thread */
-	AtomicReferenceArray<ReentrantLock> lockCallHeartbeat;
+	private final List<ReentrantLock> lockCallHeartbeat;
 	/** lock per each other member, each one is used by all caller threads and the listener thread */
-	AtomicReferenceArray<ReentrantLock> lockCallListen;
-
-
-	/**
-	 * when using multisocket, the connection between 2 nodes is only ready when all of the TCP connections
-	 * are established. this list keep all the TCP connections that are established and are waiting for the
-	 * others to make a complete connection between 2 nodes
-	 */
-	AtomicReferenceArray<AtomicReferenceArray<Socket>> pendingMultisocketConnections;
+	private final List<ReentrantLock> lockCallListen;
 	/** a thread pool used to handle incoming connections */
 	private final ExecutorService incomingConnPool;
-
-	AbstractPlatform getPlatform() {
-		return platform;
-	}
 
 	/**
 	 * The constructor must be given what ip and port to listen to. It will then listen forever, creating a
@@ -102,18 +91,14 @@ class SyncServer implements Runnable {
 		this.platform = platform;
 		this.ip = (ip != null) ? ip : listenIP;
 		this.port = port;
-		this.numMembers = platform.getNumMembers();
+		/* the number of members in the address book. Many arrays etc are this size */
+		int numMembers = platform.getNumMembers();
 		this.listenerConn = new AtomicReferenceArray<>(numMembers);
-		this.lockCallHeartbeat = new AtomicReferenceArray<>(numMembers);
-		this.lockCallListen = new AtomicReferenceArray<>(numMembers);
-		for (int i = 0; i < numMembers; i++) {
-			lockCallHeartbeat.set(i, new ReentrantLock(false /* fair locks have not shown good results */));
-			lockCallListen.set(i, new ReentrantLock(false));
-		}
+		// fair locks have not shown good results
+		this.lockCallHeartbeat = Stream.generate(() -> new ReentrantLock(false)).limit(numMembers).toList();
+		this.lockCallListen = Stream.generate(() -> new ReentrantLock(false)).limit(numMembers).toList();
 		this.incomingConnPool = Executors.newCachedThreadPool(
 				new PlatformThreadFactory("sync_server_"));
-		this.pendingMultisocketConnections = new AtomicReferenceArray<>(
-				numMembers);
 	}
 
 	/**
@@ -170,15 +155,14 @@ class SyncServer implements Runnable {
 	/**
 	 * call this in its own thread, and it will run forever, accepting incoming calls.
 	 */
-	@SuppressWarnings("resource") // newServerSocketConnect creates a socket that isn't closed.
+	@SuppressWarnings("resource") // createServerSocket creates a socket that isn't closed.
 	public void run() {
 		ServerSocket serverSocket = null;
 		try {
 			// keep trying to connect to port on this computer, until success
 			while (serverSocket == null || !serverSocket.isBound()) {
 				try {
-					serverSocket = platform.getCrypto().newServerSocketConnect(ip,
-							port);
+					serverSocket = platform.getSocketFactory().createServerSocket(ip, port);
 				} catch (final IOException e) {
 					log.error(EXCEPTION.getMarker(), "SyncServer.run error", e);
 
@@ -319,7 +303,6 @@ class SyncServer implements Runnable {
 
 		@Override
 		public void run() {
-			String otherKey = "";
 			DataInputStream dis = null;
 			DataOutputStream dos = null;
 			long otherId = -1;
@@ -332,7 +315,7 @@ class SyncServer implements Runnable {
 
 				dos = new DataOutputStream(clientSocket.getOutputStream());
 
-				otherKey = dis.readUTF();
+				final String otherKey = dis.readUTF();
 
 				otherId = platform.getAddressBook().getId(otherKey);
 
@@ -374,4 +357,39 @@ class SyncServer implements Runnable {
 		}
 	}
 
+	/**
+	 * Returns a lock that ensures we don't have multiple ongoing syncs with the same node
+	 *
+	 * @param nodeId
+	 * 		the ID of the node whose lock we need
+	 * @return the sync ongoing lock for this node
+	 */
+	public ReentrantLock getSyncOngoingLock(final int nodeId) {
+		return lockCallListen.get(nodeId);
+	}
+
+	/**
+	 * Same as {@link SyncServer#getOutboundConnLock(NodeId)} but using an int as the ID
+	 */
+	public ReentrantLock getOutboundConnLock(final int nodeId) {
+		return lockCallHeartbeat.get(nodeId);
+	}
+
+	/**
+	 * Returns a lock that ensures only one thread uses the connection at a time
+	 *
+	 * @param nodeId
+	 * 		the ID of the node whose lock we need
+	 * @return the connection lock for this node
+	 */
+	public ReentrantLock getOutboundConnLock(final NodeId nodeId) {
+		return getOutboundConnLock(nodeId.getIdAsInt());
+	}
+
+	/**
+	 * @return A {@link Collection} of all sync ongoing locks
+	 */
+	public Collection<ReentrantLock> getSyncOngoingLocks() {
+		return lockCallListen;
+	}
 }

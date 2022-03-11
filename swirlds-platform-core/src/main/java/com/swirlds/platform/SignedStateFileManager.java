@@ -14,18 +14,12 @@
 
 package com.swirlds.platform;
 
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.swirlds.blob.internal.db.SnapshotManager;
 import com.swirlds.blob.internal.db.SnapshotTask;
 import com.swirlds.blob.internal.db.SnapshotTaskType;
 import com.swirlds.common.CommonUtils;
 import com.swirlds.common.NodeId;
-import com.swirlds.common.SwirldState;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.events.Event;
 import com.swirlds.common.merkle.io.MerkleDataInputStream;
 import com.swirlds.common.merkle.io.MerkleDataOutputStream;
 import com.swirlds.common.notification.NotificationFactory;
@@ -36,21 +30,24 @@ import com.swirlds.platform.state.SavedStateInfo;
 import com.swirlds.platform.state.SigSet;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.State;
-import com.swirlds.platform.state.StateDumpSource;
+import com.swirlds.platform.state.StateSettings;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STATE_TO_DISK;
 
@@ -66,6 +63,8 @@ public class SignedStateFileManager implements Runnable {
 	private static final int FILE_VERSION = 1;
 
 	private static final int MAX_MERKLE_NODES_IN_STATE = Integer.MAX_VALUE;
+
+	private static final String HASH_INFO_FILE_NAME = "hashInfo.txt";
 
 	/** task queue that is polled forever */
 	private final BlockingQueue<FileManagerTask> taskQueue = new LinkedBlockingQueue<>(20);
@@ -109,6 +108,29 @@ public class SignedStateFileManager implements Runnable {
 			}
 		}
 
+	}
+
+	/**
+	 * Write a file that contains information about the hash of the state. A useful nugget of information
+	 * for when a human needs to decide what is contained within a signed state file. If the file already
+	 * exists in the given directory then it is overwritten.
+	 *
+	 * @param state
+	 * 		the state that is being written
+	 * @param dir
+	 * 		the directory where the state is being written
+	 */
+	private static void writeHashInfoFile(final State state, final File dir) {
+		final String hashInfo = generateHashDebugString(state, StateSettings.getDebugHashDepth());
+		log.info(STATE_TO_DISK.getMarker(), "Hash information for state written to disk:\n{}", hashInfo);
+
+		final File hashInfoFile = CommonUtils.canonicalFile(dir, HASH_INFO_FILE_NAME);
+
+		try (final BufferedWriter writer = new BufferedWriter(new FileWriter(hashInfoFile));) {
+			writer.write(hashInfo);
+		} catch (final IOException e) {
+			log.error(EXCEPTION.getMarker(), "Unable to write hash info file", e);
+		}
 	}
 
 	/**
@@ -166,6 +188,8 @@ public class SignedStateFileManager implements Runnable {
 						"Done writing saved state with HashEventsCons {}, starting with local events",
 						signedState::getHashEventsCons);
 
+				writeHashInfoFile(signedState.getState(), dir);
+
 				if (Settings.state.saveLocalEvents) {
 					writeAndRename(dir, events, tmpEvents, out -> {
 						out.writeInt(FILE_VERSION);
@@ -175,11 +199,6 @@ public class SignedStateFileManager implements Runnable {
 				}
 
 				Settings.writeSettingsUsed(dir);
-
-				// This was added to support writing signed state JSON files every time a binary signed state is written
-				// This is enabled/disabled via settings and is disabled by default
-				platform.getSignedStateManager().jsonifySignedState(signedState, StateDumpSource.DISK_WRITE);
-
 			} catch (Exception e) {
 				log.error(EXCEPTION.getMarker(),
 						"Exception when writing the signed state for round {} to disk:",
@@ -338,24 +357,12 @@ public class SignedStateFileManager implements Runnable {
 	}
 
 	static void deleteRecursively(final File f) {
-		if (!f.exists()) {
-			log.error(EXCEPTION.getMarker(),
-					"Could not delete because it doesn't exist: '{}'", f.getAbsolutePath());
-			return;
-		}
-
-		if (f.isDirectory()) {
-			for (File c : f.listFiles()) {
-				deleteRecursively(c);
-			}
-		}
-
-		boolean deleted = f.delete();
-
-		if (!deleted) {
-			log.error(EXCEPTION.getMarker(), "Could not delete: '{}'", f.getAbsolutePath());
+		log.info(STATE_TO_DISK.getMarker(), "deleting directory {}", f.getAbsolutePath());
+		final boolean success = CommonUtils.deleteDirectory(f);
+		if (success) {
+			log.info(STATE_TO_DISK.getMarker(), "successfully deleted directory {}", f.getAbsolutePath());
 		} else {
-			log.info(STATE_TO_DISK.getMarker(), "Deleted: '{}'", f.getAbsolutePath());
+			log.error(EXCEPTION.getMarker(), "failed to delete directory {}", f.getAbsolutePath());
 		}
 	}
 
@@ -632,53 +639,5 @@ public class SignedStateFileManager implements Runnable {
 		WHOLE_STATE,
 		LOCAL,
 		EVENTS
-	}
-
-	public static <T> void jsonify(final File file, final T node) throws IOException {
-		final ObjectMapper mapper = new ObjectMapper();
-		mapper.configure(SerializationFeature.FLUSH_AFTER_WRITE_VALUE, true);
-		mapper.configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true);
-		mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
-		mapper.registerModule(new JavaTimeModule());
-
-		if (file.exists()) {
-			file.delete();
-		}
-
-		if (!file.getParentFile().exists()) {
-			file.getParentFile().mkdirs();
-		}
-
-		try (
-				final FileOutputStream fos = new FileOutputStream(file);
-				final BufferedOutputStream bos = new BufferedOutputStream(fos)
-		) {
-			mapper.writer()
-					.withDefaultPrettyPrinter()
-					.with(SerializationFeature.FLUSH_AFTER_WRITE_VALUE)
-					.with(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
-					.writeValue(bos, node);
-		}
-	}
-
-	public void jsonify(final SignedState signedState, final boolean onDisk) throws IOException {
-		final String fileName = (onDisk) ? "DiskLoadedSignedState.json" : "InMemorySignedState.json";
-		final File file = new File(getSignedStateDir(signedState.getLastRoundReceived()), fileName);
-
-		jsonify(file, signedState);
-	}
-
-	public void jsonify(final long round, final SwirldState swirldState, final boolean onDisk) throws IOException {
-		final String fileName = (onDisk) ? "DiskLoadedSwirldState.json" : "InMemorySwirldState.json";
-		final File file = new File(getSignedStateDir(round), fileName);
-
-		jsonify(file, swirldState);
-	}
-
-	public void jsonify(final long round, final Event[] events, final boolean onDisk) throws IOException {
-		final String fileName = (onDisk) ? "DiskLoadedHashgraph.json" : "InMemoryHashgraph.json";
-		final File file = new File(getSignedStateDir(round), fileName);
-
-		jsonify(file, events);
 	}
 }

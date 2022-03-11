@@ -551,6 +551,27 @@ public class FCQueue<E extends FCQueueElement> extends AbstractMerkleLeaf implem
 	}
 
 	/**
+	 * Returns an iterator over the elements in this queue in reverse insertion order (tail first, head last).
+	 *
+	 * @return an {@code Iterator} over the elements in this collection in reverse order
+	 */
+	public Iterator<E> reverseIterator() {
+		return new Iterator<>() {
+			private final Iterator<FCQueueNode<E>> nodeIterator = nodeBackwardIterator();
+
+			@Override
+			public boolean hasNext() {
+				return nodeIterator.hasNext();
+			}
+
+			@Override
+			public E next() {
+				return nodeIterator.next().getElement();
+			}
+		};
+	}
+
+	/**
 	 * Returns an iterator over the internal nodes in this queue, in insertion order (head first, tail last).
 	 *
 	 * @return an {@code Iterator} over the elements in this collection

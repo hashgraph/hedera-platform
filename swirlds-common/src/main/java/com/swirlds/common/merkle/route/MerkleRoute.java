@@ -52,12 +52,23 @@ public interface MerkleRoute extends Comparable<MerkleRoute>, Iterable<Integer>,
 	Iterator<Integer> iterator();
 
 	/**
+	 * <p>
 	 * Get the number of steps in the route. A node at the root of a tree will have a route of size 0.
+	 * </p>
 	 *
+	 * <p>
 	 * This operation may be more expensive than O(1) for some route implementations (for example, some implementations
 	 * that are compressed may compute the size as needed so the size doesn't need to be stored in memory).
+	 * </p>
 	 */
 	int size();
+
+	/**
+	 * Check if this route is the empty route.
+	 *
+	 * @return true if this route has 0 steps
+	 */
+	boolean isEmpty();
 
 	/**
 	 * Create a new route that shares all steps of this route but with an additional step at the end.
@@ -87,14 +98,18 @@ public interface MerkleRoute extends Comparable<MerkleRoute>, Iterable<Integer>,
 	MerkleRoute extendRoute(final int... steps);
 
 	/**
+	 * <p>
 	 * Compare this route to another. Will return -1 if this route is "to the left" of the other route, 1 if this route
 	 * is "to the right" of the other route, and 0 if this route is an ancestor, descendant, or the same as the other
 	 * route.
+	 * </p>
 	 *
+	 * <p>
 	 * To determine if a route is to the left or the right of another route, find a route that is the last common
 	 * ancestor of both (i.e. the longest route that matches the beginnings of both routes). On the last common ancestor
 	 * find the two children that are ancestors of each of the routes. Route A is to the left of route B if the ancestor
 	 * of route A is to the left of the ancestor of route B on the last common ancestor.
+	 * </p>
 	 */
 	@Override
 	int compareTo(final MerkleRoute that);
@@ -116,5 +131,23 @@ public interface MerkleRoute extends Comparable<MerkleRoute>, Iterable<Integer>,
 	 * @return true if the given route is a descendant of this route
 	 */
 	boolean isDescendantOf(final MerkleRoute that);
+
+	/**
+	 * <p>
+	 * Get the step at a particular index.
+	 * </p>
+	 *
+	 * <p>
+	 * May be O(n) where n is the length of the route for some implementations.
+	 * </p>
+	 *
+	 * @param index
+	 * 		the index of the step to fetch. Negative values index from the end of the list, with -1 referencing
+	 * 		the last step, -2 referencing the second to last step, and so on.
+	 * @return the requested step
+	 * @throws IndexOutOfBoundsException
+	 * 		if the requested index is invalid
+	 */
+	int getStep(final int index);
 }
 

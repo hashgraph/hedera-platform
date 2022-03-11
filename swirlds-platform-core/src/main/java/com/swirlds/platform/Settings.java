@@ -19,7 +19,6 @@ import com.swirlds.platform.internal.CryptoSettings;
 import com.swirlds.platform.internal.DatabaseBackupSettings;
 import com.swirlds.platform.internal.DatabaseRestoreSettings;
 import com.swirlds.platform.internal.DatabaseSettings;
-import com.swirlds.platform.internal.JsonExportSettings;
 import com.swirlds.platform.internal.SubSetting;
 import com.swirlds.platform.reconnect.ReconnectSettingsImpl;
 import com.swirlds.platform.state.SignedStateManager;
@@ -33,6 +32,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -81,8 +81,6 @@ class Settings {
 	static final String settingsUsedFilename = "settingsUsed.txt";
 	/** the directory where the settings used file will be created on startup if and only if settings.txt exists */
 	static final File settingsUsedDir = CommonUtils.canonicalFile(".");
-	/** path to log4j2.xml (which might not exist) */
-	static File logPath = CommonUtils.canonicalFile(".", "log4j2.xml");
 	/** path to data/keys/ */
 	static final File keysDirPath = CommonUtils.canonicalFile("data", "keys");
 	/** path to data/apps/ */
@@ -91,24 +89,22 @@ class Settings {
 	static final File savedDirPath = CommonUtils.canonicalFile("data", "saved");
 	/** file extension used by the swirlds platform, it stands for SwirldsHashgraph */
 	static final String swirldsFileExtension = ".swh";
-
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
+	/** path to log4j2.xml (which might not exist) */
+	static File logPath = CommonUtils.canonicalFile(".", "log4j2.xml");
 
 	///////////////////////////////////////////
 	// settings from settings.txt file
-
 	static String about = """
-			Swirlds browser v. 0.22.1
-			(c)2016-2021 Swirlds Inc
+			Swirlds browser v. 0.23.1
+			(c)2016-2022 Swirlds Inc
 			This is an early alpha version.
 			The Swirlds™ software is covered by one or more patents
 			(see www.swirlds.com/ip). The browser is free to download,
 			to experiment with, and to test in building apps. To deploy
 			or use those apps, contact sales@swirlds.com""";
 
-	/** use RSA-3072 instead of ECDSA-p384 for signatures? */
-	static boolean useRSA = true;
 	/** verify event signatures (rather than just trusting they are correct)? */
 	static boolean verifyEventSigs = true;
 	/** number of threads used to verify signatures and generate keys, in parallel */
@@ -119,14 +115,6 @@ class Settings {
 	static boolean showDBStats = false;
 	/** show expand statistics values, inlcude mean, min, max, stdDev */
 	static boolean verboseStatistics = false;
-	/** log any LoggingReentrantLock held at least this many milliseconds (0=all, -1=none) */
-	static int lockLogTimeout = 2000;
-	/** log LoggingReentrantLock requests blocking for at least this many milliseconds (0=all, -1=none) */
-	static int lockLogBlockTimeout = 2000;
-	/** should LoggingReentrantLock only do logging for the Platform where selfId is 0? */
-	static boolean lockLogMemberZeroOnly = false;
-	/** should each lock log also create a file on disk describe all current threads? */
-	static boolean lockLogThreadDump = false;
 
 	/**
 	 * the consensus timestamp of a transaction is guaranteed to be at least this many nanoseconds
@@ -137,9 +125,6 @@ class Settings {
 
 	/** settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors */
 	static StateSettings state = new StateSettings();
-
-	/** settings controlling the diagnostic export of state objects as JSON */
-	static JsonExportSettings jsonExport = new JsonExportSettings();
 
 	/** if set to true, the platform will fail to start if it fails to load a state from disk */
 	static boolean requireStateLoad = false;
@@ -287,6 +272,14 @@ class Settings {
 	static CryptoSettings crypto = new CryptoSettings();
 
 	/**
+	 * When enabled, the platform will try to load node keys from .pfx files located in {@link #keysDirPath}. If even a
+	 * single key is missing, the platform will warn and exit.
+	 *
+	 * If disabled, the platform will generate keys deterministically.
+	 */
+	static boolean loadKeysFromPfxFiles = true;
+
+	/**
 	 * the maximum number of bytes that a single event may contain not including the event headers
 	 * if a single transaction exceeds this limit then the event will contain the single transaction only
 	 */
@@ -294,12 +287,6 @@ class Settings {
 
 	/** the maximum number of transactions that a single event may contain */
 	static int maxTransactionCountPerEvent = 245760;
-
-	/**
-	 * if true, both nodes send and wait for a COMM_EVENT_DONE byte after finishing reading and writing all events of a
-	 * sync
-	 */
-	static boolean sendSyncDoneByte = false;
 
 	/**
 	 * settings controlling the reconnect feature, ie. enabled/disabled, fallen behind, etc
@@ -499,7 +486,7 @@ class Settings {
 		}
 
 		try {
-			scanner = new Scanner(Settings.settingsPath, "utf-8");
+			scanner = new Scanner(Settings.settingsPath, StandardCharsets.UTF_8.name());
 		} catch (final FileNotFoundException e) { // this should never happen
 			CommonUtils.tellUserConsole("The file " + Settings.settingsPath
 					+ " exists, but can't be opened. " + e);
@@ -521,8 +508,7 @@ class Settings {
 			count++;
 			if (!line.isEmpty()) {
 				final String[] pars = Browser.splitLine(line);
-				if (pars.length == 0) { // ignore empty lines
-				} else {
+				if (pars.length > 0) { // ignore empty lines
 					try {
 						if (!handleSetting(pars)) {
 							CommonUtils.tellUserConsole(
@@ -617,7 +603,7 @@ class Settings {
 	 */
 	static Field getFieldByName(final Field[] fields, final String name) {
 		for (final Field f : fields) {
-			if (f.getName().toLowerCase().equals(name.toLowerCase())) {
+			if (f.getName().equalsIgnoreCase(name)) {
 				return f;
 			}
 		}
@@ -644,7 +630,7 @@ class Settings {
 			field.set(object, value);
 			return true;
 		} else if (t == char.class) {
-			field.set(object, (Character) (value.charAt(0)));
+			field.set(object, value.charAt(0));
 			return true;
 		} else if (t == byte.class) {
 			field.set(object, Byte.parseByte(value));

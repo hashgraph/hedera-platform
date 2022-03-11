@@ -99,7 +99,7 @@ class SyncHeartbeat implements Runnable {
 		log.debug(HEARTBEAT.getMarker(),
 				"about to lock platform[{}].syncServer.lockCallHeartbeat[{}]",
 				platform.getSelfId(), otherId);
-		final ReentrantLock lock = platform.getSyncServer().lockCallHeartbeat.get(otherId.getIdAsInt());
+		final ReentrantLock lock = platform.getSyncServer().getOutboundConnLock(otherId);
 		if (!conn.connected()) {
 			return;
 		}

@@ -18,8 +18,7 @@ import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildHashException;
-import com.swirlds.common.merkle.iterators.MerkleHashIterator;
-import com.swirlds.common.merkle.iterators.MerkleRandomHashIterator;
+import com.swirlds.common.merkle.iterators.MerkleIterator;
 import com.swirlds.common.threading.ThreadConfiguration;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
@@ -32,6 +31,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.swirlds.common.crypto.engine.CryptoEngine.THREAD_COMPONENT_NAME;
+import static com.swirlds.common.merkle.iterators.MerkleIterationOrder.POST_ORDERED_DEPTH_FIRST_RANDOM;
 import static com.swirlds.common.merkle.utility.MerkleConstants.MERKLE_DIGEST_TYPE;
 
 /**
@@ -73,6 +73,38 @@ public class MerkleHashBuilder {
 	}
 
 	/**
+	 * Only return nodes that require a hash.
+	 */
+	private static boolean filter(MerkleNode node) {
+		if (node == null) {
+			return false;
+		}
+
+		if (node.isSelfHashing()) {
+			if (node.getHash() == null) {
+				throw new IllegalChildHashException("A self hashing node " + node + " returned a null hash");
+			}
+			return false;
+		}
+
+		return node.getHash() == null;
+	}
+
+	/**
+	 * Don't bother with subtrees that have already been hashed.
+	 */
+	private static boolean descendantFilter(final MerkleNode child) {
+		if (child.isSelfHashing()) {
+			if (child.getHash() == null) {
+				throw new IllegalChildHashException("A self hashing node " + child + " returned a null hash");
+			}
+			return false;
+		}
+
+		return child.getHash() == null;
+	}
+
+	/**
 	 * Compute the hash of the merkle tree synchronously on the caller's thread.
 	 *
 	 * @param root
@@ -87,7 +119,10 @@ public class MerkleHashBuilder {
 		final StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
 
 		try {
-			hashSubtree(new MerkleHashIterator(root), null);
+			final Iterator<MerkleNode> iterator = root.treeIterator()
+					.setFilter(MerkleHashBuilder::filter)
+					.setDescendantFilter(MerkleHashBuilder::descendantFilter);
+			hashSubtree(iterator, null);
 			return root.getHash();
 		} catch (IllegalChildHashException ex) {
 			ex.setStackTrace(stackTrace);
@@ -140,13 +175,12 @@ public class MerkleHashBuilder {
 
 		return () -> {
 
-			Iterator<MerkleNode> it;
-			if (threadId == 0) {
-				// One thread can iterate in-order
-				// This iterator doesn't have to randomize iteration order and is therefore faster
-				it = new MerkleHashIterator(root);
-			} else {
-				it = new MerkleRandomHashIterator(root, threadId);
+			final MerkleIterator<MerkleNode> it = root.treeIterator()
+					.setFilter(MerkleHashBuilder::filter)
+					.setDescendantFilter(MerkleHashBuilder::descendantFilter);
+			if (threadId > 0) {
+				// One thread can iterate in-order, all others will use random order.
+				it.setOrder(POST_ORDERED_DEPTH_FIRST_RANDOM);
 			}
 
 			try {

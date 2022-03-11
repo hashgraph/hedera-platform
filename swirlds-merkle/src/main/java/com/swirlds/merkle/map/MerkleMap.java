@@ -19,6 +19,7 @@ import com.swirlds.common.merkle.Archivable;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.ArchivedException;
 import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
+import com.swirlds.common.merkle.utility.DebugIterationEndpoint;
 import com.swirlds.common.merkle.utility.Keyed;
 import com.swirlds.fchashmap.FCHashMap;
 import com.swirlds.fchashmap.FCHashMapSettingsFactory;
@@ -73,6 +74,7 @@ import static com.swirlds.logging.LogMarker.RECONNECT;
  * 		value that implements {@link MerkleNode} and {@link Keyed}. Can be an internal node or a leaf.
  * 		If this value is an internal node the key will need to be stored inside a descendant leaf node.
  */
+@DebugIterationEndpoint
 public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 		extends AbstractBinaryMerkleInternal
 		implements Archivable, Map<K, V> {
@@ -732,7 +734,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 		final long stamp = readLock();
 		try {
 
-			final Iterator<V> entryIterator = getTree().entryIterator();
+			final Iterator<V> entryIterator = getTree().iterator();
 			final Set<K> keys = new HashSet<>();
 			while (entryIterator.hasNext()) {
 				final V entry = entryIterator.next();
@@ -754,7 +756,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 		final long stamp = readLock();
 		try {
-			final Iterator<V> entryIterator = getTree().entryIterator();
+			final Iterator<V> entryIterator = getTree().iterator();
 			final Set<V> values = new HashSet<>();
 			while (entryIterator.hasNext()) {
 				values.add(entryIterator.next());
@@ -900,7 +902,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 	 */
 	@Override
 	public void initialize() {
-		final Iterator<V> entryIterator = getTree().entryIterator();
+		final Iterator<V> entryIterator = getTree().iterator();
 		while (entryIterator.hasNext()) {
 			final V nextEntry = entryIterator.next();
 			index.put(nextEntry.getKey(), nextEntry);

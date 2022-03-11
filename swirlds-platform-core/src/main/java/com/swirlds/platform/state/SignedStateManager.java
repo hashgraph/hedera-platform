@@ -13,31 +13,28 @@
  */
 package com.swirlds.platform.state;
 
-import com.swirlds.common.AddressBook;
 import com.swirlds.common.AutoCloseableWrapper;
 import com.swirlds.common.InvalidSignedStateListener;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.SwirldState;
 import com.swirlds.common.Transaction;
-import com.swirlds.common.crypto.CryptoFactory;
-import com.swirlds.common.internal.JsonExporterSettings;
+import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.internal.SettingsCommon;
+import com.swirlds.common.stream.HashSigner;
 import com.swirlds.common.threading.ThreadConfiguration;
 import com.swirlds.common.transaction.internal.StateSignatureTransaction;
 import com.swirlds.common.transaction.internal.SystemTransactionBitsPerSecond;
 import com.swirlds.common.transaction.internal.SystemTransactionPing;
-import com.swirlds.logging.payloads.IssPayload;
 import com.swirlds.platform.AbstractPlatform;
-import com.swirlds.platform.Crypto;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SignedStateFileManager;
 import com.swirlds.platform.SwirldsPlatform;
 import com.swirlds.platform.components.StateSignatureRecorder;
-import com.swirlds.platform.event.EventUtils;
+import com.swirlds.platform.crypto.CryptoConstants;
+import com.swirlds.platform.crypto.CryptoStatic;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.security.PublicKey;
 import java.time.Instant;
 import java.util.Iterator;
@@ -45,12 +42,9 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static com.swirlds.common.CommonUtils.hex;
 import static com.swirlds.common.Units.BYTES_TO_BITS;
 import static com.swirlds.common.Units.MILLISECONDS_TO_SECONDS;
 import static com.swirlds.common.Units.SECONDS_TO_MILLISECONDS;
@@ -61,15 +55,22 @@ import static com.swirlds.logging.LogMarker.SIGNED_STATE;
 import static com.swirlds.logging.LogMarker.STATE_ON_DISK_QUEUE;
 import static com.swirlds.logging.LogMarker.STATE_SIG_DIST;
 import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS;
-import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT_NODE;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
 
 /**
  * Data structures and methods to manage the various signed states. That includes collecting signatures from
  * the other members, and storing/loading signed states to/from disk.
  */
-public class SignedStateManager implements StateSignatureRecorder {
+public class SignedStateManager implements StateSignatureRecorder, SignedStateSignatureCollector {
 
+	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
+	private static final Logger log = LogManager.getLogger();
+	/** A queue that stores events for a particular round that will be stored in the local state on disk */
+	private final LinkedHashMap<Long, EventImpl[]> eventsForRound = new LinkedHashMap<>();
+	/** instance in charge of deleting and archiving signed states */
+	private final SignedStateGarbageCollector garbageCollector;
+	/** a thread that runs the SignedStateGarbageCollector */
+	private final Thread garbageCollectorThread;
 	/**
 	 * The latest signed state signed by members with more than 2/3 of total stake.
 	 * The state referenced here will hold an archival reservation.
@@ -77,7 +78,6 @@ public class SignedStateManager implements StateSignatureRecorder {
 	 * Must only be set via {@link #setLastCompleteSignedState(SignedState)}.
 	 */
 	private volatile SignedState lastCompleteSignedState = null;
-
 	/**
 	 * The latest signed state signed by self but not by members with more than 2/3 of total stake.
 	 * The state reference here will hold a reservation.
@@ -85,13 +85,11 @@ public class SignedStateManager implements StateSignatureRecorder {
 	 * Must only be set via {@link #setLastIncompleteSignedState(SignedState)}.
 	 */
 	private volatile SignedState lastIncompleteSignedState = null;
-
 	/**
 	 * signatures by other members (not self) (not thread safe, because it is private and only accessed in a
 	 * synchronized method here)
 	 */
 	private List<SigInfo> otherSigInfos = new LinkedList<>();
-
 	/**
 	 * mapping from round to SignedState for that round. Because it's linked it preserves the order in which
 	 * they are added, this is useful for discarding old states.
@@ -99,50 +97,30 @@ public class SignedStateManager implements StateSignatureRecorder {
 	 * Any signed state taken from this data structure MUST be reserved if it is used outside of a synchronized method.
 	 */
 	private LinkedHashMap<Long, SignedState> allStates = new LinkedHashMap<>();
-
 	/** a list of states that are saved to disk */
 	private LinkedList<Long> savedToDisk = new LinkedList<>();
 	/** the last SignedState round that is intended to be saved to disk */
 	private volatile long lastSSRoundGoingToDisk = -1;
-
 	/** the member ID for self */
 	private NodeId selfId;
 	/**
 	 * The Platform whose address book has all members. Those with more than 2/3 of total stake must sign to
 	 * complete
 	 */
-	private AbstractPlatform platform;
-	/** The Crypto object used to verify and sign */
-	private Crypto crypto;
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
-	private static final Logger log = LogManager.getLogger();
-
+	private final AbstractPlatform platform;
+	/** used to sign states with the platforms signing private key */
+	private final HashSigner signer;
 	/** the timestamp of the last signed state held by the manager */
 	private Instant lastSignedStateTimestamp = null;
-
-	/** A queue that stores events for a particular round that will be stored in the local state on disk */
-	private final LinkedHashMap<Long, EventImpl[]> eventsForRound = new LinkedHashMap<>();
-
 	/** last time the state is saved to disk successfully in millisecond */
 	private long lastSaveStateTimeMS;
-
 	/** a thread that provides a new signed state to SwirldMain */
 	private Thread newSignedStateThread;
-
-	/** instance in charge of deleting and archiving signed states */
-	private final SignedStateGarbageCollector garbageCollector;
-
-	/** a thread that runs the SignedStateGarbageCollector */
-	private final Thread garbageCollectorThread;
-
 	/** a thread that writes, reads and deletes FastCopyable object to/from files */
 	private SignedStateFileManager signedStateFileManager;
 
 	/** settings that control {@link SignedState} creation, deletion, and disk persistence */
 	private StateSettings stateSettings;
-
-	/** settings that control the {@link #jsonifySignedState(SignedState, StateDumpSource)} features and behavior */
-	private JsonExporterSettings jsonExporterSettings;
 
 	/** track all registered {@link InvalidSignedStateListener} attached to this {@link SignedStateManager} instance */
 	private List<InvalidSignedStateListener> invalidSignedStateListeners;
@@ -167,17 +145,85 @@ public class SignedStateManager implements StateSignatureRecorder {
 	 */
 	private double lastISSDumpTimestampSeconds;
 
-	/**
-	 * Keeps track of whether a ISS has been logged or not
-	 */
-	private boolean firstISSLogged = false;
+	private final IssLogger issLogger;
+
 
 	/**
-	 * Used by {@link #jsonifySignedState(SignedState, StateDumpSource)} to control continually dumping signed states
-	 * after a reconnect has occurred. This feature is enabled/disabled via the {@link
-	 * JsonExporterSettings#isWriteContinuallyEnabled()} setting.
+	 * Start empty, with no known signed states. The number of addresses in
+	 * platform.hashgraph.getAddressBook() must not change in the future. The addressBook must contain
+	 * exactly the set of members who can sign the state. A signed state is considered completed when it has
+	 * signatures from members with 1/3 or more of the total stake.
+	 *
+	 * @param platform
+	 * 		the Platform running this, such that platform.hashgraph.getAddressBook() containing
+	 * 		exactly those members who can sign
+	 * @param signer
+	 * 		used to sign states with the platforms signing private key
+	 * @param signedStateFileManager
+	 * 		a manager which takes care of saving, deleting, and managing signed state files
+	 * @param stateSettings
+	 * 		settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors
 	 */
-	private static final AtomicBoolean jsonDumpContinually = new AtomicBoolean(false);
+	public SignedStateManager(final AbstractPlatform platform, final HashSigner signer,
+			final SignedStateFileManager signedStateFileManager, final StateSettings stateSettings) {
+		this(platform, signer, signedStateFileManager, stateSettings,
+				new SignedStateGarbageCollector(platform::getStats, stateSettings));
+	}
+
+	/**
+	 * Start empty, with no known signed states. The number of addresses in
+	 * platform.hashgraph.getAddressBook() must not change in the future. The addressBook must contain
+	 * exactly the set of members who can sign the state. A signed state is considered completed when it has
+	 * signatures from members with 1/3 or more of the total stake.
+	 *
+	 * @param platform
+	 * 		the Platform running this, such that platform.hashgraph.getAddressBook() containing
+	 * 		exactly those members who can sign
+	 * @param signer
+	 * 		used to sign states with the platforms signing private key
+	 * @param signedStateFileManager
+	 * 		a manager which takes care of saving, deleting, and managing signed state files
+	 * @param stateSettings
+	 * 		settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors
+	 * @param signedStateGarbageCollector
+	 * 		a garbage collector which deletes signed states which are not reserved for use
+	 */
+	protected SignedStateManager(final AbstractPlatform platform, final HashSigner signer,
+			final SignedStateFileManager signedStateFileManager, final StateSettings stateSettings,
+			final SignedStateGarbageCollector signedStateGarbageCollector) {
+
+		this.selfId = platform.getSelfId();
+		this.platform = platform;
+		this.signer = signer;
+
+		this.issLogger = new IssLogger(platform.getSelfId().getId(), platform.getStats());
+
+		this.signedStateFileManager = signedStateFileManager;
+		this.stateSettings = stateSettings;
+
+		// Initialize the list of InvalidStateListeners
+		this.invalidSignedStateListeners = new LinkedList<>();
+
+		newSignedStateThread = new ThreadConfiguration()
+				.setNodeId(selfId.getId())
+				.setComponent(PLATFORM_THREAD_POOL_NAME)
+				.setThreadName("newSignedState")
+				.setRunnable(new NewSignedStateRunnable(newSignedStateQueue, platform.getAppMain()))
+				.build();
+		newSignedStateThread.start();
+
+		this.garbageCollector = signedStateGarbageCollector;
+
+		garbageCollectorThread = new ThreadConfiguration()
+				.setNodeId(selfId.getId())
+				.setComponent(PLATFORM_THREAD_POOL_NAME)
+				.setThreadName("signedStateGarbageCollector")
+				.setRunnable(garbageCollector)
+				.build();
+		garbageCollectorThread.start();
+
+		lock = new ReentrantLock(false);
+	}
 
 	/**
 	 * Acquire {@link #lock} and return an {@link AutoCloseableWrapper} around it that unlocks the lock.
@@ -185,30 +231,6 @@ public class SignedStateManager implements StateSignatureRecorder {
 	private AutoCloseableWrapper<ReentrantLock> getAutoCloseableLock() {
 		lock.lock();
 		return new AutoCloseableWrapper<>(lock, lock::unlock);
-	}
-
-	/**
-	 * Mark a SignedState as the most recent completed signed state.
-	 */
-	private void setLastCompleteSignedState(SignedState ss) {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			if (lastCompleteSignedState != null) {
-				lastCompleteSignedState.weakReleaseState();
-			}
-			if (ss != null) {
-				ss.weakReserveState();
-				// All signed states from earlier rounds can be archived now.
-				for (SignedState state : allStates.values()) {
-					if (!state.isMarkedForArchival()
-							&& state.isComplete()
-							&& state.getLastRoundReceived() < ss.getLastRoundReceived()) {
-						state.markForArchival();
-						garbageCollector.archiveBackground(state);
-					}
-				}
-			}
-			lastCompleteSignedState = ss;
-		}
 	}
 
 	/**
@@ -290,6 +312,30 @@ public class SignedStateManager implements StateSignatureRecorder {
 	}
 
 	/**
+	 * Mark a SignedState as the most recent completed signed state.
+	 */
+	private void setLastCompleteSignedState(SignedState ss) {
+		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
+			if (lastCompleteSignedState != null) {
+				lastCompleteSignedState.weakReleaseState();
+			}
+			if (ss != null) {
+				ss.weakReserveState();
+				// All signed states from earlier rounds can be archived now.
+				for (SignedState state : allStates.values()) {
+					if (!state.isMarkedForArchival()
+							&& state.isComplete()
+							&& state.getLastRoundReceived() < ss.getLastRoundReceived()) {
+						state.markForArchival();
+						garbageCollector.archiveBackground(state);
+					}
+				}
+			}
+			lastCompleteSignedState = ss;
+		}
+	}
+
+	/**
 	 * Returns the latest signed {#link SwirldState} signed by members with more than 1/3 of total stake.
 	 *
 	 * The {#link SwirldState} is returned in a {#link AutoCloseableWrapper} that <b>must</b> be use with
@@ -367,88 +413,6 @@ public class SignedStateManager implements StateSignatureRecorder {
 	}
 
 	/**
-	 * Start empty, with no known signed states. The number of addresses in
-	 * platform.hashgraph.getAddressBook() must not change in the future. The addressBook must contain
-	 * exactly the set of members who can sign the state. A signed state is considered completed when it has
-	 * signatures from members with 1/3 or more of the total stake.
-	 *
-	 * @param platform
-	 * 		the Platform running this, such that platform.hashgraph.getAddressBook() containing
-	 * 		exactly those members who can sign
-	 * @param crypto
-	 * 		an object holding all the public/private key pairs and the CSPRNG state for this member
-	 * @param signedStateFileManager
-	 * 		a manager which takes care of saving, deleting, and managing signed state files
-	 * @param stateSettings
-	 * 		settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors
-	 * @param jsonExporterSettings
-	 * 		settings that control the diagnostic export of state objects as JSON
-	 */
-	public SignedStateManager(final AbstractPlatform platform, final Crypto crypto,
-			final SignedStateFileManager signedStateFileManager, final StateSettings stateSettings,
-			final JsonExporterSettings jsonExporterSettings) {
-		this(platform, crypto, signedStateFileManager, stateSettings,
-				jsonExporterSettings, new SignedStateGarbageCollector(platform::getStats, stateSettings));
-	}
-
-	/**
-	 * Start empty, with no known signed states. The number of addresses in
-	 * platform.hashgraph.getAddressBook() must not change in the future. The addressBook must contain
-	 * exactly the set of members who can sign the state. A signed state is considered completed when it has
-	 * signatures from members with 1/3 or more of the total stake.
-	 *
-	 * @param platform
-	 * 		the Platform running this, such that platform.hashgraph.getAddressBook() containing
-	 * 		exactly those members who can sign
-	 * @param crypto
-	 * 		an object holding all the public/private key pairs and the CSPRNG state for this member
-	 * @param signedStateFileManager
-	 * 		a manager which takes care of saving, deleting, and managing signed state files
-	 * @param stateSettings
-	 * 		settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors
-	 * @param jsonExporterSettings
-	 * 		settings that control the diagnostic export of state objects as JSON
-	 * @param signedStateGarbageCollector
-	 * 		a garbage collector which deletes signed states which are not reserved for use
-	 */
-	protected SignedStateManager(final AbstractPlatform platform, final Crypto crypto,
-			final SignedStateFileManager signedStateFileManager, final StateSettings stateSettings,
-			final JsonExporterSettings jsonExporterSettings,
-			final SignedStateGarbageCollector signedStateGarbageCollector) {
-
-		this.selfId = platform.getSelfId();
-		this.platform = platform;
-		this.crypto = crypto;
-
-		this.signedStateFileManager = signedStateFileManager;
-		this.stateSettings = stateSettings;
-		this.jsonExporterSettings = jsonExporterSettings;
-
-		// Initialize the list of InvalidStateListeners
-		this.invalidSignedStateListeners = new LinkedList<>();
-
-		newSignedStateThread = new ThreadConfiguration()
-				.setNodeId(selfId.getId())
-				.setComponent(PLATFORM_THREAD_POOL_NAME)
-				.setThreadName("newSignedState")
-				.setRunnable(new NewSignedStateRunnable(newSignedStateQueue, platform.getAppMain()))
-				.build();
-		newSignedStateThread.start();
-
-		this.garbageCollector = signedStateGarbageCollector;
-
-		garbageCollectorThread = new ThreadConfiguration()
-				.setNodeId(selfId.getId())
-				.setComponent(PLATFORM_THREAD_POOL_NAME)
-				.setThreadName("signedStateGarbageCollector")
-				.setRunnable(garbageCollector)
-				.build();
-		garbageCollectorThread.start();
-
-		lock = new ReentrantLock(false);
-	}
-
-	/**
 	 * Invokes the invalid signed state listeners.
 	 *
 	 * @param signedState
@@ -494,7 +458,8 @@ public class SignedStateManager implements StateSignatureRecorder {
 	 * @param ss
 	 * 		the signed state to be kept by the manager
 	 */
-	public SigSet newSelfSigned(SignedState ss) {
+	@Override
+	public SigSet collectSignatures(SignedState ss) {
 		// The last state saved before the freeze period is always saved to disk
 		// the first round should be saved to disk and every round which is about saveStatePeriod seconds after the
 		// previous one should be saved.
@@ -505,17 +470,18 @@ public class SignedStateManager implements StateSignatureRecorder {
 		// Put the round number and signature of the SignedState into a system transaction.
 		// There is no need to store the hash, since everyone should agree.
 		// There is no need to sign the transaction, because the event will be signed.
-		final byte[] sig = crypto.sign(ss.getStateHashBytes());
+		final Hash stateHash = ss.getStateHash();
+		final byte[] sig = signer.sign(stateHash);
 		log.info(SIGNED_STATE.getMarker(), "newSelfSigned:: get sig by calling crypto.sign()");
 
 		final Transaction freezeTran = new StateSignatureTransaction(ss.isFreezeState(),
 				ss.getLastRoundReceived(),
 				sig);
 
-		if (ss.getStateHashBytes().length != Crypto.HASH_SIZE_BYTES) {
+		if (stateHash.getValue().length != CryptoConstants.HASH_SIZE_BYTES) {
 			log.error(EXCEPTION.getMarker(),
 					"hash.length = {} != {} = Crypto.HASH_SIZE_BYTES",
-					ss.getStateHashBytes().length, Crypto.HASH_SIZE_BYTES);
+					stateHash.getValue().length, CryptoConstants.HASH_SIZE_BYTES);
 		}
 
 		// If beta mirror logic is enabled and this node is zero stake then do not attempt
@@ -711,28 +677,15 @@ public class SignedStateManager implements StateSignatureRecorder {
 			// verify that the other member's signature is a valid signature of the hash found by self
 			// if multiple for the same (round,member), only count 1
 			boolean valid = false;
-			try {
-				// verify signatures from others, but not from self
-				if (stateSettings.isEnableStateRecovery()) {
-					//recover mode no need to collect signatures
-					return;
-				} else {
-					valid = singleMember || crypto.verifySignatureParallel(selfSigInfo.getHash(),
-							sigInfo.getSig(), key, (Boolean b) -> {
-							}).get(); // do the verification in parallel, but wait until it's done
-				}
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
+			// verify signatures from others, but not from self
+			if (stateSettings.isEnableStateRecovery()) {
+				//recover mode no need to collect signatures
 				return;
-			} catch (ExecutionException e) {
-				// Such exceptions are acceptable for reconnect node,
-				// because when a node falls behind, EventFlow.stopAndClear() would be called,
-				// which stops all the threads in EventFlow and clears out all the data,
-				// thus causes InterruptedException
-				log.error(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT_NODE.getMarker(),
-						"error while verifying signature:", e);
-				return;
+			} else {
+				valid = singleMember || CryptoStatic.verifySignature(selfSigInfo.getHash(), sigInfo.getSig(), key);
 			}
+
+			issLogger.reportSignature(signedState, sigInfo.getMemberId(), valid);
 
 			if (valid) {
 				// it verified so save it (otherwise, it's discarded)
@@ -774,8 +727,8 @@ public class SignedStateManager implements StateSignatureRecorder {
 							platform::getSelfId, selfSigInfo::getRound);
 				}
 
-				if (sigSet.isComplete() && //
-						(lastCompleteSignedState == null || //
+				if (sigSet.isComplete() &&
+						(lastCompleteSignedState == null ||
 								selfSigInfo.getRound() > lastCompleteSignedState.getLastRoundReceived())) {
 					setLastCompleteSignedState(signedState);
 					log.info(LAST_COMPLETE_SIGNED_STATE.getMarker(),
@@ -787,17 +740,14 @@ public class SignedStateManager implements StateSignatureRecorder {
 						findLastIncompleteSignedState();
 					}
 				}
-
-				// Added to support dumping signed state JSON files after a reconnect
-				// This is enabled/disabled by a setting which defaults to disabled and is okay to leave in prod code
-				jsonifySignedState(signedState, StateDumpSource.STATE_SIGNED);
 			} else {
-				handleInvalidSignedState(signedState, sigInfo);
+				signedState.reserveState();
+				try {
+					notifySignedStateListeners(signedState, sigInfo);
+				} finally {
+					signedState.releaseState();
+				}
 				dumpSignedState(signedState);
-
-				// Added to support dumping signed state JSON files after an invalid signed state is detected
-				// This is enabled/disabled by a setting which defaults to disabled and is okay to leave in prod code
-				jsonifySignedState(signedState, StateDumpSource.INVALID_SIG);
 			}
 		}
 	}
@@ -828,70 +778,6 @@ public class SignedStateManager implements StateSignatureRecorder {
 
 		state.weakReserveState();
 		signedStateFileManager.saveIssStateToDisk(state);
-	}
-
-
-	/**
-	 * Diagnostic utility method for writing JSON versions of the {@link SignedState}, {@link SwirldState}, and {@code
-	 * Hashgraph} contents. The JSON files are written in the saved state folders located under the {@code data/saved}
-	 * path and are organized by node ID and round numbers.
-	 *
-	 * <p>
-	 * NOTE: This utility is controlled via the {@link JsonExporterSettings} and different features maybe
-	 * enabled/disabled individually. Please see the javadoc on the {@link JsonExporterSettings} interface for
-	 * additional details.
-	 * </p>
-	 *
-	 * @param state
-	 * 		the signed state instance to be serialized as a JSON file
-	 * @param source
-	 * 		an enumeration value indicated the calling platform feature that requested the export
-	 */
-	public void jsonifySignedState(final SignedState state, final StateDumpSource source) {
-
-		boolean shouldDump = jsonExporterSettings.isActive();
-		boolean onDisk = false;
-
-		switch (source) {
-			case INVALID_SIG:
-				jsonDumpContinually.set(false);
-				break;
-			case RECONNECT:
-				jsonDumpContinually.set(jsonExporterSettings.isWriteContinuallyEnabled());
-				break;
-			case STATE_SIGNED:
-				shouldDump = jsonDumpContinually.get();
-				break;
-			case DISK_WRITE:
-				shouldDump = jsonExporterSettings.isActive() && jsonExporterSettings.isWriteWithSavedStateEnabled();
-				break;
-			case DISK_LOAD:
-				shouldDump = jsonExporterSettings.isActive() && jsonExporterSettings.isWriteWithSavedStateEnabled();
-				onDisk = true;
-				break;
-			case USER_REQUEST:
-			default:
-				break;
-		}
-
-		if (shouldDump) {
-			try {
-				if (jsonExporterSettings.isHashgraphExportEnabled()) {
-					signedStateFileManager.jsonify(state.getLastRoundReceived(), platform.getAllEvents(), onDisk);
-				}
-
-				if (jsonExporterSettings.isSignedStateExportEnabled()) {
-					signedStateFileManager.jsonify(state, onDisk);
-				}
-
-				if (jsonExporterSettings.isSwirldStateExportEnabled()) {
-					signedStateFileManager.jsonify(state.getLastRoundReceived(), state.getSwirldState(), onDisk);
-				}
-			} catch (IOException ex) {
-				log.info(TESTING_EXCEPTIONS.getMarker(), "Error while writing JSON signed state", ex);
-			}
-		}
-
 	}
 
 	// This may be used for a recovery feature in the future.
@@ -1013,92 +899,5 @@ public class SignedStateManager implements StateSignatureRecorder {
 	 */
 	public long getLastSSRoundGoingToDisk() {
 		return lastSSRoundGoingToDisk;
-	}
-
-	/**
-	 * Internal utility method for logging an invalid state error and invoking the {@link InvalidSignedStateListener}.
-	 *
-	 * @param signedState
-	 * 		the signed state which was determined to be invalid based on the signature
-	 * @param sigInfo
-	 * 		the signature and related information which did not match the signed state
-	 */
-	private void handleInvalidSignedState(final SignedState signedState, final SigInfo sigInfo) {
-		final PlatformState platformState = signedState.getState().getPlatformState();
-
-		org.apache.logging.log4j.util.Supplier<String> eventsToString;
-		if (!firstISSLogged) {
-			eventsToString = () -> {
-				StringBuilder sb = new StringBuilder();
-				for (EventImpl event : signedState.getEvents()) {
-					sb.append(event.getBaseEventHashedData().toString());
-					sb.append('\n');
-					sb.append(event.getBaseEventUnhashedData().toString());
-					sb.append('\n');
-					sb.append(event.getConsensusData().toString());
-					sb.append('\n');
-				}
-				return sb.toString();
-			};
-		} else {
-			eventsToString = () -> "Events logged only on first ISS";
-		}
-
-		final AddressBook addressBook = signedState.getAddressBook();
-		CryptoFactory.getInstance().digestSync(addressBook);
-
-		log.error(TESTING_EXCEPTIONS.getMarker(),
-				"Exception: {} Received invalid state signature! round:{} memberId:{} details:\n"
-						+ "hash: {}\n"//
-						+ "consensusTimestamp: {}\n"//
-						+ "numEventsCons: {}\n"//
-						+ "hashEventsCons: {}\n"//
-						+ "eventHashXor: {}\n"//
-						+ "swirldStateHash: {}\n"//
-						+ "addressBookHash: {}\n"
-						+ "platformStateHash: {}\n"
-						+ "platformStateConsensusTime: {}\n"
-						+ "platformStateRound: {}\n"
-						+ "platformStateNumEventsCons: {}\n"
-						+ "platformStateHashEventsCons: {}\n"
-						+ "platformStateMinGenInfo: {}\n"
-						+ "platformStateAddressBookHash: {}\n"
-						+ "platformStateEventCount: {}\n"
-						+ "platformStateLastTransactionTimestamp: {}\n"
-						+ "events: \n{}\n",
-				platform::getSelfId, sigInfo::getRound, sigInfo::getMemberId,
-				signedState::getStateHash,
-				signedState::getConsensusTimestamp,
-				signedState::getNumEventsCons,
-				signedState::getHashEventsCons,
-				() -> hex(EventUtils.xorEventHashes(signedState.getEvents())),
-				() -> hex(signedState.getSwirldStateHashBytes()),
-				() -> signedState.getAddressBook().getHash().toString(),
-				platformState::getHash,
-				platformState::getConsensusTimestamp,
-				platformState::getRound,
-				platformState::getNumEventsCons,
-				platformState::getHashEventsCons,
-				platformState::getMinGenInfo,
-				addressBook::getHash,
-				() -> platformState.getEvents().length,
-				platformState::getLastTransactionTimestamp,
-				eventsToString
-		);
-
-		log.error(TESTING_EXCEPTIONS.getMarker(), () -> new IssPayload(
-				signedState.getLastRoundReceived(),
-				selfId.getId(),
-				sigInfo.getMemberId()
-		));
-
-		signedState.reserveState();
-		try {
-			notifySignedStateListeners(signedState, sigInfo);
-		} finally {
-			signedState.releaseState();
-		}
-
-		firstISSLogged = true;
 	}
 }

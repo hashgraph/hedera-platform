@@ -31,6 +31,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -284,11 +285,13 @@ public class ShadowGraphSynchronizer {
 			final SyncConnection conn,
 			final SyncTiming timing,
 			final List<EventImpl> sendList)
-			throws ParallelExecutionException, IOException {
+			throws ParallelExecutionException, IOException, SyncException {
 		timing.setTimePoint(4);
+		// the reading thread uses this to indicate to the writing thread that it is done
+		final CountDownLatch eventReadingDone = new CountDownLatch(1);
 		final Integer eventsRead = executor.doParallel(
-				SyncComms.phase3Read(conn, eventTaskCreator::addEvent, stats),
-				SyncComms.phase3Write(conn, sendList)
+				SyncComms.phase3Read(conn, eventTaskCreator::addEvent, stats, eventReadingDone),
+				SyncComms.phase3Write(conn, sendList, eventReadingDone)
 		);
 		LOG.info(SYNC_INFO.getMarker(),
 				"{} writing events done, wrote {} events",
@@ -296,9 +299,8 @@ public class ShadowGraphSynchronizer {
 		LOG.info(SYNC_INFO.getMarker(), "{} reading events done, read {} events",
 				conn.getDescription(), eventsRead);
 
-		if (settings.shouldSendSyncDoneByte()) {
-			SyncComms.syncDoneByte(conn);
-		}
+		SyncComms.syncDoneByte(conn);
+
 		syncDone(new SyncResult(
 				conn.isOutbound(),
 				conn.getOtherId(),

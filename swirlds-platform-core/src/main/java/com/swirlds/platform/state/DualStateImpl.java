@@ -53,7 +53,7 @@ public class DualStateImpl extends AbstractMerkleLeaf implements PlatformDualSta
 	public DualStateImpl() {
 	}
 
-	private DualStateImpl(final DualStateImpl that) {
+	protected DualStateImpl(final DualStateImpl that) {
 		super(that);
 		this.freezeTime = that.freezeTime;
 		this.lastFrozenTime = that.lastFrozenTime;

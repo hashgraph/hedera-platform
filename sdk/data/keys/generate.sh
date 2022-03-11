@@ -28,11 +28,6 @@ mkdir unused 2>/dev/null
 mv *.pfx unused 2>/dev/null
 rmdir unused 2>/dev/null
 
-# When gen_stream_key is set to 1, an extra pair of key used for streaming will be generated
-# and added to keystore
-
-gen_stream_key=1
-
 for nm in "${names[@]}"; do
   n="$(echo $nm | tr '[A-Z]' '[a-z]')"
   keytool -genkeypair -alias "s-$n" -keystore "private-$n.pfx" -storetype "pkcs12" -storepass "password" -dname "cn=s-$n" -keyalg "rsa" -sigalg "SHA384withRSA" -keysize "3072" -validity "36524"
@@ -51,38 +46,10 @@ for nm in "${names[@]}"; do
   keytool -exportcert -alias "e-$n" -keystore "private-$n.pfx" -storetype "pkcs12" -storepass "password" |
     keytool -importcert -alias "e-$n" -keystore "public.pfx" -storetype "pkcs12" -storepass "password" -noprompt
 
-  if [ $gen_stream_key == 1 ]; then
-    # generate stream key pair for client
-    keytool -genkeypair -alias "k-$n" -keystore "private-$n.pfx" -storetype "pkcs12" -storepass "password" -dname "cn=k-$n" -keyalg "ec" -sigalg "SHA384withECDSA" -groupname "secp384r1" -validity "36524"
-
-    keytool -certreq -alias "k-$n" -keystore "private-$n.pfx" -storetype "pkcs12" -storepass "password" |
-      keytool -gencert -alias "s-$n" -keystore "private-$n.pfx" -storetype "pkcs12" -storepass "password" -validity "36524" |
-      keytool -importcert -alias "k-$n" -keystore "private-$n.pfx" -storetype "pkcs12" -storepass "password"
-
-    keytool -exportcert -alias "k-$n" -keystore "private-$n.pfx" -storetype "pkcs12" -storepass "password" |
-      keytool -importcert -alias "k-$n" -keystore "public.pfx" -storetype "pkcs12" -storepass "password" -noprompt
-  fi
-
   echo "--------------------"
   echo "file: private-$n.pfx"
   keytool -list -keystore "private-$n.pfx" -storetype "pkcs12" -storepass "password"
 done
-
-if [ $gen_stream_key == 1 ]; then
-  # generate stream key pair for server
-  keytool -genkeypair -alias "s-stream" -keystore "private-stream.pfx" -storetype "pkcs12" -storepass "password" -dname "cn=s-stream" -keyalg "rsa" -sigalg "SHA384withRSA" -keysize "3072" -validity "36524"
-
-  keytool -genkeypair -alias "k-stream" -keystore "private-stream.pfx" -storetype "pkcs12" -storepass "password" -dname "cn=k-stream" -keyalg "ec" -sigalg "SHA384withECDSA" -groupname "secp384r1" -validity "36524"
-
-  # export certificate
-  keytool -certreq -alias "k-stream" -keystore "private-stream.pfx" -storetype "pkcs12" -storepass "password" |
-    keytool -gencert -alias "s-stream" -keystore "private-stream.pfx" -storetype "pkcs12" -storepass "password" -validity "36524" |
-    keytool -importcert -alias "k-stream" -keystore "private-stream.pfx" -storetype "pkcs12" -storepass "password"
-
-  # import to public.pfx
-  keytool -exportcert -alias "k-stream" -keystore "private-stream.pfx" -storetype "pkcs12" -storepass "password" |
-    keytool -importcert -alias "k-stream" -keystore "public.pfx" -storetype "pkcs12" -storepass "password" -noprompt
-fi
 
 echo "--------------------"
 echo "file: public.pfx"

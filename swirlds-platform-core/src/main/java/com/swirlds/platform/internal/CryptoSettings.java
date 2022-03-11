@@ -48,19 +48,6 @@ public class CryptoSettings extends SubSetting implements CryptographySettings {
 	 */
 	public String keystorePassword = CryptoSettings.DEFAULT_KEYSTORE_PASSWORD;
 
-	public CryptoSettings() {
-
-	}
-
-	public CryptoSettings(final double cpuVerifierThreadRatio, final double cpuDigestThreadRatio,
-			final int cpuVerifierQueueSize, final int cpuDigestQueueSize, final String keystorePassword) {
-		this.cpuVerifierThreadRatio = cpuVerifierThreadRatio;
-		this.cpuDigestThreadRatio = cpuDigestThreadRatio;
-		this.cpuVerifierQueueSize = cpuVerifierQueueSize;
-		this.cpuDigestQueueSize = cpuDigestQueueSize;
-		this.keystorePassword = keystorePassword;
-	}
-
 	/**
 	 * {@inheritDoc}
 	 */
@@ -102,10 +89,13 @@ public class CryptoSettings extends SubSetting implements CryptographySettings {
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * Returns the password to be used to protected the PKCS12 key store containing the nodes RSA key pairs. This method
+	 * safely falls back on default values if no password was provided.
+	 *
+	 * @return the key store password
 	 */
 	@Override
 	public String getKeystorePassword() {
-		return keystorePassword;
+		return (keystorePassword == null) ? CryptographySettings.DEFAULT_KEYSTORE_PASSWORD : keystorePassword;
 	}
 }

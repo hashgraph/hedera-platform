@@ -14,7 +14,6 @@
 
 package com.swirlds.platform;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swirlds.common.CommonUtils;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.Transaction;
@@ -308,7 +307,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * {@inheritDoc}
 	 */
-	@JsonIgnore
 	@Override
 	public long getClassId() {
 		return ConsensusEvent.CLASS_ID;
@@ -317,7 +315,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * {@inheritDoc}
 	 */
-	@JsonIgnore
 	@Override
 	public int getVersion() {
 		return ConsensusEvent.CLASS_VERSION;
@@ -331,7 +328,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * @return The hashed part of a base event
 	 */
-	@JsonIgnore
 	public BaseEventHashedData getBaseEventHashedData() {
 		return baseEventHashedData;
 	}
@@ -339,7 +335,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * @return The part of a base event which is not hashed
 	 */
-	@JsonIgnore
 	public BaseEventUnhashedData getBaseEventUnhashedData() {
 		return baseEventUnhashedData;
 	}
@@ -347,7 +342,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * @return Consensus data calculated for an event
 	 */
-	@JsonIgnore
 	public ConsensusData getConsensusData() {
 		return consensusData;
 	}
@@ -355,7 +349,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * @return Internal data used for calculating consensus
 	 */
-	@JsonIgnore
 	public InternalEventData getInternalEventData() {
 		return internalEventData;
 	}
@@ -395,7 +388,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * @return array of transactions inside this event instance
 	 */
-	@JsonIgnore
 	public Transaction[] getTransactions() {
 		return baseEventHashedData.getTransactions();
 	}
@@ -516,7 +508,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * @return the time this event was first received locally
 	 */
-	@JsonIgnore
 	public Instant getTimeReceived() {
 		return internalEventData.getTimeReceived();
 	}
@@ -547,7 +538,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * @return the local time (not consensus time) at which the event reached consensus
 	 */
-	@JsonIgnore
 	public Instant getReachedConsTimestamp() {
 		return internalEventData.getReachedConsTimestamp();
 	}
@@ -562,7 +552,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * @return the Election associated with the earliest round involved in the election for this event's fame
 	 */
-	@JsonIgnore
 	public RoundInfo.ElectionRound getFirstElection() {
 		return internalEventData.getFirstElection();
 	}
@@ -578,7 +567,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * @return temporarily used during any graph algorithm that needs to mark vertices (events) already visited
 	 */
-	@JsonIgnore
 	public int getMark() {
 		return internalEventData.getMark();
 	}
@@ -610,7 +598,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 * @return is roundCreated frozen (won't change with address book changes)? True if an ancestor of a famous
 	 * 		witness
 	 */
-	@JsonIgnore
 	public boolean isFrozen() {
 		return internalEventData.isFrozen();
 	}
@@ -636,7 +623,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 * 		the member ID
 	 * @return last ancestor created by m (memoizes lastSee function from Swirlds-TR-2020-01)
 	 */
-	@JsonIgnore
 	public EventImpl getLastSee(int m) {
 		return internalEventData.getLastSee(m);
 	}
@@ -676,7 +662,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 * 		the member ID
 	 * @return strongly-seen witness in parent round by m (memoizes stronglySeeP function from Swirlds-TR-2020-01)
 	 */
-	@JsonIgnore
 	public EventImpl getStronglySeeP(int m) {
 		return internalEventData.getStronglySeeP(m);
 	}
@@ -716,7 +701,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 * @return The first witness that's a self-ancestor in the self round (memoizes function from
 	 * 		Swirlds-TR-2020-01)
 	 */
-	@JsonIgnore
 	public EventImpl getFirstSelfWitnessS() {
 		return internalEventData.getFirstSelfWitnessS();
 	}
@@ -733,7 +717,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 * @return the first witness that's an ancestor in the the self round (memoizes function from
 	 * 		Swirlds-TR-2020-01)
 	 */
-	@JsonIgnore
 	public EventImpl getFirstWitnessS() {
 		return internalEventData.getFirstWitnessS();
 	}
@@ -749,7 +732,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * {@inheritDoc}
 	 */
-	@JsonIgnore
 	public boolean isLastOneBeforeShutdown() {
 		return internalEventData.isLastEventBeforeShutdown();
 	}
@@ -817,7 +799,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * {@inheritDoc}
 	 */
-	@JsonIgnore
 	@Override
 	public EventImpl getSelfParent() {
 		return internalEventData.getSelfParent();
@@ -826,7 +807,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	/**
 	 * {@inheritDoc}
 	 */
-	@JsonIgnore
 	@Override
 	public EventImpl getOtherParent() {
 		return internalEventData.getOtherParent();

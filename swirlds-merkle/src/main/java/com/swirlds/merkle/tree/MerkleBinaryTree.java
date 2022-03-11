@@ -15,12 +15,13 @@
 package com.swirlds.merkle.tree;
 
 import com.swirlds.common.crypto.SerializableHashable;
+import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
+import com.swirlds.common.merkle.iterators.MerkleIterator;
 import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
 import com.swirlds.common.merkle.utility.MerkleLong;
 import com.swirlds.merkle.tree.internal.BitUtil;
-import com.swirlds.merkle.tree.internal.MerkleTreeEntryIterator;
 
 import java.util.Iterator;
 import java.util.function.Consumer;
@@ -40,7 +41,7 @@ import static com.swirlds.common.merkle.utility.MerkleUtils.findChildPositionInP
  * @param <T>
  * 		Type for leaves
  */
-public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkleInternal {
+public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkleInternal implements Iterable<T> {
 
 	public static final long CLASS_ID = 0x84bec080aa5cfeecL;
 
@@ -472,9 +473,9 @@ public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkle
 			throw new IllegalArgumentException("Null predicates are not allowed");
 		}
 
-		final Iterator<T> leafIterator = this.entryIterator();
-		while (leafIterator.hasNext()) {
-			final T leaf = leafIterator.next();
+		final Iterator<T> iterator = this.iterator();
+		while (iterator.hasNext()) {
+			final T leaf = iterator.next();
 			if (condition.test(leaf)) {
 				return leaf;
 			}
@@ -545,12 +546,36 @@ public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkle
 	}
 
 	/**
-	 * Returns an iterator over the entries in the tree.
-	 *
-	 * @return Iterator over the entries of the tree.
+	 * {@inheritDoc}
 	 */
-	public Iterator<T> entryIterator() {
-		return new MerkleTreeEntryIterator<>(this.getRoot());
+	@Override
+	public MerkleIterator<T> iterator() {
+		return new MerkleIterator<T>(getRoot())
+				.setFilter(MerkleBinaryTree::filter)
+				.setDescendantFilter(MerkleBinaryTree::descendantFilter);
+	}
+
+	/**
+	 * This method is used by the iterator to ignore all of the internal nodes in the tree.
+	 *
+	 * @param node
+	 * 		the node the iterator might want to return
+	 * @return if the node should be returned by the iterator
+	 */
+	private static boolean filter(final MerkleNode node) {
+		return node.getClassId() != MerkleTreeInternalNode.CLASS_ID;
+	}
+
+	/**
+	 * This method is used by the iterator to ignore all nodes that may sit below entries if the entries
+	 * are internal nodes
+	 *
+	 * @param node
+	 * 		the node the iterator might want to return the descendants of
+	 * @return if the node's descendants can be returned
+	 */
+	private static boolean descendantFilter(final MerkleInternal node) {
+		return node.getClassId() == MerkleTreeInternalNode.CLASS_ID;
 	}
 
 	/**

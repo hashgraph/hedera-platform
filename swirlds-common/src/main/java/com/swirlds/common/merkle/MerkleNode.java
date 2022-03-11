@@ -19,16 +19,14 @@ import com.swirlds.common.crypto.Hashable;
 import com.swirlds.common.io.SerializableDet;
 import com.swirlds.common.merkle.exceptions.MerkleRouteException;
 import com.swirlds.common.merkle.io.SerializationStrategy;
-import com.swirlds.common.merkle.iterators.MerkleDepthFirstIterator;
+import com.swirlds.common.merkle.iterators.MerkleIterator;
 import com.swirlds.common.merkle.route.MerkleRoute;
+import com.swirlds.common.merkle.route.MerkleRouteFactory;
 import com.swirlds.common.merkle.route.MerkleRouteIterator;
-import com.swirlds.common.merkle.route.ReverseMerkleRouteIterator;
 import com.swirlds.common.merkle.synchronization.views.CustomReconnectRoot;
 
-import java.util.Iterator;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * A MerkleNode object has the following properties
@@ -47,6 +45,15 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 	 * @return true if this is a leaf node in a merkle tree.
 	 */
 	boolean isLeaf();
+
+	/**
+	 * Check if this node is a {@link MerkleInternal} node.
+	 *
+	 * @return true if this is an internal node
+	 */
+	default boolean isInternal() {
+		return !isLeaf();
+	}
 
 	/**
 	 * Return true if this node is the root of a subtree that has a custom view for reconnect. Nodes that return
@@ -115,30 +122,6 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 	void setRoute(final MerkleRoute route);
 
 	/**
-	 * Returns an iterator that will iterate from this node along each node on a specified route.
-	 *
-	 * @param route
-	 * 		the route to follow
-	 * @return an iterator, first node returned will be this node, last node returned will
-	 * 		be the node at the end of the route
-	 */
-	default Iterator<MerkleNode> routeIterator(final MerkleRoute route) {
-		return new MerkleRouteIterator(this, route);
-	}
-
-	/**
-	 * Returns an iterator that will iterate from this node along each node on a specified route in reverse order.
-	 *
-	 * @param route
-	 * 		the route to follow
-	 * @return an iterator, last node returned will be this node, first node returned will
-	 * 		be the node at the end of the route
-	 */
-	default Iterator<MerkleNode> reverseRouteIterator(final MerkleRoute route) {
-		return new ReverseMerkleRouteIterator(this, route);
-	}
-
-	/**
 	 * Get the node that is reached by starting at this node and traversing along a provided route.
 	 *
 	 * @param route
@@ -147,6 +130,17 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 	 */
 	default MerkleNode getNodeAtRoute(final MerkleRoute route) {
 		return new MerkleRouteIterator(this, route).getLast();
+	}
+
+	/**
+	 * Get the node that is reached by starting at this node and traversing along a provided route.
+	 *
+	 * @param steps
+	 * 		the steps in the route
+	 * @return the node at the end of the route
+	 */
+	default MerkleNode getNodeAtRoute(final int... steps) {
+		return getNodeAtRoute(MerkleRouteFactory.buildRoute(steps));
 	}
 
 	/**
@@ -192,16 +186,6 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 	int getReferenceCount();
 
 	/**
-	 * Execute a function on each non-null node in the subtree rooted at this node (which includes this node).
-	 *
-	 * @param operation
-	 * 		The function to execute.
-	 */
-	default void forEachNode(Consumer<MerkleNode> operation) {
-		forEachNode(MerkleDepthFirstIterator::new, operation);
-	}
-
-	/**
 	 * {@inheritDoc}
 	 */
 	@SuppressWarnings("unchecked")
@@ -209,22 +193,21 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 	MerkleNode copy();
 
 	/**
-	 * Execute a function on each non-null node returned by an iterator that is walking over the the subtree rooted
-	 * at this node (which includes this node).
+	 * Create a pre-ordered depth first iterator for this tree (or subtree).
 	 *
-	 * @param iteratorFactory
-	 * 		A method that returns an iterator.
-	 * @param operation
-	 * 		A method to call on each node returned by the iterator.
+	 * @return a configurable iterator
 	 */
-	default <T extends MerkleNode> void forEachNode(Function<MerkleNode, Iterator<T>> iteratorFactory,
-			Consumer<T> operation) {
-		Iterator<T> iterator = iteratorFactory.apply(this);
-		while (iterator.hasNext()) {
-			T next = iterator.next();
-			if (next != null) {
-				operation.accept(next);
-			}
-		}
+	default <T extends MerkleNode> MerkleIterator<T> treeIterator() {
+		return new MerkleIterator<>(this);
+	}
+
+	/**
+	 * Execute a function on each non-null node in the subtree rooted at this node (which includes this node).
+	 *
+	 * @param operation
+	 * 		The function to execute.
+	 */
+	default void forEachNode(final Consumer<MerkleNode> operation) {
+		treeIterator().forEachRemaining(operation);
 	}
 }

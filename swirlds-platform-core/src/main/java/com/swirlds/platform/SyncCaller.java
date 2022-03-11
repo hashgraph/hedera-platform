@@ -20,6 +20,7 @@ import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
 import com.swirlds.common.notification.listeners.ReconnectCompleteNotification;
+import com.swirlds.common.stream.HashSigner;
 import com.swirlds.logging.payloads.ReconnectFailurePayload;
 import com.swirlds.logging.payloads.ReconnectFinishPayload;
 import com.swirlds.logging.payloads.ReconnectLoadFailurePayload;
@@ -27,14 +28,15 @@ import com.swirlds.logging.payloads.ReconnectPeerInfoPayload;
 import com.swirlds.logging.payloads.ReconnectStartPayload;
 import com.swirlds.logging.payloads.UnableToReconnectPayload;
 import com.swirlds.platform.event.EventUtils;
-import com.swirlds.platform.internal.SystemExitReason;
 import com.swirlds.platform.reconnect.ReconnectException;
 import com.swirlds.platform.reconnect.ReconnectLearner;
 import com.swirlds.platform.state.SigInfo;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.State;
-import com.swirlds.platform.state.StateDumpSource;
+import com.swirlds.platform.state.StateSettings;
 import com.swirlds.platform.sync.SyncCallerType;
+import com.swirlds.platform.system.SystemExitReason;
+import com.swirlds.platform.system.SystemUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,8 +44,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
+import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.HEARTBEAT;
 import static com.swirlds.logging.LogMarker.RECONNECT;
@@ -67,6 +69,8 @@ class SyncCaller implements Runnable {
 	private final NodeId selfId;
 	/** the type of this caller */
 	private final SyncCallerType callerType;
+	/** used to sign states with the platforms signing private key */
+	private final HashSigner signer;
 
 	/**
 	 * The number of times reconnect has failed since the last succesfull reconnect.
@@ -89,15 +93,37 @@ class SyncCaller implements Runnable {
 	 * 		the type of this caller
 	 * @param callerNumber
 	 * 		0 for the first caller thread created by this platform, 1 for the next, etc
+	 * @param signer
+	 * 		used to sign states with the platforms signing private key
 	 */
 	public SyncCaller(final AbstractPlatform platform, final AddressBook addressBook, final NodeId selfId,
-			final int callerNumber, final SyncCallerType callerType) {
+			final int callerNumber, final SyncCallerType callerType, final HashSigner signer) {
 		this.platform = platform;
 		this.addressBook = addressBook;
 		this.selfId = selfId;
 		this.callerNumber = callerNumber;
 		this.callerType = callerType;
 		this.failedReconnectsInARow = 0;
+		this.signer = signer;
+	}
+
+	/**
+	 * The state used to reconnect may not be hashed.
+	 */
+	private static void hashStateForReconnect(final State workingState) {
+		try {
+			CryptoFactory.getInstance().digestTreeAsync(workingState).get();
+		} catch (final ExecutionException e) {
+			log.error(EXCEPTION.getMarker(), () -> new ReconnectFailurePayload(
+					"Error encountered while hashing state for reconnect",
+					ReconnectFailurePayload.CauseOfFailure.ERROR).toString(), e);
+			throw new ReconnectException(e);
+		} catch (final InterruptedException e) {
+			Thread.currentThread().interrupt();
+			log.error(EXCEPTION.getMarker(), () -> new ReconnectFailurePayload(
+					"Interrupted while attempting to hash state",
+					ReconnectFailurePayload.CauseOfFailure.ERROR).toString(), e);
+		}
 	}
 
 	/**
@@ -213,24 +239,7 @@ class SyncCaller implements Runnable {
 			}
 
 			// the sync manager will tell us who we need to call
-			final List<Long> nodeList;
-
-			if (Browser.isLoadedSavedState()) {
-				// If this node loaded saved state from disk but has not created any event yet,
-				// then this node is a newly added node to the network.
-				// Only allow this node to sync with other pre-existing nodes, or
-				// any new nodes that have finished synchronization already
-				//
-				// The way to tell if a node is pre-existing node or a node has finished synchronization
-				// is to check whether it has any event created. EventMapper is used for this purpose
-				// since it is populated with most recent event from each node after loading
-				// a signed state
-				nodeList = platform.getSyncManager().getNeighborsToCall(callerType).stream()
-						.filter(x -> platform.getEventMapper().getMostRecentEvent(x.intValue()) != null)
-						.collect(Collectors.toList());
-			} else {
-				nodeList = platform.getSyncManager().getNeighborsToCall(callerType);
-			}
+			final List<Long> nodeList = platform.getSyncManager().getNeighborsToCall(callerType);
 
 			// the array is sorted in ascending or from highest to lowest priority, so we go through the array and
 			// try to
@@ -261,8 +270,8 @@ class SyncCaller implements Runnable {
 						platform.getSelfId(), otherId);
 
 
-				final ReentrantLock lockCallListen = platform.getSyncServer().lockCallListen.get(otherId);
-				final ReentrantLock lockCallHeartbeat = platform.getSyncServer().lockCallHeartbeat.get(otherId);
+				final ReentrantLock lockCallListen = platform.getSyncServer().getSyncOngoingLock(otherId);
+				final ReentrantLock lockCallHeartbeat = platform.getSyncServer().getOutboundConnLock(otherId);
 
 				// Try to get both locks. If either is unavailable, then try the next node. Never block.
 				if (!lockCallListen.tryLock()) {
@@ -378,25 +387,6 @@ class SyncCaller implements Runnable {
 	}
 
 	/**
-	 * The state used to reconnect may not be hashed.
-	 */
-	private static void hashStateForReconnect(final State workingState) {
-		try {
-			CryptoFactory.getInstance().digestTreeAsync(workingState).get();
-		} catch (final ExecutionException e) {
-			log.error(EXCEPTION.getMarker(), () -> new ReconnectFailurePayload(
-					"Error encountered while hashing state for reconnect",
-					ReconnectFailurePayload.CauseOfFailure.ERROR).toString(), e);
-			throw new ReconnectException(e);
-		} catch (final InterruptedException e) {
-			Thread.currentThread().interrupt();
-			log.error(EXCEPTION.getMarker(), () -> new ReconnectFailurePayload(
-					"Interrupted while attempting to hash state",
-					ReconnectFailurePayload.CauseOfFailure.ERROR).toString(), e);
-		}
-	}
-
-	/**
 	 * Check if a reconnect is currently allowed. If not then kill the node.
 	 */
 	private void exitIfReconnectIsDisabled() {
@@ -405,7 +395,7 @@ class SyncCaller implements Runnable {
 			log.warn(STARTUP.getMarker(), () -> new UnableToReconnectPayload(
 					"Node has fallen behind, reconnect is disabled, will die",
 					platform.getSelfId().getIdAsInt()).toString());
-			Browser.exitSystem(SystemExitReason.BEHIND_RECONNECT_DISABLED);
+			SystemUtils.exitSystem(SystemExitReason.BEHIND_RECONNECT_DISABLED);
 		}
 
 		if (Settings.reconnect.getReconnectWindowSeconds() >= 0 &&
@@ -413,7 +403,7 @@ class SyncCaller implements Runnable {
 			log.warn(STARTUP.getMarker(), () -> new UnableToReconnectPayload(
 					"Node has fallen behind, reconnect is disabled outside of time window, will die",
 					platform.getSelfId().getIdAsInt()).toString());
-			Browser.exitSystem(SystemExitReason.BEHIND_RECONNECT_DISABLED);
+			SystemUtils.exitSystem(SystemExitReason.BEHIND_RECONNECT_DISABLED);
 		}
 	}
 
@@ -426,16 +416,24 @@ class SyncCaller implements Runnable {
 		exitIfReconnectIsDisabled();
 
 		log.info(RECONNECT.getMarker(),
-				"{} has fallen behind, will stop and clear EventFlow, Hashgraph, and ShadowGraph",
+				"{} has fallen behind, will wait for all syncs to finish",
 				platform.getSelfId());
+		// wait and acquire all sync ongoing locks and release them immediately
+		// this will ensure any ongoing sync are finished before we start reconnect
+		// no new sync will start because we have a fallen behind status
+		for (ReentrantLock lock : platform.getSyncServer().getSyncOngoingLocks()) {
+			lock.lock();
+			lock.unlock();
+		}
+
+		log.info(RECONNECT.getMarker(),
+				"all ongoing syncs done, will stop and clear EventFlow, Hashgraph, and ShadowGraph");
 
 		platform.getIntakeQueue().clear();
 		platform.getEventMapper().clear();
 		platform.getShadowGraph().clear();
 
-		log.info(RECONNECT.getMarker(),
-				"{} has fallen behind, Hashgraph and shadow graph are now cleared",
-				platform.getSelfId());
+		log.info(RECONNECT.getMarker(), "Hashgraph and shadow graph are now cleared");
 
 		// clear EventFlow after finish clearing RunningHashCalculator,
 		// to make sure that forCons queue is empty during reconnect
@@ -473,8 +471,7 @@ class SyncCaller implements Runnable {
 				peerInfo.addPeerInfo(neighborId, "peer unreachable, unable to establish connection");
 				continue;
 			}
-			final ReentrantLock lockCallHeartbeat = platform.getSyncServer().lockCallHeartbeat.get(
-					neighborId.intValue());
+			final ReentrantLock lockCallHeartbeat = platform.getSyncServer().getOutboundConnLock(neighborId.intValue());
 
 			// try to get the lock, it should be available if we have fallen behind
 			if (!lockCallHeartbeat.tryLock()) {
@@ -540,7 +537,7 @@ class SyncCaller implements Runnable {
 	private void killNodeIfThresholdMet() {
 		if (failedReconnectsInARow >= Settings.reconnect.getMaximumReconnectFailuresBeforeShutdown()) {
 			log.error(EXCEPTION.getMarker(), "Too many reconnect failures in a row, killing node");
-			Browser.exitSystem(SystemExitReason.RECONNECT_FAILURE);
+			SystemUtils.exitSystem(SystemExitReason.RECONNECT_FAILURE);
 		}
 	}
 
@@ -594,6 +591,9 @@ class SyncCaller implements Runnable {
 				neighborId.intValue(),
 				lastRoundReceived).toString());
 
+		log.info(RECONNECT.getMarker(), "Hash information for state received during reconnect:\n{}",
+				() -> generateHashDebugString(signedState.getState(), StateSettings.getDebugHashDepth()));
+
 		log.info(RECONNECT.getMarker(),
 				"signed state events:\n{}", EventUtils.toShortStrings(signedState.getEvents()));
 
@@ -619,7 +619,7 @@ class SyncCaller implements Runnable {
 		try {
 
 			// Inject a self signature
-			final byte[] signature = platform.getCrypto().sign(signedState.getStateHashBytes());
+			final byte[] signature = signer.sign(signedState.getStateHash());
 			final SigInfo selfSigInfo = new SigInfo(signedState.getLastRoundReceived(),
 					platform.getSelfId().getIdAsInt(), signedState.getStateHashBytes(), signature);
 			signedState.getSigSet().addSigInfo(selfSigInfo);
@@ -636,10 +636,6 @@ class SyncCaller implements Runnable {
 			platform.loadIntoConsensusAndEventIntake(signedState);
 
 			platform.getEventFlow().loadDataFromSignedState(signedState, true);
-
-			// This was added to support writing signed state JSON files after every reconnect
-			// This is enabled/disabled via settings and is disabled by default
-			platform.getSignedStateManager().jsonifySignedState(signedState, StateDumpSource.RECONNECT);
 
 			// Notify any listeners that the reconnect has been completed
 			try {

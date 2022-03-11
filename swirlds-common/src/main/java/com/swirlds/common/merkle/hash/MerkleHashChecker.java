@@ -20,12 +20,18 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.SerializableHashable;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
+import com.swirlds.common.merkle.iterators.MerkleIterationOrder;
+import com.swirlds.common.merkle.iterators.MerkleIterator;
+import com.swirlds.common.merkle.utility.DebugIterationEndpoint;
+import com.swirlds.common.utility.ValueReference;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LoggingUtils.plural;
@@ -178,5 +184,58 @@ public final class MerkleHashChecker {
 
 		LOGGER.error(EXCEPTION.getMarker(), sb);
 		return false;
+	}
+
+	/**
+	 * Generate a human-readable debug string that contains hash information about nodes near the top of a tree.
+	 * No hash information is displayed for nodes below a certain depth, or for nodes below other nodes annotated
+	 * with {@link com.swirlds.common.merkle.utility.DebugIterationEndpoint DebugIterationEndpoint}.
+	 *
+	 * @param root
+	 * 		the root of a tree (or subtree) to iterate
+	 * @param maxDepth
+	 * 		the maximum depth of the tree to iterate
+	 * @return a string containing debug information
+	 */
+	public static String generateHashDebugString(final MerkleNode root, final int maxDepth) {
+		final StringBuilder sb = new StringBuilder();
+
+		final Predicate<MerkleInternal> filter = (final MerkleInternal parent) -> !(
+				parent.getClass().isAnnotationPresent(DebugIterationEndpoint.class)
+						|| parent.getRoute().size() >= maxDepth);
+
+		final Iterator<MerkleNode> iterator = new MerkleIterator<>(root)
+				.setOrder(MerkleIterationOrder.PRE_ORDERED_DEPTH_FIRST)
+				.setDescendantFilter(filter);
+
+		iterator.forEachRemaining((final MerkleNode node) -> {
+
+			// Indent
+			final int depth = node.getRoute().size();
+			for (int indent = 0; indent < depth; indent++) {
+				sb.append("   ");
+			}
+
+			// Get child's index in its parent
+			final String indexString;
+			if (depth == 0) {
+				// Root of the tree
+				indexString = "(root)";
+			} else {
+				final ValueReference<Integer> step = new ValueReference<>(-1);
+				node.getRoute().iterator().forEachRemaining(step::setValue);
+				indexString = Integer.toString(step.getValue());
+			}
+
+			sb.append(indexString).append(" ")
+					.append(node.getClass().getSimpleName()).append(" ")
+					.append(node.getHash());
+
+			if (iterator.hasNext()) {
+				sb.append("\n");
+			}
+		});
+
+		return sb.toString();
 	}
 }

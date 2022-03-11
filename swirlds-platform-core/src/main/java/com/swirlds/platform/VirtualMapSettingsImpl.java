@@ -17,12 +17,17 @@ package com.swirlds.platform;
 import com.swirlds.platform.internal.SubSetting;
 import com.swirlds.virtualmap.VirtualMapSettings;
 
+import java.time.Duration;
+
 import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_FLUSH_INTERVAL;
+import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_FLUSH_THROTTLE_STEP_SIZE;
+import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_MAXIMUM_FLUSH_THROTTLE_PERIOD;
 import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_MAXIMUM_VIRTUAL_MAP_SIZE;
 import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_NUM_CLEANER_THREADS;
 import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_NUM_HASH_THREADS;
 import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_PERCENT_CLEANER_THREADS;
 import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_PERCENT_HASH_THREADS;
+import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_PREFERRED_FLUSH_QUEUE_SIZE;
 import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_VIRTUAL_MAP_WARNING_INTERVAL;
 import static com.swirlds.virtualmap.DefaultVirtualMapSettings.DEFAULT_VIRTUAL_MAP_WARNING_THRESHOLD;
 
@@ -40,6 +45,9 @@ public class VirtualMapSettingsImpl extends SubSetting implements VirtualMapSett
 	public long virtualMapWarningThreshold = DEFAULT_VIRTUAL_MAP_WARNING_THRESHOLD;
 	public long virtualMapWarningInterval = DEFAULT_VIRTUAL_MAP_WARNING_INTERVAL;
 	public int flushInterval = DEFAULT_FLUSH_INTERVAL;
+	public int preferredFlushQueueSize = DEFAULT_PREFERRED_FLUSH_QUEUE_SIZE;
+	public Duration flushThrottleStepSize = DEFAULT_FLUSH_THROTTLE_STEP_SIZE;
+	public Duration maximumFlushThrottlePeriod = DEFAULT_MAXIMUM_FLUSH_THROTTLE_PERIOD;
 
 	/**
 	 * {@inheritDoc}
@@ -158,5 +166,51 @@ public class VirtualMapSettingsImpl extends SubSetting implements VirtualMapSett
 			throw new IllegalArgumentException("Cannot configure flushInterval=" + flushInterval);
 		}
 		this.flushInterval = flushInterval;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getPreferredFlushQueueSize() {
+		return preferredFlushQueueSize;
+	}
+
+	/**
+	 * Set the preferred maximum number of virtual maps (in a fast copy family) that are waiting to be flushed.
+	 */
+	public void setPreferredFlushQueueSize(final int preferredFlushQueueSize) {
+		this.preferredFlushQueueSize = preferredFlushQueueSize;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Duration getFlushThrottleStepSize() {
+		return flushThrottleStepSize;
+	}
+
+	/**
+	 * For every map copy that is awaiting flushing in excess of {@link #getPreferredFlushQueueSize()}, artificially
+	 * increase the amount of time required to make a fast copy by this amount of time.
+	 */
+	public void setFlushThrottleStepSize(final Duration flushThrottleStepSize) {
+		this.flushThrottleStepSize = flushThrottleStepSize;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Duration getMaximumFlushThrottlePeriod() {
+		return maximumFlushThrottlePeriod;
+	}
+
+	/**
+	 * Set the maximum amount of time that any virtual map fast copy will be delayed due to a flush backlog.
+	 */
+	public void setMaximumFlushThrottlePeriod(final Duration maximumFlushThrottlePeriod) {
+		this.maximumFlushThrottlePeriod = maximumFlushThrottlePeriod;
 	}
 }

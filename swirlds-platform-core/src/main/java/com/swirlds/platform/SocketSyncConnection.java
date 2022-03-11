@@ -257,7 +257,7 @@ public class SocketSyncConnection implements SyncConnection {
 		SyncInputStream dis;
 
 		try {
-			clientSocket = platform.getCrypto().newClientSocketConnect(ipAddress, port);
+			clientSocket = platform.getSocketFactory().createClientSocket(ipAddress, port);
 
 			dos = SyncOutputStream.createSyncOutputStream(clientSocket.getOutputStream(), Settings.bufferSize);
 			dis = SyncInputStream.createSyncInputStream(clientSocket.getInputStream(), Settings.bufferSize);

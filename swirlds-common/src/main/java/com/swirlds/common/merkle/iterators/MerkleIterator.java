@@ -16,187 +16,271 @@ package com.swirlds.common.merkle.iterators;
 
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
+import com.swirlds.common.merkle.iterators.internal.BreadthFirstAlgorithm;
+import com.swirlds.common.merkle.iterators.internal.MerkleIterationAlgorithm;
+import com.swirlds.common.merkle.iterators.internal.NullNode;
+import com.swirlds.common.merkle.iterators.internal.PostOrderedDepthFirstAlgorithm;
+import com.swirlds.common.merkle.iterators.internal.PostOrderedDepthFirstRandomAlgorithm;
+import com.swirlds.common.merkle.iterators.internal.PreOrderedDepthFirstAlgorithm;
+import com.swirlds.common.merkle.route.MerkleRoute;
 
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Iterate over a merkle tree.
  *
  * @param <T>
- * 		The type of node over which this iterator walks. Usually MerkleNode is the correct choice for this
- * 		unless there is an implementation specific method required by one of the overridable methods in this
- * 		iterator.
- * @param <R>
- * 		The type of the node returned by this iterator. Nodes of type T are cast into type R before being
- * 		returned by next().
+ * 		The type of the node returned by this iterator.
  */
-public abstract class MerkleIterator<T extends MerkleNode, R extends T> implements Iterator<R> {
+public class MerkleIterator<T extends MerkleNode> implements Iterator<T> {
+
+	/**
+	 * The root of the tree being iterated.
+	 */
+	private final MerkleNode root;
 
 	/**
 	 * The next node to be returned by this iterator
 	 */
-	protected T next;
+	private T next;
+
+	/**
+	 * The route of the next node to be returned by this iterator.
+	 */
+	private MerkleRoute nextRoute;
+
+	/**
+	 * The merkle route of the node that was most recently returned by {@link #next}.
+	 */
+	private MerkleRoute previousRoute;
 
 	/**
 	 * True if the value contained should be returned by the iterator
 	 */
-	protected boolean hasNext;
-
-	public MerkleIterator(final T root) {
-		setup(root);
-	}
+	private boolean hasNext;
 
 	/**
-	 * Default constructor to allow work to be done by a subclass before the call to {@link #setup(MerkleNode)}
+	 * If the filter is not null, do not return a node if the filter returns false for that node.
 	 */
-	protected MerkleIterator() {
-
-	}
+	private BiPredicate<MerkleNode, MerkleRoute> filter;
 
 	/**
-	 * This method must be called in the constructor.
+	 * If not null, do not return any nodes below any internal nodes that
+	 * causes this method to return false.
+	 */
+	private Predicate<MerkleInternal> descendantFilter;
+
+	/**
+	 * If true then don't return null nodes, and don't pass any null nodes to the
+	 * {@link #filter} or {@link #descendantFilter}.
+	 */
+	private boolean ignoreNull = true;
+
+	/**
+	 * The iteration order used by this algorithm.
+	 */
+	private MerkleIterationOrder order = MerkleIterationOrder.POST_ORDERED_DEPTH_FIRST;
+
+	/**
+	 * The algorithm that implements the proper iteration order.
+	 */
+	private MerkleIterationAlgorithm algorithm;
+
+	/**
+	 * Create a new iterator.
 	 *
 	 * @param root
-	 * 		the root of the tree (or subtree) to be iterated
+	 * 		the root of the tree
 	 */
-	protected void setup(final T root) {
-		init();
-		if (root != null) {
-			pushNode(root);
-		}
+	public MerkleIterator(final MerkleNode root) {
+		this.root = root;
 	}
 
 	/**
-	 * Initialize any data structures that are required. This is called in MerkleIterator's constructor.
-	 */
-	protected abstract void init();
-
-	/**
-	 * Push a node into the stack/queue.
-	 */
-	protected abstract void push(T node);
-
-	/**
-	 * Remove and return the next item in the stack/queue.
-	 */
-	protected abstract T pop();
-
-	/**
-	 * Return the next item in the stack/queue but do not remove it.
-	 */
-	protected abstract T peek();
-
-	/**
-	 * Get the number of elements in the stack/queue.
-	 */
-	protected abstract int size();
-
-	/**
-	 * When adding children, should the order the children are pushed be reversed?
-	 * Should be true for depth first searches (since stacks are first in last out)
-	 * and false for breadth first searches (since queues are first in first out).
-	 */
-	protected abstract boolean reverseChildren();
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean hasNext() {
-		findNext();
-		return hasNext;
-	}
-
-	/**
-	 * An overridable filter that is applied to each internal node. If false then neither this node nor its descendants
-	 * will be visited by this iterator.
-	 */
-	protected boolean shouldNodeBeVisited(@SuppressWarnings("unused") final T node) {
-		return true;
-	}
-
-	/**
-	 * An overridable filter that is applied to each node. If false then this node will not be returned by the iterator.
-	 * Does not stop the iterator from visiting and possibly returning descendant nodes.
-	 */
-	protected boolean shouldNodeBeReturned(final T node) {
-		return true;
-	}
-
-	/**
-	 * Called when a parent is fetching its children. If false is returned then the
-	 * parent will act as if that child does not exist. This will cause the child to
-	 * not be iterated over and not returned.
+	 * Provide an optional filter. If not null, do not return any node that causes the filter to return false.
 	 *
-	 * Useful if T is a subtype of MerkleNode but there are parts of the tree that do not implement T. This
-	 * allows for the iterator to ignore the parts of the tree that it should not (or can not) handle.
-	 *
-	 * @param parent
-	 * 		Parent node
-	 * @param child
-	 * 		Child node
-	 * @return Whether the child node should be considered or not
+	 * @param filter
+	 * 		a predicate that is applied to every node before it can be returned.
+	 * 		If {@link #ignoreNull(boolean)} has been called and set to true then this
+	 * 		method will never be passed a null node.
+	 * @return this object
+	 * @throws IllegalStateException
+	 * 		if called after {@link #hasNext()} or {@link #next()}
 	 */
-	protected boolean shouldChildBeConsidered(final T parent, final MerkleNode child) {
+	public MerkleIterator<T> setFilter(final Predicate<MerkleNode> filter) {
+		setFilter((final MerkleNode node, final MerkleRoute route) -> filter.test(node));
+		return this;
+	}
+
+	/**
+	 * Provide an optional filter. If not null, do not return any node that causes the filter to return false.
+	 *
+	 * @param filter
+	 * 		a predicate that is applied to every node before it can be returned.
+	 * 		If {@link #ignoreNull(boolean)} has been called and set to true then this
+	 * 		method will never be passed a null node. The merkle route corresponds the merkle
+	 * 		route of the node, which is useful if null valuess are being filtered.
+	 * @return this object
+	 * @throws IllegalStateException
+	 * 		if called after {@link #hasNext()} or {@link #next()}
+	 */
+	public MerkleIterator<T> setFilter(final BiPredicate<MerkleNode, MerkleRoute> filter) {
+		if (algorithm != null) {
+			throw new IllegalStateException("iterator can not be configured after iteration has started");
+		}
+		this.filter = filter;
+		return this;
+	}
+
+	/**
+	 * Provide an optional filter that can exclude descendants of a node. If this method returns false for an internal
+	 * node, no node descendant from that internal node will be returned. An internal node that causes the descendant
+	 * filter to return false can still itself be returned if the filter specified by {@link #setFilter(Predicate)}
+	 * returns true for that internal node.
+	 *
+	 * @param descendantFilter
+	 * 		only nodes that cause this filter to return true will have their descendants iterated over
+	 * @return this object
+	 * @throws IllegalStateException
+	 * 		if called after {@link #hasNext()} or {@link #next()}
+	 */
+	public MerkleIterator<T> setDescendantFilter(final Predicate<MerkleInternal> descendantFilter) {
+		if (algorithm != null) {
+			throw new IllegalStateException("iterator can not be configured after iteration has started");
+		}
+		this.descendantFilter = descendantFilter;
+		return this;
+	}
+
+	/**
+	 * Specify if null nodes should be returned. If true then null nodes will never be returned, and null nodes will
+	 * never be passed to the predicate set by {@link #setFilter(Predicate)}. Default value is true.
+	 *
+	 * @param ignoreNullNodes
+	 * 		if true then ignore null nodes (default), if false then return null nodes
+	 * @return this object
+	 * @throws IllegalStateException
+	 * 		if called after {@link #hasNext()} or {@link #next()}
+	 */
+	public MerkleIterator<T> ignoreNull(final boolean ignoreNullNodes) {
+		if (algorithm != null) {
+			throw new IllegalStateException("iterator can not be configured after iteration has started");
+		}
+		this.ignoreNull = ignoreNullNodes;
+		return this;
+	}
+
+	/**
+	 * Specify the iteration order. If unset, default order is {@link MerkleIterationOrder#POST_ORDERED_DEPTH_FIRST}.
+	 *
+	 * @param order
+	 * 		an iteration order
+	 * @return this object
+	 * @throws IllegalStateException
+	 * 		if called after {@link #hasNext()} or {@link #next()}
+	 */
+	public MerkleIterator<T> setOrder(final MerkleIterationOrder order) {
+		this.order = order;
+		return this;
+	}
+
+	/**
+	 * A filter that is applied to each internal node. If false then none of the nodes descended from
+	 * the internal node will be returned.
+	 *
+	 * @param node
+	 * 		the internal node in question
+	 * @return false then none of this node's descendants will be returned by the iterator
+	 */
+	private boolean shouldVisitDescendants(final MerkleInternal node) {
+		if (descendantFilter != null) {
+			return descendantFilter.test(node);
+		}
 		return true;
 	}
 
 	/**
-	 * Check if a node is ready to be visited by the iterator. A node that is ready to be visited is ready to
-	 * be pushed onto the stack/queue.
+	 * A filter that is applied to each node. If false then this node will not be returned by the iterator.
+	 * Does not stop the iterator from possibly returning descendant nodes.
 	 */
-	protected boolean isNodeReadyToBeVisited(final T node) {
-		if (node == null || node.isLeaf()) {
-			return shouldNodeBeReturned(node);
-		} else {
-			return shouldNodeBeVisited(node);
+	private boolean shouldNodeBeReturned(final MerkleNode node, final MerkleRoute route) {
+		if (ignoreNull && node == null) {
+			return false;
 		}
+		if (filter != null) {
+			return filter.test(node, route);
+		}
+		return true;
 	}
 
 	/**
 	 * Check if this node has children that need to be added to the stack/queue.
 	 */
-	protected boolean hasChildrenToHandle(MerkleNode node) {
-		if (node != null && !node.isLeaf()) {
-			// Node is an InternalNode and may have children
-			// If a node has children that need to be handled it will have been added to the stack twice in a row
-			return size() > 0 && peek() == node;
-		}
-		return false;
+	private boolean hasChildrenToHandle(MerkleNode node) {
+		// If an internal node has children that need to be handled it will have been added to the stack twice in a row
+		return node != null && node.isInternal() && algorithm.size() > 0 && algorithm.peek() == node;
 	}
 
 	/**
-	 * Add all of a node's children to the stack that need to be added.
+	 * Fetch a node and push it onto the stack.
+	 *
+	 * @param parent
+	 * 		the parent of the node to push
+	 * @param childIndex
+	 * 		the index within the parent of the node to push
 	 */
-	@SuppressWarnings("unchecked")
-	protected void addChildren(final T node) {
-		final MerkleInternal internalNode = node.cast();
-		final boolean reverseChildren = reverseChildren();
+	protected final void pushNode(final MerkleInternal parent, final int childIndex) {
+		final MerkleNode node = parent.getChild(childIndex);
 
-		// If needed, iterate through the children from last to first
-		final int startIndex = reverseChildren ? (internalNode.getNumberOfChildren() - 1) : 0;
-		final int endIndex = reverseChildren ? -1 : internalNode.getNumberOfChildren();
-		final int delta = reverseChildren ? -1 : 1;
+		// FUTURE WORK: filter here, for certain iterations may significantly reduce number
+		//  of objects pushed to the queue. Instead of pushing internal nodes twice, wrap
+		//  in small container object that holds needed metadata. Provide an option for
+		//  descendant filter + regular filter to be the same function that is called only
+		//  once.
 
-		for (int childIndex = startIndex; childIndex != endIndex; childIndex += delta) {
-			final MerkleNode child = internalNode.getChild(childIndex);
-			if (shouldChildBeConsidered(node, child)) {
-				pushNode((T) child);
+		if (node == null) {
+			if (!ignoreNull) {
+				pushNode(new NullNode(parent.getRoute().extendRoute(childIndex)));
 			}
+		} else {
+			pushNode(node);
 		}
 	}
 
 	/**
 	 * Push a node onto the stack.
+	 *
+	 * @param node
+	 * 		the node to push
 	 */
-	protected void pushNode(final T node) {
-		if (isNodeReadyToBeVisited(node)) {
-			push(node);
-			if (node != null && !node.isLeaf()) {
-				// Internal nodes are pushed twice
-				// This sends a signal to handle that node's children when the time comes
-				push(node);
+	private void pushNode(final MerkleNode node) {
+		algorithm.push(node);
+		if (node.isInternal() && shouldVisitDescendants(node.asInternal())) {
+			// Internal nodes with children to handle are pushed twice
+			// This sends a signal to handle that node's children when the time comes
+			algorithm.push(node);
+		}
+	}
+
+	/**
+	 * Do initialization if it is required.
+	 */
+	private void setup() {
+		if (algorithm == null) {
+			switch (order) {
+				case POST_ORDERED_DEPTH_FIRST -> algorithm = new PostOrderedDepthFirstAlgorithm();
+				case POST_ORDERED_DEPTH_FIRST_RANDOM -> algorithm = new PostOrderedDepthFirstRandomAlgorithm();
+				case PRE_ORDERED_DEPTH_FIRST -> algorithm = new PreOrderedDepthFirstAlgorithm();
+				case BREADTH_FIRST -> algorithm = new BreadthFirstAlgorithm();
+				default -> throw new UnsupportedOperationException("unhandled iteration algorithm " + order);
+			}
+			if (root != null) {
+				pushNode(root);
 			}
 		}
 	}
@@ -204,18 +288,23 @@ public abstract class MerkleIterator<T extends MerkleNode, R extends T> implemen
 	/**
 	 * Iterate over the merkle tree until the next MerkleNode to be returned is found.
 	 */
-	protected void findNext() {
+	@SuppressWarnings("unchecked")
+	private void findNext() {
+		setup();
+
 		if (hasNext) {
 			return;
 		}
 
-		while (size() > 0) {
-			final T target = pop();
+		while (algorithm.size() > 0) {
+			final MerkleNode candidate = algorithm.pop();
+			nextRoute = candidate.getRoute();
+			final MerkleNode target = candidate.getClassId() == NullNode.CLASS_ID ? null : candidate;
 
 			if (hasChildrenToHandle(target)) {
-				addChildren(target);
-			} else if (shouldNodeBeReturned(target)) {
-				next = target;
+				algorithm.pushChildren(target.asInternal(), this::pushNode);
+			} else if (shouldNodeBeReturned(target, nextRoute)) {
+				next = (T) target;
 				hasNext = true;
 				return;
 			}
@@ -226,15 +315,77 @@ public abstract class MerkleIterator<T extends MerkleNode, R extends T> implemen
 	 * {@inheritDoc}
 	 */
 	@Override
-	@SuppressWarnings("unchecked")
-	public R next() {
+	public final boolean hasNext() {
+		findNext();
+		return hasNext;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public final T next() {
 		findNext();
 		if (!hasNext) {
 			throw new NoSuchElementException();
 		}
 
+		previousRoute = nextRoute;
+
 		hasNext = false;
-		return (R) next;
+		return next;
 	}
 
+	/**
+	 * Get the merkle route of the most recently returned node. Useful for obtaining the route when iterating over
+	 * nodes that may be null.
+	 *
+	 * @return the merkle route of the most recently returned node, or null if no node has been returned
+	 */
+	public final MerkleRoute getRoute() {
+		return previousRoute;
+	}
+
+	/**
+	 * Convert this iterator into an iterator that walks over the same data but returns a different type.
+	 * Calling {@link #next()} on this iterator will update the transformed iterator, and vice versa.
+	 *
+	 * @param converter
+	 * 		a method that converts from the original type of the iterator to the new iterator type
+	 * @param <K>
+	 * 		the new type that the iterator will return
+	 * @return an iterator that walks over the same data but returns a different type
+	 */
+	public <K> Iterator<K> transform(final Function<T, K> converter) {
+		return transform((final T node, final MerkleRoute route) -> converter.apply(node));
+	}
+
+	/**
+	 * Convert this iterator into an iterator that walks over the same data but returns a different type.
+	 * Calling {@link #next()} on this iterator will update the transformed iterator, and vice versa.
+	 *
+	 * @param converter
+	 * 		a method that converts from the original type of the iterator to the new iterator type
+	 * @param <K>
+	 * 		the new type that the iterator will return
+	 * @return an iterator that walks over the same data but returns a different type
+	 */
+	public <K> Iterator<K> transform(final BiFunction<T, MerkleRoute, K> converter) {
+		final MerkleIterator<T> originalIterator = this;
+
+		return new Iterator<>() {
+			@Override
+			public boolean hasNext() {
+				return originalIterator.hasNext();
+			}
+
+			@Override
+			public K next() {
+				final T node = originalIterator.next();
+				final MerkleRoute route = originalIterator.getRoute();
+
+				return converter.apply(node, route);
+			}
+		};
+	}
 }

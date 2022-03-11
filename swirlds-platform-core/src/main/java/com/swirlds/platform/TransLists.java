@@ -39,7 +39,7 @@ import static com.swirlds.logging.LogMarker.FREEZE;
  * is because future stateWork objects will now reflect them as a result of copying the state, so they don't
  * need to be in this extra list of transactions any more.
  */
-class TransLists {
+public class TransLists {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
 
@@ -214,7 +214,7 @@ class TransLists {
 	 *
 	 * @return the number of transactions
 	 */
-	synchronized int getCurrSize() {
+	public synchronized int getCurrSize() {
 		return transCurr.size();
 	}
 
@@ -241,7 +241,7 @@ class TransLists {
 	 *
 	 * @return the number of transactions
 	 */
-	synchronized int getConsSize() {
+	public synchronized int getConsSize() {
 		return transCons.size();
 	}
 

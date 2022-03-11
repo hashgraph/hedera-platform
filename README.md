@@ -28,8 +28,8 @@ The full list of acknowledgements is available at
 
 #### Minimum Requirements
 
-- **Oracle OpenJDK 12**
-  - Available from [https://jdk.java.net/archive/](https://jdk.java.net/archive/)
+- **Oracle OpenJDK 17**
+  - Available from [http://jdk.java.net/17/](http://jdk.java.net/17/)
 - **Apache Maven 3**
   - Available from [http://maven.apache.org/download.cgi](http://maven.apache.org/download.cgi)
 - **PostgreSQL 10**

@@ -33,6 +33,7 @@ module com.swirlds.common {
 	exports com.swirlds.common.merkle.route;
 	exports com.swirlds.common.merkle.synchronization;
 	exports com.swirlds.common.merkle.utility;
+	exports com.swirlds.common.utility;
 
 	exports com.swirlds.common.transaction.internal to com.swirlds.platform, com.swirlds.common.test,
 			com.swirlds.platform.test;

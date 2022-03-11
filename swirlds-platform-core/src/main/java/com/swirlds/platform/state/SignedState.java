@@ -13,7 +13,6 @@
  */
 package com.swirlds.platform.state;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swirlds.common.AddressBook;
 import com.swirlds.common.Releasable;
 import com.swirlds.common.SwirldState;
@@ -111,7 +110,6 @@ public class SignedState implements Releasable, SignedStateInfo {
 	/**
 	 * {@inheritDoc}
 	 */
-	@JsonIgnore
 	@Override
 	public SigSet getSigSet() {
 		return sigSet;
@@ -233,7 +231,6 @@ public class SignedState implements Releasable, SignedStateInfo {
 	 *
 	 * @return true if this {@link SignedState} has been written to disk, false otherwise
 	 */
-	@JsonIgnore
 	synchronized boolean isSavedToDisk() {
 		return savedToDisk;
 	}
@@ -275,7 +272,6 @@ public class SignedState implements Releasable, SignedStateInfo {
 	/**
 	 * Check if this state has been marked for archival.
 	 */
-	@JsonIgnore
 	public boolean isMarkedForArchival() {
 		return markedForArchival;
 	}
@@ -459,7 +455,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 	 *
 	 * @return the hash of the state's merkle tree.
 	 */
-	public final Hash getStateHash() {
+	public Hash getStateHash() {
 		return state.getHash();
 	}
 

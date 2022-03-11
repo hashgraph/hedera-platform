@@ -33,6 +33,8 @@ public final class SyncConstants {
 	public static final byte COMM_SYNC_NACK = 0x44 /* 68 */;
 	/** sent at the end of a sync, to show it's done */
 	public static final byte COMM_SYNC_DONE = 0x45 /* 69 */;
+	/** optionally sent during event transfer phase to assure the peer the connection is still open */
+	public static final byte COMM_SYNC_ONGOING = 0x46 /* 70 */;
 	/** sent after a new socket connection is made */
 	public static final byte COMM_CONNECT = 0x47 /* 71 */;
 	/** sent before sending each event */

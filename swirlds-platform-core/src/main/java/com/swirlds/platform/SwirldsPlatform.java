@@ -57,10 +57,10 @@ import com.swirlds.platform.components.StartupThrottle;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRules;
 import com.swirlds.platform.components.TransactionTracker;
+import com.swirlds.platform.crypto.SocketFactory;
 import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.internal.SignedStateLoadingException;
-import com.swirlds.platform.internal.SystemExitReason;
 import com.swirlds.platform.observers.EventObserverDispatcher;
 import com.swirlds.platform.reconnect.ReconnectThrottle;
 import com.swirlds.platform.state.BackgroundHashChecker;
@@ -69,11 +69,13 @@ import com.swirlds.platform.state.SavedStateInfo;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.SignedStateManager;
 import com.swirlds.platform.state.State;
+import com.swirlds.platform.state.StateSettings;
 import com.swirlds.platform.stats.StatConstructor;
 import com.swirlds.platform.swirldapp.SwirldAppLoader;
 import com.swirlds.platform.sync.ShadowGraph;
 import com.swirlds.platform.sync.ShadowGraphSynchronizer;
 import com.swirlds.platform.sync.SyncCallerType;
+import com.swirlds.platform.system.SystemExitReason;
 import org.apache.commons.lang3.SystemUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -100,65 +102,107 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.swirlds.common.Units.SECONDS_TO_MILLISECONDS;
+import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.common.merkle.utility.MerkleUtils.rehashTree;
 import static com.swirlds.logging.LogMarker.EVENT_PARSER;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.PLATFORM_STATUS;
 import static com.swirlds.logging.LogMarker.STARTUP;
-import static com.swirlds.platform.Browser.exitSystem;
-import static com.swirlds.platform.internal.SystemExitReason.SAVED_STATE_NOT_LOADED;
-import static com.swirlds.platform.internal.SystemExitReason.SWIRLD_MAIN_THREW_EXCEPTION;
+import static com.swirlds.platform.system.SystemExitReason.SAVED_STATE_NOT_LOADED;
+import static com.swirlds.platform.system.SystemExitReason.SWIRLD_MAIN_THREW_EXCEPTION;
+import static com.swirlds.platform.system.SystemUtils.exitSystem;
 
 public class SwirldsPlatform extends AbstractPlatform {
 
+	public static final String PLATFORM_THREAD_POOL_NAME = "platform-core";
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
-
+	/** alert threshold for java app pause */
+	private static final long PAUSE_ALERT_INTERVAL = 5000;
+	// The following hold info about the swirld being run (appMain), and the platform's id
+	/**
+	 * the ID of the member running this. Since a node can be a main node or a mirror node, the ID is not a primitive
+	 * value
+	 */
+	protected final NodeId selfId;
+	/**
+	 * This object is responsible for rate limiting reconnect attempts (in the role of sender)
+	 */
+	protected final ReconnectThrottle reconnectThrottle;
 	/** A type used by Hashgraph, Statistics, and SyncUtils. Only Hashgraph modifies this type instance. */
 	private final EventMapper eventMapper;
-
 	/** the name of the swirld being run */
 	private final String swirldName;
-	// The following hold info about the swirld being run (appMain), and the platform's id
 	/** the name of the main class this platform will be running */
 	private final String mainClassName;
-	/** the main program for the app. (The app also has a SwirldState, managed by eventFlow) */
-	private SwirldMain appMain;
-
 	/** this is the Nth Platform running on this machine (N=winNum) */
 	private final int winNum;
 	/** parameters given to the app when it starts */
 	private final String[] parameters;
 	/** the connection ID for self (must be from 0 to N-1 for N members, currently equal to selfId) */
 	private final NodeId selfConnectionId;
-	/** set in the constructor and given to the SwirldState object in run() */
-	private AddressBook initialAddressBook = null;
-
 	/** Database Statistics */
 	private final DBStatistics dbStats;
-
 	/** various signed states in various stages of collecting signatures */
 	private final SignedStateManager signedStateManager;
-
+	/** creates connections to other nodes */
+	private final SocketFactory socketFactory;
 	/** Handles all system transactions */
 	private final SystemTransactionHandler systemTransactionHandler;
-
-	/** a long name including (app, swirld, member id, member self name) */
-	private String platformName;
-
-	/** this Platform's infoMember, representing the (app, swirld ID, member ID) triplet it is running */
-	private StateHierarchy.InfoMember infoMember;
-
-
 	/** The platforms freeze manager */
 	private final FreezeManager freezeManager;
 
 	/** is used for pausing event creation for a while at start up */
 	private final StartUpEventFrozenManager startUpEventFrozenManager;
-
+	/**
+	 * The shadow graph manager. This wraps a shadow graph, which is an Event graph that
+	 * adds child pointers to the Hashgraph Event graph. Used for gossiping.
+	 */
+	private final ShadowGraph shadowGraph;
+	/**
+	 * All the SyncListener threads, which are each listening for incoming sync requests from a single
+	 * member
+	 */
+	private final List<Thread> syncListenerThreads = new LinkedList<>();
+	/** The last status of the platform that was determined, is null until the platform starts up */
+	private final AtomicReference<PlatformStatus> currentPlatformStatus = new AtomicReference<PlatformStatus>(null);
+	/** the number of active connections this node has to other nodes */
+	private final AtomicInteger activeConnectionNumber = new AtomicInteger(0);
+	/**
+	 * the object used to calculate consensus. it is volatile because the whole object is replaced when reading a state
+	 * from disk or getting it through reconnect
+	 */
+	private final AtomicReference<Consensus> consensusRef;
+	/** all the events and other data about the hashgraph */
+	protected EventTaskCreator eventTaskCreator;
+	/** threads and queues of events to record, with/without consensus */
+	protected EventFlow eventFlow;
+	/** font size to use in the console text window */
+	protected int fontSize;
+	/** statistics to monitor the network, syncing, etc. */
+	protected Statistics stats;
+	/** Application statistics */
+	protected ApplicationStatistics appStats;
+	/** ID number of the swirld being run */
+	protected byte[] swirldId;
+	/** the object that contains all key pairs and CSPRNG state for this member */
+	protected Crypto crypto;
+	/**
+	 * Set to true when state recovery is in progress.
+	 */
+	protected volatile boolean stateRecoveryInProgress;
+	/** tell which pairs of members should establish connections (syncing randomly within that set) */
+	RandomGraph connectionGraph;
+	/** the main program for the app. (The app also has a SwirldState, managed by eventFlow) */
+	private SwirldMain appMain;
+	/** set in the constructor and given to the SwirldState object in run() */
+	private AddressBook initialAddressBook = null;
+	/** a long name including (app, swirld, member id, member self name) */
+	private String platformName;
+	/** this Platform's infoMember, representing the (app, swirld ID, member ID) triplet it is running */
+	private StateHierarchy.InfoMember infoMember;
 	/** is used for calculating runningHash of all consensus events and writing consensus events to file */
 	private EventStreamManager<EventImpl> eventStreamManager;
-
 	/** the initial signed state that was loaded from disk on platform startup */
 	private volatile SignedState signedState = null;
 	/**
@@ -166,128 +210,42 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * Should only be accessed in synchronized blocks.
 	 */
 	private State initialState = null;
-
-	/** tell which pairs of members should establish connections (syncing randomly within that set) */
-	RandomGraph connectionGraph;
-
-	/**
-	 * The shadow graph manager. This wraps a shadow graph, which is an Event graph that
-	 * adds child pointers to the Hashgraph Event graph. Used for gossiping.
-	 */
-	private final ShadowGraph shadowGraph;
-
 	/** tells callers who to sync with and keeps track of whether we have fallen behind */
 	private SyncManagerImpl syncManager;
-
 	/**
 	 * a single thread uses this to listen for incoming requests to set up a connection for future syncing
 	 */
 	private SyncServer syncServer;
-
 	/**
 	 * the SyncClient that holds all the SyncConnection objects, one for each member it called to create a
 	 * connection with.
 	 */
 	private SyncClient syncClient;
-
-
 	/** a thread that writes, reads and deletes FastCopyable object to/from files */
 	private SignedStateFileManager signedStateFileManager;
-
 	/** last time stamp when pause check timer is active */
 	private long pauseCheckTimeStamp;
-	/** alert threshold for java app pause */
-	private static final long PAUSE_ALERT_INTERVAL = 5000;
-
-	/**
-	 * All the SyncListener threads, which are each listening for incoming sync requests from a single
-	 * member
-	 */
-	private final List<Thread> syncListenerThreads = new LinkedList<>();
-
-	/** The last status of the platform that was determined, is null until the platform starts up */
-	private final AtomicReference<PlatformStatus> currentPlatformStatus = new AtomicReference<PlatformStatus>(null);
-
 	/** the round number of last recover state with valid new user transactions */
 	private long roundOfLastRecoveredEvent;
-	/** the number of active connections this node has to other nodes */
-	private final AtomicInteger activeConnectionNumber = new AtomicInteger(0);
-
-	/**
-	 * the ID of the member running this. Since a node can be a main node or a mirror node, the ID is not a primitive
-	 * value
-	 */
-	protected final NodeId selfId;
-
 	/** the app can set appAbout, which shows in the menu's "about" */
 	private String appAbout = "";
-
 	/** allows nodes to wait for each other when starting up */
 	private StartupThrottle startupThrottle;
-
 	/** Tracks user transactions in the hashgraph */
 	private TransactionTracker transactionTracker;
-
 	/** Tracks recent events created in the network */
 	private CriticalQuorum criticalQuorum;
-
-	/** all the events and other data about the hashgraph */
-	protected EventTaskCreator eventTaskCreator;
-
 	private QueueThread<EventIntakeTask> intakeQueue;
-
-	/**
-	 * the object used to calculate consensus. it is volatile because the whole object is replaced when reading a state
-	 * from disk or getting it through reconnect
-	 */
-	private final AtomicReference<Consensus> consensusRef;
-
-	/** threads and queues of events to record, with/without consensus */
-	protected EventFlow eventFlow;
-
-	/** font size to use in the console text window */
-	protected int fontSize;
-
-	/** statistics to monitor the network, syncing, etc. */
-	protected Statistics stats;
-
-	/** Application statistics */
-	protected ApplicationStatistics appStats;
-
 	/** sleep in ms after each sync in SyncCaller. A public setter for this exists. */
 	private long delayAfterSync = 0;
-
 	/**
 	 * freezeTime in seconds;
 	 * when the node is started from genesis, and this value is positive,
 	 * set this node's freezeTime to be an Instant with this many epoch seconds
 	 */
 	private long genesisFreezeTime = -1;
-
-	/** ID number of the swirld being run */
-	protected byte[] swirldId;
-
-	/** the object that contains all key pairs and CSPRNG state for this member */
-	protected Crypto crypto;
-
 	/** Executes a sync with a remote node */
 	private ShadowGraphSynchronizer shadowgraphSynchronizer;
-
-	/**
-	 * This object is responsible for rate limiting reconnect attempts (in the role of sender)
-	 */
-	protected final ReconnectThrottle reconnectThrottle;
-
-	/**
-	 * Set to true when state recovery is in progress.
-	 */
-	protected volatile boolean stateRecoveryInProgress;
-
-	public enum StatsType {
-		AVGSTATESIGS
-	}
-
-	public static final String PLATFORM_THREAD_POOL_NAME = "platform-core";
 
 	/**
 	 * the browser gives the Platform what app to run. There can be multiple Platforms on one computer.
@@ -316,6 +274,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	SwirldsPlatform(final int winNum, final String[] parameters, final Crypto crypto, final byte[] swirldId,
 			final NodeId id, final AddressBook initialAddressBook, final int fontSize,
 			final String mainClassName, final String swirldName, final SwirldAppLoader appLoader) {
+
 		// ThreadDumpGenerator.createDeadlock(); // intentionally deadlock, for debugging
 		this.mainClassName = mainClassName;
 		this.swirldName = swirldName;
@@ -355,6 +314,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 		this.eventFlow = null;
 		this.swirldId = swirldId.clone();
 		this.crypto = crypto;
+		this.socketFactory = PlatformConstructor.socketFactory(crypto.getKeysAndCerts());
 		this.appStats = new ApplicationStatistics();
 		if (displayDBStats()) {
 			this.dbStats = new DBStatistics();
@@ -362,7 +322,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 			this.dbStats = null;
 		}
 
-		if (Settings.state.getSaveStatePeriod() > 0 || Settings.state.dumpStateOnISS || Settings.jsonExport.isActive()) {
+		if (Settings.state.getSaveStatePeriod() > 0 || Settings.state.dumpStateOnISS) {
 			signedStateFileManager = new SignedStateFileManager(this);
 
 			new ThreadConfiguration()
@@ -374,8 +334,9 @@ public class SwirldsPlatform extends AbstractPlatform {
 					.build()
 					.start();
 		}
-		signedStateManager = new SignedStateManager(this, crypto, signedStateFileManager, Settings.state,
-				Settings.jsonExport);
+		signedStateManager = new SignedStateManager(this,
+				PlatformConstructor.platformSigner(crypto.getKeysAndCerts()),
+				signedStateFileManager, Settings.state);
 
 		if (Settings.state.backgroundHashChecking) {
 			// This object performs background sanity checks on copies of the state.
@@ -393,14 +354,12 @@ public class SwirldsPlatform extends AbstractPlatform {
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * Get the transactionMaxBytes in Settings
+	 *
+	 * @return integer representing the maximum number of bytes allowed in a transaction
 	 */
-	@Override
-	void setInfoMember(final StateHierarchy.InfoMember infoMember) {
-		this.infoMember = infoMember;
-		this.platformName = infoMember.name//
-				+ " - " + infoMember.swirld.name //
-				+ " - " + infoMember.swirld.app.name;
+	public static int getTransactionMaxBytes() {
+		return Settings.transactionMaxBytes;
 	}
 
 	/**
@@ -470,6 +429,17 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 * {@inheritDoc}
 	 */
 	@Override
+	void setInfoMember(final StateHierarchy.InfoMember infoMember) {
+		this.infoMember = infoMember;
+		this.platformName = infoMember.name//
+				+ " - " + infoMember.swirld.name //
+				+ " - " + infoMember.swirld.app.name;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
 	public boolean createSystemTransaction(final Transaction systemTransaction) {
 		return eventFlow.createTransaction(systemTransaction);
 	}
@@ -518,6 +488,9 @@ public class SwirldsPlatform extends AbstractPlatform {
 									oldHash, newHash);
 						}
 					}
+
+					log.info(STARTUP.getMarker(), "Hash information for state loaded from disk:\n{}",
+							() -> generateHashDebugString(signedState.getState(), StateSettings.getDebugHashDepth()));
 
 					signedState.getState().getSwirldState().init(this, initialAddressBook.copy(),
 							signedState.getState().getSwirldDualState());
@@ -786,6 +759,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 			initEventStreamManager(String.valueOf(selfId));
 		}
 
+
 		eventFlow = buildEventFlow();
 
 		if (Settings.waitAtStartup) {
@@ -836,7 +810,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 		final EventCreator eventCreator = new EventCreator(
 				this,
 				selfId,
-				this,
+				PlatformConstructor.platformSigner(crypto.getKeysAndCerts()),
 				consensusRef::get,
 				eventFlow,
 				eventIntake::addEvent,
@@ -881,7 +855,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 			appMain.init(this, selfId);
 		} catch (final Exception e) {
 			log.error(EXCEPTION.getMarker(), "Exception while calling {}.init! Exiting...", mainClassName, e);
-			Browser.exitSystem(SWIRLD_MAIN_THREW_EXCEPTION);
+			com.swirlds.platform.system.SystemUtils.exitSystem(SWIRLD_MAIN_THREW_EXCEPTION);
 		}
 	}
 
@@ -890,6 +864,15 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 */
 	private EventFlow buildEventFlow() {
 		final EventFlow newEventFlow;
+
+		// Queue thread that stores and handles signed states that need to be hashed and have signatures collected.
+		final QueueThread<SignedState> stateHashSignQueueThread = PlatformConstructor.stateHashSignQueue(
+				selfId.getId(),
+				signedStateManager,
+				stats
+		);
+		stateHashSignQueueThread.start();
+
 		if (signedState != null) {
 			log.debug(STARTUP.getMarker(), () -> new SavedStateLoadedPayload(
 					signedState.getLastRoundReceived(),
@@ -907,7 +890,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 			// newEventFlow will get a copy of the state loaded, that copy will become stateCons.
 			// The original state will be saved in the SignedStateMgr and will be deleted when it becomes old
 			newEventFlow = new EventFlow(selfId, stats, initialAddressBook, eventStreamManager, isZeroStakeNode(),
-					systemTransactionHandler, signedStateManager, this::estimateTime,
+					systemTransactionHandler, stateHashSignQueueThread, this::estimateTime,
 					PlatformConstructor.settingsProvider(), initialState);
 			newEventFlow.loadDataFromSignedState(signedState, false);
 		} else {
@@ -923,7 +906,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 			// addressBook
 			// this state passed will become stateCons
 			newEventFlow = new EventFlow(selfId, stats, initialAddressBook, eventStreamManager, isZeroStakeNode(),
-					systemTransactionHandler, signedStateManager, this::estimateTime,
+					systemTransactionHandler, stateHashSignQueueThread, this::estimateTime,
 					PlatformConstructor.settingsProvider(), state);
 			// if we are not starting from a saved state, don't freeze on startup
 			startUpEventFrozenManager.setStartUpEventFrozenEndTime(null);
@@ -1131,7 +1114,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	private void spawnSyncCaller(final int callerNumber, final SyncCallerType callerType) {
 		// create a caller that will run repeatedly to call random members other than selfId
 		final SyncCaller syncCaller = new SyncCaller(this, getAddressBook(),
-				selfId, callerNumber, callerType);
+				selfId, callerNumber, callerType, PlatformConstructor.platformSigner(crypto.getKeysAndCerts()));
 
 		/* the thread that repeatedly initiates syncs with other members */
 		final Thread syncCallerThread = new ThreadConfiguration()
@@ -1518,6 +1501,12 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** {@inheritDoc} */
 	@Override
+	public void setAbout(final String about) {
+		appAbout = about;
+	}
+
+	/** {@inheritDoc} */
+	@Override
 	public Address getAddress() {
 		if (selfId.isMirror()) {
 			throw new RuntimeException("Mirror node not yet implemented!");
@@ -1569,6 +1558,12 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	/** {@inheritDoc} */
 	@Override
+	public void setSleepAfterSync(final long delay) {
+		delayAfterSync = delay;
+	}
+
+	/** {@inheritDoc} */
+	@Override
 	@SuppressWarnings("unchecked")
 	public <T extends SwirldState> T getState() {
 		return (T) eventFlow.getCurrStateAndKeep();
@@ -1591,31 +1586,10 @@ public class SwirldsPlatform extends AbstractPlatform {
 		return swirldId.clone();
 	}
 
-	/**
-	 * Get the transactionMaxBytes in Settings
-	 *
-	 * @return integer representing the maximum number of bytes allowed in a transaction
-	 */
-	public static int getTransactionMaxBytes() {
-		return Settings.transactionMaxBytes;
-	}
-
 	/** {@inheritDoc} */
 	@Override
 	public void releaseState() {
 		eventFlow.releaseStateCurr();
-	}
-
-	/** {@inheritDoc} */
-	@Override
-	public void setAbout(final String about) {
-		appAbout = about;
-	}
-
-	/** {@inheritDoc} */
-	@Override
-	public void setSleepAfterSync(final long delay) {
-		delayAfterSync = delay;
 	}
 
 	/** {@inheritDoc} */
@@ -1685,7 +1659,6 @@ public class SwirldsPlatform extends AbstractPlatform {
 		return startUpEventFrozenManager;
 	}
 
-
 	/**
 	 * Initializes EventStreamManager instance,
 	 * which will start threads for calculating RunningHash, and writing event stream files when event streaming is
@@ -1730,5 +1703,14 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 	public ShadowGraphSynchronizer getShadographSynchronizer() {
 		return shadowgraphSynchronizer;
+	}
+
+	@Override
+	public SocketFactory getSocketFactory() {
+		return socketFactory;
+	}
+
+	public enum StatsType {
+		AVGSTATESIGS
 	}
 }

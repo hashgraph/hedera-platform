@@ -26,40 +26,62 @@ public class IssPayload extends AbstractLogPayload {
 	}
 
 	/**
+	 * Create a new payload for an ISS.
+	 *
+	 * @param message
+	 * 		the human-readable message
 	 * @param round
 	 * 		the round for which the ISS was received
 	 * @param nodeId
-	 * 		the node that received the ISS
+	 * 		this node
 	 * @param otherId
 	 * 		the node that sent the ISS
 	 */
-	public IssPayload(long round, long nodeId, long otherId) {
-		super("Received invalid state signature!");
+	public IssPayload(final String message, final long round, final long nodeId, final long otherId) {
+		super(message);
 		this.round = round;
 		this.nodeId = nodeId;
 		this.otherId = otherId;
 	}
 
+	/**
+	 * Get the round when the ISS was observed.
+	 */
 	public long getRound() {
 		return round;
 	}
 
+	/**
+	 * Set the round when the ISS was observed.
+	 */
 	public void setRound(long round) {
 		this.round = round;
 	}
 
+	/**
+	 * Get the ID of this node.
+	 */
 	public long getNodeId() {
 		return nodeId;
 	}
 
+	/**
+	 * Set the ID of this node.
+	 */
 	public void setNodeId(long nodeId) {
 		this.nodeId = nodeId;
 	}
 
+	/**
+	 * Get the ID of the other node.
+	 */
 	public long getOtherId() {
 		return otherId;
 	}
 
+	/**
+	 * Set the ID of the other node.
+	 */
 	public void setOtherId(long otherId) {
 		this.otherId = otherId;
 	}

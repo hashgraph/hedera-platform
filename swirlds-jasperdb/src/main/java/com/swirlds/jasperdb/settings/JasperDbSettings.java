@@ -1,0 +1,140 @@
+/*
+ * (c) 2016-2022 Swirlds, Inc.
+ *
+ * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
+ * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
+ *
+ * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
+ *
+ * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * OR NON-INFRINGEMENT.
+ */
+
+package com.swirlds.jasperdb.settings;
+
+import java.time.temporal.ChronoUnit;
+
+/**
+ * Instance-wide settings for {@code VirtualDataSourceJasperDB}.
+ */
+public interface JasperDbSettings {
+
+	/**
+	 * Get the base path for database storage, JasperDbBuilder will create database directories inside this storage
+	 * path.
+	 * This is the machine specific part of the database path.
+	 *
+	 * @return Database storage base directory.
+	 */
+	String getStoragePath();
+
+	/**
+	 * Get the maximum number of unique keys we expect to be stored in this database. This is used for calculating in
+	 * memory index sizes.
+	 * <p><b>IMPORTANT: This can only be set before a new database is created, changing on an existing database will
+	 * break it.</b></p>
+	 */
+	long getMaxNumOfKeys();
+
+	/**
+	 * Get threshold where we switch from storing internal hashes in ram to storing them on disk. If it is 0 then
+	 * everything
+	 * is on disk, if it is Long.MAX_VALUE then everything is in ram. Any value in the middle is the path value at which
+	 * we swap from ram to disk. This allows a tree where the lower levels of the tree nodes hashes are in ram and the
+	 * upper larger less changing layers are on disk.
+	 * <p><b>IMPORTANT: This can only be set before a new database is created, changing on an existing database will
+	 * break it.</b></p>
+	 */
+	long getInternalHashesRamToDiskThreshold();
+
+	/**
+	 * The cutoff size in MB of files to include in a "medium" merge. Default is 10240MB.
+	 *
+	 * @return the medium merge cutoff
+	 */
+	int getMediumMergeCutoffMb();
+
+	/**
+	 * The cutoff size in MB of files to include in a "small" merge. Default is 3072MB.
+	 *
+	 * @return the small merge cutoff
+	 */
+	int getSmallMergeCutoffMb();
+
+	/**
+	 * The time unit to use when interpreting merge periods. Note this requires the
+	 * {@code jasperDb.mergePeriodUnit} to be one of the constants of the {@link ChronoUnit}
+	 * enum ("SECONDS", "MINUTES", or "HOURS" are the most likely to be used). Default
+	 * is MINUTES.
+	 *
+	 * @return the time unit for merge periods
+	 */
+	ChronoUnit getMergePeriodUnit();
+
+	/**
+	 * The maximum number of files to include in a single merge.
+	 *
+	 * Sets a maximum value for the number of files we will permit to be used in a single merge. The merging algorithm
+	 * scales at something near O(n^2), and under some conditions can get into a runaway state where we are never able
+	 * to merge all the files. By keeping the number fixed, we can use a fixed amount of memory no matter how many files
+	 * there are, and we can keep each merge round reasonably short.
+	 */
+	int getMaxNumberOfFilesInMerge();
+
+	/**
+	 * The minimum number of files before we do a merge. Each time it is time for a merge we will gather all files
+	 * available for merging for a small, medium or large merge. If there are less than this number then it is
+	 * acceptable to not do a merge.
+	 */
+	int getMinNumberOfFilesInMerge();
+
+	/**
+	 * The minimum elapsed time in seconds between merge thread activating to check if merge is needed.
+	 */
+	long getMergeActivatePeriod();
+
+	/**
+	 * The minimum elapsed time in merge period units between medium merges. Default is 10 (minutes).
+	 */
+	long getMediumMergePeriod();
+
+	/**
+	 * The minimum elapsed time in merge period units between full merges. Default is 30 (minutes).
+	 */
+	long getFullMergePeriod();
+
+	/**
+	 * Chosen max size for a data file, this is a balance as fewer bigger files are faster to read from
+	 * but large files are extensive to merge. It must be less than 1024GB (as determined by
+	 * {@code DataFileCommon#MAX_ADDRESSABLE_DATA_FILE_SIZE_BYTES}); default is 64GB.
+	 */
+	long getMaxDataFileBytes();
+
+	/**
+	 * This is the size of each sub array chunk allocated as the moves list grows. It wants to be big enough that we
+	 * don't have too many arrays but small enough to not use a crazy amount of RAM for small virtual merkle trees and
+	 * in unit tests etc. Default of 500_000 seems an ok compromise at 11.5Mb.
+	 */
+	int getMoveListChunkSize();
+
+	/**
+	 * Maximum amount of RAM that can be used for the moves map during merging of files. This is for a single merge. If
+	 * we do more than 1 merge at a time then this will be multiplied by number of active merges. This directly dictates
+	 * the max number of items that can be stored in a data file. Default is 10GB.
+	 */
+	int getMaxRamUsedForMergingGb();
+
+	/**
+	 * Size of the buffered input stream (in bytes) underlying a {@link com.swirlds.jasperdb.files.DataFileIterator}.
+	 * Default is 1MB.
+	 */
+	int getIteratorInputBufferBytes();
+
+	/**
+	 * Size of the buffered output stream (in bytes) used by a {@link com.swirlds.jasperdb.files.DataFileWriter}.
+	 * Default is 4MB.
+	 */
+	int getWriterOutputBufferBytes();
+}

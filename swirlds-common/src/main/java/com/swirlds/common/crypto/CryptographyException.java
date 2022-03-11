@@ -18,6 +18,7 @@ import com.swirlds.common.PlatformException;
 import com.swirlds.logging.LogMarker;
 
 public class CryptographyException extends PlatformException {
+	private static final LogMarker DEFAULT_MARKER = LogMarker.EXCEPTION;
 
 	public CryptographyException(final LogMarker logMarker) {
 		super(logMarker);
@@ -37,5 +38,9 @@ public class CryptographyException extends PlatformException {
 
 	public CryptographyException(final Throwable cause, final LogMarker logMarker) {
 		super(cause, logMarker);
+	}
+
+	public CryptographyException(final Throwable cause) {
+		super(cause, DEFAULT_MARKER);
 	}
 }

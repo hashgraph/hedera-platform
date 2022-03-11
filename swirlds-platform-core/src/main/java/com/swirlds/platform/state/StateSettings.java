@@ -96,6 +96,12 @@ public class StateSettings extends SubSetting {
 	 */
 	public static boolean backgroundHashChecking = false;
 
+	/**
+	 * When logging debug information about the hashes in a merkle tree, do not display hash information
+	 * for nodes deeper than this.
+	 */
+	public static int debugHashDepth = 5;
+
 	public StateSettings() {
 
 	}
@@ -151,6 +157,16 @@ public class StateSettings extends SubSetting {
 	 */
 	public void setEnableStateRecovery(boolean enableStateRecovery) {
 		this.enableStateRecovery = enableStateRecovery;
+	}
+
+	/**
+	 * When logging debug information about the hashes in a merkle tree, do not display hash information
+	 * for nodes deeper than this.
+	 *
+	 * @return the maximum depth when displaying debug information about the hash of the state
+	 */
+	public static int getDebugHashDepth() {
+		return debugHashDepth;
 	}
 
 	/**

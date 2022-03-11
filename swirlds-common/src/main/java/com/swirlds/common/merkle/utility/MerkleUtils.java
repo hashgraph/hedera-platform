@@ -19,7 +19,6 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 
-import java.util.Iterator;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -37,8 +36,13 @@ public final class MerkleUtils {
 	 * 		the root of the tree (or subtree)
 	 */
 	public static void invalidateTree(final MerkleNode root) {
-		final Iterator<MerkleNode> iterator = new MerkleInvalidationIterator(root);
-		iterator.forEachRemaining(MerkleNode::invalidateHash);
+		if (root == null) {
+			return;
+		}
+		root.treeIterator()
+				.setFilter(node -> !node.isSelfHashing())
+				.setDescendantFilter(node -> !node.isSelfHashing())
+				.forEachRemaining(MerkleNode::invalidateHash);
 	}
 
 	/**

@@ -14,6 +14,7 @@
 
 package com.swirlds.common.merkle.synchronization.internal;
 
+import com.swirlds.common.ThresholdLimitingHandler;
 import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.MerkleNode;
@@ -53,6 +54,8 @@ public class LearnerThread<T> {
 	private final ReconnectNodeCount nodeCount;
 
 	private final Queue<MerkleNode> rootsToReceive;
+
+	private final ThresholdLimitingHandler<Throwable> exceptionRateLimiter = new ThresholdLimitingHandler<>(1);
 
 	/**
 	 * Create a new thread for the learner.
@@ -184,7 +187,11 @@ public class LearnerThread<T> {
 			final Hash originalHash = view.getNodeHash(originalChild);
 
 			final Hash teacherHash = queries.get(childIndex);
-			final boolean nodeAlreadyPresent = originalHash.equals(teacherHash);
+			if (originalHash == null) {
+				exceptionRateLimiter.handle(new NullPointerException(),
+						(error) -> LOG.warn(RECONNECT.getMarker(), "originalHash for node {} is null", originalChild));
+			}
+			final boolean nodeAlreadyPresent = originalHash != null && originalHash.equals(teacherHash);
 			out.sendAsync(new QueryResponse(nodeAlreadyPresent));
 
 			view.expectLessonFor(newParent, childIndex, originalChild, nodeAlreadyPresent);

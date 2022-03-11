@@ -14,15 +14,14 @@
 
 package com.swirlds.common.events;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swirlds.common.CommonUtils;
+import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.AbstractSerializableHashable;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.OptionalSelfSerializable;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
-import com.swirlds.common.Transaction;
 import com.swirlds.common.transaction.internal.LegacyTransaction;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
@@ -75,7 +74,6 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 	/** creation time, as claimed by its creator */
 	private Instant timeCreated;
 	/** the payload: an array of transactions */
-	@JsonIgnore
 	private Transaction[] transactions;
 
 	/** are any of the transactions user transactions */

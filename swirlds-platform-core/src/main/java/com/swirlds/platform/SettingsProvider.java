@@ -14,6 +14,8 @@
 
 package com.swirlds.platform;
 
+import com.swirlds.platform.internal.CryptoSettings;
+
 /**
  * A temporary interface to bridge circumvent the fact that the Settings class is package private
  */
@@ -36,12 +38,6 @@ public interface SettingsProvider {
 	 * This feature is used to get consensus on events with no descendants which are created by nodes who go offline.
 	 */
 	int getRandomEventProbability();
-
-	/**
-	 * if true, both nodes send and wait for a COMM_EVENT_DONE byte after finishing reading and writing all events of a
-	 * sync
-	 */
-	boolean shouldSendSyncDoneByte();
 
 	/**
 	 * Defines a "falling behind" node as a one that received at least N * throttle7threshold events in a sync. A good
@@ -82,4 +78,29 @@ public interface SettingsProvider {
 	 * @see Settings#delayShuffle
 	 */
 	long getDelayShuffle();
+
+	/**
+	 * @see Settings#socketIpTos
+	 */
+	int getSocketIpTos();
+
+	/**
+	 * @see Settings#timeoutSyncClientSocket
+	 */
+	int getTimeoutSyncClientSocket();
+
+	/**
+	 * @see Settings#timeoutSyncClientConnect
+	 */
+	int getTimeoutSyncClientConnect();
+
+	/**
+	 * @see Settings#tcpNoDelay
+	 */
+	boolean isTcpNoDelay();
+
+	/**
+	 * @see CryptoSettings#getKeystorePassword()
+	 */
+	String getKeystorePassword();
 }

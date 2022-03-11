@@ -38,6 +38,7 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.eventhandling to com.swirlds.platform.test;
 	exports com.swirlds.platform.sync;
 	exports com.swirlds.platform.consensus to com.swirlds.platform.test;
+	exports com.swirlds.platform.system to com.swirlds.platform.test;
 
 	/* Swirlds Libraries */
 	requires transitive com.swirlds.common;
@@ -74,11 +75,6 @@ module com.swirlds.platform {
 	requires org.flywaydb.core;
 	requires com.zaxxer.hikari;
 	requires org.postgresql.jdbc;
-
-	/* Jackson JSON */
-	requires com.fasterxml.jackson.core;
-	requires com.fasterxml.jackson.databind;
-	requires com.fasterxml.jackson.datatype.jsr310;
 	requires com.swirlds.fchashmap;
 	requires com.swirlds.jasperdb;
 	requires com.swirlds.virtualmap;

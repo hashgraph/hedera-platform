@@ -21,14 +21,16 @@ import com.swirlds.logging.payloads.ReconnectFinishPayload;
 import com.swirlds.logging.payloads.ReconnectStartPayload;
 import com.swirlds.platform.ReconnectStatistics;
 import com.swirlds.platform.SocketSyncConnection;
-import com.swirlds.platform.sync.SyncConstants;
 import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.StateSettings;
+import com.swirlds.platform.sync.SyncConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.net.SocketException;
 
+import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 
 /**
@@ -199,6 +201,8 @@ public class ReconnectTeacher {
 				selfId,
 				otherId,
 				lastRoundReceived));
+		LOG.info(RECONNECT.getMarker(), "The following state will be sent to the learner:\n{}",
+				() -> generateHashDebugString(signedState.getState(), StateSettings.getDebugHashDepth()));
 	}
 
 	private void logReconnectFinish() {

@@ -145,6 +145,14 @@ public class BinaryMerkleRoute extends AbstractMerkleRoute {
 	 * {@inheritDoc}
 	 */
 	@Override
+	public boolean isEmpty() {
+		return data.length == 0;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
 	public Iterator<Integer> iterator() {
 		return new BinaryMerkleRouteIterator(this.data);
 	}
@@ -177,6 +185,29 @@ public class BinaryMerkleRoute extends AbstractMerkleRoute {
 			return this;
 		}
 		return new BinaryMerkleRoute(this, steps);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getStep(final int index) {
+		final int normalizedIndex = index >= 0 ? index : (size() + index);
+		if (normalizedIndex < 0) {
+			throw new IndexOutOfBoundsException("index " + index + " is out of bounds");
+		}
+
+		final Iterator<Integer> iterator = iterator();
+
+		int ret = -1;
+		for (int i = 0; i <= normalizedIndex; i++) {
+			if (!iterator.hasNext()) {
+				throw new IndexOutOfBoundsException("index " + index + " is out of bounds");
+			}
+			ret = iterator.next();
+		}
+
+		return ret;
 	}
 
 	/**

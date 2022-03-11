@@ -357,18 +357,6 @@ public class Utilities extends DataStreamUtils {
 	}
 
 	/**
-	 * Convert an int to a byte array, little endian.
-	 *
-	 * @param i
-	 * 		the int to convert
-	 * @return the byte array
-	 */
-	static byte[] intToBytes(int i) {
-		return new byte[] { (byte) i, (byte) (i >> 8), (byte) (i >> 16),
-				(byte) (i) };
-	}
-
-	/**
 	 * Return a string with info about all threads currently deadlocked. Each thread has a name of XYZ where
 	 * X is the thread ID of the thread that created this thread, Y is a 2-letter code for its purpose, and
 	 * Z is the Platform ID (0 for Alice, 1 for Bob, etc). See newThreadFromPool for the list of 2-letter codes.

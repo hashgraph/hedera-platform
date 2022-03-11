@@ -18,7 +18,6 @@ import com.swirlds.common.io.BadIOException;
 import com.swirlds.platform.reconnect.ReconnectTeacher;
 import com.swirlds.platform.reconnect.ReconnectThrottle;
 import com.swirlds.platform.state.SignedState;
-import com.swirlds.platform.state.StateDumpSource;
 import com.swirlds.platform.sync.SyncConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -232,7 +231,7 @@ class SyncListener implements Runnable {
 		final SocketSyncConnection conn;
 		final NodeId selfId;
 		// otherId assumed to be main
-		final ReentrantLock lockCallListen = platform.getSyncServer().lockCallListen.get(otherId.getIdAsInt());
+		final ReentrantLock lockCallListen = platform.getSyncServer().getSyncOngoingLock(otherId.getIdAsInt());
 		Socket socket = null;
 		final DataInputStream dis;
 
@@ -322,10 +321,6 @@ class SyncListener implements Runnable {
 			log.info(RECONNECT.getMarker(), "{} got COMM_STATE_REQUEST from {}", platform.getSelfId(), otherId);
 
 			final SignedState state = platform.getSignedStateManager().getLastCompleteSignedState().get();
-
-			// This was added to support writing signed state JSON files after every reconnect
-			// This is enabled/disabled via settings and is disabled by default
-			platform.getSignedStateManager().jsonifySignedState(state, StateDumpSource.RECONNECT);
 
 			new ReconnectTeacher(
 					conn,

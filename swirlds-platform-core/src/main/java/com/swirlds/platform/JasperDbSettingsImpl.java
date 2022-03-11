@@ -28,19 +28,19 @@ import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MEDIUM_MERGE_CUTOFF_MB;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MEDIUM_MERGE_PERIOD;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MERGE_ACTIVATED_PERIOD;
+import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MIN_NUMBER_OF_FILES_IN_MERGE;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MOVE_LIST_CHUNK_SIZE;
-import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_NUMBER_OF_SAVES_BEFORE_SMALL_MERGE;
-import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_NUM_MERGE_THREADS;
+import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_NUMBER_OF_FILES_IN_MERGE;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_SMALL_MERGE_CUTOFF_MB;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_STORAGE_DIRECTORY;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_WRITER_OUTPUT_BUFFER_BYTES;
 
+@SuppressWarnings("unused")
 public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings {
 	public static final int MAX_NUMBER_OF_SAVES_BEFORE_MERGE = 100;
 
 	public String storagePath = DEFAULT_STORAGE_DIRECTORY;
 	public int maxNumOfKeys = DEFAULT_MAX_NUM_OF_KEYS;
-	public int numMergeThreads = DEFAULT_NUM_MERGE_THREADS;
 	public int internalHashesRamToDiskThreshold = DEFAULT_INTERNAL_HASHES_RAM_TO_DISK_THRESHOLD;
 	public int smallMergeCutoffMb = DEFAULT_SMALL_MERGE_CUTOFF_MB;
 	public int mediumMergeCutoffMb = DEFAULT_MEDIUM_MERGE_CUTOFF_MB;
@@ -52,7 +52,8 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 	public long fullMergePeriod = DEFAULT_FULL_MERGE_PERIOD;
 	public long mediumMergePeriod = DEFAULT_MEDIUM_MERGE_PERIOD;
 	public long mergeActivatedPeriod = DEFAULT_MERGE_ACTIVATED_PERIOD;
-	public long numberOfSavesBeforeSmallMerge = DEFAULT_NUMBER_OF_SAVES_BEFORE_SMALL_MERGE;
+	public int maxNumberOfFilesInMerge = DEFAULT_MAX_NUMBER_OF_FILES_IN_MERGE;
+	public int minNumberOfFilesInMerge = DEFAULT_MIN_NUMBER_OF_FILES_IN_MERGE;
 	public String mergePeriodUnit = "MINUTES";
 
 	/**
@@ -169,21 +170,6 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 	 * {@inheritDoc}
 	 */
 	@Override
-	public int getNumMergeThreads() {
-		return numMergeThreads;
-	}
-
-	public void setNumMergeThreads(final int numMergeThreads) {
-		if (numMergeThreads < 0) {
-			throw new IllegalArgumentException("Cannot configure numMergeThreads=" + numMergeThreads);
-		}
-		this.numMergeThreads = numMergeThreads;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public long getMergeActivatePeriod() {
 		return mergeActivatedPeriod;
 	}
@@ -197,18 +183,38 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 
 	/**
 	 * {@inheritDoc}
+	 * @return
 	 */
 	@Override
-	public long getNumberOfSavesBeforeSmallMerge() {
-		return numberOfSavesBeforeSmallMerge;
+	public int getMaxNumberOfFilesInMerge() {
+		return maxNumberOfFilesInMerge;
 	}
 
-	public void setNumberOfSavesBeforeSmallMerge(final long numberOfSavesBeforeSmallMerge) {
-		if (numberOfSavesBeforeSmallMerge < 1 || numberOfSavesBeforeSmallMerge > MAX_NUMBER_OF_SAVES_BEFORE_MERGE) {
+	public void setMaxNumberOfFilesInMerge(final int maxNumberOfFilesInMerge) {
+		if (maxNumberOfFilesInMerge <= minNumberOfFilesInMerge) {
 			throw new IllegalArgumentException(
-					"Cannot configure numberOfSavesBeforeSmallMerge=" + numberOfSavesBeforeSmallMerge);
+					"Cannot configure maxNumberOfFilesInMerge to " + maxNumberOfFilesInMerge +
+							", it mist be > " + minNumberOfFilesInMerge);
 		}
-		this.numberOfSavesBeforeSmallMerge = numberOfSavesBeforeSmallMerge;
+		this.maxNumberOfFilesInMerge = maxNumberOfFilesInMerge;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @return
+	 */
+	@Override
+	public int getMinNumberOfFilesInMerge() {
+		return minNumberOfFilesInMerge;
+	}
+
+	public void setMinNumberOfFilesInMerge(final int minNumberOfFilesInMerge) {
+		if (minNumberOfFilesInMerge < 2 || minNumberOfFilesInMerge >= maxNumberOfFilesInMerge) {
+			throw new IllegalArgumentException(
+					"Cannot configure minNumberOfFilesInMerge to " + minNumberOfFilesInMerge +
+							", it must be >= 2 and < "+maxNumberOfFilesInMerge);
+		}
+		this.minNumberOfFilesInMerge = minNumberOfFilesInMerge;
 	}
 
 	/**

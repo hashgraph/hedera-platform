@@ -29,6 +29,7 @@ import com.swirlds.platform.components.EventTaskCreator;
 import com.swirlds.platform.components.SwirldMainManager;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.components.TransactionTracker;
+import com.swirlds.platform.crypto.SocketFactory;
 import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.internal.SignedStateLoadingException;
 import com.swirlds.platform.state.SignedState;
@@ -323,5 +324,10 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	 * @return the platform instance of the {@link ShadowGraphSynchronizer}
 	 */
 	public abstract ShadowGraphSynchronizer getShadographSynchronizer();
+
+	/**
+	 * @return the instance that creates and connects sockets
+	 */
+	public abstract SocketFactory getSocketFactory();
 
 }

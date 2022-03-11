@@ -15,7 +15,6 @@
 package com.swirlds.platform.sync;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.BadIOException;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SyncConnection;
 import com.swirlds.platform.event.ValidateEventTask;
@@ -28,6 +27,8 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -35,6 +36,11 @@ import static com.swirlds.logging.LogMarker.SYNC_INFO;
 
 public final class SyncComms {
 	private static final Logger LOG = LogManager.getLogger();
+	/**
+	 * send a {@link SyncConstants#COMM_SYNC_ONGOING} every this many milliseconds after we are done writing events,
+	 * until we are done reading events
+	 */
+	private static final int SYNC_ONGOING_SEND_EVERY_MS = 500;
 
 	// Prevent instantiations of this static utility class
 	private SyncComms() {
@@ -146,7 +152,8 @@ public final class SyncComms {
 
 	public static Callable<Void> phase3Write(
 			final SyncConnection conn,
-			final List<EventImpl> events) {
+			final List<EventImpl> events,
+			final CountDownLatch eventReadingDone) {
 		return () -> {
 			LOG.info(SYNC_INFO.getMarker(), "{} writing events start. send list size: {}",
 					conn.getDescription(), events.size());
@@ -160,6 +167,12 @@ public final class SyncComms {
 			LOG.info(SYNC_INFO.getMarker(), "{} writing events done, wrote {} events",
 					conn.getDescription(), events.size());
 
+			// if we are still reading events, send keepalive messages
+			while (!eventReadingDone.await(SYNC_ONGOING_SEND_EVERY_MS, TimeUnit.MILLISECONDS)) {
+				conn.getDos().writeByte(SyncConstants.COMM_SYNC_ONGOING);
+				conn.getDos().flush();
+			}
+
 			// (ignored)
 			return null;
 		};
@@ -168,27 +181,33 @@ public final class SyncComms {
 	public static Callable<Integer> phase3Read(
 			final SyncConnection conn,
 			final Consumer<ValidateEventTask> eventHandler,
-			final SyncStats stats) {
+			final SyncStats stats,
+			final CountDownLatch eventReadingDone) {
 		return () -> {
 			LOG.info(SYNC_INFO.getMarker(), "{} reading events start", conn.getDescription());
 			int eventsRead = 0;
 			long startTime = Long.MIN_VALUE;
-			while (true) {
-				final byte next = conn.getDis().readByte();
-				if (startTime == Long.MIN_VALUE) {
-					startTime = System.nanoTime();
+			try {
+				while (true) {
+					final byte next = conn.getDis().readByte();
+					if (startTime == Long.MIN_VALUE) {
+						startTime = System.nanoTime();
+					}
+					if (next == SyncConstants.COMM_EVENT_DONE) {
+						break;
+					} else if (next == SyncConstants.COMM_EVENT_NEXT) {
+						final ValidateEventTask validateEventTask = conn.getDis().readEventData();
+						eventHandler.accept(validateEventTask);
+						eventsRead++;
+					} else {
+						throw new SyncException(conn,
+								String.format("while reading events, received unexpected byte %02x", next));
+					}
 				}
-				if (next == SyncConstants.COMM_EVENT_DONE) {
-					break;
-				} else if (next == SyncConstants.COMM_EVENT_NEXT) {
-					final ValidateEventTask validateEventTask = conn.getDis().readEventData();
-					eventHandler.accept(validateEventTask);
-					eventsRead++;
-				} else {
-					throw new SyncException(conn,
-							String.format("while reading events, received unexpected byte %02x", next));
-				}
+			} finally {
+				eventReadingDone.countDown();
 			}
+
 			stats.eventsReceived(startTime, eventsRead);
 
 			LOG.info(SYNC_INFO.getMarker(), "{} reading events done, read {} events",
@@ -197,7 +216,7 @@ public final class SyncComms {
 		};
 	}
 
-	public static void syncDoneByte(final SyncConnection conn) throws IOException {
+	public static void syncDoneByte(final SyncConnection conn) throws IOException, SyncException {
 		// we have now finished reading and writing all the events of a sync. the remote node may not have
 		// finished reading and processing all the events this node has sent. so we write a byte to tell the remote
 		// node we have finished, and we wait for it to send us the same byte.
@@ -206,14 +225,25 @@ public final class SyncComms {
 
 		LOG.debug(SYNC_INFO.getMarker(), "{} sent COMM_SYNC_DONE", conn.getDescription());
 
-		final byte done = conn.getDis().readByte();
+		// while we are waiting for the peer to tell us they are done, they might send COMM_SYNC_ONGOING if they are
+		// still busy reading events
+		while (true) {
+			final byte b = conn.getDis().readByte();
 
-		if (done != SyncConstants.COMM_SYNC_DONE) {
-			throw new BadIOException(
-					"received " + done + " instead of COMM_SYNC_DONE");
+			switch (b) {
+				case SyncConstants.COMM_SYNC_DONE -> {
+					LOG.debug(SYNC_INFO.getMarker(), "{} received COMM_SYNC_DONE", conn.getDescription());
+					return;
+				}
+				case SyncConstants.COMM_SYNC_ONGOING ->
+						// peer is still reading events, waiting for them to finish
+						LOG.debug(SYNC_INFO.getMarker(), "{} received COMM_SYNC_ONGOING", conn.getDescription());
+				default -> throw new SyncException(
+						String.format("received %02X instead of COMM_SYNC_ONGOING or COMM_SYNC_DONE", b));
+			}
 		}
 
-		LOG.debug(SYNC_INFO.getMarker(), "{} received COMM_SYNC_DONE", conn.getDescription());
+
 	}
 
 }

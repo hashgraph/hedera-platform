@@ -30,7 +30,7 @@
     --env POSTGRES_PASSWORD=password --env POSTGRES_USER=swirlds \
     --env POSTGRES_DB=fcfs \
     --env PGDATA=/var/lib/postgresql/data/pgdata \
-    postgres:10.16-alpine 
+    postgres:10.20-alpine 
     ```
     
     c. Execute the following command on Windows:
@@ -40,7 +40,7 @@
     --env POSTGRES_PASSWORD=password --env POSTGRES_USER=swirlds ^
     --env POSTGRES_DB=fcfs ^
     --env PGDATA=/var/lib/postgresql/data/pgdata ^
-    postgres:10.16-alpine 
+    postgres:10.20-alpine 
     ```
 
 3.  Control your PostgresSQL container with the following commands:

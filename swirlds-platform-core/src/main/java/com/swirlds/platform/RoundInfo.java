@@ -13,6 +13,7 @@
  */
 package com.swirlds.platform;
 
+import com.swirlds.platform.crypto.CryptoConstants;
 import com.swirlds.platform.event.EventConstants;
 
 import java.util.ArrayList;
@@ -85,7 +86,7 @@ public class RoundInfo {
 	/**
 	 * XOR of sigs of all famous events
 	 */
-	protected final byte[] whitening = new byte[Crypto.SIG_SIZE_BYTES];
+	protected final byte[] whitening = new byte[CryptoConstants.SIG_SIZE_BYTES];
 
 	/**
 	 * each witness has one election per future round, to decide whether it is famous. This should

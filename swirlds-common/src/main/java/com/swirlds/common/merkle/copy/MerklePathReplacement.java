@@ -101,7 +101,7 @@ public final class MerklePathReplacement {
 			// Add the copied child to the parent
 			parentInPath.setChild(indexToCopy, childInPath, child.getRoute());
 
-			if (!child.isLeaf()) {
+			if (child.isInternal()) {
 				// Add the original child's children to the new copy
 				adoptChildren(child.asInternal(), childInPath.asInternal());
 			}

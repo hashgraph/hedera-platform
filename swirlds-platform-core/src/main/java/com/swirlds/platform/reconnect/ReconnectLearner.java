@@ -27,12 +27,13 @@ import com.swirlds.logging.payloads.ReconnectFailurePayload;
 import com.swirlds.platform.Crypto;
 import com.swirlds.platform.ReconnectStatistics;
 import com.swirlds.platform.SyncConnection;
-import com.swirlds.platform.sync.SyncConstants;
 import com.swirlds.platform.Utilities;
 import com.swirlds.platform.state.SigInfo;
 import com.swirlds.platform.state.SigSet;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.State;
+import com.swirlds.platform.state.StateSettings;
+import com.swirlds.platform.sync.SyncConstants;
 import com.swirlds.platform.sync.SyncInputStream;
 import com.swirlds.platform.sync.SyncOutputStream;
 import org.apache.logging.log4j.LogManager;
@@ -43,6 +44,7 @@ import java.net.SocketException;
 import java.security.PublicKey;
 import java.util.concurrent.Future;
 
+import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 
@@ -221,6 +223,7 @@ public class ReconnectLearner {
 		LOG.info(RECONNECT.getMarker(), () -> new ReconnectDataUsagePayload(
 				"Reconnect data usage report",
 				mbReceived).toString());
+
 		statistics.incrementReceiverEndTimes();
 	}
 
@@ -273,6 +276,8 @@ public class ReconnectLearner {
 		LOG.info(RECONNECT.getMarker(), "StrongMinority status: {}",
 				Utilities.isStrongMinority(validStake, addressBook.getTotalStake()));
 		if (!Utilities.isStrongMinority(validStake, addressBook.getTotalStake())) {
+			LOG.error(RECONNECT.getMarker(), "Hash information for failed reconnect state:\n{}",
+					() -> generateHashDebugString(signedState.getState(), StateSettings.getDebugHashDepth()));
 			throw new ReconnectException(String.format(
 					"Error: Received signed state does not have enough valid signatures! validCount:%d, addressBook " +
 							"size:%d, validStake:%d, addressBook total stake:%d",

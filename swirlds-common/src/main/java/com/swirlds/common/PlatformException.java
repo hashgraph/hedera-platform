@@ -26,7 +26,6 @@ public class PlatformException extends RuntimeException {
 		this.logMarker = logMarker;
 	}
 
-
 	public PlatformException(final String message, final LogMarker logMarker) {
 		super(message);
 		this.logMarker = logMarker;

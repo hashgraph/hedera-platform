@@ -59,15 +59,6 @@ public final class StaticSettingsProvider implements SettingsProvider {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean shouldSendSyncDoneByte() {
-		return Settings.sendSyncDoneByte;
-	}
-
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public double getThrottle7Threshold() {
 		return Settings.throttle7threshold;
 	}
@@ -118,5 +109,30 @@ public final class StaticSettingsProvider implements SettingsProvider {
 	@Override
 	public long getDelayShuffle() {
 		return Settings.delayShuffle;
+	}
+
+	@Override
+	public int getSocketIpTos() {
+		return Settings.socketIpTos;
+	}
+
+	@Override
+	public int getTimeoutSyncClientSocket() {
+		return Settings.timeoutSyncClientSocket;
+	}
+
+	@Override
+	public int getTimeoutSyncClientConnect() {
+		return Settings.timeoutSyncClientConnect;
+	}
+
+	@Override
+	public boolean isTcpNoDelay() {
+		return Settings.tcpNoDelay;
+	}
+
+	@Override
+	public String getKeystorePassword() {
+		return Settings.crypto.getKeystorePassword();
 	}
 }

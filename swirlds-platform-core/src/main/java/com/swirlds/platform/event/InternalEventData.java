@@ -14,7 +14,6 @@
 
 package com.swirlds.platform.event;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.RoundInfo;
 
@@ -27,16 +26,12 @@ import java.util.ArrayList;
  */
 public class InternalEventData {
 	/** the self parent of this */
-	@JsonIgnore
 	private EventImpl selfParent;
 	/** the other parent of this */
-	@JsonIgnore
 	private EventImpl otherParent;
 	/** the time this event was first received locally */
-	@JsonIgnore
 	private Instant timeReceived;
 	/** an estimate of what the consensus timestamp will be (could be a very bad guess) */
-	@JsonIgnore
 	private Instant estimatedTime;
 	/** has this event been cleared (because it was old and should be discarded)? */
 	private boolean cleared = false;
@@ -51,27 +46,20 @@ public class InternalEventData {
 	/** is this part of the consensus order yet? */
 	private boolean isConsensus;
 	/** the local time (not consensus time) at which the event reached consensus */
-	@JsonIgnore
 	private Instant reachedConsTimestamp;
 	/** the Election associated with the earliest round involved in the election for this event's fame */
-	@JsonIgnore
 	private RoundInfo.ElectionRound firstElection;
 	/** does this event contains user transactions (not just system transactions) */
 	private boolean hasUserTransactions = false;
 	/** lastSee[m] is the last ancestor created by m (memoizes function from Swirlds-TR-2020-01) */
-	@JsonIgnore
 	private EventImpl[] lastSee;
 	/** stronglySeeP[m] is strongly-seen witness in parent round by m (memoizes function from Swirlds-TR-2020-01) */
-	@JsonIgnore
 	private EventImpl[] stronglySeeP;
 	/** The first witness that's a self-ancestor in the self round (memoizes function from Swirlds-TR-2020-01) */
-	@JsonIgnore
 	private EventImpl firstSelfWitnessS;
 	/** the first witness that's an ancestor in the the self round (memoizes function from Swirlds-TR-2020-01) */
-	@JsonIgnore
 	private EventImpl firstWitnessS;
 	/** temporarily used during any graph algorithm that needs to mark vertices (events) already visited */
-	@JsonIgnore
 	private int mark;
 	/** the time at which each unique famous witness in the received round first received this event */
 	private ArrayList<Instant> recTimes;
@@ -80,7 +68,6 @@ public class InternalEventData {
 	 * only used for event streaming
 	 * this is the last event to be written to event stream before restart
 	 */
-	@JsonIgnore
 	private boolean isLastEventBeforeShutdown = false;
 
 	public InternalEventData() {

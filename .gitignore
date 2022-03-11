@@ -110,6 +110,8 @@ Icon?
 Icon\r
 *.log
 *.pfx
+# allow pfx for unit tests
+!**/test/resources/**/*.pfx
 *.hprof
 *.vm
 

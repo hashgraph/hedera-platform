@@ -13,7 +13,6 @@
  */
 package com.swirlds.common;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
 import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
@@ -150,7 +149,6 @@ public class AddressBook extends AbstractMerkleLeaf implements Iterable<Address>
 	 *
 	 * @return the number of addresses with a stake greater than zero
 	 */
-	@JsonIgnore
 	public int getNumberWithStake() {
 		return (int) addresses.stream().filter(v -> v.getStake() > 0).count();
 	}
@@ -161,7 +159,6 @@ public class AddressBook extends AbstractMerkleLeaf implements Iterable<Address>
 	 *
 	 * @return the total stake
 	 */
-	@JsonIgnore
 	public long getTotalStake() {
 		if (totalStake == 0 && addresses != null) {
 			long tmpTotalStake = 0;
@@ -178,7 +175,6 @@ public class AddressBook extends AbstractMerkleLeaf implements Iterable<Address>
 	 *
 	 * @return the array of member stakes
 	 */
-	@JsonIgnore
 	public long[] getStakes() {
 		if (stakes == null && addresses != null) {
 			long[] tmpStakes = new long[addresses.size()];
@@ -197,7 +193,6 @@ public class AddressBook extends AbstractMerkleLeaf implements Iterable<Address>
 	 *
 	 * @return the number of local addresses
 	 */
-	@JsonIgnore
 	public int getOwnHostCount() {
 		int count = 0;
 		for (int i = 0; i < addresses.size(); i++) {

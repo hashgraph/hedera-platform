@@ -118,6 +118,14 @@ public class UncompressedMerkleRoute extends AbstractMerkleRoute {
 	 * {@inheritDoc}
 	 */
 	@Override
+	public boolean isEmpty() {
+		return data.length == 0;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
 	public MerkleRoute extendRoute(final int step) {
 		return new UncompressedMerkleRoute(this, step);
 	}
@@ -142,6 +150,15 @@ public class UncompressedMerkleRoute extends AbstractMerkleRoute {
 			return this;
 		}
 		return new UncompressedMerkleRoute(this, steps);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getStep(final int index) {
+		final int normalizedIndex = index >= 0 ? index : (data.length + index);
+		return data[normalizedIndex];
 	}
 
 	/**

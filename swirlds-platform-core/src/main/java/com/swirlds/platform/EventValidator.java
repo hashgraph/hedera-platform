@@ -21,6 +21,7 @@ import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.BaseEventHashedData;
 import com.swirlds.common.events.BaseEventUnhashedData;
+import com.swirlds.platform.crypto.CryptoStatic;
 import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.stats.HashgraphStats;
 import org.apache.logging.log4j.LogManager;
@@ -169,7 +170,7 @@ public class EventValidator {
 					"event signature is about to be verified. {}",
 					event::toShortString);
 
-			final boolean valid = Crypto.verifySignature(
+			final boolean valid = CryptoStatic.verifySignature(
 					event.getBaseHash().getValue(),
 					event.getSignature(),
 					publicKey);

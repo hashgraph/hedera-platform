@@ -17,12 +17,10 @@ package com.swirlds.common.merkle.copy;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 
-import java.util.Iterator;
+import java.util.function.Predicate;
 
-import static com.swirlds.common.merkle.copy.InitializationType.COPY;
-import static com.swirlds.common.merkle.copy.InitializationType.DESERIALIZATION;
-import static com.swirlds.common.merkle.copy.InitializationType.EXTERNAL_DESERIALIZATION;
-import static com.swirlds.common.merkle.copy.InitializationType.RECONNECT;
+import static com.swirlds.common.merkle.io.SerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
+import static com.swirlds.common.merkle.io.SerializationStrategy.SELF_SERIALIZATION;
 
 /**
  * This class provides utility methods for initializing trees.
@@ -34,13 +32,40 @@ public final class MerkleInitialize {
 	}
 
 	/**
+	 * This filter is used when iterating over a tree to do initialization after a deserialization.
+	 */
+	private static boolean deserializationFilter(final MerkleNode node) {
+		// Leaf nodes are never initialized.
+		// Internal nodes that are self serializing don't require initialization.
+		return !node.isLeaf() && !node.supportedSerialization(node.getVersion()).contains(SELF_SERIALIZATION);
+	}
+
+	/**
+	 * This filter is used when iterating over a tree to do initialization after an external deserialization.
+	 */
+	private static boolean externalDeserializationFilter(final MerkleNode node) {
+		// Leaf nodes are never initialized.
+		// Internal nodes that are self serializing don't require initialization.
+		return !node.isLeaf() && !node.supportedSerialization(node.getVersion()).contains(SELF_SERIALIZATION) &&
+				!node.supportedSerialization(node.getVersion()).contains(EXTERNAL_SELF_SERIALIZATION);
+	}
+
+	/**
+	 * This filter is used when iterating over a tree to do initialization after a copy.
+	 */
+	private static boolean copyFilter(final MerkleNode node) {
+		// Leaf nodes are never initialized.
+		return !node.isLeaf();
+	}
+
+	/**
 	 * Initialize the tree after deserialization.
 	 *
 	 * @param root
 	 * 		the tree (or subtree) to initialize
 	 */
 	public static void initializeTreeAfterDeserialization(final MerkleNode root) {
-		initializeWithType(root, DESERIALIZATION);
+		initializeWithFilter(root, MerkleInitialize::deserializationFilter);
 	}
 
 	/**
@@ -50,17 +75,7 @@ public final class MerkleInitialize {
 	 * 		the tree (or subtree) to initialize
 	 */
 	public static void initializeTreeAfterExternalDeserialization(final MerkleNode root) {
-		initializeWithType(root, EXTERNAL_DESERIALIZATION);
-	}
-
-	/**
-	 * Initialize the tree after reconnect.
-	 *
-	 * @param root
-	 * 		the tree (or subtree) to initialize
-	 */
-	public static void initializeTreeAfterReconnect(final MerkleNode root) {
-		initializeWithType(root, RECONNECT);
+		initializeWithFilter(root, MerkleInitialize::externalDeserializationFilter);
 	}
 
 	/**
@@ -70,11 +85,21 @@ public final class MerkleInitialize {
 	 * 		the tree (or subtree) to initialize
 	 */
 	public static void initializeTreeAfterCopy(final MerkleNode root) {
-		initializeWithType(root, COPY);
+		initializeWithFilter(root, MerkleInitialize::copyFilter);
 	}
 
-	private static void initializeWithType(final MerkleNode root, final InitializationType type) {
-		final Iterator<MerkleInternal> iterator = new MerkleInitializationIterator(root, type);
-		iterator.forEachRemaining(MerkleInternal::initialize);
+	private static void initializeWithFilter(final MerkleNode root, final Predicate<MerkleNode> filter) {
+
+		if (root == null) {
+			return;
+		}
+
+		// If a node should not be initialized, then neither should any of its descendants be initialized.
+		final Predicate<MerkleInternal> descendantFilter = filter::test;
+
+		root.treeIterator()
+				.setFilter(filter)
+				.setDescendantFilter(descendantFilter)
+				.forEachRemaining(node -> ((MerkleInternal) node).initialize());
 	}
 }

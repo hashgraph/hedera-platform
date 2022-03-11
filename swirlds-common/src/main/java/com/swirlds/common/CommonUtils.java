@@ -41,7 +41,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.Normalizer;
 import java.util.Locale;
+import org.apache.commons.lang3.Conversion;
 import java.util.stream.Stream;
+
 
 /**
  * Utility class for other operations
@@ -381,6 +383,18 @@ public class CommonUtils {
 			}
 		}
 		return directoryToBeDeleted.delete();
+	}
+
+	/**
+	 * Convert an int to a byte array, little endian.
+	 *
+	 * @param value
+	 * 		the int to convert
+	 * @return the byte array
+	 */
+	public static byte[] intToBytes(int value) {
+		byte[] result = new byte[Integer.BYTES];
+		return Conversion.intToByteArray(value, 0, result, 0, Integer.BYTES);
 	}
 
 	/**

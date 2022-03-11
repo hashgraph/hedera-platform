@@ -26,12 +26,12 @@ import java.util.List;
  */
 public class ApplicationDefinition {
 
-	private String swirldName;
-	private String[] appParameters;
-	private String appJarFileName;
-	private String mainClassName;
-	private File appJarPath;
-	private AddressBook addressBook;
+	private final String swirldName;
+	private final String[] appParameters;
+	private final String appJarFileName;
+	private final String mainClassName;
+	private final File appJarPath;
+	private final AddressBook addressBook;
 
 	private byte[] masterKey;
 	private byte[] swirldId;

@@ -23,6 +23,7 @@ import com.swirlds.common.StartupTime;
 import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.constructable.ConstructableRegistryException;
 import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyException;
 import com.swirlds.common.crypto.SerializablePublicKey;
 import com.swirlds.common.internal.ApplicationDefinition;
 import com.swirlds.common.internal.ConfigurationException;
@@ -35,18 +36,22 @@ import com.swirlds.common.threading.ThreadConfiguration;
 import com.swirlds.fchashmap.FCHashMapSettingsFactory;
 import com.swirlds.jasperdb.settings.JasperDbSettingsFactory;
 import com.swirlds.logging.payloads.NodeStartPayload;
-import com.swirlds.logging.payloads.SystemExitPayload;
 import com.swirlds.p2p.portforwarding.PortForwarder;
 import com.swirlds.p2p.portforwarding.PortMapping;
 import com.swirlds.platform.StateHierarchy.InfoApp;
 import com.swirlds.platform.StateHierarchy.InfoMember;
 import com.swirlds.platform.StateHierarchy.InfoSwirld;
 import com.swirlds.platform.WinBrowser.ScrollableJPanel;
+import com.swirlds.platform.crypto.CryptoConstants;
+import com.swirlds.platform.crypto.CryptoStatic;
+import com.swirlds.platform.crypto.KeyLoadingException;
+import com.swirlds.platform.crypto.KeysAndCerts;
 import com.swirlds.platform.internal.PlatformThreadFactory;
 import com.swirlds.platform.internal.SignedStateLoadingException;
-import com.swirlds.platform.internal.SystemExitReason;
 import com.swirlds.platform.swirldapp.AppLoaderException;
 import com.swirlds.platform.swirldapp.SwirldAppLoader;
+import com.swirlds.platform.system.SystemExitReason;
+import com.swirlds.platform.system.SystemUtils;
 import com.swirlds.virtualmap.VirtualMapSettingsFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -64,10 +69,10 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyStore;
 import java.security.KeyStoreException;
-import java.security.PublicKey;
-import java.security.cert.Certificate;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.UnrecoverableKeyException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -76,6 +81,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.Timer;
@@ -83,13 +89,12 @@ import java.util.TimerTask;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 
 import static com.swirlds.common.CommonUtils.canonicalFile;
-import static com.swirlds.common.CommonUtils.nameToAlias;
+import static com.swirlds.logging.LogMarker.CERTIFICATES;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.JVM_PAUSE_WARN;
 import static com.swirlds.logging.LogMarker.STARTUP;
@@ -119,32 +124,24 @@ public abstract class Browser {
 	//
 	// [*] Two members are considered to be on the same LAN if their listed external addresses are the same.
 
-	/** has the browser started up yet? */
-	private static boolean launched = false;
-
-	/** is the Browser currently in the process of shutting down? */
-	private static volatile boolean shuttingDown = false;
-
 	/** all the Platform objects currently running on this machine */
 	static final Collection<SwirldsPlatform> platforms = new LinkedList<>();
-
+	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
+	private static final Logger log = LogManager.getLogger();// must be after the configuration load
+	/** the "name" passed in by the app, when it was launched from Eclipse or other IDE (or null if none) */
+	private static final String FROM_APP_NAME = null;
+	/** the "main" passed in by the app, when it was launched from Eclipse or other IDE (or null if none) */
+	private static final Class<?> fromAppMain = null;
 	/** the primary window used by Browser */
 	static WinBrowser browserWindow = null;
 	/* the number of pixels between the edges of a window and interior region that can be used */
 	static Insets insets;
-	/** the thread for each Platform.run */
-	private static Thread[] platformRunThreads;
 	/** metadata about all known apps, swirlds, members, signed states */
 	static StateHierarchy stateHierarchy = null;
-
-	/** the "name" passed in by the app, when it was launched from Eclipse or other IDE (or null if none) */
-	private static String fromAppName = null;
-	/** the "main" passed in by the app, when it was launched from Eclipse or other IDE (or null if none) */
-	private static Class<?> fromAppMain = null;
-
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
-	private static final Logger log = LogManager.getLogger();// must be after the configuration load
-
+	/** has the browser started up yet? */
+	private static boolean launched = false;
+	/** the thread for each Platform.run */
+	private static Thread[] platformRunThreads;
 	/**
 	 * whether a savedState has been loaded.
 	 * if it is true, NotificationEngine will send a StateLoadedFromDiskNotification
@@ -165,15 +162,6 @@ public abstract class Browser {
 	}
 
 	/**
-	 * Indicates whether the Browser is currently shutting down.
-	 *
-	 * @return True if the Browser is shutting down, otherwise false
-	 */
-	public static boolean isShuttingDown() {
-		return shuttingDown;
-	}
-
-	/**
 	 * Check whether a saved state file has been loaded
 	 */
 	public static boolean isLoadedSavedState() {
@@ -184,37 +172,7 @@ public abstract class Browser {
 	 * Shut down the browser and all platforms
 	 */
 	static void stopBrowser() {
-		exitSystem(SystemExitReason.BROWSER_WINDOW_CLOSED, true);
-	}
-
-	/**
-	 * Exits the system
-	 *
-	 * @param reason
-	 * 		the reason for the exit
-	 * @param haltRuntime
-	 * 		whether to halt the java runtime or not
-	 */
-	static void exitSystem(SystemExitReason reason, boolean haltRuntime) {
-		shuttingDown = true;
-		if (reason.isError()) {
-			log.error(EXCEPTION.getMarker(), new SystemExitPayload(reason.name(), reason.getExitCode()));
-			final String exitMsg = "Exiting system, reason: " + reason.toString();
-			System.out.println(exitMsg);
-		}
-		System.exit(reason.getExitCode());
-		if (haltRuntime) {
-			Runtime.getRuntime().halt(reason.getExitCode());
-		}
-	}
-
-	/**
-	 * Same as {@link #exitSystem(SystemExitReason, boolean)}, but with haltRuntime set to false
-	 *
-	 * @see #exitSystem(SystemExitReason, boolean)
-	 */
-	static void exitSystem(SystemExitReason reason) {
-		exitSystem(reason, false);
+		SystemUtils.exitSystem(SystemExitReason.BROWSER_WINDOW_CLOSED, true);
 	}
 
 	/**
@@ -295,9 +253,6 @@ public abstract class Browser {
 	 * 		args is ignored, and has no effect
 	 */
 	public static synchronized void main(String[] args) {
-		// Register a shutdown hook that sets the shuttingDown variable to true
-		Runtime.getRuntime().addShutdownHook(new Thread(() -> shuttingDown = true));
-
 		StartupTime.markStartupTime();
 
 		// This set contains the nodes set by the command line to start, if none are passed, then IP
@@ -337,9 +292,8 @@ public abstract class Browser {
 			//Provide swirlds.common the settings it needs via the SettingsCommon class
 			populateSettingsCommon();
 
-
 			// find all the apps in data/apps and stored states in data/states
-			stateHierarchy = new StateHierarchy(fromAppName, fromAppMain);
+			stateHierarchy = new StateHierarchy(FROM_APP_NAME, fromAppMain);
 
 			// read from config.txt (in same directory as .jar, usually sdk/)
 			// to fill in the following three variables, which define the
@@ -493,20 +447,20 @@ public abstract class Browser {
 	public static ApplicationDefinition loadConfigFile(final Set<Integer> localNodesToStart)
 			throws UnknownHostException, SocketException, ConfigurationException {
 
-		/** symbolic part of the name of the swirld, passed to its Platform */
+		/* symbolic part of the name of the swirld, passed to its Platform */
 		String swirldName = "";
-		/** parameters from one line of config.txt */
+		/* parameters from one line of config.txt */
 		String[] lineParameters = null;
-		/** parameters from the app line of config.txt */
+		/* parameters from the app line of config.txt */
 		String[] appParameters = null;
-		/** name of app jar file, such as Example.jar */
+		/* name of app jar file, such as Example.jar */
 		String appJarFilename = "";
-		/** name of app SwirldMain class, such as a.b.c.ExampleMain */
+		/* name of app SwirldMain class, such as a.b.c.ExampleMain */
 		String mainClassname = "";
-		/** the path to the application jar file */
+		/* the path to the application jar file */
 		File appJarPath = null;
 
-		/** interim list of Address instances */
+		/* interim list of Address instances */
 		List<Address> bookData = Collections
 				.synchronizedList(new ArrayList<>());
 
@@ -547,7 +501,7 @@ public abstract class Browser {
 							appParameters = lineParameters.clone();
 							// the line is: app, jarFilename, optionalParameters
 							appJarFilename = lineParameters[1];
-							if (appJarFilename.equals(Browser.fromAppName)) {
+							if (appJarFilename.equals(Browser.FROM_APP_NAME)) {
 								// this is the virtual .jar file because running in Eclipse or IDE
 								mainClassname = Browser.fromAppMain.getName();
 								break;
@@ -692,7 +646,6 @@ public abstract class Browser {
 
 		for (int i = 0; i < addressBook.getSize(); i++) {
 			if (addressBook.getAddress(i).isOwnHost()) {
-				crypto[i].prepSocketsSSL(); // use the trustStore to prepare for creating TLS sockets
 				SwirldsPlatform platform = new SwirldsPlatform(
 						// window index
 						ownHostIndex,
@@ -723,7 +676,7 @@ public abstract class Browser {
 					log.error(EXCEPTION.getMarker(), "Saved state not loaded:", e);
 					// if requireStateLoad is on, we exit. if not, we just log it
 					if (Settings.requireStateLoad) {
-						exitSystem(SystemExitReason.SAVED_STATE_NOT_LOADED);
+						SystemUtils.exitSystem(SystemExitReason.SAVED_STATE_NOT_LOADED);
 						return;
 					}
 				}
@@ -751,145 +704,6 @@ public abstract class Browser {
 				}
 			}
 		}
-	}
-
-	private static Crypto[] initNodeSecurity(final ApplicationDefinition appDefinition) {
-
-		final AddressBook addressBook = appDefinition.getAddressBook();
-		final byte[] masterKey = appDefinition.getMasterKey();
-		final byte[] swirldId = appDefinition.getSwirldId();
-
-		final int n = addressBook.getSize();
-		final Crypto[] crypto = new Crypto[n];
-
-		final ExecutorService cryptoThreadPool = Executors
-				.newFixedThreadPool(Settings.numCryptoThreads, new PlatformThreadFactory("crypto-verify-"));
-
-		final List<String> names = new ArrayList<>();
-		final List<String> ownHostNames = new ArrayList<>();
-
-		for (int i = 0; i < addressBook.getSize(); i++) {
-			Address add = addressBook.getAddress(i);
-			String name = nameToAlias(add.getSelfName());
-			if (add.isOwnHost()) {
-				ownHostNames.add(name);
-			}
-			names.add(name);
-		}
-		// try to get all the key stores and trust stores from disk
-
-		log.debug(STARTUP.getMarker(), "About start loading keys");
-		KeyStore[] stores = Crypto.loadKeys(Settings.keysDirPath,
-				ownHostNames, cryptoThreadPool);
-
-		log.debug(STARTUP.getMarker(), "Done loading keys");
-		// if there are no keys on the disk, then create our own keys
-		Boolean createKeys = (stores == null);
-
-		final KeyStore sigTrustStore = Crypto.createEmptyTrustStore();
-		final KeyStore encTrustStore = Crypto.createEmptyTrustStore();
-		final KeyStore agrTrustStore = Crypto.createEmptyTrustStore();
-		if (!createKeys) {
-			for (int i = 0; i < names.size(); i++) {
-				String name = names.get(i);
-				try {
-					Certificate sigCert = stores[0]
-							.getCertificate("s-" + name);
-					Certificate encCert = stores[0]
-							.getCertificate("e-" + name);
-					Certificate agrCert = stores[0]
-							.getCertificate("a-" + name);
-
-					sigTrustStore.setCertificateEntry("s-" + name, sigCert);
-					encTrustStore.setCertificateEntry("e-" + name, encCert);
-					agrTrustStore.setCertificateEntry("a-" + name, agrCert);
-
-				} catch (KeyStoreException e) {
-					log.error(EXCEPTION.getMarker(), "", e);
-				}
-			}
-		}
-
-		log.debug(STARTUP.getMarker(),
-				"About to start creating Crypto objects");
-
-		List<Future<Crypto>> cryptoFutures = new ArrayList<>(n);
-		int ownHostIndex = 0;
-		for (int i = 0; i < n; i++) {
-			if (!addressBook.getAddress(i).isOwnHost() && !createKeys) {
-				// in case we are not creating keys but loading them from disk, we do not need to create
-				// a Crypto object for every node, just the local ones. in case we are creating keys,
-				// they will be created in the Crypto object
-				cryptoFutures.add(null);
-				continue;
-			}
-			String name = nameToAlias(
-					addressBook.getAddress(i).getSelfName());
-			for (int j = 0; j < masterKey.length; j++) {
-				masterKey[j] = (byte) (j * 157);
-			}
-			for (int j = 0; j < swirldId.length; j++) {
-				swirldId[j] = (byte) (j * 163);
-			}
-			masterKey[0] = (byte) i;
-			masterKey[1] = (byte) (i >> 8);
-
-			// the stores array will only have keys for the local platforms, so the index is not i but
-			// ownHostIndex. the +1 is because the first store contains all the public keys
-			KeyStore privateKS = createKeys ? null
-					: stores[ownHostIndex + 1];
-
-			// Crypto objects will be created in parallel. The process of creating a Crypto object is
-			// very CPU intensive even if the keys are loaded from the hard drive, so making it parallel
-			// greatly reduces the time it takes to create them all.
-			byte[] masterKeyClone = masterKey.clone();
-			byte[] swirldIdClone = swirldId.clone();
-			final int memId = i;
-			cryptoFutures
-					.add(cryptoThreadPool.submit(() ->
-							new Crypto(memId, name, masterKeyClone,
-									swirldIdClone,
-									Utilities.intToBytes(memId), createKeys,
-									privateKS, sigTrustStore, encTrustStore,
-									agrTrustStore, cryptoThreadPool)
-					));
-			ownHostIndex++;
-
-		}
-		for (int i = 0; i < n; i++) {
-			try {
-				Future<Crypto> f = cryptoFutures.get(i);
-				if (f != null) {
-					// in case we have loaded the keys, we will not have all the Crypto objects
-					crypto[i] = f.get();
-				}
-			} catch (InterruptedException ex) {
-				Thread.currentThread().interrupt();
-			} catch (ExecutionException ex) {
-				log.error(EXCEPTION.getMarker(), "", ex);
-			}
-		}
-		// After the keys have been generated or loaded, they are then copied to the address book
-		for (int i = 0; i < n; i++) {
-			try {
-				PublicKey sigKey = sigTrustStore
-						.getCertificate("s-" + names.get(i)).getPublicKey();
-				PublicKey encKey = encTrustStore
-						.getCertificate("e-" + names.get(i)).getPublicKey();
-				PublicKey agrKey = agrTrustStore
-						.getCertificate("a-" + names.get(i)).getPublicKey();
-				addressBook.setAddress(i,
-						addressBook.getAddress(i)
-								.copySetSigPublicKey(sigKey)
-								.copySetEncPublicKey(encKey)
-								.copySetAgreePublicKey(agrKey));
-			} catch (KeyStoreException e) {
-				log.error(EXCEPTION.getMarker(), "", e);
-			}
-		}
-		log.debug(STARTUP.getMarker(), "Done creating Crypto objects");
-
-		return crypto;
 	}
 
 	/**
@@ -927,8 +741,8 @@ public abstract class Browser {
 		// will create a new thread with a new Platform for each local address
 		// general address number addIndex is local address number i
 		platformRunThreads = new Thread[addressBook.getOwnHostCount()];
-		appDefinition.setMasterKey(new byte[Crypto.SYM_KEY_SIZE_BYTES]);
-		appDefinition.setSwirldId(new byte[Crypto.HASH_SIZE_BYTES]);
+		appDefinition.setMasterKey(new byte[CryptoConstants.SYM_KEY_SIZE_BYTES]);
+		appDefinition.setSwirldId(new byte[CryptoConstants.HASH_SIZE_BYTES]);
 
 
 		// Create the various keys and certificates (which are saved in various Crypto objects).
@@ -936,7 +750,9 @@ public abstract class Browser {
 		// Save the trust stores in the address book.
 		//
 		log.debug(STARTUP.getMarker(), "About do crypto instantiation");
-		Crypto[] crypto = initNodeSecurity(appDefinition);
+		Crypto[] crypto = initNodeSecurity(
+				appDefinition.getAddressBook()
+		);
 		log.debug(STARTUP.getMarker(), "Done with crypto instantiation");
 
 		// the AddressBook is not changed after this point, so we calculate the hash now
@@ -982,7 +798,7 @@ public abstract class Browser {
 			} catch (SignedStateLoadingException e) {
 				log.error(EXCEPTION.getMarker(), "Issue with initializing saved state:", e);
 				// there is not much we can do at this point
-				exitSystem(SystemExitReason.SAVED_STATE_NOT_LOADED);
+				SystemUtils.exitSystem(SystemExitReason.SAVED_STATE_NOT_LOADED);
 			}
 		}
 
@@ -1090,5 +906,56 @@ public abstract class Browser {
 		FCHashMapSettingsFactory.configure(Settings.fcHashMap);
 		VirtualMapSettingsFactory.configure(Settings.virtualMap);
 		JasperDbSettingsFactory.configure(Settings.jasperDb);
+	}
+
+	static Crypto[] initNodeSecurity(final AddressBook addressBook) {
+		final ExecutorService cryptoThreadPool = Executors
+				.newFixedThreadPool(Settings.numCryptoThreads, new PlatformThreadFactory("crypto-verify-"));
+
+		final File keysDirPath = Settings.keysDirPath;
+		final KeysAndCerts[] keysAndCerts;
+		try {
+			if (Settings.loadKeysFromPfxFiles) {
+				CommonUtils.tellUserConsole(
+						"Reading crypto keys from the files here:   " + keysDirPath + File.separator + "*.pfx");
+				log.debug(STARTUP.getMarker(), "About start loading keys");
+				keysAndCerts = CryptoStatic.loadKeysAndCerts(addressBook, keysDirPath,
+						Settings.crypto.getKeystorePassword().toCharArray());
+				log.debug(STARTUP.getMarker(), "Done loading keys");
+			} else {
+				// if there are no keys on the disk, then create our own keys
+				CommonUtils.tellUserConsole(
+						"Creating keys, because there are no files: " + keysDirPath + File.separator + "*.pfx");
+				log.debug(STARTUP.getMarker(), "About to start creating generating keys");
+				keysAndCerts = CryptoStatic.generateKeysAndCerts(addressBook, cryptoThreadPool);
+				log.debug(STARTUP.getMarker(), "Done generating keys");
+			}
+		} catch (InterruptedException | ExecutionException
+				| KeyStoreException | KeyLoadingException
+				| UnrecoverableKeyException | NoSuchAlgorithmException e) {
+			log.error(EXCEPTION.getMarker(), "Exception while loading/generating keys", e);
+			if (Utilities.isRootCauseSuppliedType(e, NoSuchAlgorithmException.class)
+					|| Utilities.isRootCauseSuppliedType(e, NoSuchProviderException.class)) {
+				CommonUtils.tellUserConsolePopup("ERROR",
+						"ERROR: This Java installation does not have the needed cryptography " +
+								"providers installed");
+			}
+			SystemUtils.exitSystem(SystemExitReason.KEY_LOADING_FAILED);
+			throw new CryptographyException(e);// will never reach this line due to exit above
+		}
+
+
+		final String msg = Settings.loadKeysFromPfxFiles
+				? "Certificate loaded: {}"
+				: "Certificate generated: {}";
+		Arrays.stream(keysAndCerts).filter(Objects::nonNull).forEach(
+				k -> {
+					log.debug(CERTIFICATES.getMarker(), msg, k.sigCert());
+					log.debug(CERTIFICATES.getMarker(), msg, k.encCert());
+					log.debug(CERTIFICATES.getMarker(), msg, k.agrCert());
+				}
+		);
+
+		return Arrays.stream(keysAndCerts).map(kc -> new Crypto(kc, cryptoThreadPool)).toArray(Crypto[]::new);
 	}
 }
