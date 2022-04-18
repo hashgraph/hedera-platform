@@ -355,7 +355,7 @@ public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkle
 			final MerkleTreeInternalNode parent = getParentInPath(path);
 			final int indexOfChildInParent = findChildPositionInParent(parent, oldLeaf);
 
-			parent.setChild(indexOfChildInParent, newLeaf, oldLeaf.getRoute());
+			parent.setChild(indexOfChildInParent, newLeaf, oldLeaf.getRoute(), false);
 
 			if (rightMostLeaf == oldLeaf) {
 				rightMostLeaf = newLeaf;

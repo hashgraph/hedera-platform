@@ -123,7 +123,7 @@ public class Dispatcher<L extends Listener> {
 			try {
 				@SuppressWarnings("unchecked") final Listener<N> listener = (Listener<N>) l;
 				listener.notify(notification);
-			} catch (Exception ex) {
+			} catch (final Throwable ex) {
 				if (throwOnError) {
 					throw new DispatchException(ex);
 				}

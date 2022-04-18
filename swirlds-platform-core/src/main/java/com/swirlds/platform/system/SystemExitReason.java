@@ -19,12 +19,22 @@ public enum SystemExitReason {
 	STATE_RECOVER_FINISHED(0),
 	SAVED_STATE_NOT_LOADED(200),
 	SWIRLD_MAIN_THREW_EXCEPTION(201),
-	/** This node has fallen behind but can not reconnect due to policy. */
+	/**
+	 * This node has fallen behind but can not reconnect due to policy.
+	 */
 	BEHIND_RECONNECT_DISABLED(202),
-	/** This node exceeded the maximum consecutive failed reconnect attempts. */
+	/**
+	 * This node exceeded the maximum consecutive failed reconnect attempts.
+	 */
 	RECONNECT_FAILURE(203),
-	/** An issue occurred while loading keys from .pfx files */
-	KEY_LOADING_FAILED(204);
+	/**
+	 * An issue occurred while loading keys from .pfx files
+	 */
+	KEY_LOADING_FAILED(204),
+	/**
+	 * An unrecoverable error.
+	 */
+	FATAL_ERROR(255);
 
 	private final int exitCode;
 

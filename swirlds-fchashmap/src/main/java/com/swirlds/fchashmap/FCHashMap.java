@@ -15,40 +15,42 @@
 package com.swirlds.fchashmap;
 
 import com.swirlds.common.FastCopyable;
+import com.swirlds.common.utility.ValueReference;
+import com.swirlds.fchashmap.internal.FCHashMapEntrySet;
 import com.swirlds.fchashmap.internal.FCHashMapGarbageCollector;
 import com.swirlds.fchashmap.internal.Mutation;
-import com.swirlds.fchashmap.internal.MutationQueue;
 
 import java.util.AbstractMap;
-import java.util.AbstractSet;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 /**
- * A map that with HashMap like performance that provides FastCopyable semantics.
+ * <p>
+ * A map that with {@link java.util.HashMap HashMap} like O(1) performance that provides {@link FastCopyable} semantics.
+ * </p>
  *
- * This object is thread safe only under the following conditions:
- * 1) Only one thread is making modifications at any one point in time
- * 2) It's ok to read from the map (or a copy) while another thread is writing to it
- * 3) A copy of this structure may not be made at the same time this structure is being modified.
- * 4) A copy must not be deleted at the same time another thread is reading it, copying it,
- * or also attempting to delete it.
+ * <p>
+ * All operations are thread safe if performed simultaneously on different copies of the map.
+ * </p>
  *
- * The following synchronization methods are not thread safe
- * 1) timing (duh)
- * 2) communication via non-synchronized variables (same reordering risks as other data types)
+ * <p>
+ * It is safe to read and write simultaneously to the mutable copy of the map with multiple threads as long as
+ * the read operations are not performed concurrently with write operations on the same key. {@link #size} may return
+ * incorrect results if executed concurrently with an operation that modifies the size.
+ * </p>
  *
- * The following synchronization methods are thread safe
- * 1) locks in any form
- * 2) communication over volatile variables
- * 3) thread operations such as join()
+ * <p>
+ * It is not thread safe to perform read/write operations on a copy of this this map while that copy is being released.
+ * </p>
  *
- * There is a special mode of operation during which concurrent writes to the data structure are thread safe iff
- * those writes are to different keys and no thread attempts to concurrently read a key that is being written by
- * a different thread. This is sometimes useful when initializing a map. This behavior is disabled by default.
+ * @param <K>
+ * 		the type of the key
+ * @param <V>
+ * 		the type of the value
  */
 public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 
@@ -62,9 +64,9 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 */
 	private boolean immutable;
 
-	private final ConcurrentHashMap<K, MutationQueue<V>> data;
+	private final Map<K, Mutation<V>> data;
 
-	private int size;
+	private final AtomicInteger size;
 
 	private final CountDownLatch releasedLatch;
 
@@ -76,36 +78,59 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	private boolean deleted;
 
 	/**
-	 * Initialized to contain an instance of the appropriate view the first time this view is requested.
-	 * The views is stateless, so there's no reason to create more than one. This same pattern is used
-	 * in AbstractMap.
+	 * Create a new FCHashMap.
 	 */
-	private transient Set<Entry<K, V>> entrySet;
-
-	public FCHashMap(int capacity) {
-		data = new ConcurrentHashMap<>(capacity);
-		immutable = false;
-		version = 0;
-		garbageCollector = new FCHashMapGarbageCollector<>(data);
-		startGarbageCollector();
-		deleted = false;
-		releasedLatch = new CountDownLatch(1);
-	}
-
-	/**
-	 * Start the garbage collector. Can be overridden by tests that want to disable garbage collection.
-	 */
-	protected void startGarbageCollector() {
-		garbageCollector.start();
-	}
-
 	public FCHashMap() {
 		this(0);
 	}
 
-	protected FCHashMap(FCHashMap<K, V> other) {
+	/**
+	 * Create a new FCHashMap.
+	 *
+	 * @param capacity
+	 * 		the initial capacity
+	 */
+	public FCHashMap(final int capacity) {
+		this(capacity, FCHashMapGarbageCollector::new);
+	}
+
+	/**
+	 * Create a new FCHashMap.
+	 *
+	 * @param capacity
+	 * 		the initial capacity of the map
+	 * @param gcBuilder
+	 * 		garbage collector constructor
+	 */
+	protected FCHashMap(final int capacity,
+			Function<Map<K, Mutation<V>>, FCHashMapGarbageCollector<K, V>> gcBuilder) {
+
+		data = new ConcurrentHashMap<>(capacity);
+		immutable = false;
+		version = 0;
+		garbageCollector = gcBuilder.apply(data);
+		garbageCollector.start();
+		deleted = false;
+		releasedLatch = new CountDownLatch(1);
+		size = new AtomicInteger(0);
+	}
+
+	/**
+	 * Get the garbage collector. Useful for testing.
+	 */
+	protected FCHashMapGarbageCollector<K, V> getGarbageCollector() {
+		return garbageCollector;
+	}
+
+	/**
+	 * Copy constructor.
+	 *
+	 * @param other
+	 * 		the map to copy
+	 */
+	protected FCHashMap(final FCHashMap<K, V> other) {
 		data = other.data;
-		size = other.size;
+		size = new AtomicInteger(other.size.get());
 		garbageCollector = other.garbageCollector;
 		deleted = false;
 
@@ -120,9 +145,8 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 
 	/**
 	 * {@inheritDoc}
-	 *
-	 * There can only be one mutable copy of an FCHashMap at any point in time.
 	 */
+	@SuppressWarnings("unchecked")
 	@Override
 	public FCHashMap<K, V> copy() {
 		throwIfImmutable();
@@ -145,12 +169,12 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 * Not thread safe.
 	 * Must not be called at the same time another thread is attempting to read from this copy.
 	 */
+	@Override
 	public synchronized void release() {
+		throwIfReleased();
 		releasedLatch.countDown();
-		if (!deleted) {
-			deleted = true;
-			garbageCollector.decrementReferenceCount();
-		}
+		deleted = true;
+		garbageCollector.decrementReferenceCount();
 	}
 
 	/**
@@ -173,7 +197,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 */
 	@Override
 	public int size() {
-		return size;
+		return size.get();
 	}
 
 	/**
@@ -181,158 +205,88 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 */
 	@SuppressWarnings("unchecked")
 	@Override
-	public boolean containsKey(Object key) {
-		Mutation<V> prev = getLatestMutation((K) key);
-		return prev != null && !prev.deleted;
+	public boolean containsKey(final Object key) {
+		final Mutation<V> mutation = getMutationForCurrentVersion((K) key);
+		return mutation != null && mutation.getValue() != null;
 	}
 
 	/**
-	 * Look up the most recent mutation for a key at the map's current version
+	 * Look up the most recent mutation that does not exceed this copy of the map's current version.
 	 *
 	 * @param key
-	 * 		Look up the mutation for this key.
-	 * @return The latest mutation for this version. May be null if the key is not in the map at this version.
+	 * 		look up the mutation for this key
+	 * @return The mutation that corresponds to this version. May be null if the key is not in the map at this version.
 	 */
-	private Mutation<V> getLatestMutation(K key) {
-		MutationQueue<V> mutations = data.get(key);
+	protected Mutation<V> getMutationForCurrentVersion(final K key) {
+		Mutation<V> mutation = data.get(key);
 
-		if (mutations == null || mutations.isEmpty()) {
-			return null;
+		while (mutation != null && mutation.getVersion() > version) {
+			mutation = mutation.getPrevious();
 		}
-		if (!immutable) {
-			// The mutable copy always depends on the latest value
-			return mutations.getLast();
-		} else {
-			Mutation<V> prev = null;
-			for (Mutation<V> mutation : mutations) {
-				if (mutation.version == version) {
-					// This mutation happened during this copy's version
-					return mutation;
-				} else if (mutation.version > version) {
-					// This mutation happened after this copy was made
-					return prev;
-				}
-				prev = mutation;
-			}
-			// There are no more mutations
-			return prev;
-		}
+		return mutation;
 	}
 
 	/**
-	 * Change the value associated with a particular key.
+	 * Update the value for a key at this version.
 	 *
 	 * @param key
-	 * 		The key that is being written to.
+	 * 		the key associated that will hold the new value
 	 * @param value
-	 * 		The new value for that key.
-	 * @return The previous value for a key
+	 * 		the new value, or null if this operation signifies a deletion.
+	 * @return the original value, or null if originally deleted
 	 */
-	private V setValueAtKey(K key, V value) {
-		return this.setValueAtKey(key, value, false);
-	}
-
-	/**
-	 * Sets as deleted the value associated with a particular key.
-	 *
-	 * @param key
-	 * 		The key that is being written to.
-	 * @return The previous value for a key or null if it was
-	 * 		previously deleted
-	 */
-	private V deleteValueAtKey(K key) {
-		return this.setValueAtKey(key, null, true);
-	}
-
-	/**
-	 * Change the value associated with a particular key.
-	 *
-	 * @param key
-	 * 		The key that is being written to.
-	 * @param value
-	 * 		The new value for that key.
-	 * @param deletion
-	 * 		If true then delete this entry from the map. In this case value should also be null.
-	 * @return The previous value for a key or null if {@code deletion = true} and it was
-	 * 		previously deleted
-	 */
-	private V setValueAtKey(K key, V value, boolean deletion) {
-		if (key == null) {
-			throw new NullPointerException("null keys are not supported");
-		}
-
+	private V mutate(final K key, final V value) {
 		throwIfImmutable();
-		boolean insertion = true;
-		V originalValue = null;
-		boolean originalDeletionStatus = false;
 
-		MutationQueue<V> mutations = data.get(key);
+		final ValueReference<V> originalValueReference = new ValueReference<>();
+		final ValueReference<Boolean> requiresGarbageCollection = new ValueReference<>(false);
 
-		// Create a new mutation queue if needed
-		if (mutations == null) {
-			// Mutation queue for this key does not yet exist, create it
-			if (deletion) {
-				// Caller is deleting a key that is not in a map
+		// update the value in the list of mutations
+		data.compute(key, (final K k, final Mutation<V> mutationHead) -> {
+			originalValueReference.setValue(mutationHead == null ? null : mutationHead.getValue());
+
+			final Mutation<V> mutation;
+			if (mutationHead != null && mutationHead.getVersion() == version) {
+				// mutation for this version already exists
+				mutation = mutationHead;
+				mutation.setValue(value);
+			} else {
+				// mutation for this version does not yet exist
+				mutation = new Mutation<>(version, value, mutationHead);
+
+				if (mutationHead != null) {
+					// If mutationHead is not null, then this list now contains at least two entries. All lists
+					// with more than one entry will eventually require garbage collection.
+					requiresGarbageCollection.setValue(true);
+				}
+			}
+
+			if (value == null && mutation.getPrevious() == null) {
+				// If the only remaining mutation is a deletion then it is safe to remove the key from the map
 				return null;
 			}
 
-			mutations = new MutationQueue<>();
+			return mutation;
+		});
 
-			// We don't need to synchronize on data.
-			// If mutation queue for key is currently null then there is nothing
-			// the garbage collection thread can do to modify the entry.
-			data.put(key, mutations);
+		// update size of the map
+		final V originalValue = originalValueReference.getValue();
+		if (originalValue == null && value != null) {
+			size.getAndIncrement();
+		} else if (originalValue != null && value == null) {
+			size.getAndDecrement();
 		}
 
-		synchronized (mutations) {
-
-			if (mutations.isDeleted()) {
-				// This mutation queue was deleted after we took it from the map but before we locked it.
-				if (deletion) {
-					// Caller is deleting a key that has already been deleted
-					return null;
-				}
-
-				mutations = new MutationQueue<>();
-				synchronized (data) {
-					// Garbage collection thread may be attempting to modify mutation
-					// queue at key concurrently, synchronization prevents race condition.
-					data.put(key, mutations);
-				}
-			}
-
-			final Mutation<V> newest = mutations.peekLast();
-			if (newest != null) {
-				// Read the state of an existing mutation queue
-				originalValue = newest.value;
-				originalDeletionStatus = newest.deleted;
-				if (deletion && originalDeletionStatus) {
-					// Caller is deleting the same key twice
-					return null;
-				}
-				insertion = originalDeletionStatus;
-			}
-
-			final boolean originallyEmpty = mutations.isEmpty();
-
-			// Add the mutation
-			final boolean mutationAdded = mutations.maybeAddLast(version, value, deletion);
-
-			// Adjust the size of the map
-			if (insertion) {
-				size++;
-			} else if (deletion) {
-				size--;
-			}
-
-			// We don't need to schedule garbage collection on queues that don't grow unless there is a deletion
-			// We don't need to schedule garbage collection on queues of size 1
-			if ((mutationAdded && !originallyEmpty) || deletion) {
-				garbageCollector.registerGarbageCollectionEvent(key, mutations, version);
-			}
-
-			return originalValue;
+		if (requiresGarbageCollection.getValue()) {
+			// Set up future garbage collection. This is called iff the mutate operation caused an additional
+			// mutation to be added to the list. Once all copies of the map before the current version
+			// are released, no mutations before the current mutations will be reachable. So request
+			// a garbage collection operation on this list of mutations when the version right before
+			// the current version is released.
+			garbageCollector.registerGarbageCollectionEvent(key, version - 1);
 		}
+
+		return originalValue;
 	}
 
 	/**
@@ -345,29 +299,107 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	}
 
 	/**
-	 * Not thread safe on an immutable copy if it is possible that another thread may have deleted the copy.
-	 * Deletes and reads against an immutable copy must be externally synchronized. The function hasBeenDeleted()
+	 * Not thread safe on an immutable copy of the map if it is possible that another thread may have deleted the
+	 * map copy. Map deletion and reads against the map must be externally synchronized. The function hasBeenDeleted()
 	 * can be used to check to see if the copy has been deleted.
 	 */
 	@SuppressWarnings("unchecked")
 	@Override
-	public V get(Object key) {
+	public V get(final Object key) {
 		if (key == null) {
 			throw new NullPointerException("Null keys are not allowed");
 		}
-		Mutation<V> mutation = getLatestMutation((K) key);
-		return mutation == null ? null : mutation.value;
+		final Mutation<V> mutation = getMutationForCurrentVersion((K) key);
+		return mutation == null ? null : mutation.getValue();
+	}
+
+	/**
+	 * A value from an {@link FCHashMap} that is safe to modify. Return type of {@link #getForModify(Object)}.
+	 *
+	 * @param value
+	 * 		the value from the FCHashMap, or null if no value exists
+	 * @param original
+	 * 		the original value that was copied. Equal to value if there was no copying performed
+	 * @param <V>
+	 * 		the type of the value
+	 */
+	public record ModifiableValue<V>(V value, V original) {
+
+	}
+
+	/**
+	 * <p>
+	 * Get a value that is safe to directly modify. If value has been modified this round then return it.
+	 * If value was modified in a previous round, call {@link FastCopyable#copy()} on it, insert it into
+	 * the map, and return it. If the value is null, then return null.
+	 * </p>
+	 *
+	 * <p>
+	 * It is not necessary to manually re-insert the returned value back into the map.
+	 * </p>
+	 *
+	 * <p>
+	 * This method is only permitted to be used on maps that contain values that implement {@link FastCopyable}.
+	 * Using this method on maps that contain values that do not implement {@link FastCopyable} will
+	 * result in undefined behavior.
+	 * </p>
+	 *
+	 * @param key
+	 * 		the key
+	 * @return a {@link ModifiableValue} that contains a value is safe to directly modify, or null if the key
+	 * 		is not in the map
+	 */
+	@SuppressWarnings("unchecked")
+	public ModifiableValue<V> getForModify(final K key) {
+		final ValueReference<V> original = new ValueReference<>();
+
+		final Mutation<V> mutation = data.compute(key, (final K k, final Mutation<V> mutationHead) -> {
+			if (mutationHead == null) {
+				return null;
+			}
+
+			original.setValue(mutationHead.getValue());
+
+			if (mutationHead.getVersion() == version || mutationHead.getValue() == null) {
+				return mutationHead;
+			}
+
+			return new Mutation<>(version, ((FastCopyable) mutationHead.getValue()).copy(), mutationHead);
+		});
+
+
+		if (mutation == null || mutation.getValue() == null) {
+			return null;
+		}
+
+		if (mutation.getValue() != original.getValue()) {
+			// Set up future garbage collection. This is called iff the mutate operation caused an additional
+			// mutation to be added to the list. Once all copies of the map before the current version
+			// are released, no mutations before the current mutations will be reachable. So request
+			// a garbage collection operation on this list of mutations when the version right before
+			// the current version is released.
+			garbageCollector.registerGarbageCollectionEvent(key, version - 1);
+		}
+
+		return new ModifiableValue<>(mutation.getValue(), original.getValue());
 	}
 
 	/**
 	 * {@inheritDoc}
 	 *
 	 * @throws NullPointerException
-	 * 		if the key is null
+	 * 		if the key or value is null
 	 */
 	@Override
-	public V put(K key, V value) {
-		return setValueAtKey(key, value);
+	public V put(final K key, final V value) {
+		if (key == null) {
+			throw new NullPointerException("null keys are not supported");
+		}
+		if (value == null) {
+			throw new NullPointerException("null values are not supported");
+		}
+
+		return mutate(key, value);
 	}
 
 	/**
@@ -375,8 +407,8 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 */
 	@SuppressWarnings("unchecked")
 	@Override
-	public V remove(Object key) {
-		return deleteValueAtKey((K) key);
+	public V remove(final Object key) {
+		return mutate((K) key, null);
 	}
 
 	/**
@@ -384,7 +416,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 */
 	@Override
 	public void clear() {
-		for (K k : keySet()) {
+		for (final K k : keySet()) {
 			remove(k);
 		}
 	}
@@ -394,99 +426,16 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 */
 	@Override
 	public Set<Entry<K, V>> entrySet() {
-		Set<Entry<K, V>> set = entrySet;
-		if (set == null) {
-			set = new AbstractSet<>() {
-				public Iterator<Entry<K, V>> iterator() {
-					return new Iterator<>() {
-						private Iterator<K> i = data.keySet().iterator();
-						private K nextValidKey;
-						private K previousValidKey;
-
-						/**
-						 * Some elements in the data iterator will not
-						 * be in the current copy. After calling this
-						 * method, nextValidKey will point to the
-						 * next key in the map that is in the current
-						 * copy of the map (if one exists))
-						 */
-						private void advanceIterator() {
-							if (nextValidKey != null) {
-								return;
-							}
-							while (i.hasNext()) {
-								K nextKey = i.next();
-								if (FCHashMap.this.containsKey(nextKey)) {
-									nextValidKey = nextKey;
-									break;
-								}
-							}
-						}
-
-						public boolean hasNext() {
-							advanceIterator();
-							return nextValidKey != null;
-						}
-
-						public Entry<K, V> next() {
-							advanceIterator();
-							if (nextValidKey != null) {
-								previousValidKey = nextValidKey;
-								nextValidKey = null;
-								return new AbstractMap.SimpleEntry<>(
-										previousValidKey, FCHashMap.this.get(previousValidKey));
-							} else {
-								throw new NoSuchElementException();
-							}
-						}
-
-						public void remove() {
-							if (previousValidKey != null) {
-								FCHashMap.this.remove(previousValidKey);
-								previousValidKey = null;
-							} else {
-								throw new IllegalStateException();
-							}
-						}
-					};
-				}
-
-				public int size() {
-					return FCHashMap.this.size();
-				}
-
-				public boolean isEmpty() {
-					return FCHashMap.this.isEmpty();
-				}
-
-				public void clear() {
-					FCHashMap.this.clear();
-				}
-
-				public boolean contains(Object k) {
-					return FCHashMap.this.containsKey(k);
-				}
-			};
-			entrySet = set;
-		}
-		return set;
+		return new FCHashMapEntrySet<>(this, data);
 	}
 
 	/**
-	 * Utility function for unit testing garbage collection. Check the number of mutations still in memory for a key.
-	 * Not thread safe.
+	 * Utility function for testing garbage collection.
 	 *
-	 * @param key
-	 * 		the key whose associated value is to be returned
-	 * @return the number of mutations still in memory for a key
+	 * @return the internal map
 	 */
-	public Integer mutationCountForKey(K key) {
-		MutationQueue<V> mq = data.get(key);
-		if (mq == null) {
-			return null;
-		} else {
-			return mq.size();
-		}
+	protected Map<K, Mutation<V>> getData() {
+		return data;
 	}
 
 	/**
@@ -494,7 +443,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 *
 	 * @return if the garbage collection thread is still running.
 	 */
-	public boolean isGarbageCollectorStillRunning() {
+	protected boolean isGarbageCollectorStillRunning() {
 		return garbageCollector.isRunning();
 	}
 }

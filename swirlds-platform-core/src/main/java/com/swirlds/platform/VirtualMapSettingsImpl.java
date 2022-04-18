@@ -69,9 +69,11 @@ public class VirtualMapSettingsImpl extends SubSetting implements VirtualMapSett
 	 */
 	@Override
 	public int getNumHashThreads() {
-		return (numHashThreads == -1)
+		final int threads = (numHashThreads == -1)
 				? (int) (Runtime.getRuntime().availableProcessors() * (getPercentHashThreads() / UNIT_FRACTION_PERCENT))
 				: numHashThreads;
+
+		return Math.max(1, threads);
 	}
 
 	public void setNumHashThreads(final int numHashThreads) {
@@ -99,9 +101,11 @@ public class VirtualMapSettingsImpl extends SubSetting implements VirtualMapSett
 	@Override
 	public int getNumCleanerThreads() {
 		final int numProcessors = Runtime.getRuntime().availableProcessors();
-		return (numCleanerThreads == -1)
+		final int threads = (numCleanerThreads == -1)
 				? (int) (numProcessors * (getPercentCleanerThreads() / UNIT_FRACTION_PERCENT))
 				: numCleanerThreads;
+
+		return Math.max(1, threads);
 	}
 
 	public void setNumCleanerThreads(final int numCleanerThreads) {
@@ -133,7 +137,8 @@ public class VirtualMapSettingsImpl extends SubSetting implements VirtualMapSett
 
 	public void setVirtualMapWarningThreshold(final long virtualMapWarningThreshold) {
 		if (virtualMapWarningThreshold < 0 || virtualMapWarningThreshold > Integer.MAX_VALUE) {
-			throw new IllegalArgumentException("Cannot configure virtualMapWarningThreshold=" + virtualMapWarningThreshold);
+			throw new IllegalArgumentException(
+					"Cannot configure virtualMapWarningThreshold=" + virtualMapWarningThreshold);
 		}
 		this.virtualMapWarningThreshold = virtualMapWarningThreshold;
 	}
@@ -148,7 +153,8 @@ public class VirtualMapSettingsImpl extends SubSetting implements VirtualMapSett
 
 	public void setVirtualMapWarningInterval(final long virtualMapWarningInterval) {
 		if (virtualMapWarningInterval < 1 || virtualMapWarningInterval > virtualMapWarningThreshold) {
-			throw new IllegalArgumentException("Cannot configure virtualMapWarningInterval=" + virtualMapWarningInterval);
+			throw new IllegalArgumentException(
+					"Cannot configure virtualMapWarningInterval=" + virtualMapWarningInterval);
 		}
 		this.virtualMapWarningInterval = virtualMapWarningInterval;
 	}

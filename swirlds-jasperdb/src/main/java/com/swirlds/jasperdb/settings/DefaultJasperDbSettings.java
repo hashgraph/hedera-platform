@@ -44,6 +44,7 @@ public class DefaultJasperDbSettings implements JasperDbSettings {
 	public static final long DEFAULT_MEDIUM_MERGE_PERIOD = 60L; // 1h
 	public static final long DEFAULT_FULL_MERGE_PERIOD = 1440L; // 24h in min
 	public static final long DEFAULT_MAX_FILE_SIZE_BYTES = 64L * 1024 * 1024 * 1024;
+	public static final boolean DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED = true;
 
 	/**
 	 * {@inheritDoc}
@@ -171,5 +172,13 @@ public class DefaultJasperDbSettings implements JasperDbSettings {
 	@Override
 	public int getWriterOutputBufferBytes() {
 		return DEFAULT_WRITER_OUTPUT_BUFFER_BYTES;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isReconnectKeyLeakMitigationEnabled() {
+		return DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED;
 	}
 }

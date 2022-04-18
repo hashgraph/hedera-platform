@@ -18,6 +18,7 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.Archivable;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.ArchivedException;
+import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
 import com.swirlds.common.merkle.utility.DebugIterationEndpoint;
 import com.swirlds.common.merkle.utility.Keyed;
@@ -485,7 +486,8 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 	/**
 	 * <p>
-	 * Get the value associated with a given key. Value is safe to directly modify.
+	 * Get the value associated with a given key. Value is safe to directly modify. If given key is not in the
+	 * map then null is returned.
 	 * </p>
 	 *
 	 * <p>
@@ -497,7 +499,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 	 *
 	 * @param key
 	 * 		the key that will be used to look up the value
-	 * @return an object that is safe to directly modify
+	 * @return an object that is safe to directly modify, or null if the requested key is not in the map
 	 */
 	public V getForModify(final K key) {
 		throwIfImmutable();
@@ -511,23 +513,30 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 		final long stamp = readLock();
 		try {
-			final V originalEntry = index.get(key);
-			if (originalEntry == null) {
+
+			final FCHashMap.ModifiableValue<V> value = index.getForModify(key);
+
+			if (value == null) {
 				return null;
 			}
 
-			// Replace path down to parent of the entry
-			final MerkleNode[] path = replacePath(getTree(), originalEntry.getRoute(), 1);
-			final MerkleTreeInternalNode parent = getParentInPath(path);
-			final int indexInParent = findChildPositionInParent(parent, originalEntry);
+			final V copy = value.value();
+			final V original = value.original();
+			final MerkleRoute route = original.getRoute();
 
-			// Copy the entry
-			final V newEntry = originalEntry.copy().cast();
-			parent.setChild(indexInParent, newEntry, originalEntry.getRoute());
-			updateCache(newEntry);
-			getTree().registerCopy(originalEntry, newEntry);
+			if (copy != original) {
+				// Replace path down to parent of the entry
+				final MerkleNode[] path = replacePath(getTree(), route, 1);
 
-			return newEntry;
+				final MerkleTreeInternalNode parent = getParentInPath(path);
+				final int indexInParent = findChildPositionInParent(parent, original);
+
+				parent.setChild(indexInParent, copy, route, false);
+				getTree().registerCopy(original, copy);
+			}
+
+			return copy;
+
 		} finally {
 			releaseReadLock(stamp);
 

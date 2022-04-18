@@ -15,13 +15,18 @@
 package com.swirlds.platform.sync;
 
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.Utilities;
 import com.swirlds.platform.consensus.GraphGenerations;
+import org.apache.logging.log4j.Marker;
 
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
+
+import static com.swirlds.logging.LogMarker.EXCEPTION;
+import static com.swirlds.logging.LogMarker.SOCKET_EXCEPTIONS;
 
 /**
  * Various static utility method used in syncing
@@ -95,5 +100,19 @@ public final class SyncUtils {
 	 */
 	static void sort(final List<EventImpl> sendList) {
 		sendList.sort((EventImpl e1, EventImpl e2) -> (int) (e1.getGeneration() - e2.getGeneration()));
+	}
+
+	/**
+	 * Determines the log marker to use for a connection exception based on the nested exception types
+	 *
+	 * @param e
+	 * 		the exception thrown during a network operations
+	 * @return the marker to use for logging
+	 */
+	public static Marker determineExceptionMarker(final Exception e) {
+		return Utilities.isCausedByIOException(e) ||
+				Utilities.isRootCauseSuppliedType(e, SyncTimeoutException.class)
+				? SOCKET_EXCEPTIONS.getMarker()
+				: EXCEPTION.getMarker();
 	}
 }

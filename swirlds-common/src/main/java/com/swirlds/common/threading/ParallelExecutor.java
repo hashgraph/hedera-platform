@@ -31,4 +31,21 @@ public interface ParallelExecutor {
 	 * 		if anything goes wrong
 	 */
 	<T> T doParallel(Callable<T> task1, Callable<Void> task2) throws ParallelExecutionException;
+
+	/**
+	 * Run two tasks in parallel
+	 *
+	 * @param task1
+	 * 		a task to execute in parallel
+	 * @param task2
+	 * 		a task to execute in parallel
+	 * @param onThrow
+	 * 		a task to run if an exception gets thrown
+	 * @throws ParallelExecutionException
+	 * 		if anything goes wrong
+	 */
+	default <T> T doParallel(Callable<T> task1, Callable<Void> task2, Runnable onThrow)
+			throws ParallelExecutionException {
+		throw new UnsupportedOperationException("not implemented");
+	}
 }

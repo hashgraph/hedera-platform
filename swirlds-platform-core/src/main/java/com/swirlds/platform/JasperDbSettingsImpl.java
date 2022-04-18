@@ -31,6 +31,7 @@ import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MERG
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MIN_NUMBER_OF_FILES_IN_MERGE;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MOVE_LIST_CHUNK_SIZE;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_NUMBER_OF_FILES_IN_MERGE;
+import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_SMALL_MERGE_CUTOFF_MB;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_STORAGE_DIRECTORY;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_WRITER_OUTPUT_BUFFER_BYTES;
@@ -54,6 +55,7 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 	public long mergeActivatedPeriod = DEFAULT_MERGE_ACTIVATED_PERIOD;
 	public int maxNumberOfFilesInMerge = DEFAULT_MAX_NUMBER_OF_FILES_IN_MERGE;
 	public int minNumberOfFilesInMerge = DEFAULT_MIN_NUMBER_OF_FILES_IN_MERGE;
+	public boolean reconnectKeyLeakMitigationEnabled = DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED;
 	public String mergePeriodUnit = "MINUTES";
 
 	/**
@@ -283,6 +285,14 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 	@Override
 	public int getWriterOutputBufferBytes() {
 		return writerOutputBufferBytes;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isReconnectKeyLeakMitigationEnabled() {
+		return reconnectKeyLeakMitigationEnabled;
 	}
 
 	public void setWriterOutputBufferBytes(final int writerOutputBufferBytes) {

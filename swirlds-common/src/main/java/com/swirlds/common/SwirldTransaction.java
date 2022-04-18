@@ -23,6 +23,7 @@ import com.swirlds.common.io.SerializableDataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
@@ -174,7 +175,7 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 
 	/**
 	 * Returns a {@link List} of {@link TransactionSignature} objects associated with this transaction. This method
-	 * returns a shallow copy of the original list.
+	 * returns a shallow copy of the original list. This method can return an unmodifiable list.
 	 *
 	 * This method is thread-safe and guaranteed to be atomic in nature.
 	 *
@@ -185,7 +186,7 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 
 		try {
 			readLock.lock();
-			return (signatures != null) ? new ArrayList<>(signatures) : new ArrayList<>(1);
+			return (signatures != null) ? new ArrayList<>(signatures) : Collections.emptyList();
 		} finally {
 			readLock.unlock();
 		}
@@ -396,7 +397,7 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	 *
 	 * This method is thread-safe and guaranteed to be atomic in nature.
 	 */
-	public void clear() {
+	public void clearSignatures() {
 		final Lock writeLock = readWriteLock.writeLock();
 
 		try {
@@ -405,7 +406,7 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 				return;
 			}
 
-			signatures.clear();
+			signatures = null;
 		} finally {
 			writeLock.unlock();
 		}

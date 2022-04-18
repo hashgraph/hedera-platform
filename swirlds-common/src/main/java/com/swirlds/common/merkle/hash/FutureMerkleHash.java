@@ -15,17 +15,27 @@
 package com.swirlds.common.merkle.hash;
 
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.merkle.MerkleNode;
 
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
+/**
+ * This future object is used by {@link MerkleHashBuilder#digestTreeAsync(MerkleNode)} to return a hash to the user.
+ */
 public class FutureMerkleHash implements Future<Hash> {
 
 	private volatile Hash hash;
+	private volatile Throwable exception;
+	private final CountDownLatch latch;
 
-	private CountDownLatch latch;
-
+	/**
+	 * Create a future that will eventually have the hash specified.
+	 */
 	public FutureMerkleHash() {
 		latch = new CountDownLatch(1);
 	}
@@ -34,8 +44,19 @@ public class FutureMerkleHash implements Future<Hash> {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean cancel(boolean mayInterruptIfRunning) {
-		return false;
+	public boolean cancel(final boolean mayInterruptIfRunning) {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * This method is used to register that an exception was encountered while hashing the tree.
+	 */
+	public synchronized void cancelWithException(final Throwable exception) {
+		if (exception != null) {
+			// Only the first exception gets rethrown
+			this.exception = exception;
+			latch.countDown();
+		}
 	}
 
 	/**
@@ -43,7 +64,7 @@ public class FutureMerkleHash implements Future<Hash> {
 	 */
 	@Override
 	public boolean isCancelled() {
-		return false;
+		return exception != null;
 	}
 
 	/**
@@ -55,11 +76,21 @@ public class FutureMerkleHash implements Future<Hash> {
 	}
 
 	/**
+	 * If there were any exceptions encountered during hashing, rethrow that exception.
+	 */
+	private void rethrowException() throws ExecutionException {
+		if (exception != null) {
+			throw new ExecutionException(exception);
+		}
+	}
+
+	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Hash get() throws InterruptedException {
+	public Hash get() throws InterruptedException, ExecutionException {
 		latch.await();
+		rethrowException();
 		return hash;
 	}
 
@@ -67,13 +98,25 @@ public class FutureMerkleHash implements Future<Hash> {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Hash get(long timeout, TimeUnit unit) throws InterruptedException {
-		latch.await(timeout, unit);
-		return get();
+	public Hash get(final long timeout, final TimeUnit unit)
+			throws InterruptedException, TimeoutException, ExecutionException {
+		if (!latch.await(timeout, unit)) {
+			throw new TimeoutException();
+		}
+		rethrowException();
+		return hash;
 	}
 
-	public void set(Hash hash) {
-		this.hash = hash;
-		latch.countDown();
+	/**
+	 * Set the hash for the tree.
+	 *
+	 * @param hash
+	 * 		the hash
+	 */
+	public synchronized void set(Hash hash) {
+		if (exception == null) {
+			this.hash = hash;
+			latch.countDown();
+		}
 	}
 }

@@ -21,7 +21,7 @@
 	<!-- Project Configuration -->
 	<groupId>com.swirlds</groupId>
 	<artifactId>swirlds-platform</artifactId>
-	<version>0.23.1-orvw.1</version>
+	<version>0.24.0-orvw.1</version>
 
 	<packaging>pom</packaging>
 
@@ -115,13 +115,13 @@
 		<plugin.maven.shade.version>3.2.4</plugin.maven.shade.version>
 		<plugin.maven.gpg.version>3.0.1</plugin.maven.gpg.version>
 
-
 		<!-- Maven CI/CD Utilities -->
 		<plugin.versions.maven.version>2.8.1</plugin.versions.maven.version>
 		<plugin.dependency.check.version>6.5.0</plugin.dependency.check.version>
 		<plugin.license.maven.version>4.0.rc2</plugin.license.maven.version>
 		<plugin.build.helper.version>3.2.0</plugin.build.helper.version>
 		<plugin.nexus.staging.version>1.6.8</plugin.nexus.staging.version>
+		<plugin.maven.reproducible.build.version>0.15</plugin.maven.reproducible.build.version>
 
 		<!-- Dependency Versions -->
 
@@ -655,6 +655,18 @@
 		<!-- Plugin Management -->
 		<pluginManagement>
 			<plugins>
+				<plugin>
+					<groupId>io.github.zlika</groupId>
+					<artifactId>reproducible-build-maven-plugin</artifactId>
+					<version>${plugin.maven.reproducible.build.version}</version>
+					<executions>
+						<execution>
+							<goals>
+								<goal>strip-jar</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
 				<!-- Code Analysis Plugins -->
 				<plugin>
 					<groupId>org.jacoco</groupId>
@@ -968,6 +980,10 @@
 					</cveUrlModified>
 					<cveUrlBase>https://freedumbytes.gitlab.io/setup/nist-nvd-mirror/nvdcve-1.1-%d.json.gz</cveUrlBase>
 				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>io.github.zlika</groupId>
+				<artifactId>reproducible-build-maven-plugin</artifactId>
 			</plugin>
 		</plugins>
 	</build>

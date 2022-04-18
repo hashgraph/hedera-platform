@@ -137,4 +137,13 @@ public interface JasperDbSettings {
 	 * Default is 4MB.
 	 */
 	int getWriterOutputBufferBytes();
+
+	/**
+	 * There currently exists a bug when a virtual map is reconnected that can cause some deleted keys to leak into the
+	 * datasource. If this method returns true then a mitigation strategy is used when a leaked key is encountered,
+	 * which hides the problem from the perspective of the application. This setting exists so that we can test
+	 * behavior with and without this mitigation enabled. This mitigation should always be enabled
+	 * in production environments.
+	 */
+	boolean isReconnectKeyLeakMitigationEnabled();
 }

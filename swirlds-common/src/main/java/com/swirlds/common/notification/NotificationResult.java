@@ -39,7 +39,7 @@ public class NotificationResult<N extends Notification> {
 	/**
 	 * the list of exceptions, if any, that were thrown by the listeners
 	 */
-	private List<Exception> exceptions;
+	private List<Throwable> exceptions;
 
 	/**
 	 * Creates a new instance with no exceptions and the given number of registered listeners.
@@ -63,7 +63,7 @@ public class NotificationResult<N extends Notification> {
 	 * @param exceptions
 	 * 		the list of exceptions that occurred during listener invocation
 	 */
-	public NotificationResult(final N notification, final int totalListeners, final List<Exception> exceptions) {
+	public NotificationResult(final N notification, final int totalListeners, final List<Throwable> exceptions) {
 		if (notification == null) {
 			throw new IllegalArgumentException("notification");
 		}
@@ -92,11 +92,11 @@ public class NotificationResult<N extends Notification> {
 	}
 
 	/**
-	 * Getter that returns a list of {@link Exception} instances that were thrown during listener invocation.
+	 * Getter that returns a list of {@link Throwable} instances that were thrown during listener invocation.
 	 *
 	 * @return the list of exceptions, if any, thrown during listener invocation
 	 */
-	public List<Exception> getExceptions() {
+	public List<Throwable> getExceptions() {
 		return exceptions;
 	}
 
@@ -115,7 +115,7 @@ public class NotificationResult<N extends Notification> {
 	 * @param ex
 	 * 		the exception to be added
 	 */
-	public void addException(final Exception ex) {
+	public void addException(final Throwable ex) {
 		exceptions.add(ex);
 	}
 }

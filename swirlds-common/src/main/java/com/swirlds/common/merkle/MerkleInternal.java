@@ -52,10 +52,12 @@ public interface MerkleInternal extends MerkleNode {
 	 * The maximum number of children that a MerkleInternal node can have
 	 */
 	int MAX_CHILD_COUNT_UBOUND = 64;
+
 	/**
 	 * The maximum number of children that a MerkleInternal node can have
 	 */
 	int MAX_CHILD_COUNT_LBOUND = 1;
+
 	/**
 	 * The minimum number of children that a MerkleInternal node can have
 	 */
@@ -71,12 +73,18 @@ public interface MerkleInternal extends MerkleNode {
 	int getNumberOfChildren();
 
 	/**
+	 * <p>
 	 * Returns deterministically the child at position <i>index</i>
+	 * </p>
+	 *
 	 * <p>
 	 * This function must not change the number of children or modify any children in any way.
+	 * </p>
+	 *
 	 * <p>
 	 * If a child at an index that does not violate {@link #getMaximumChildCount(int)} is requested
 	 * but that child has never been set, then null should be returned.
+	 * </p>
 	 *
 	 * @param index
 	 * 		The position to look for the child.
@@ -90,13 +98,28 @@ public interface MerkleInternal extends MerkleNode {
 	<T extends MerkleNode> T getChild(final int index);
 
 	/**
+	 * <p>
 	 * Set the child at a particular index.
+	 * </p>
 	 *
+	 * <p>
 	 * Additionally, method is expected to perform the following operations:
-	 * - invalidating this node's hash
-	 * - decrementing the reference count of the displaced child (if any)
-	 * - incrementing the reference count of the new child (if not null)
-	 * - updating the route of the new child (if not null)
+	 * </p>
+	 *
+	 * <ul>
+	 * <li>
+	 * invalidating this node's hash
+	 * </li>
+	 * <li>
+	 * decrementing the reference count of the displaced child (if any)
+	 * </li>
+	 * <li>
+	 * incrementing the reference count of the new child (if not null)
+	 * </li>
+	 * <li>
+	 * updating the route of the new child (if not null)
+	 * </li>
+	 * </ul>
 	 *
 	 * @param index
 	 * 		The position where the child will be inserted.
@@ -107,19 +130,39 @@ public interface MerkleInternal extends MerkleNode {
 	 * @throws MerkleRouteException
 	 * 		if the child's route is changed in an illegal manner
 	 */
-	void setChild(final int index, final MerkleNode child);
+	default void setChild(final int index, final MerkleNode child) {
+		setChild(index, child, null, false);
+	}
 
 	/**
-	 * Set the child at a particular index.
+	 * <p>
+	 * Set the child at a particular index. This method provides extra configuration and is designed for
+	 * advanced use cases.
+	 * </p>
 	 *
+	 * <p>
 	 * Uses a precomputed route for the child. Useful for setting a child where the route is already known without
 	 * paying the performance penalty of recreating the route.
+	 * </p>
 	 *
+	 * <p>
 	 * Additionally, method is expected to perform the following operations:
-	 * - invalidating this node's hash
-	 * - decrementing the reference count of the displaced child (if any)
-	 * - incrementing the reference count of the new child (if not null)
-	 * - updating the route of the new child (if not null)
+	 * </p>
+	 *
+	 * <ul>
+	 * <li>
+	 * invalidating this node's hash
+	 * </li>
+	 * <li>
+	 * decrementing the reference count of the displaced child (if any)
+	 * </li>
+	 * <li>
+	 * incrementing the reference count of the new child (if not null)
+	 * </li>
+	 * <li>
+	 * updating the route of the new child (if not null)
+	 * </li>
+	 * </ul>
 	 *
 	 * @param index
 	 * 		The position where the child will be inserted.
@@ -127,12 +170,20 @@ public interface MerkleInternal extends MerkleNode {
 	 * 		A MerkleNode object.
 	 * @param childRoute
 	 * 		A precomputed route. No error checking, assumed to be correct.
+	 * @param childMayBeImmutable
+	 * 		if true then the child may be immutable. If false then it is assumed
+	 * 		that the child is mutable, and if the child is immutable then an
+	 * 		exception is thrown
 	 * @throws MutabilityException
-	 * 		if the child is immutable
+	 * 		if the child is immutable and childMayBeImmutable is false
 	 * @throws com.swirlds.common.merkle.exceptions.MerkleRouteException
 	 * 		if the child's route is changed in an illegal manner
 	 */
-	void setChild(final int index, final MerkleNode child, final MerkleRoute childRoute);
+	void setChild(
+			final int index,
+			final MerkleNode child,
+			final MerkleRoute childRoute,
+			final boolean childMayBeImmutable);
 
 	/**
 	 * The minimum number of children that this node may have.

@@ -124,6 +124,8 @@ public class VirtualPipeline {
 	 */
 	private final PipelineList<VirtualRoot> copies;
 
+	private final AtomicInteger unreleasedCopies = new AtomicInteger();
+
 	/**
 	 * A list of copies that have not yet been hashed. We guarantee that each copy
 	 * is hashed in order from oldest to newest (relying on the order of
@@ -133,7 +135,7 @@ public class VirtualPipeline {
 	private final ConcurrentLinkedDeque<VirtualRoot> unhashedCopies;
 
 	/**
-	 * A reference to the most recent copy. This is the copy that {@link VirtualRoot#onShutdown()}
+	 * A reference to the most recent copy. This is the copy that {@link VirtualRoot#onShutdown(boolean)}
 	 * will be called on.
 	 */
 	private final AtomicReference<VirtualRoot> mostRecentCopy = new AtomicReference<>();
@@ -143,7 +145,7 @@ public class VirtualPipeline {
 	 * will still complete. A pipeline is either terminated because the last copy has been released
 	 * or because of an explicit call to {@link #terminate()}.
 	 */
-	private boolean alive;
+	private volatile boolean alive;
 
 	/**
 	 * A single-threaded executor on which we perform all flush and merge tasks.
@@ -238,6 +240,7 @@ public class VirtualPipeline {
 			flushBacklog.getAndIncrement();
 		}
 
+		unreleasedCopies.getAndIncrement();
 		copies.add(copy);
 		unhashedCopies.add(copy);
 		mostRecentCopy.set(copy);
@@ -271,7 +274,18 @@ public class VirtualPipeline {
 	 * that the resources held by the copy will be eventually released.
 	 */
 	public synchronized void releaseCopy() {
-		if (alive) {
+		if (!alive) {
+			// Copy released after the pipeline was manually shut down.
+			return;
+		}
+
+		final int remainingCopies = unreleasedCopies.decrementAndGet();
+
+		if (remainingCopies < 0) {
+			throw new IllegalStateException("copies released too many times");
+		} else if (remainingCopies == 0) {
+			shutdown(true);
+		} else {
 			executorService.submit(this::doWork);
 		}
 	}
@@ -343,8 +357,13 @@ public class VirtualPipeline {
 	 * 		whether to enable background compaction on the new database, if it is reopened
 	 * @return a reference to the detached state
 	 */
-	public <T> T detachCopy(final VirtualRoot copy, final String label, final Path targetDirectory, boolean reopen,
-			boolean withDbCompactionEnabled) {
+	public <T> T detachCopy(
+			final VirtualRoot copy,
+			final String label,
+			final Path targetDirectory,
+			final boolean reopen,
+			final boolean withDbCompactionEnabled) {
+
 		validatePipelineRegistration(copy);
 
 		final AtomicReference<T> ret = new AtomicReference<>();
@@ -485,13 +504,6 @@ public class VirtualPipeline {
 
 			next = next.getNext();
 		}
-
-		if (copies.testAll(VirtualRoot::isReleased)) {
-			// If all copies still in the list are released then we can just stop the executor service.
-			// These copies don't need to be flushed/merged, as all copies being released indicates that
-			// the results of those flushes and merges no longer matter.
-			shutdown(false);
-		}
 	}
 
 	private void doWork() {
@@ -508,16 +520,17 @@ public class VirtualPipeline {
 	 *
 	 * @param immediately
 	 * 		If {@code true}, shuts down the service immediately. This will interrupt any threads currently
-	 * 		running and prevents an orderly shutdown. Reserved for error conditions.
+	 * 		running. Useful for when there is an error, or for when the virtual map is no longer in use
+	 * 		(and therefore any/all pending work will never be used).
 	 */
 	private synchronized void shutdown(final boolean immediately) {
 		alive = false;
 		if (!executorService.isShutdown()) {
 			if (immediately) {
 				executorService.shutdownNow();
-				fireOnShutdown();
+				fireOnShutdown(immediately);
 			} else {
-				executorService.submit(this::fireOnShutdown);
+				executorService.submit(() -> fireOnShutdown(false));
 				executorService.shutdown();
 			}
 		}
@@ -571,11 +584,14 @@ public class VirtualPipeline {
 
 	/**
 	 * If there is a most-recent copy, calls shutdown on it.
+	 *
+	 * @param immediately
+	 * 		if true then the shutdown is immediate
 	 */
-	private void fireOnShutdown() {
+	private void fireOnShutdown(final boolean immediately) {
 		final var copy = mostRecentCopy.get();
 		if (copy != null) {
-			copy.onShutdown();
+			copy.onShutdown(immediately);
 		}
 	}
 

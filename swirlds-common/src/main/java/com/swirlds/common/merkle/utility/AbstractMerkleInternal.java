@@ -101,20 +101,17 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void setChild(final int index, final MerkleNode child) {
-		setChild(index, child, null);
-	}
+	public final void setChild(
+			final int index,
+			final MerkleNode child,
+			final MerkleRoute childRoute,
+			final boolean childMayBeImmutable) {
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public final void setChild(final int index, final MerkleNode child, final MerkleRoute childRoute) {
 		throwIfInvalidState();
 
 		checkChildIndexIsValid(index);
 
-		throwIfInvalidChild(index, child);
+		throwIfInvalidChild(index, child, childMayBeImmutable);
 
 		allocateSpaceForChild(index);
 
@@ -147,13 +144,23 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 		setChildInternal(index, child);
 	}
 
-	private void throwIfInvalidChild(final int index, final MerkleNode child) {
+	/**
+	 * Check if a potential child is valid, and throw if it is not valid
+	 *
+	 * @param index
+	 * 		the index of the child
+	 * @param child
+	 * 		the child to be added
+	 * @param childMayBeImmutable
+	 * 		if true then the child is permitted to be immutable, if false then it is not permitted
+	 */
+	private void throwIfInvalidChild(final int index, final MerkleNode child, final boolean childMayBeImmutable) {
 		long classId = NULL_CLASS_ID;
 
 		if (child != null) {
 			classId = child.getClassId();
 
-			if (child.isImmutable()) {
+			if (!childMayBeImmutable && child.isImmutable()) {
 				throw new MutabilityException("Immutable child can not be added to parent. parent = "
 						+ merkleDebugString(this) + ", child = " + merkleDebugString(child));
 			}

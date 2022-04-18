@@ -46,8 +46,10 @@ public final class DefaultVirtualMapSettings implements VirtualMapSettings {
 	 */
 	@Override
 	public int getNumHashThreads() {
-		return Integer.getInteger("hashingThreadCount",
+		final int threads = Integer.getInteger("hashingThreadCount",
 				(int) (Runtime.getRuntime().availableProcessors() * (getPercentHashThreads() / UNIT_FRACTION_PERCENT)));
+
+		return Math.max(1, threads);
 	}
 
 	/**
@@ -61,8 +63,10 @@ public final class DefaultVirtualMapSettings implements VirtualMapSettings {
 	@Override
 	public int getNumCleanerThreads() {
 		final int numProcessors = Runtime.getRuntime().availableProcessors();
-		return Integer.getInteger("cleanerThreadCount",
+		final int threads = Integer.getInteger("cleanerThreadCount",
 				(int) (numProcessors * (getPercentCleanerThreads() / UNIT_FRACTION_PERCENT)));
+
+		return Math.max(1, threads);
 	}
 
 	@Override

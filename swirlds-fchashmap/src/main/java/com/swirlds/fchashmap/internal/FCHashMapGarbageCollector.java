@@ -24,8 +24,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.swirlds.logging.LogMarker.ARCHIVE;
@@ -41,7 +41,7 @@ public class FCHashMapGarbageCollector<K, V> {
 	/**
 	 * A reference to the internal data structure of the FCHashMap copies.
 	 */
-	private final ConcurrentMap<K, MutationQueue<V>> data;
+	private final Map<K, Mutation<V>> data;
 
 	private final AtomicInteger referenceCount;
 
@@ -58,9 +58,9 @@ public class FCHashMapGarbageCollector<K, V> {
 	/**
 	 * Contains a sequence of events that eventually require cleanup
 	 */
-	private final ConcurrentLinkedDeque<GarbageCollectionEvent<K, V>> garbageCollectionEvents;
+	private final ConcurrentLinkedDeque<GarbageCollectionEvent<K>> garbageCollectionEvents;
 
-	public FCHashMapGarbageCollector(final ConcurrentMap<K, MutationQueue<V>> data) {
+	public FCHashMapGarbageCollector(final Map<K, Mutation<V>> data) {
 		this.data = data;
 		this.garbageCollectionEvents = new ConcurrentLinkedDeque<>();
 		this.referenceCount = new AtomicInteger(1);
@@ -130,73 +130,12 @@ public class FCHashMapGarbageCollector<K, V> {
 	 * Inform the garbage collector of a mutation that will later require cleanup.
 	 *
 	 * @param key
-	 * 		The key in the map where the mutation occurred.
-	 * @param mutationQueue
-	 * 		The mutation queue that holds a mutation that needs cleanup.
+	 * 		the key in the map where the mutation occurred
 	 * @param version
-	 * 		When this copy is no longer in memory then the mutation queue needs to be cleaned.
+	 * 		when this copy is no longer in memory then the mutation queue needs to be cleaned
 	 */
-	public void registerGarbageCollectionEvent(K key, MutationQueue<V> mutationQueue, long version) {
-		garbageCollectionEvents.addLast(new GarbageCollectionEvent<>(key, mutationQueue, version));
-	}
-
-	/**
-	 * Find the next queue that needs to have garbage collection done.
-	 *
-	 * @param version
-	 * 		A copy version that has expired.
-	 * @return A mutation queue that needs cleaning. null if no mutation queues need cleaning (with the given version).
-	 */
-	private GarbageCollectionEvent<K, V> getNextGarbageCollectionEvent(final long version) {
-		final GarbageCollectionEvent<K, V> next = garbageCollectionEvents.peekFirst();
-		if (next != null && version + 1 >= next.getVersion()) {
-			// When a queue contains a single (non-removal) element there is no need for garbage collection.
-			// When a second element is added to the queue at version v, we know that when all copies older
-			// than v expire we will need to clean the first element in the queue. The last copy to depend
-			// on the first element in the queue is at version v-1, so when v-1 expires it is time to clean the
-			// queue.
-			garbageCollectionEvents.removeFirst();
-			return next;
-		}
-		return null;
-	}
-
-	/**
-	 * Given a queue and a version, remove mutations that are no longer needed by any copies.
-	 *
-	 * @param event
-	 * 		Contains a queue that will require garbage collection.
-	 * @param version
-	 * 		The version of the oldest event that has just been evicted from memory.
-	 */
-	private void cleanQueue(final GarbageCollectionEvent<K, V> event, final long version) {
-		synchronized (event.getMutationQueue()) {
-
-			while (event.getMutationQueue().size() > 1) {
-				// There will always be at least one element in the mutationQueue so getFirst() will never fail
-				final Mutation<V> next = event.getMutationQueue().getFirst();
-
-				// There exist no copies with an id lower or equal to version.
-				// Delete a mutation that happened at or before this version.
-				if (next.version <= version) {
-					event.getMutationQueue().remove();
-				} else {
-					break;
-				}
-			}
-
-			// Decide if the queue needs to be removed from the map after being cleaned.
-			if (event.getMutationQueue().size() == 1 && event.getMutationQueue().getFirst().deleted) {
-				event.getMutationQueue().delete();
-				synchronized (data) {
-					// If the mutation queue is not present then it has been replaced with a newer queue.
-					// Only remove value at key if the mutation queue to delete has not been replaced.
-					if (data.get(event.getKey()) == event.getMutationQueue()) {
-						data.remove(event.getKey());
-					}
-				}
-			}
-		}
+	public void registerGarbageCollectionEvent(final K key, final long version) {
+		garbageCollectionEvents.addLast(new GarbageCollectionEvent<>(key, version));
 	}
 
 	/**
@@ -209,12 +148,50 @@ public class FCHashMapGarbageCollector<K, V> {
 	}
 
 	/**
-	 * This method is called every time there is a version to delete.
+	 * Given a queue and a version, remove mutations that are no longer needed by any copies.
+	 *
+	 * @param key
+	 * 		the key that requires garbage collection
+	 * @param version
+	 * 		the version of the map that has been released
 	 */
-	private void handler(final FCHashMap<K, V> versionToDelete) throws InterruptedException {
+	private void cleanOldMutations(final K key, final long version) {
+		data.compute(key, (final K k, final Mutation<V> mutationHead) -> {
+			if (mutationHead == null) {
+				return null;
+			}
+
+			Mutation<V> parent = mutationHead;
+			Mutation<V> target = parent.getPrevious();
+
+			while (target != null) {
+
+				// truncate all older mutations
+				if (target.getVersion() <= version) {
+					parent.setPrevious(null);
+					break;
+				}
+
+				parent = target;
+				target = parent.getPrevious();
+			}
+
+			if (mutationHead.getPrevious() == null && mutationHead.getValue() == null) {
+				// entry can be deleted if just a single deletion record remains
+				return null;
+			}
+
+			return mutationHead;
+		});
+	}
+
+	/**
+	 * This method is called every time there is a map that requires garbage collection.
+	 */
+	protected void handler(final FCHashMap<K, V> mapToDelete) throws InterruptedException {
 
 		final Instant start = Instant.now();
-		versionToDelete.waitUntilReleased();
+		mapToDelete.waitUntilReleased();
 		final Instant finish = Instant.now();
 		final Duration timeSpentWaiting = Duration.between(start, finish);
 		if (timeSpentWaiting.toMillis() >= WAIT_LOG_THRESHOLD_MS) {
@@ -222,11 +199,16 @@ public class FCHashMapGarbageCollector<K, V> {
 					"ms waiting for FCHashMap to be released");
 		}
 
-		final long version = versionToDelete.version();
+		final long version = mapToDelete.version();
 
-		GarbageCollectionEvent<K, V> nextEvent;
-		while ((nextEvent = getNextGarbageCollectionEvent(version)) != null) {
-			cleanQueue(nextEvent, version);
+		GarbageCollectionEvent<K> event;
+		while ((event = garbageCollectionEvents.peekFirst()) != null) {
+			if (event.getVersion() > version) {
+				break;
+			}
+
+			garbageCollectionEvents.pop();
+			cleanOldMutations(event.getKey(), version);
 		}
 	}
 }

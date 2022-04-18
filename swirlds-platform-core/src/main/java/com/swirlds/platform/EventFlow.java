@@ -237,8 +237,6 @@ public class EventFlow extends AbstractEventFlow {
 	 * 		the event stream manager to send consensus events to
 	 * @param isZeroStakedNode
 	 * 		true if this node is a zero-stake node
-	 * @param stateHashSignQueue
-	 * 		the queue that handles hashing and collecting signatures of new self-signed states
 	 * @param systemTransactionHandler
 	 * 		the handler for all system transactions
 	 * @param initialState
@@ -873,6 +871,11 @@ public class EventFlow extends AbstractEventFlow {
 				state.getState().getSwirldState().handleTransaction(creator, isConsensus, timeCreated,
 						estConsTime, swirldTransaction, state.getState().getSwirldDualState());
 
+				// clear sigs to free up memory, since we don't need them anymore
+				if (isConsensus) {
+					swirldTransaction.clearSignatures();
+				}
+
 				// we only add these stats for transactions that have reached consensus
 				if (event != null && event.getReachedConsTimestamp() != null) {
 					stats.consensusTransHandleTime((System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
@@ -1249,8 +1252,9 @@ public class EventFlow extends AbstractEventFlow {
 		if (fromQueue == forCons && savedStateInFreeze) {
 			return event;
 		}
-
-		boolean isConsensusEvent = event.isConsensus();//remember isConsensus, in case a thread changes it during this
+		
+		//remember isConsensus, in case a thread changes it during this
+		boolean isConsensusEvent = event.getConsensusTimestamp() != null;
 
 		if (isConsensusEvent) {
 			baseTime = event.getConsensusTimestamp();

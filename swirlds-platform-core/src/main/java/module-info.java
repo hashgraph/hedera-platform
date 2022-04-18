@@ -38,7 +38,7 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.eventhandling to com.swirlds.platform.test;
 	exports com.swirlds.platform.sync;
 	exports com.swirlds.platform.consensus to com.swirlds.platform.test;
-	exports com.swirlds.platform.system to com.swirlds.platform.test;
+	exports com.swirlds.platform.system;
 
 	/* Swirlds Libraries */
 	requires transitive com.swirlds.common;

@@ -322,7 +322,9 @@ public class SwirldsPlatform extends AbstractPlatform {
 			this.dbStats = null;
 		}
 
-		if (Settings.state.getSaveStatePeriod() > 0 || Settings.state.dumpStateOnISS) {
+		if (Settings.state.getSaveStatePeriod() > 0
+				|| Settings.state.dumpStateOnISS
+				|| Settings.state.dumpStateOnFatal) {
 			signedStateFileManager = new SignedStateFileManager(this);
 
 			new ThreadConfiguration()
@@ -334,6 +336,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 					.build()
 					.start();
 		}
+
 		signedStateManager = new SignedStateManager(this,
 				PlatformConstructor.platformSigner(crypto.getKeysAndCerts()),
 				signedStateFileManager, Settings.state);

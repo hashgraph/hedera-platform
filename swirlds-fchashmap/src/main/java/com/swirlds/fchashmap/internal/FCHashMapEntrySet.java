@@ -14,45 +14,48 @@
 
 package com.swirlds.fchashmap.internal;
 
+import com.swirlds.fchashmap.FCHashMap;
+
+import java.util.AbstractSet;
+import java.util.Iterator;
+import java.util.Map;
+
 /**
- * Represents an action that the garbage collector will take after a certain copy version is deleted.
+ * An entry set view for {@link FCHashMap}.
  *
  * @param <K>
- * 		the type of the key
+ * 		the type of the map's key
+ * @param <V>
+ * 		the type of the map's value
  */
-class GarbageCollectionEvent<K> {
+public class FCHashMapEntrySet<K, V> extends AbstractSet<Map.Entry<K, V>> {
 
-	private final K key;
-	private final long version;
+	private final FCHashMap<K, V> map;
+	private final Map<K, Mutation<V>> data;
 
 	/**
-	 * Create a new garbage collection event.
+	 * Create a new entry set view for an {@link FCHashMap}.
 	 *
-	 * @param key
-	 * 		the key that requires garbage colleciton
-	 * @param version
-	 * 		the version which triggers garbage collection when it is deleted
+	 * @param map
+	 * 		the map that will be represented by this set
 	 */
-	public GarbageCollectionEvent(final K key, final long version) {
-		this.key = key;
-		this.version = version;
+	public FCHashMapEntrySet(final FCHashMap<K, V> map, final Map<K, Mutation<V>> data) {
+		this.map = map;
+		this.data = data;
 	}
 
 	/**
-	 * Get the key that requires cleanup.
+	 * {@inheritDoc}
 	 */
-	public K getKey() {
-		return key;
+	public Iterator<Map.Entry<K, V>> iterator() {
+		return new FCHashMapEntrySetIterator<>(map, data);
 	}
 
 	/**
-	 * Get the version which, after deletion, requires cleanup.
+	 * {@inheritDoc}
 	 */
-	public long getVersion() {
-		return version;
-	}
-
-	public String toString() {
-		return "[" + key + "@" + version + "]";
+	@Override
+	public int size() {
+		return map.size();
 	}
 }

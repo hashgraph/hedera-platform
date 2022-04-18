@@ -266,6 +266,8 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 
 	private JasperDbStatistics statistics;
 
+	private final AtomicBoolean closed = new AtomicBoolean(false);
+
 	/**
 	 * Create new VirtualDataSourceJasperDB.
 	 *
@@ -304,6 +306,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 			final VirtualInternalRecordSerializer virtualInternalRecordSerializer, final KeySerializer<K> keySerializer,
 			final Path storageDir, final String label, final long maxNumOfKeys, final boolean mergingEnabled,
 			final long internalHashesRamToDiskThreshold, final boolean preferDiskBasedIndexes) throws IOException {
+
 		this.label = label;
 		// updated count of open databases
 		COUNT_OF_OPEN_DATABASES.incrementAndGet();
@@ -336,7 +339,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 				.setExceptionHandler((t, ex) ->
 						LOG.error(EXCEPTION.getMarker(), "[{}] Uncaught exception during storing keys", label, ex))
 				.buildFactory());
-		 // thread pool creating snapshots, it is unbounded in threads, but we use at most 7
+		// thread pool creating snapshots, it is unbounded in threads, but we use at most 7
 		snapshotExecutor = Executors.newCachedThreadPool(new ThreadConfiguration()
 				.setComponent(JASPER_DB_COMPONENT)
 				.setThreadGroup(threadGroup)
@@ -445,11 +448,11 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 		// compute initial merge periods to a randomized value of now +/- 50% of merge period. So each node will do
 		// medium and full merges at random times.
 		lastMediumMerge = Instant.now()
-				.minus(settings.getMediumMergePeriod()/2,settings.getMergePeriodUnit())
-				.plus((long)(settings.getMediumMergePeriod()*Math.random()),settings.getMergePeriodUnit());
+				.minus(settings.getMediumMergePeriod() / 2, settings.getMergePeriodUnit())
+				.plus((long) (settings.getMediumMergePeriod() * Math.random()), settings.getMergePeriodUnit());
 		lastFullMerge = Instant.now()
-				.minus(settings.getFullMergePeriod()/2,settings.getMergePeriodUnit())
-				.plus((long)(settings.getFullMergePeriod()*Math.random()),settings.getMergePeriodUnit());
+				.minus(settings.getFullMergePeriod() / 2, settings.getMergePeriodUnit())
+				.plus((long) (settings.getFullMergePeriod() * Math.random()), settings.getMergePeriodUnit());
 		// If merging is enabled start merging service
 		if (mergingEnabled) {
 			startBackgroundCompaction();
@@ -624,9 +627,20 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 
 		statistics.cycleLeafByKeyReadsPerSecond();
 		// Go ahead and lookup the value.
-		final var leafRecord = pathToHashKeyValue.get(path);
-		assert leafRecord.getKey().equals(key)
-				: "We found a record at a path but it is the wrong one! Keys don't match!";
+		final VirtualLeafRecord<K, V> leafRecord = pathToHashKeyValue.get(path);
+
+		// FUTURE WORK: once the reconnect key leak bug is fixed, this block should be removed
+		if (!leafRecord.getKey().equals(key)) {
+			if (settings.isReconnectKeyLeakMitigationEnabled()) {
+				LOG.warn(JASPER_DB.getMarker(),
+						"leaked key {} encountered, mitigation is enabled", key);
+				return null;
+			} else {
+				LOG.error(EXCEPTION.getMarker(),
+						"leaked key {} encountered, mitigation is disabled, expect problems", key);
+			}
+		}
+
 		return leafRecord;
 	}
 
@@ -759,31 +773,34 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 	 */
 	@Override
 	public void close() throws IOException {
-		try {
-			// stop merging
-			stopBackgroundCompaction();
-			// shut down all four DB threads
-			shutdownThreadsAndWait(mergingExecutor, storeInternalExecutor, storeKeyToPathExecutor, snapshotExecutor);
-		} finally {
-			// close all closable data stores
-			LOG.info(JASPER_DB.getMarker(), "Closing Data Source [{}]", label);
-			if (internalHashStoreRam != null) {
-				internalHashStoreRam.close();
+		if (!closed.getAndSet(true)) {
+			try {
+				// stop merging
+				stopBackgroundCompaction();
+				// shut down all four DB threads
+				shutdownThreadsAndWait(mergingExecutor, storeInternalExecutor, storeKeyToPathExecutor,
+						snapshotExecutor);
+			} finally {
+				// close all closable data stores
+				LOG.info(JASPER_DB.getMarker(), "Closing Data Source [{}]", label);
+				if (internalHashStoreRam != null) {
+					internalHashStoreRam.close();
+				}
+				if (internalHashStoreDisk != null) {
+					internalHashStoreDisk.close();
+				}
+				pathToDiskLocationInternalNodes.close();
+				pathToDiskLocationLeafNodes.close();
+				if (longKeyToPath != null) {
+					longKeyToPath.close();
+				}
+				if (objectKeyToPath != null) {
+					objectKeyToPath.close();
+				}
+				pathToHashKeyValue.close();
+				// updated count of open databases
+				COUNT_OF_OPEN_DATABASES.decrementAndGet();
 			}
-			if (internalHashStoreDisk != null){
-				internalHashStoreDisk.close();
-			}
-			pathToDiskLocationInternalNodes.close();
-			pathToDiskLocationLeafNodes.close();
-			if (longKeyToPath != null) {
-				longKeyToPath.close();
-			}
-			if (objectKeyToPath != null) {
-				objectKeyToPath.close();
-			}
-			pathToHashKeyValue.close();
-			// updated count of open databases
-			COUNT_OF_OPEN_DATABASES.decrementAndGet();
 		}
 	}
 
@@ -850,14 +867,15 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 				// write all data stores
 				runWithSnapshotExecutor(true, countDownLatch,
 						"pathToDiskLocationInternalNodes", () -> {
-					pathToDiskLocationInternalNodes.writeToFile(snapshotDbPaths.pathToDiskLocationInternalNodesFile);
-					return true;
-				});
+							pathToDiskLocationInternalNodes.writeToFile(
+									snapshotDbPaths.pathToDiskLocationInternalNodesFile);
+							return true;
+						});
 				runWithSnapshotExecutor(true, countDownLatch,
 						"pathToDiskLocationLeafNodes", () -> {
-					pathToDiskLocationLeafNodes.writeToFile(snapshotDbPaths.pathToDiskLocationLeafNodesFile);
-					return true;
-				});
+							pathToDiskLocationLeafNodes.writeToFile(snapshotDbPaths.pathToDiskLocationLeafNodesFile);
+							return true;
+						});
 				runWithSnapshotExecutor(internalHashStoreRam != null, countDownLatch,
 						"internalHashStoreRam", () -> {
 							internalHashStoreRam.writeToFile(snapshotDbPaths.internalHashStoreRamFile);
@@ -1018,10 +1036,12 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 	/**
 	 * Shutdown threads if they are running and wait for them to finish
 	 *
-	 * @param executors array of threads to shut down.
-	 * @throws IOException if there was a problem or timeout shutting down threads.
+	 * @param executors
+	 * 		array of threads to shut down.
+	 * @throws IOException
+	 * 		if there was a problem or timeout shutting down threads.
 	 */
-	private void shutdownThreadsAndWait(ExecutorService ... executors) throws IOException {
+	private void shutdownThreadsAndWait(ExecutorService... executors) throws IOException {
 		try {
 			// shutdown threads
 			for (final ExecutorService executor : executors) {
@@ -1344,7 +1364,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 		public Clock withZone(final ZoneId zone) {
 			return new NanoClock(clock.withZone(zone));
 		}
-	
+
 		private static long getSystemNanos() {
 			return System.nanoTime();
 		}

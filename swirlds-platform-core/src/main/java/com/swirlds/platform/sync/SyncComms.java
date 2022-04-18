@@ -23,6 +23,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -41,6 +42,12 @@ public final class SyncComms {
 	 * until we are done reading events
 	 */
 	private static final int SYNC_ONGOING_SEND_EVERY_MS = 500;
+	/**
+	 * The maximum time we will allow for phase 3. If phase 3 is not done within this time limit, we will abort the sync
+	 */
+	private static final Duration PHASE3_MAX_DURATION = Duration.ofMinutes(1);
+	/** The value of PHASE3_MAX_DURATION in nanoseconds */
+	private static final long PHASE3_MAX_NANOS = PHASE3_MAX_DURATION.toNanos();
 
 	// Prevent instantiations of this static utility class
 	private SyncComms() {
@@ -173,6 +180,14 @@ public final class SyncComms {
 				conn.getDos().flush();
 			}
 
+			// we have now finished reading and writing all the events of a sync. the remote node may not have
+			// finished reading and processing all the events this node has sent. so we write a byte to tell the remote
+			// node we have finished, and the reader will wait for it to send us the same byte.
+			conn.getDos().writeByte(SyncConstants.COMM_SYNC_DONE);
+			conn.getDos().flush();
+
+			LOG.debug(SYNC_INFO.getMarker(), "{} sent COMM_SYNC_DONE", conn.getDescription());
+
 			// (ignored)
 			return null;
 		};
@@ -186,64 +201,60 @@ public final class SyncComms {
 		return () -> {
 			LOG.info(SYNC_INFO.getMarker(), "{} reading events start", conn.getDescription());
 			int eventsRead = 0;
-			long startTime = Long.MIN_VALUE;
 			try {
+				final long startTime = System.nanoTime();
 				while (true) {
+					// readByte() will throw a timeout exception if the socket timeout is exceeded
 					final byte next = conn.getDis().readByte();
-					if (startTime == Long.MIN_VALUE) {
-						startTime = System.nanoTime();
-					}
-					if (next == SyncConstants.COMM_EVENT_DONE) {
-						break;
-					} else if (next == SyncConstants.COMM_EVENT_NEXT) {
-						final ValidateEventTask validateEventTask = conn.getDis().readEventData();
-						eventHandler.accept(validateEventTask);
-						eventsRead++;
-					} else {
-						throw new SyncException(conn,
+					// if the peer continuously sends COMM_SYNC_ONGOING, or sends the data really slowly,
+					// this timeout will be triggered
+					checkPhase3Time(startTime);
+					switch (next) {
+						case SyncConstants.COMM_EVENT_NEXT -> {
+							final ValidateEventTask validateEventTask = conn.getDis().readEventData();
+							eventHandler.accept(validateEventTask);
+							eventsRead++;
+						}
+						case SyncConstants.COMM_EVENT_DONE -> {
+							stats.eventsReceived(startTime, eventsRead);
+							LOG.info(SYNC_INFO.getMarker(), "{} reading events done, read {} events",
+									conn.getDescription(), eventsRead);
+							// we are done reading event, tell the writer thread to send a COMM_SYNC_DONE
+							eventReadingDone.countDown();
+						}
+						// while we are waiting for the peer to tell us they are done, they might send COMM_SYNC_ONGOING
+						// if they are still busy reading events
+						case SyncConstants.COMM_SYNC_ONGOING ->
+								// peer is still reading events, waiting for them to finish
+								LOG.debug(SYNC_INFO.getMarker(), "{} received COMM_SYNC_ONGOING",
+										conn.getDescription());
+						case SyncConstants.COMM_SYNC_DONE -> {
+							LOG.debug(SYNC_INFO.getMarker(), "{} received COMM_SYNC_DONE", conn.getDescription());
+							return eventsRead;
+						}
+						default -> throw new SyncException(conn,
 								String.format("while reading events, received unexpected byte %02x", next));
 					}
 				}
 			} finally {
+				// in case an exception gets thrown, unblock the writer thread
 				eventReadingDone.countDown();
 			}
-
-			stats.eventsReceived(startTime, eventsRead);
-
-			LOG.info(SYNC_INFO.getMarker(), "{} reading events done, read {} events",
-					conn.getDescription(), eventsRead);
-			return eventsRead;
 		};
 	}
 
-	public static void syncDoneByte(final SyncConnection conn) throws IOException, SyncException {
-		// we have now finished reading and writing all the events of a sync. the remote node may not have
-		// finished reading and processing all the events this node has sent. so we write a byte to tell the remote
-		// node we have finished, and we wait for it to send us the same byte.
-		conn.getDos().writeByte(SyncConstants.COMM_SYNC_DONE);
-		conn.getDos().flush();
-
-		LOG.debug(SYNC_INFO.getMarker(), "{} sent COMM_SYNC_DONE", conn.getDescription());
-
-		// while we are waiting for the peer to tell us they are done, they might send COMM_SYNC_ONGOING if they are
-		// still busy reading events
-		while (true) {
-			final byte b = conn.getDis().readByte();
-
-			switch (b) {
-				case SyncConstants.COMM_SYNC_DONE -> {
-					LOG.debug(SYNC_INFO.getMarker(), "{} received COMM_SYNC_DONE", conn.getDescription());
-					return;
-				}
-				case SyncConstants.COMM_SYNC_ONGOING ->
-						// peer is still reading events, waiting for them to finish
-						LOG.debug(SYNC_INFO.getMarker(), "{} received COMM_SYNC_ONGOING", conn.getDescription());
-				default -> throw new SyncException(
-						String.format("received %02X instead of COMM_SYNC_ONGOING or COMM_SYNC_DONE", b));
-			}
+	/**
+	 * Checks if the phase 3 maximum time has been exceeded. If it has, it throws an exception.
+	 *
+	 * @param startTime
+	 * 		the time at which phase 3 started
+	 * @throws SyncTimeoutException
+	 * 		thrown if the time is exceeded
+	 */
+	private static void checkPhase3Time(final long startTime) throws SyncTimeoutException {
+		final long phase3Nanos = System.nanoTime() - startTime;
+		if (phase3Nanos > PHASE3_MAX_NANOS) {
+			throw new SyncTimeoutException(Duration.ofNanos(phase3Nanos), PHASE3_MAX_DURATION);
 		}
-
-
 	}
-
 }

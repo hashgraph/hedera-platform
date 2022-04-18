@@ -24,6 +24,8 @@ import java.util.concurrent.Future;
  * An implementation that uses a CachedThreadPool to execute parallel tasks
  */
 public class CachedPoolParallelExecutor implements ParallelExecutor {
+	private static final Runnable NOOP = () -> {
+	};
 	/**
 	 * The thread pool used by this class.
 	 */
@@ -43,45 +45,51 @@ public class CachedPoolParallelExecutor implements ParallelExecutor {
 	}
 
 	/**
-	 * Run two tasks in parallel, the second one in the current thread, and the first in a thread from the
-	 * syncThreadPool. This method returns only after both have finished.
+	 * Run two tasks in parallel, the first one in the current thread, and the second in a background thread.
 	 *
-	 * @param task1
+	 * This method returns only after both have finished.
+	 *
+	 * @param foregroundTask
 	 * 		a task to execute in parallel
-	 * @param task2
+	 * @param backgroundTask
 	 * 		a task to execute in parallel
+	 * @param onThrow
+	 * 		a cleanup task to be executed if an exception gets thrown. if the foreground task throws an exception, this
+	 * 		could be used to stop the background task, but not vice versa
 	 * @throws ParallelExecutionException
-	 * 		if either of the invoked tasks throws an exception. if both throw an exception, then the task2 exception
-	 * 		will be the cause and the task1 exception will be the suppressed exception
+	 * 		if either of the invoked tasks throws an exception. if both throw an exception, then the foregroundTask
+	 * 		exception will be the cause and the backgroundTask exception will be the suppressed exception
 	 */
 	@Override
 	public <T> T doParallel(
-			final Callable<T> task1,
-			final Callable<Void> task2)
+			final Callable<T> foregroundTask,
+			final Callable<Void> backgroundTask,
+			final Runnable onThrow)
 			throws ParallelExecutionException {
-
-		final Future<T> future1 = threadPool.submit(task1);
+		final Future<Void> future = threadPool.submit(backgroundTask);
 
 		// exception to throw, if any of the tasks throw
 		ParallelExecutionException toThrow = null;
 
-		try {
-			task2.call();
-		} catch (Exception e) {
-			toThrow = new ParallelExecutionException(e);
-		}
-
 		T result = null;
 		try {
-			result = future1.get();
+			result = foregroundTask.call();
+		} catch (Exception e) {
+			toThrow = new ParallelExecutionException(e);
+			onThrow.run();
+		}
+
+		try {
+			future.get();
 		} catch (InterruptedException | ExecutionException e) {
 			if (e instanceof InterruptedException) {
 				Thread.currentThread().interrupt();
 			}
 			if (toThrow == null) {
 				toThrow = new ParallelExecutionException(e);
+				onThrow.run();
 			} else {
-				// if task2 already threw an exception, we add this one as a suppressed exception
+				// if foregroundTask already threw an exception, we add this one as a suppressed exception
 				toThrow.addSuppressed(e);
 			}
 		}
@@ -92,5 +100,16 @@ public class CachedPoolParallelExecutor implements ParallelExecutor {
 		}
 
 		return result;
+	}
+
+	/**
+	 * Same as {@link #doParallel(Callable, Callable, Runnable)} where the onThrow task is a no-op
+	 */
+	@Override
+	public <T> T doParallel(
+			final Callable<T> foregroundTask,
+			final Callable<Void> backgroundTask)
+			throws ParallelExecutionException {
+		return doParallel(foregroundTask, backgroundTask, NOOP);
 	}
 }

@@ -97,7 +97,7 @@ class Settings {
 	///////////////////////////////////////////
 	// settings from settings.txt file
 	static String about = """
-			Swirlds browser v. 0.23.1
+			Swirlds browser v. 0.24.0
 			(c)2016-2022 Swirlds Inc
 			This is an early alpha version.
 			The Swirlds™ software is covered by one or more patents

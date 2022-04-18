@@ -27,6 +27,7 @@ import java.util.concurrent.Future;
 
 import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
 import static com.swirlds.logging.LogMarker.SIGNED_STATE;
+import static com.swirlds.platform.system.Fatal.fatalError;
 
 /**
  * Hashes a signed state and passes it on for signature collection.
@@ -71,8 +72,8 @@ public final class StateHasherSigner {
 		// wait for the hash to be computed
 		try {
 			hashFuture.get();
-		} catch (ExecutionException ex) {
-			log.warn(LogMarker.MERKLE_HASHING.getMarker(), "Exception occurred during SignedState hashing", ex);
+		} catch (final ExecutionException ex) {
+			fatalError("Exception occurred during SignedState hashing", ex);
 		}
 
 		log.info(LogMarker.MERKLE_HASHING.getMarker(), "Done hashing SignedState, starting newSelfSigned");

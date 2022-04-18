@@ -103,7 +103,11 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void setChild(final int index, final MerkleNode merkleNode, final MerkleRoute merkleRoute) {
+	public void setChild(
+			final int index,
+			final MerkleNode merkleNode,
+			final MerkleRoute merkleRoute,
+			final boolean mayBeImmutable) {
 		throw new UnsupportedOperationException();
 	}
 

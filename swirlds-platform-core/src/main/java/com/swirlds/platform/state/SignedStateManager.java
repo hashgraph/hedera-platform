@@ -20,6 +20,7 @@ import com.swirlds.common.SwirldState;
 import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.internal.SettingsCommon;
+import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.stream.HashSigner;
 import com.swirlds.common.threading.ThreadConfiguration;
 import com.swirlds.common.transaction.internal.StateSignatureTransaction;
@@ -32,6 +33,7 @@ import com.swirlds.platform.SwirldsPlatform;
 import com.swirlds.platform.components.StateSignatureRecorder;
 import com.swirlds.platform.crypto.CryptoConstants;
 import com.swirlds.platform.crypto.CryptoStatic;
+import com.swirlds.platform.system.Fatal;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -223,6 +225,29 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 		garbageCollectorThread.start();
 
 		lock = new ReentrantLock(false);
+
+		NotificationFactory.getEngine().register(Fatal.FatalListener.class, this::fatalListener);
+	}
+
+	/**
+	 * This method is called if there is a fatal error.
+	 *
+	 * @param notification
+	 * 		the fatal notification object
+	 */
+	private void fatalListener(final Fatal.FatalNotification notification) {
+		if (stateSettings.dumpStateOnFatal) {
+			try (final AutoCloseableWrapper<SignedState> wrapper = getLastCompleteSignedState()) {
+				final SignedState state = wrapper.get();
+				if (state != null) {
+					state.weakReserveState();
+					signedStateFileManager.saveFatalStateToDisk(state);
+				}
+			} catch (final InterruptedException e) {
+				log.error(EXCEPTION.getMarker(), "interrupted while attempting to save state");
+				Thread.currentThread().interrupt();
+			}
+		}
 	}
 
 	/**

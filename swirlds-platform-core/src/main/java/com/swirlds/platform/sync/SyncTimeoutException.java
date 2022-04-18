@@ -11,17 +11,16 @@
  * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
-/**
- * A HashMap-like structure that implements the FastCopyable interface.
- */
-module com.swirlds.fchashmap {
-	requires com.swirlds.common;
-	requires com.swirlds.logging;
 
-	requires org.apache.logging.log4j;
-	requires org.apache.commons.lang3;
+package com.swirlds.platform.sync;
 
-	exports com.swirlds.fchashmap;
+import java.time.Duration;
 
-	exports com.swirlds.fchashmap.internal to com.swirlds.fchashmap.test;
+public class SyncTimeoutException extends SyncException {
+	public SyncTimeoutException(final Duration syncTime, final Duration maxSyncTime) {
+		super(String.format(
+				"Maximum sync time exceeded! Max time: %d sec, time elapsed: %d sec",
+				maxSyncTime.toSeconds(), syncTime.toSeconds()
+		));
+	}
 }

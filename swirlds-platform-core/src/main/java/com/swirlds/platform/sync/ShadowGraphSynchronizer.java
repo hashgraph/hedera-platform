@@ -31,6 +31,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -88,6 +89,38 @@ public class ShadowGraphSynchronizer {
 		this.settings = settings;
 	}
 
+	private static List<Boolean> getMyBooleans(final List<ShadowEvent> theirTipShadows) {
+		final List<Boolean> myBooleans = new ArrayList<>(theirTipShadows.size());
+		for (ShadowEvent s : theirTipShadows) {
+			myBooleans.add(s != null);// is this event is known to me
+		}
+		return myBooleans;
+	}
+
+	private static List<ShadowEvent> processTheirBooleans(
+			final SyncConnection conn,
+			final List<ShadowEvent> myTips,
+			final List<Boolean> theirBooleans
+	) throws SyncException {
+		if (theirBooleans.size() != myTips.size()) {
+			throw new SyncException(
+					conn,
+					String.format(
+							"peer booleans list is wrong size. Expected: %d Actual: %d,",
+							myTips.size(), theirBooleans.size())
+			);
+		}
+		List<ShadowEvent> knownTips = new ArrayList<>();
+		// process their booleans
+		for (int i = 0; i < theirBooleans.size(); i++) {
+			if (Boolean.TRUE.equals(theirBooleans.get(i))) {
+				knownTips.add(myTips.get(i));
+			}
+		}
+
+		return knownTips;
+	}
+
 	/**
 	 * Synchronize with a remote node using the supplied connection
 	 *
@@ -133,9 +166,10 @@ public class ShadowGraphSynchronizer {
 			final SyncGenerations myGenerations = getGenerations(reservation.getGeneration());
 			final List<ShadowEvent> myTips = getTips();
 			// READ and WRITE generation numbers & tip hashes
-			final Phase1Response theirGensTips = executor.doParallel(
+			final Phase1Response theirGensTips = readWriteParallel(
 					SyncComms.phase1Read(conn, numberOfNodes),
-					SyncComms.phase1Write(conn, myGenerations, myTips)
+					SyncComms.phase1Write(conn, myGenerations, myTips),
+					conn
 			);
 			timing.setTimePoint(1);
 
@@ -163,9 +197,10 @@ public class ShadowGraphSynchronizer {
 
 			// comms phase 2
 			timing.setTimePoint(2);
-			final List<Boolean> theirBooleans = executor.doParallel(
+			final List<Boolean> theirBooleans = readWriteParallel(
 					SyncComms.phase2Read(conn, myTips.size()),
-					SyncComms.phase2Write(conn, myBooleans)
+					SyncComms.phase2Write(conn, myBooleans),
+					conn
 			);
 			timing.setTimePoint(3);
 
@@ -207,38 +242,6 @@ public class ShadowGraphSynchronizer {
 			return true; //abort the sync
 		}
 		return false;
-	}
-
-	private static List<Boolean> getMyBooleans(final List<ShadowEvent> theirTipShadows) {
-		final List<Boolean> myBooleans = new ArrayList<>(theirTipShadows.size());
-		for (ShadowEvent s : theirTipShadows) {
-			myBooleans.add(s != null);// is this event is known to me
-		}
-		return myBooleans;
-	}
-
-	private static List<ShadowEvent> processTheirBooleans(
-			final SyncConnection conn,
-			final List<ShadowEvent> myTips,
-			final List<Boolean> theirBooleans
-	) throws SyncException {
-		if (theirBooleans.size() != myTips.size()) {
-			throw new SyncException(
-					conn,
-					String.format(
-							"peer booleans list is wrong size. Expected: %d Actual: %d,",
-							myTips.size(), theirBooleans.size())
-			);
-		}
-		List<ShadowEvent> knownTips = new ArrayList<>();
-		// process their booleans
-		for (int i = 0; i < theirBooleans.size(); i++) {
-			if (Boolean.TRUE.equals(theirBooleans.get(i))) {
-				knownTips.add(myTips.get(i));
-			}
-		}
-
-		return knownTips;
 	}
 
 	private List<EventImpl> createSendList(
@@ -285,21 +288,20 @@ public class ShadowGraphSynchronizer {
 			final SyncConnection conn,
 			final SyncTiming timing,
 			final List<EventImpl> sendList)
-			throws ParallelExecutionException, IOException, SyncException {
+			throws ParallelExecutionException {
 		timing.setTimePoint(4);
 		// the reading thread uses this to indicate to the writing thread that it is done
 		final CountDownLatch eventReadingDone = new CountDownLatch(1);
-		final Integer eventsRead = executor.doParallel(
+		final Integer eventsRead = readWriteParallel(
 				SyncComms.phase3Read(conn, eventTaskCreator::addEvent, stats, eventReadingDone),
-				SyncComms.phase3Write(conn, sendList, eventReadingDone)
+				SyncComms.phase3Write(conn, sendList, eventReadingDone),
+				conn
 		);
 		LOG.info(SYNC_INFO.getMarker(),
 				"{} writing events done, wrote {} events",
 				conn::getDescription, sendList::size);
 		LOG.info(SYNC_INFO.getMarker(), "{} reading events done, read {} events",
 				conn.getDescription(), eventsRead);
-
-		SyncComms.syncDoneByte(conn);
 
 		syncDone(new SyncResult(
 				conn.isOutbound(),
@@ -315,6 +317,39 @@ public class ShadowGraphSynchronizer {
 	}
 
 	/**
+	 * A method to do reads and writes in parallel.
+	 *
+	 * It is very important that the read task is executed by the caller thread. The reader thread can always time out,
+	 * if the writer thread gets blocked by a write method because the buffer is full, the only way to unblock it is to
+	 * close the connection. So the reader will close the connection and unblock the writer if it times out or if
+	 * anything goes wrong.
+	 *
+	 * @param readTask
+	 * 		read task
+	 * @param writeTask
+	 * 		write task
+	 * @param connection
+	 * 		the connection to close if anything goes wrong
+	 * @param <T>
+	 * 		the return type of the read task and this method
+	 * @return whatever the read task returns
+	 * @throws ParallelExecutionException
+	 * 		thrown if anything goes wrong during these read write operations. the connection will be closed before this
+	 * 		exception is thrown
+	 */
+	private <T> T readWriteParallel(
+			final Callable<T> readTask,
+			final Callable<Void> writeTask,
+			final SyncConnection connection)
+			throws ParallelExecutionException {
+		return executor.doParallel(
+				readTask,
+				writeTask,
+				() -> connection.disconnect(connection.isOutbound(), -1)
+		);
+	}
+
+	/**
 	 * Applies throttle7 if enabled and applicable to this sync.
 	 */
 	private void throttle7(final SyncConnection conn, final int eventsReceived,
@@ -322,9 +357,10 @@ public class ShadowGraphSynchronizer {
 		if (settings.isThrottle7Enabled()) {
 			SyncThrottle throttle7 = new SyncThrottle(numberOfNodes, settings);
 			if (throttle7.shouldThrottle(eventsReceived, eventsSent)) {
-				Integer throttle7BytesWritten = executor.doParallel(
+				Integer throttle7BytesWritten = readWriteParallel(
 						throttle7.sendThrottleBytes(conn),
-						throttle7.receiveThrottleBytes(conn)
+						throttle7.receiveThrottleBytes(conn),
+						conn
 				);
 				stats.syncThrottleBytesWritten(throttle7BytesWritten);
 			}

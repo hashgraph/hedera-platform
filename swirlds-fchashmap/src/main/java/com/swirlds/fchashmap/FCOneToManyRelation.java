@@ -59,6 +59,8 @@ public class FCOneToManyRelation<K, V> implements FastCopyable {
 
 	private boolean immutable;
 
+	private boolean released;
+
 	/**
 	 * Create a new {@link FCOneToManyRelation}.
 	 */
@@ -109,6 +111,15 @@ public class FCOneToManyRelation<K, V> implements FastCopyable {
 		throwIfReleased();
 		associationMap.release();
 		associationCountMap.release();
+		released = true;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isReleased() {
+		return released;
 	}
 
 	/**

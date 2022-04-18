@@ -16,23 +16,24 @@ package com.swirlds.common.merkle.hash;
 
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.futures.WaitingFuture;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.exceptions.IllegalChildHashException;
 import com.swirlds.common.merkle.iterators.MerkleIterator;
 import com.swirlds.common.threading.ThreadConfiguration;
-import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.swirlds.common.crypto.engine.CryptoEngine.THREAD_COMPONENT_NAME;
 import static com.swirlds.common.merkle.iterators.MerkleIterationOrder.POST_ORDERED_DEPTH_FIRST_RANDOM;
 import static com.swirlds.common.merkle.utility.MerkleConstants.MERKLE_DIGEST_TYPE;
+import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 /**
  * This class is responsible for hashing a merkle tree.
@@ -64,7 +65,7 @@ public class MerkleHashBuilder {
 				.setThreadName("merkle hash")
 				.setPriority(Thread.NORM_PRIORITY)
 				.setExceptionHandler((t, ex) -> {
-					log.error(LogMarker.EXCEPTION.getMarker(),
+					log.error(EXCEPTION.getMarker(),
 							"Uncaught exception in MerkleHashBuilder thread pool", ex);
 				})
 				.buildFactory();
@@ -81,10 +82,7 @@ public class MerkleHashBuilder {
 		}
 
 		if (node.isSelfHashing()) {
-			if (node.getHash() == null) {
-				throw new IllegalChildHashException("A self hashing node " + node + " returned a null hash");
-			}
-			return false;
+			return true;
 		}
 
 		return node.getHash() == null;
@@ -95,9 +93,6 @@ public class MerkleHashBuilder {
 	 */
 	private static boolean descendantFilter(final MerkleNode child) {
 		if (child.isSelfHashing()) {
-			if (child.getHash() == null) {
-				throw new IllegalChildHashException("A self hashing node " + child + " returned a null hash");
-			}
 			return false;
 		}
 
@@ -116,20 +111,11 @@ public class MerkleHashBuilder {
 			return cryptography.getNullHash(MERKLE_DIGEST_TYPE);
 		}
 
-		final StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-
-		try {
-			final Iterator<MerkleNode> iterator = root.treeIterator()
-					.setFilter(MerkleHashBuilder::filter)
-					.setDescendantFilter(MerkleHashBuilder::descendantFilter);
-			hashSubtree(iterator, null);
-			return root.getHash();
-		} catch (IllegalChildHashException ex) {
-			ex.setStackTrace(stackTrace);
-
-			log.error(LogMarker.EXCEPTION.getMarker(), ex.getMessage(), ex);
-			throw new IllegalChildHashException(ex);
-		}
+		final Iterator<MerkleNode> iterator = root.treeIterator()
+				.setFilter(MerkleHashBuilder::filter)
+				.setDescendantFilter(MerkleHashBuilder::descendantFilter);
+		hashSubtree(iterator, null);
+		return root.getHash();
 	}
 
 	/**
@@ -139,25 +125,19 @@ public class MerkleHashBuilder {
 	 * 		the root of the tree to hash
 	 * @return a Future which encapsulates the hash of the merkle tree
 	 */
-	public FutureMerkleHash digestTreeAsync(MerkleNode root) {
-		final StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-		FutureMerkleHash result = new FutureMerkleHash();
-
+	public Future<Hash> digestTreeAsync(MerkleNode root) {
 		if (root == null) {
-			result.set(cryptography.getNullHash(MERKLE_DIGEST_TYPE));
+			return new WaitingFuture<>(cryptography.getNullHash(MERKLE_DIGEST_TYPE));
+		} else if (root.getHash() != null) {
+			return new WaitingFuture<>(root.getHash());
 		} else {
-			if (root.getHash() != null) {
-				// Creating threads is expensive. If the hash is already known then just immediately return it.
-				result.set(root.getHash());
-			} else {
-				AtomicInteger activeThreadCount = new AtomicInteger(cpuThreadCount);
-				for (int threadIndex = 0; threadIndex < cpuThreadCount; threadIndex++) {
-					threadPool.execute(createHashingRunnable(threadIndex, activeThreadCount, result, root, stackTrace));
-				}
+			final FutureMerkleHash result = new FutureMerkleHash();
+			AtomicInteger activeThreadCount = new AtomicInteger(cpuThreadCount);
+			for (int threadIndex = 0; threadIndex < cpuThreadCount; threadIndex++) {
+				threadPool.execute(createHashingRunnable(threadIndex, activeThreadCount, result, root));
 			}
+			return result;
 		}
-
-		return result;
 	}
 
 	/**
@@ -170,11 +150,9 @@ public class MerkleHashBuilder {
 			final int threadId,
 			AtomicInteger activeThreadCount,
 			final FutureMerkleHash result,
-			final MerkleNode root,
-			final StackTraceElement[] stackTrace) {
+			final MerkleNode root) {
 
 		return () -> {
-
 			final MerkleIterator<MerkleNode> it = root.treeIterator()
 					.setFilter(MerkleHashBuilder::filter)
 					.setDescendantFilter(MerkleHashBuilder::descendantFilter);
@@ -191,11 +169,8 @@ public class MerkleHashBuilder {
 				if (remainingActiveThreads == 0) {
 					result.set(root.getHash());
 				}
-			} catch (IllegalChildHashException ex) {
-				ex.setStackTrace(stackTrace);
-
-				log.error(LogMarker.EXCEPTION.getMarker(), ex.getMessage(), ex);
-				throw new IllegalChildHashException(ex);
+			} catch (final Throwable t) {
+				result.cancelWithException(t);
 			}
 		};
 	}
@@ -210,7 +185,7 @@ public class MerkleHashBuilder {
 	 * 		that are actively hashing. Once the active thread count dips below the maximum,
 	 * 		this means that one thread has either finished or exploded.
 	 */
-	private void hashSubtree(Iterator<MerkleNode> it, AtomicInteger activeThreadCount) {
+	private void hashSubtree(final Iterator<MerkleNode> it, final AtomicInteger activeThreadCount) {
 		while (it.hasNext()) {
 			final MerkleNode node = it.next();
 			// Potential optimization: if this node is currently locked, do not wait here. Skip it and continue.
@@ -225,12 +200,10 @@ public class MerkleHashBuilder {
 					continue;
 				}
 
-				if (!node.isSelfHashing()) {
-					if (node.isLeaf()) {
-						cryptography.digestSync(node.asLeaf(), MERKLE_DIGEST_TYPE);
-					} else {
-						cryptography.digestSync(node.asInternal(), MERKLE_DIGEST_TYPE);
-					}
+				if (node.isLeaf()) {
+					cryptography.digestSync(node.asLeaf(), MERKLE_DIGEST_TYPE);
+				} else {
+					cryptography.digestSync(node.asInternal(), MERKLE_DIGEST_TYPE);
 				}
 			}
 		}

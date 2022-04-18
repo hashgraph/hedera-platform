@@ -64,12 +64,17 @@ public class StateSettings extends SubSetting {
 	public boolean enableStateRecovery = false;
 
 	/**
-	 * If true, save the state to disk when an ISS is detected. May negatively effect the performance
+	 * If true, save the state to disk when an ISS is detected. May negatively affect the performance
 	 * of the node where the ISS occurs.
 	 *
 	 * This feature is for debugging purposes and should not be active in production systems.
 	 */
 	public boolean dumpStateOnISS = false;
+
+	/**
+	 * If true, then save the state to disk when there is a fatal exception.
+	 */
+	public boolean dumpStateOnFatal = true;
 
 	/**
 	 * If true, a snapshot of all events will be saved after every round. This can be used in conjunction with

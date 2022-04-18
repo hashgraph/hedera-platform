@@ -1047,18 +1047,29 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 			// If there is no mutation or the mutation isn't for this version, then we need to create a new mutation.
 			// Note that this code DEPENDS on hashing only a single round at a time. VirtualPipeline
 			// enforces this constraint.
-			if (mutation == null || mutation.version != fastCopyVersion.get()) {
+			Mutation<T> nextMutation = mutation;
+			Mutation<T> previousMutation = null;
+			while (nextMutation != null && nextMutation.version > fastCopyVersion.get()) {
+				previousMutation = nextMutation;
+				nextMutation = nextMutation.next;
+			}
+			if (nextMutation == null || nextMutation.version != fastCopyVersion.get()) {
 				// It must be that there is *NO* mutation in the dirtyPaths for this cache version.
 				// I don't have an easy way to assert it programmatically, but by inspection, it must be true.
 				// Create a mutation for this version pointing to the next oldest mutation (if any).
-				mutation = new Mutation<>(mutation, path, value, fastCopyVersion.get());
-				mutation.deleted = value == null;
+				nextMutation = new Mutation<>(nextMutation, path, value, fastCopyVersion.get());
+				nextMutation.deleted = value == null;
 				// Hold a reference to this newest mutation in this cache
-				dirtyPaths.add(mutation);
+				dirtyPaths.add(nextMutation);
 			} else {
 				// This mutation already exists in this version. Simply update its value and deleted status.
-				mutation.value = value;
-				mutation.deleted = value == null;
+				nextMutation.value = value;
+				nextMutation.deleted = value == null;
+			}
+			if (previousMutation != null) {
+				previousMutation.next = nextMutation;
+			} else {
+				mutation = nextMutation;
 			}
 			return mutation;
 		});

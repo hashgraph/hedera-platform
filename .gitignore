@@ -152,4 +152,7 @@ ExpectedMap.json.gz
 hedera/testProtoBuf/src/com/hederahashgraph/api/proto/doc/HAPI.html
 hedera/HAPI.zip
 
+# maven wrapper
+.mvn/wrapper/maven-wrapper.jar
+
 # Other Files Added by Tools

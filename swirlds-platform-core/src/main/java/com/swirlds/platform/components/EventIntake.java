@@ -205,20 +205,21 @@ public class EventIntake {
 		// after node3 reconnect, when node0 syncs with node3,
 		// node0 creates an event whose otherParent is the lastInfo received from node3, i.e., lastInfoByMember.get(3)
 		if (event.getMaxRoundCreated() < consensus().getMinRound() && !event.isFromSignedState()) {
-			log.error(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(), () -> String.format(
-					"Round created %d will be smaller than min round %d, discarding event: %s",
-					event.getMaxRoundCreated(),
-					consensus().getMinRound(),
-					event));
-			log.error(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(), "Event's self parent {}",
-					event.getSelfParent());
-			log.error(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(), "Event's other parent {}",
-					event.getOtherParent());
+			final Consensus consensus = consensus();
 			log.error(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(),
-					"Consensus min round {}, max round {}, last round decided {}",
-					consensus().getMinRound(),
-					consensus().getMaxRound(),
-					consensus().getFameDecidedBelow());
+					"""
+							Round created {} will be smaller than min round {}, discarding event: {}
+							Self parent:{} Other parent:{}
+							Consensus min round:{}, max round:{}, last round decided:{}
+							Consensus min gen:{}, min gen non ancient:{}, max gen:{}""",
+					event::getMaxRoundCreated, consensus::getMinRound, event::toMediumString,
+					() -> EventStrings.toShortString(event.getSelfParent()),
+					() -> EventStrings.toShortString(event.getOtherParent()),
+					consensus::getMinRound, consensus::getMaxRound, consensus::getFameDecidedBelow,
+					consensus::getMinRoundGeneration,
+					consensus::getMinGenerationNonAncient,
+					consensus::getMaxRoundGeneration
+			);
 			event.setStale(true);
 			event.clear();
 			return true;

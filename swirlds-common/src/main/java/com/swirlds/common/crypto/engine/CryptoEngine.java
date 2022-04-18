@@ -453,7 +453,7 @@ public class CryptoEngine implements Cryptography {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public FutureMerkleHash digestTreeAsync(final MerkleNode root, final DigestType digestType) {
+	public Future<Hash> digestTreeAsync(final MerkleNode root, final DigestType digestType) {
 		return merkleHashBuilder.digestTreeAsync(root);
 	}
 

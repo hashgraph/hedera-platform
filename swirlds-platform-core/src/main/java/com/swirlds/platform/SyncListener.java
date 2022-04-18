@@ -19,6 +19,7 @@ import com.swirlds.platform.reconnect.ReconnectTeacher;
 import com.swirlds.platform.reconnect.ReconnectThrottle;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.sync.SyncConstants;
+import com.swirlds.platform.sync.SyncUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -191,11 +192,7 @@ class SyncListener implements Runnable {
 				conn.disconnect(false, 6);// close the connection, don't reconnect until needed.
 			}
 		} catch (final Exception e) {
-			// we use a different marker depending on what the root cause is
-			log.error(
-					Utilities.isCausedByIOException(e)
-							? SOCKET_EXCEPTIONS.getMarker()
-							: EXCEPTION.getMarker(),
+			log.error(SyncUtils.determineExceptionMarker(e),
 					"! SyncListener.sync Exception (so incrementing interruptedRecSyncsPerSecond) while {} listening " +
 							"for {}:", selfId, otherId, e);
 			if (conn != null) {

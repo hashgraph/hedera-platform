@@ -139,7 +139,11 @@ public final class MerkleCopy {
 			if (rootOfSubtree == null) {
 				rootOfSubtree = (T) copy;
 			}
-			nodeToCopy.getNewParent().setChild(nodeToCopy.getIndexInParent(), copy, nodeToCopy.getRouteForNode());
+			nodeToCopy.getNewParent().setChild(
+					nodeToCopy.getIndexInParent(),
+					copy,
+					nodeToCopy.getRouteForNode(),
+					false);
 		}
 
 		// Since we have obtained new instances of internal nodes without calling copy on them we must initialize them
@@ -156,9 +160,15 @@ public final class MerkleCopy {
 	}
 
 	/**
+	 * <p>
 	 * Take the children from an internal node and make them also the children of another. Does not fast copy anything,
 	 * each child will have an additional direct parent after this method returns. Assumes that two nodes are in the
 	 * exact same position within the tree.
+	 * </p>
+	 *
+	 * <p>
+	 * This method is safe to use on both mutable and immutable children.
+	 * </p>
 	 *
 	 * @param originalParent
 	 * 		the node that is providing children
@@ -172,7 +182,11 @@ public final class MerkleCopy {
 			if (child != null) {
 				childRoute = child.getRoute();
 			}
-			newParent.setChild(childIndex, child, childRoute);
+			newParent.setChild(
+					childIndex,
+					child,
+					childRoute,
+					true);
 		}
 	}
 }

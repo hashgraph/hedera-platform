@@ -30,9 +30,12 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
 import java.util.Objects;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongFunction;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
@@ -48,9 +51,9 @@ import static com.swirlds.virtualmap.internal.Path.getSiblingPath;
  * hashing use cases, and also for hashing during reconnect.
  *
  * @param <K>
- *     	The {@link VirtualKey} type
+ * 		The {@link VirtualKey} type
  * @param <V>
- *     	The {@link VirtualValue} type
+ * 		The {@link VirtualValue} type
  */
 public final class VirtualHasher<K extends VirtualKey<? super K>, V extends VirtualValue> {
 	/**
@@ -132,6 +135,13 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 	private final ArrayHashingQueue<K, V> lastQueue;
 
 	/**
+	 * Tracks if this virtual hasher has been shut down. If true (indicating that the hasher
+	 * has been intentionally shut down), then don't log/throw if the rug is pulled from
+	 * underneath the hashing threads.
+	 */
+	private AtomicBoolean shutdown = new AtomicBoolean(false);
+
+	/**
 	 * Create a new {@link VirtualHasher}. There should be one {@link VirtualHasher} shared across all copies
 	 * of a {@link VirtualMap} "family".
 	 */
@@ -143,6 +153,15 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 		this.maxRankStopQueue = new ArrayHashingQueue<>();
 		this.lastQueue = new ArrayHashingQueue<>();
 		this.minRankStopQueue = new ArrayHashingQueue<>();
+	}
+
+	/**
+	 * Indicate to the virtual hasher that it has been shut down. This method does not interrupt threads, but
+	 * it indicates to threads that an interrupt may happen, and that the interrupt should not be treated as
+	 * an error.
+	 */
+	public void shutdown() {
+		shutdown.set(true);
 	}
 
 	/**
@@ -158,16 +177,16 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 	 * 		1234 comes before 1235. If null or empty, a null hash result is returned.
 	 * @param firstLeafPath
 	 * 		The firstLeafPath of the tree that is being hashed. If &lt; 1, then a null hash result is returned.
-	 *		No leaf in {@code sortedDirtyLeaves} may have a path less than {@code firstLeafPath}.
+	 * 		No leaf in {@code sortedDirtyLeaves} may have a path less than {@code firstLeafPath}.
 	 * @param lastLeafPath
 	 * 		The lastLeafPath of the tree that is being hashed. If &lt; 1, then a null hash result is returned.
-	 *		No leaf in {@code sortedDirtyLeaves} may have a path greater than {@code lastLeafPath}.
+	 * 		No leaf in {@code sortedDirtyLeaves} may have a path greater than {@code lastLeafPath}.
 	 * @return The hash of the root of the tree
 	 */
 	public Hash hash(final LongFunction<VirtualLeafRecord<K, V>> leafReader,
-			  final LongFunction<VirtualInternalRecord> internalReader,
-			  Iterator<VirtualLeafRecord<K, V>> sortedDirtyLeaves,
-			  final long firstLeafPath, final long lastLeafPath) {
+			final LongFunction<VirtualInternalRecord> internalReader,
+			Iterator<VirtualLeafRecord<K, V>> sortedDirtyLeaves,
+			final long firstLeafPath, final long lastLeafPath) {
 		return hash(leafReader, internalReader, sortedDirtyLeaves, firstLeafPath, lastLeafPath, null);
 	}
 
@@ -184,10 +203,10 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 	 * 		1234 comes before 1235. If null or empty, a null hash result is returned.
 	 * @param firstLeafPath
 	 * 		The firstLeafPath of the tree that is being hashed. If &lt; 1, then a null hash result is returned.
-	 *		No leaf in {@code sortedDirtyLeaves} may have a path less than {@code firstLeafPath}.
+	 * 		No leaf in {@code sortedDirtyLeaves} may have a path less than {@code firstLeafPath}.
 	 * @param lastLeafPath
 	 * 		The lastLeafPath of the tree that is being hashed. If &lt; 1, then a null hash result is returned.
-	 *		No leaf in {@code sortedDirtyLeaves} may have a path greater than {@code lastLeafPath}.
+	 * 		No leaf in {@code sortedDirtyLeaves} may have a path greater than {@code lastLeafPath}.
 	 * @param listener
 	 * 		A {@link VirtualHashListener} that will receive notification of all hashing events. Can be null.
 	 * @return The hash of the root of the tree
@@ -195,7 +214,7 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 	public Hash hash(
 			final LongFunction<VirtualLeafRecord<K, V>> leafReader,
 			final LongFunction<VirtualInternalRecord> internalReader,
-			Iterator<VirtualLeafRecord<K, V>> sortedDirtyLeaves,
+			final Iterator<VirtualLeafRecord<K, V>> sortedDirtyLeaves,
 			final long firstLeafPath,
 			final long lastLeafPath,
 			VirtualHashListener<K, V> listener) {
@@ -431,7 +450,8 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 		// If everything worked correctly, there is a single HashJob in queue2 (which we used as the
 		// "stopQueue" -- i.e. the accumulator for the root level). We can just get this root job, hash
 		// it, and return the hash.
-		assert queue2.size() == 1 : "There must only be a single hash job in the root queue!!";
+		assert queue2.size() == 1 :
+				"There must only be a single hash job in the root queue!! Current size = " + queue2.size();
 		final HashJob<K, V> rootJob = queue2.get(0);
 		rootJob.hash(HASH_BUILDER_THREAD_LOCAL.get());
 		listener.onRankStarted();
@@ -471,9 +491,9 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 	private void hashSubTree(
 			final LongFunction<VirtualLeafRecord<K, V>> leafReader,
 			final LongFunction<VirtualInternalRecord> internalReader,
-			VirtualHashListener<K, V> listener,
-			HashingQueue<K, V> wq, HashingQueue<K, V> pq, HashingQueue<K, V> lq, HashingQueue<K, V> sq,
-			long firstLeafPath, long lastLeafPath, int startRank, int stopRank) {
+			final VirtualHashListener<K, V> listener,
+			HashingQueue<K, V> wq, HashingQueue<K, V> pq, HashingQueue<K, V> lq, final HashingQueue<K, V> sq,
+			final long firstLeafPath, final long lastLeafPath, final int startRank, final int stopRank) {
 
 		// Unless we have a bug, this will always hold true
 		assert wq != null && pq != null && sq != null : "Unexpected null for pq or wq or sq";
@@ -522,6 +542,9 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 			return;
 		}
 
+		// Used to hold exceptions thrown by the hashing threads.
+		final Queue<Throwable> exceptions = new ConcurrentLinkedDeque<>();
+
 		// For each rank, start threads to process the work within those threads. When the threads
 		// complete, swap queues and run the next rank. Continue this until we get all the way to the end.
 		// The reason we grab and use a bunch of threads for each rank and then let them complete is so that
@@ -539,6 +562,11 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 			// we don't need as many threads, so we might as well leave them available for other
 			// virtual maps to use. Of course, use wq.size() instead if it is smallest.
 			final int threadCount = Math.min(workQueue.size(), Math.min(HASHING_THREAD_COUNT, 1 << (rank - stopRank)));
+
+			final boolean hasLastQueue = (lq != null && lq.size() > 0);
+			assert workQueue.size() > 0 || hasLastQueue : "Work queue is empty for rank " + rank;
+			assert threadCount > 0 || hasLastQueue : "Thread count is zero for rank " + rank +
+					", max hashing threads configured to be " + HASHING_THREAD_COUNT;
 
 			// This latch is used to cause this thread to wait until all hashing threads complete their work.
 			final CountDownLatch latch = new CountDownLatch(threadCount);
@@ -647,6 +675,8 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 								}
 							}
 						}
+					} catch (final Throwable exception) {
+						exceptions.add(exception);
 					} finally {
 						// The thread has finished iterating over the work queue, so we must count down
 						// at this latch. This is in the "finally" block so that we DO NOT under any
@@ -661,9 +691,31 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 			try {
 				latch.await();
 			} catch (final InterruptedException ex) {
-				LOG.error(EXCEPTION.getMarker(), "Failed to wait for all hashing threads", ex);
+				if (!shutdown.get()) {
+					LOG.error(EXCEPTION.getMarker(), "Failed to wait for all hashing threads", ex);
+				}
 				Thread.currentThread().interrupt();
 			}
+
+			// If there were exceptions in on any of the threads then we need to rethrow them.
+			if (!exceptions.isEmpty()) {
+				if (shutdown.get()) {
+					// During a shutdown the rug is pulled out from underneath the hashing threads.
+					// No need to log/throw anything in this condition.
+					return;
+				}
+				final RuntimeException exception =
+						new RuntimeException("exception encountered while hashing virtual tree", exceptions.remove());
+				for (final Throwable t : exceptions) {
+					exception.addSuppressed(t);
+				}
+				throw exception;
+			}
+
+			final int pendingQueueSize = pendingQueue.size();
+			final int maximumPendingQueueSize = 1 << rank;
+			assert (pendingQueueSize > 0 || hasLastQueue) && pendingQueueSize <= maximumPendingQueueSize :
+					"Pending queue has an invalid size of " + pendingQueueSize + " at rank " + rank;
 
 			// Save everything in the wq
 			listener.onRankStarted();
@@ -702,10 +754,10 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 	 * 		The queue to write leaves into. The queue <strong>will be</strong> reset.
 	 * @param eofPath
 	 * 		The path that is one place larger than the last valid path to read to.
-	 *		This could be the end of a rank, or the end of a specific segment.
+	 * 		This could be the end of a rank, or the end of a specific segment.
 	 */
 	private void readLeavesInSegment(
-			final PeekIterator<VirtualLeafRecord<K,V>> itr,
+			final PeekIterator<VirtualLeafRecord<K, V>> itr,
 			final HashingQueue<K, V> queue,
 			final long eofPath) {
 		// Iterate either until we run out of dirty leaves, or we encounter a leaf that is in the wrong rank or segment
@@ -727,7 +779,7 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 			final PeekIterator<VirtualLeafRecord<K, V>> itr,
 			final HashingQueue<K, V> queue, long segmentStart, final long segmentSize, final long eofPath) {
 		// While we have not yet read our "preferred" number of items, read off a segment into the queue.
-		while(queue.size() < segmentSize) {
+		while (queue.size() < segmentSize) {
 			readLeavesInSegment(itr, queue, Math.min(segmentStart + segmentSize, eofPath));
 			// If we have read as much as is available to read, then bail.
 			if (!itr.hasNext() || itr.peek().getPath() >= eofPath) {

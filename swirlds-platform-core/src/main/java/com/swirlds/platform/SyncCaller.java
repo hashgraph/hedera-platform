@@ -35,6 +35,7 @@ import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateSettings;
 import com.swirlds.platform.sync.SyncCallerType;
+import com.swirlds.platform.sync.SyncUtils;
 import com.swirlds.platform.system.SystemExitReason;
 import com.swirlds.platform.system.SystemUtils;
 import org.apache.logging.log4j.LogManager;
@@ -322,11 +323,7 @@ class SyncCaller implements Runnable {
 								// close the connection, don't reconnect until needed.
 								conn.disconnect(true, 1);
 							} catch (final Exception e) {
-								// we use a different marker depending on what the root cause is
-								log.error(
-										Utilities.isCausedByIOException(e)
-												? SOCKET_EXCEPTIONS.getMarker()
-												: EXCEPTION.getMarker(),
+								log.error(SyncUtils.determineExceptionMarker(e),
 										"! SyncCaller.sync Exception (so incrementing iCSyncPerSec) while {} " +
 												"listening for {}:",
 										platform.getSelfId(), otherId, e);

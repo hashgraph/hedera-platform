@@ -45,6 +45,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
@@ -82,8 +83,9 @@ public class SignedStateFileManager implements Runnable {
 	@Override
 	public void run() {
 		while (true) {
+			FileManagerTask task = null;
 			try {
-				FileManagerTask task = taskQueue.take();
+				task = taskQueue.take();
 
 				switch (task.operation) {
 					case WRITE:
@@ -97,14 +99,16 @@ public class SignedStateFileManager implements Runnable {
 								"Error in SignedStateFileManager.run(), unknown task: {}",
 								task.operation.toString());
 						break;
-
 				}
 			} catch (InterruptedException ex) {
 				Thread.currentThread().interrupt();
-				return;
 			} catch (Exception e) {
 				log.error(EXCEPTION.getMarker(),
 						"Exception in SignedStateFileManager.run():", e);
+			} finally {
+				if (task != null) {
+					task.finish();
+				}
 			}
 		}
 
@@ -402,8 +406,8 @@ public class SignedStateFileManager implements Runnable {
 	 * @param signedState
 	 * 		the signed state to be saved which has an ISS
 	 */
-	public void saveIssStateToDisk(SignedState signedState) {
-		String taskDesc = "ISS signed state for round " + signedState.getLastRoundReceived();
+	public void saveIssStateToDisk(final SignedState signedState) {
+		final String taskDesc = "ISS signed state for round " + signedState.getLastRoundReceived();
 
 		offerTask(
 				new FileManagerTask(
@@ -423,6 +427,39 @@ public class SignedStateFileManager implements Runnable {
 						)
 				)
 		);
+	}
+
+	/**
+	 * Saves a signed state to disk in response to a fatal exception. Blocks until completed.
+	 *
+	 * @param signedState
+	 * 		the state to save
+	 */
+	public void saveFatalStateToDisk(final SignedState signedState) throws InterruptedException {
+		log.info(STATE_TO_DISK.getMarker(), "writing state to disk in response to a fatal exception");
+
+		final String taskDesc = "Fatal signed state for round " + signedState.getLastRoundReceived();
+
+		final FileManagerTask task = new FileManagerTask(
+				FileManagerOperation.WRITE,
+				signedState,
+				signedState.getLastRoundReceived(),
+				null,
+				taskDesc,
+				CommonUtils.canonicalFile(
+						Settings.savedDirPath,
+						"fatal",
+						String.format(
+								"node%d_round%d",
+								platform.getSelfId().getId(),
+								signedState.getLastRoundReceived()
+						)
+				)
+		);
+
+		if (offerTask(task)) {
+			task.waitUntilFinished();
+		}
 	}
 
 	/**
@@ -590,6 +627,21 @@ public class SignedStateFileManager implements Runnable {
 		/** the directory where the files are stored */
 		private final File dir;
 
+		/**
+		 * This latch is counted down when the task has been completed.
+		 */
+		private final CountDownLatch latch = new CountDownLatch(1);
+
+		/**
+		 * Block until the task has been completed.
+		 *
+		 * @throws InterruptedException
+		 * 		if this thread is interrupted
+		 */
+		public void waitUntilFinished() throws InterruptedException {
+			latch.await();
+		}
+
 		public FileManagerTask(FileManagerOperation operation, SignedState signedState, long round,
 				SnapshotTask snapshotTask, String description, File dir) {
 			this.operation = operation;
@@ -622,6 +674,10 @@ public class SignedStateFileManager implements Runnable {
 
 		public File getDir() {
 			return dir;
+		}
+
+		public void finish() {
+			latch.countDown();
 		}
 	}
 

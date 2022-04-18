@@ -142,8 +142,9 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	}
 
 	/**
-	 * set the consensusTimestamp to an estimate of what it will be when consensus is reached. If it already
-	 * has consensus, then do nothing.
+	 * Set the consensusTimestamp to an estimate of what it will be when consensus is reached even if it has already
+	 * reached consensus. Callers are responsible for checking the consensus status of this event and using the
+	 * consensus time or estimated time appropriately.
 	 *
 	 * Estimated consensus times are predicted only here and in Platform.estimateTime().
 	 *
@@ -160,9 +161,6 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		/* number of seconds to add to the base time */
 		double sec;
 
-		if (isConsensus()) {
-			return;
-		}
 		if (selfId.equalsMain(getCreatorId())) {
 			// event by self
 			t = getTimeCreated();

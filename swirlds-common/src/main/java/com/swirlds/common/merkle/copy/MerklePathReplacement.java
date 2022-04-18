@@ -99,7 +99,7 @@ public final class MerklePathReplacement {
 			childInPath = copyAnyNodeType(child);
 
 			// Add the copied child to the parent
-			parentInPath.setChild(indexToCopy, childInPath, child.getRoute());
+			parentInPath.setChild(indexToCopy, childInPath, child.getRoute(), false);
 
 			if (child.isInternal()) {
 				// Add the original child's children to the new copy

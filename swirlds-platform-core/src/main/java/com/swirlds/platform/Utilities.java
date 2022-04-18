@@ -482,7 +482,7 @@ public class Utilities extends DataStreamUtils {
 	 * 		the exception to check
 	 * @return true if the cause is an IOException
 	 */
-	static boolean isCausedByIOException(final Exception e) {
+	public static boolean isCausedByIOException(final Exception e) {
 		return isRootCauseSuppliedType(e, IOException.class);
 	}
 
@@ -495,7 +495,7 @@ public class Utilities extends DataStreamUtils {
 	 * 		the type to check against
 	 * @return true if the root cause matches the supplied type
 	 */
-	static boolean isRootCauseSuppliedType(final Throwable t, final Class<? extends Throwable> type) {
+	public static boolean isRootCauseSuppliedType(final Throwable t, final Class<? extends Throwable> type) {
 		if (t == null) {
 			return false;
 		}

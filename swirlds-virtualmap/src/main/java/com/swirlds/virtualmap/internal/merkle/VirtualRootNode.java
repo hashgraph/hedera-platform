@@ -233,7 +233,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * defined lifecycle rules. This class makes calls to the pipeline, and the pipeline calls back methods
 	 * defined in this class.
 	 */
-	private final VirtualPipeline pipeline;
+	private VirtualPipeline pipeline;
 
 	/**
 	 * If true, then this copy of {@link VirtualRootNode} should eventually be flushed to disk. A heuristic is
@@ -322,7 +322,6 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 		this.hasher = new VirtualHasher<>();
 		this.shouldBeFlushed = false;
 		this.dataSourceBuilder = enforce ? Objects.requireNonNull(dataSourceBuilder) : dataSourceBuilder;
-		this.pipeline = new VirtualPipeline();
 	}
 
 	/**
@@ -389,6 +388,9 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 
 		// At this point in time the copy knows if it should be flushed or merged, and so it is safe
 		// to register with the pipeline.
+		if (pipeline == null) {
+			pipeline = new VirtualPipeline();
+		}
 		pipeline.registerCopy(this);
 	}
 
@@ -461,7 +463,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * {@inheritDoc}
 	 */
 	@Override
-	public <T extends MerkleNode> T getChild(int index) {
+	public <T extends MerkleNode> T getChild(final int index) {
 		if (isReleased() || dataSource == null || learnerTreeView != null
 				|| state.getFirstLeafPath() == INVALID_PATH || index > 1) {
 			return null;
@@ -478,7 +480,11 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 			node = (T) (new VirtualInternalNode<>(this, internalRecord));
 		} else if (path <= state.getLastLeafPath()) {
 			final VirtualLeafRecord<K, V> leafRecord = records.findLeafRecord(path, false);
-			assert leafRecord != null : "It cannot be null because it is <= lastLeafPath and >= firstLeafPath";
+			if (leafRecord == null) {
+				throw new IllegalStateException("Invalid null record for child index " + index +
+						" (path = " + path + "). First leaf path = " + state.getFirstLeafPath() +
+						", last leaf path = " + state.getLastLeafPath() + ".");
+			}
 			//noinspection unchecked
 			node = (T) (new VirtualLeafNode<>(this, leafRecord));
 		} else {
@@ -523,7 +529,9 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 */
 	@Override
 	protected void onRelease() {
-		pipeline.releaseCopy();
+		if (pipeline != null) {
+			pipeline.releaseCopy();
+		}
 	}
 
 	/**
@@ -758,7 +766,14 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void onShutdown() {
+	public void onShutdown(final boolean immediately) {
+
+		if (immediately) {
+			// If immediate shutdown is required then let the hasher know it is being stopped. If shutdown
+			// is not immediate, the hasher will eventually stop once it finishes all of its work.
+			hasher.shutdown();
+		}
+
 		// We can now try to shut down the data source. If this doesn't shut things down, then there
 		// isn't much we can do aside from logging the fact. The node may well die before too long.
 		if (dataSource != null) {

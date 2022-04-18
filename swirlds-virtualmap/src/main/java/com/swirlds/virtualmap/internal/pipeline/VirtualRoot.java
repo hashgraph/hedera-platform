@@ -124,8 +124,7 @@ public interface VirtualRoot extends MerkleNode {
 	 * 		whether to reopen the detached database
 	 * @param withDbCompactionEnabled
 	 * 		whether to enable background compaction on the new database, if it is reopened
-	 * @return
-	 * 		a reference to the detached state
+	 * @return a reference to the detached state
 	 */
 	<T> T detach(final String label, final Path destination, boolean reopen, boolean withDbCompactionEnabled);
 
@@ -148,6 +147,9 @@ public interface VirtualRoot extends MerkleNode {
 	/**
 	 * Called by the {@link VirtualPipeline} on the most recent remaining copy in the pipeline when the pipeline is
 	 * shut down gracefully, or due to some catastrophic failure.
+	 *
+	 * @param immediately
+	 * 		if true then the pipeline is being shut down immediately, without waiting for work to complete
 	 */
-	void onShutdown();
+	void onShutdown(boolean immediately);
 }
