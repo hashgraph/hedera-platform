@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -17,6 +17,7 @@ package com.swirlds.common.threading;
 import java.time.Duration;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -48,7 +49,16 @@ public class QueueThreadConfiguration<T> {
 	 */
 	private final List<QueueThreadThreshold> thresholds;
 
-	private final StoppableThreadConfiguration stoppableThreadConfiguration;
+	/** A runnable to execute when waiting for an item to become available in the queue. */
+	private InterruptableRunnable waitForItemRunnable;
+
+	/** An initialized queue to use. */
+	private BlockingQueue<T> queue;
+
+	/** The interruptable status of the thread. Queue threads are not interruptable by default */
+	private boolean interruptable = false;
+	
+	private final StoppableThreadConfiguration<InterruptableRunnable> stoppableThreadConfiguration;
 
 	public static final int DEFAULT_CAPACITY = 100;
 	public static final int DEFAULT_MAX_BUFFER_SIZE = 10_000;
@@ -61,27 +71,40 @@ public class QueueThreadConfiguration<T> {
 		capacity = DEFAULT_CAPACITY;
 		maxBufferSize = DEFAULT_MAX_BUFFER_SIZE;
 		thresholds = new LinkedList<>();
-		stoppableThreadConfiguration = new StoppableThreadConfiguration();
-
-		// Queue threads are never interruptable
-		stoppableThreadConfiguration.setInterruptable(false);
+		stoppableThreadConfiguration = new StoppableThreadConfiguration<>();
 
 		// Queue threads are always pausable
 		stoppableThreadConfiguration.setPausable(true);
 	}
 
 	/**
-	 * Build a new thread.
-	 * <p>
-	 * Note that the {@link QueueThread} returned by this method has not yet been started. To
-	 * start the background handler, call {@link QueueThread#start()}.
+	 * Build a new queue thread. Does not start the thread.
+	 *
+	 * @return a queue thread built using this configuration
 	 */
 	public QueueThread<T> build() {
+		return build(false);
+	}
+
+	/**
+	 * Build a new queue thread.
+	 *
+	 * @param start
+	 * 		if true then start the thread
+	 * @return a queue thread built using this configuration
+	 */
+	public QueueThread<T> build(final boolean start) {
 		if (handler == null) {
 			throw new NullPointerException("handler must not be null");
 		}
 
-		return new QueueThread<>(this);
+		final QueueThread<T> thread = new QueueThread<>(this);
+
+		if (start) {
+			thread.start();
+		}
+
+		return thread;
 	}
 
 	/**
@@ -322,12 +345,36 @@ public class QueueThreadConfiguration<T> {
 	}
 
 	/**
+	 * Set the runnable to execute when there is nothing in the queue to handle. The default is to poll the queue,
+	 * waiting a certain amount of time for it to return an item.
+	 *
+	 * @param waitForItemRunnable
+	 * 		the runnable to execute
+	 * @return this object
+	 */
+	public QueueThreadConfiguration<T> setWaitForItemRunnable(final InterruptableRunnable waitForItemRunnable) {
+		this.waitForItemRunnable = waitForItemRunnable;
+		return this;
+	}
+
+	/**
+	 * Sets the initialized queue. The default is a {@link java.util.concurrent.LinkedBlockingQueue}.
+	 *
+	 * @param queue
+	 * 		the initialized queue
+	 * @return this object
+	 */
+	public QueueThreadConfiguration<T> setQueue(final BlockingQueue<T> queue) {
+		this.queue = queue;
+		return this;
+	}
+
+	/**
 	 * Set a threshold on the size of the queue. When the threshold is exceeded, an action is performed.
 	 * <p>
 	 * Threshold detection is a best effort operation. Due to the multithreading nature of a QueueThread,
 	 * it is possible for the number of elements in the queue to briefly exceed a threshold without
 	 * being detected. Although possible to provide stronger guarantees, doing so may have performance implications.
-	 *
 	 *
 	 * @param threshold
 	 * 		a method that defines the threshold. Should return true when the threshold is exceeded.
@@ -353,7 +400,68 @@ public class QueueThreadConfiguration<T> {
 	/**
 	 * Intentionally package private. Get the underlying stoppable thread configuration.
 	 */
-	StoppableThreadConfiguration getStoppableThreadConfiguration() {
+	StoppableThreadConfiguration<InterruptableRunnable> getStoppableThreadConfiguration() {
 		return stoppableThreadConfiguration;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public Duration getMinimumPeriod() {
+		return stoppableThreadConfiguration.getMinimumPeriod();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public QueueThreadConfiguration<T> setMinimumPeriod(final Duration minimumPeriod) {
+		stoppableThreadConfiguration.setMinimumPeriod(minimumPeriod);
+		return this;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public double getMaximumRate() {
+		return stoppableThreadConfiguration.getMaximumRate();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public QueueThreadConfiguration<T> setMaximumRate(final double hz) {
+		stoppableThreadConfiguration.setMaximumRate(hz);
+		return this;
+	}
+
+	/**
+	 * Get the runnable to execute when waiting for an item to become available in the queue.
+	 */
+	public InterruptableRunnable getWaitForItemRunnable() {
+		return waitForItemRunnable;
+	}
+
+	/**
+	 * Get the initialized queue. Returns null if none was provided.
+	 */
+	public BlockingQueue<T> getQueue() {
+		return queue;
+	}
+
+	/**
+	 * Defines the thread to be interruptable not. In general, queue threads should not be interruptable.
+	 *
+	 * @return this object
+	 */
+	public QueueThreadConfiguration<T> setInterruptable(final boolean interruptable) {
+		this.interruptable = interruptable;
+		return this;
+	}
+
+	/**
+	 * Get whether this thread can be interrupted.
+	 */
+	public boolean isInterruptable() {
+		return interruptable;
 	}
 }

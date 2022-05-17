@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -42,12 +42,33 @@ public class AverageAndMax {
 			final String name,
 			final String desc,
 			final String averageFormat) {
+		this(category, name, desc, averageFormat, AverageStat.WEIGHT_SMOOTH);
+	}
+
+	/**
+	 * @param category
+	 * 		the kind of statistic (stats are grouped or filtered by this)
+	 * @param name
+	 * 		a short name for the statistic
+	 * @param desc
+	 * 		a one-sentence description of the statistic
+	 * @param averageFormat
+	 * 		a string that can be passed to String.format() to format the statistic for the average number
+	 * @param weight
+	 * 		the weight used to calculate the average
+	 */
+	public AverageAndMax(
+			final String category,
+			final String name,
+			final String desc,
+			final String averageFormat,
+			final double weight) {
 		averageStat = new AverageStat(
 				category,
 				name,
 				desc,
 				averageFormat,
-				AverageStat.WEIGHT_SMOOTH);
+				weight);
 		maxStat = new MaxStat(
 				category,
 				name + "MAX",
@@ -71,7 +92,7 @@ public class AverageAndMax {
 		return maxStat.getStatEntry();
 	}
 
-	public List<StatEntry> getAllEntries(){
+	public List<StatEntry> getAllEntries() {
 		return List.of(averageStat.getStatEntry(), maxStat.getStatEntry());
 	}
 }

@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -20,32 +20,32 @@ package com.swirlds.common.crypto;
  */
 public enum SignatureType {
 	/** An Ed25519 signature which uses a SHA-512 hash and a 32 byte public key */
-	ED25519("NONEwithED25519", "ED25519", "", 64, "x25519"),
+	ED25519(0x0, "NONEwithED25519", "ED25519", "", 64, "x25519"),
 
 	/** An RSA signature as specified by the FIPS 186-4 standards */
-	RSA("SHA384withRSA", "RSA", "SunRsaSign", 384),
+	RSA(0x1, "SHA384withRSA", "RSA", "SunRsaSign", 384),
 
 	/** An Elliptical Curve based signature using the secp256k1 curve (which is not FIPS 186-4 compliant) */
-	ECDSA_SECP256K1("NONEwithECDSA", "EC", "BC", 64, "secp256k1");
+	ECDSA_SECP256K1(0x2,"NONEwithECDSA", "EC", "BC", 64, "secp256k1");
 
 	/**
-	 * An array of enumeration values used for the purposes of a fast lookup by index.
+	 * The unique identifier used for serialization and deserialization purposes.
 	 */
-	private static final SignatureType[] ORDINAL_LOOKUP = values();
+	private final int id;
 	/**
-	 * the JCE name for the signing algorithm
+	 * The JCE name for the signing algorithm.
 	 */
 	private final String signingAlgorithm;
 	/**
-	 * the JCE name for the key generation algorithm
+	 * The JCE name for the key generation algorithm.
 	 */
 	private final String keyAlgorithm;
 	/**
-	 * the JCE name for the cryptography provider
+	 * The JCE name for the cryptography provider.
 	 */
 	private final String provider;
 	/**
-	 * The length of the signature in bytes
+	 * The length of the signature in bytes.
 	 */
 	private final int signatureLength;
 	/**
@@ -56,6 +56,8 @@ public enum SignatureType {
 	/**
 	 * Enum constructor used to initialize the values with the algorithm characteristics.
 	 *
+	 * @param id
+	 * 		the unique identifier for this algorithm
 	 * @param signingAlgorithm
 	 * 		the JCE signing algorithm name
 	 * @param keyAlgorithm
@@ -65,14 +67,16 @@ public enum SignatureType {
 	 * @param signatureLength
 	 * 		The length of the signature in bytes
 	 */
-	SignatureType(final String signingAlgorithm, final String keyAlgorithm, final String provider,
+	SignatureType(final int id, final String signingAlgorithm, final String keyAlgorithm, final String provider,
 			final int signatureLength) {
-		this(signingAlgorithm, keyAlgorithm, provider, signatureLength, null);
+		this(id, signingAlgorithm, keyAlgorithm, provider, signatureLength, null);
 	}
 
 	/**
 	 * Enum constructor used to initialize the values with the algorithm characteristics.
 	 *
+	 * @param id
+	 * 		the unique identifier for this algorithm
 	 * @param signingAlgorithm
 	 * 		the JCE signing algorithm name
 	 * @param keyAlgorithm
@@ -82,8 +86,9 @@ public enum SignatureType {
 	 * @param signatureLength
 	 * 		The length of the signature in bytes
 	 */
-	SignatureType(final String signingAlgorithm, final String keyAlgorithm, final String provider,
+	SignatureType(final int id, final String signingAlgorithm, final String keyAlgorithm, final String provider,
 			final int signatureLength, final String ellipticalCurve) {
+		this.id = id;
 		this.signingAlgorithm = signingAlgorithm;
 		this.keyAlgorithm = keyAlgorithm;
 		this.provider = provider;
@@ -94,18 +99,28 @@ public enum SignatureType {
 	/**
 	 * Translates an ordinal position into an enumeration value.
 	 *
-	 * @param ordinal
-	 * 		the ordinal value to be translated into an enumeration value.
+	 * @param id
+	 * 		the unique identifier to be translated into an enumeration value.
 	 * @param defaultValue
 	 * 		the default enumeration value to return if the {@code ordinal} cannot be found.
 	 * @return the enumeration value related to the given ordinal or the default value if the ordinal is not found.
 	 */
-	public static SignatureType from(final int ordinal, final SignatureType defaultValue) {
-		if (ordinal < 0 || ordinal >= ORDINAL_LOOKUP.length) {
-			return defaultValue;
-		}
+	public static SignatureType from(final int id, final SignatureType defaultValue) {
+		return switch (id) {
+			case 0x0 -> ED25519;
+			case 0x1 -> RSA;
+			case 0x2 -> ECDSA_SECP256K1;
+			default -> defaultValue;
+		};
+	}
 
-		return ORDINAL_LOOKUP[ordinal];
+	/**
+	 * Getter to retrieve the unique identifier for the signing algorithm.
+	 *
+	 * @return the unique identifier
+	 */
+	public int id() {
+		return this.id;
 	}
 
 	/**

@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -1094,36 +1094,39 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 		// source, and also snapshot the cache. I will create a new "RecordAccessor" for the detached
 		// record state.
 		final String snapshotName = label == null ? (createUniqueDataSourceName(state.getLabel())) : label;
+
+		final T snapshot;
+
 		if (destination == null) {
 			assert reopen : "We do not support reopen=false for this path yet";
-			try {
-				//noinspection unchecked
-				return (T) new RecordAccessorImpl<>(
-						state,
-						cache.snapshot(),
-						dataSourceBuilder.build(snapshotName, state.getLabel(), dataSource, withDbCompactionEnabled));
-			} finally {
-				detached.set(true);
-			}
+
+			//noinspection unchecked
+			snapshot = (T) new RecordAccessorImpl<>(
+					state,
+					cache.snapshot(),
+					dataSourceBuilder.build(snapshotName, state.getLabel(), dataSource, withDbCompactionEnabled));
 		} else {
 			if (reopen) {
 				final VirtualDataSource<K, V> ds = dataSourceBuilder.build(
 						snapshotName, destination.resolve(snapshotName), dataSource, withDbCompactionEnabled);
 				//noinspection unchecked
-				return (T) new RecordAccessorImpl<>(state, cache.snapshot(), ds);
+				snapshot = (T) new RecordAccessorImpl<>(state, cache.snapshot(), ds);
 			} else {
 				try {
 					final Path snapshotDir = destination.resolve(snapshotName);
 					Files.createDirectories(snapshotDir);
 					dataSource.snapshot(snapshotDir);
 					//noinspection unchecked
-					return (T) new RecordAccessorImpl<>(state, cache.snapshot(), null);
+					snapshot = (T) new RecordAccessorImpl<>(state, cache.snapshot(), null);
 				} catch (IOException e) {
 					LOG.error(EXCEPTION.getMarker(), "Failed to take a snapshot of the database", e);
 					throw new UncheckedIOException(e);
 				}
 			}
 		}
+
+		detached.set(true);
+		return snapshot;
 	}
 
 	/**

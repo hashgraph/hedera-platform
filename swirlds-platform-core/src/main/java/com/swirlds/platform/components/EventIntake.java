@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -17,8 +17,10 @@ package com.swirlds.platform.components;
 import com.swirlds.common.AddressBook;
 import com.swirlds.common.NodeId;
 import com.swirlds.platform.Consensus;
+import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.EventStrings;
+import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 import com.swirlds.platform.observers.EventObserverDispatcher;
 import com.swirlds.platform.sync.ShadowGraph;
 import com.swirlds.platform.sync.ShadowGraphInsertionException;
@@ -35,8 +37,9 @@ import static com.swirlds.logging.LogMarker.SYNC;
 import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT;
 
 /**
- * This class is responsible for adding events to {@link Consensus} and EventFlow, as well as
- * notifying event observers.
+ * This class is responsible for adding events to {@link Consensus} and notifying event observers, including
+ * {@link ConsensusRoundHandler} and
+ * {@link com.swirlds.platform.eventhandling.PreConsensusEventHandler}.
  */
 public class EventIntake {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
@@ -51,6 +54,8 @@ public class EventIntake {
 	 * A functor that provides access to a {@code Consensus} instance.
 	 */
 	private final Supplier<Consensus> consensusSupplier;
+
+	private final ConsensusWrapper consensusWrapper;
 
 	/**
 	 * A reference to the initial address book for this node.
@@ -89,6 +94,7 @@ public class EventIntake {
 			final ShadowGraph shadowGraph) {
 		this.selfId = selfId;
 		this.consensusSupplier = consensusSupplier;
+		this.consensusWrapper = new ConsensusWrapper(consensusSupplier);
 		this.addressBook = addressBook;
 		this.dispatcher = dispatcher;
 		this.shadowGraph = shadowGraph;
@@ -112,14 +118,16 @@ public class EventIntake {
 		}
 
 		// record the event in the hashgraph, which results in the events in consEvent reaching consensus
-		List<EventImpl> consEvents = consensus().addEvent(event, addressBook);
+		final List<ConsensusRound> consRounds = consensusWrapper.addEvent(event, addressBook);
 
-		final boolean newConsensus = consEvents != null;
+		final boolean newConsensus = consRounds != null;
 		addShadowEvent(event, newConsensus);
 
 		dispatcher.eventAdded(event);
 
-		handleConsensus(consEvents);
+		if (newConsensus) {
+			consRounds.forEach(this::handleConsensus);
+		}
 
 		handleStale();
 	}
@@ -136,7 +144,7 @@ public class EventIntake {
 	private void addShadowEvent(final EventImpl event, final boolean newConsensus) {
 		try {
 			shadowGraph.addEvent(event);
-		} catch (ShadowGraphInsertionException e) {
+		} catch (final ShadowGraphInsertionException e) {
 			log.error(EXCEPTION.getMarker(), "EventIntake: failed to add event {} to shadow graph",
 					EventStrings.toMediumString(event), e);
 		}
@@ -154,7 +162,7 @@ public class EventIntake {
 	 */
 	private void handleStale() {
 		while (!consensus().getStaleEventQueue().isEmpty()) {
-			EventImpl e = consensus().getStaleEventQueue().poll();
+			final EventImpl e = consensus().getStaleEventQueue().poll();
 			if (e != null) {
 				dispatcher.staleEvent(e);
 
@@ -168,24 +176,23 @@ public class EventIntake {
 	 * Notify observers that an event has reach consensus. Called on a list of
 	 * events returned from {@code Consensus.addEvent}.
 	 *
-	 * @param consEvents
-	 * 		the (new) consensus events to be observed
+	 * @param consensusRound
+	 * 		the (new) consensus round to be observed
 	 */
-	private void handleConsensus(final List<EventImpl> consEvents) {
-		if (consEvents != null) {
-			for (EventImpl e : consEvents) {
-				dispatcher.consensusEvent(e);
+	private void handleConsensus(final ConsensusRound consensusRound) {
+		if (consensusRound != null) {
+			dispatcher.consensusRound(consensusRound);
 
 //				The local events feature is not currently in use. It will also have to be refactored when we do start
 //				using it, so for now it is commented out.
 //
-//				if (e.isLastInRoundReceived() && Settings.state.saveLocalEvents) {
+//				if (Settings.state.saveLocalEvents) {
+//					EventImpl e = consensusRound.lastEvent();
 //					platform.getSignedStateManager().consensusReachedOnRound(
 //							e.getRoundReceived(),
 //							e.getLastTransTime(),
 //							getConsensus()::getAllEvents);
 //				}
-			}
 		}
 	}
 

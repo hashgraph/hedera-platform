@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -30,13 +30,23 @@ public class TimeStat {
 	private final AtomicMax max;
 	private final StatEntry maxEntry;
 
+
 	public TimeStat(
 			final ChronoUnit unit,
 			final String category,
 			final String name,
 			final String desc) {
+		this(unit, category, name, desc, AverageStat.WEIGHT_SMOOTH);
+	}
+
+	public TimeStat(
+			final ChronoUnit unit,
+			final String category,
+			final String name,
+			final String desc,
+			final double weight) {
 		this.unit = unit;
-		average = new AtomicAverage(AverageStat.WEIGHT_SMOOTH);
+		average = new AtomicAverage(weight);
 		max = new AtomicMax();
 
 		final String format;

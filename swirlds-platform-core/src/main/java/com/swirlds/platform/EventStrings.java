@@ -1,21 +1,21 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
 package com.swirlds.platform;
 
+import com.swirlds.common.events.BaseEvent;
 import com.swirlds.platform.event.EventStringBuilder;
-import com.swirlds.platform.event.ValidateEventTask;
 
 /**
  * A collection of methods for creating strings from events events.
@@ -33,14 +33,14 @@ public final class EventStrings {
 	 * 		the event to convert to a string
 	 * @return A short string representation of an event
 	 */
-	public static String toShortString(EventImpl event) {
+	public static String toShortString(final EventImpl event) {
 		return EventStringBuilder.builder(event).appendEvent().build();
 	}
 
 	/**
 	 * Same as {@link #toShortString(EventImpl)}
 	 */
-	public static String toShortString(ValidateEventTask event) {
+	public static String toShortString(final BaseEvent event) {
 		return EventStringBuilder.builder(event).appendEvent().build();
 	}
 
@@ -54,14 +54,14 @@ public final class EventStrings {
 	 * 		the event to convert to a string
 	 * @return A medium string representation of an event
 	 */
-	public static String toMediumString(EventImpl event) {
+	public static String toMediumString(final EventImpl event) {
 		return EventStringBuilder.builder(event).appendEvent().appendSelfParent().appendOtherParent().build();
 	}
 
 	/**
 	 * Same as {@link #toMediumString(EventImpl)}
 	 */
-	public static String toMediumString(ValidateEventTask event) {
+	public static String toMediumString(final BaseEvent event) {
 		return EventStringBuilder.builder(event).appendEvent().appendSelfParent().appendOtherParent().build();
 	}
 }

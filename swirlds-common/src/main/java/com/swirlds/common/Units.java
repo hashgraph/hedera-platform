@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -19,7 +19,6 @@ package com.swirlds.common;
  *
  * All constants are in the form "UNIT1_TO_UNIT2" where you multiply by the constant to go from UNIT1 to UNIT2,
  * or divide by the constant to go from UNIT2 to UNIT1.
- *
  */
 public final class Units {
 
@@ -111,6 +110,32 @@ public final class Units {
 	 * Multiply by this value for converting bytes to bits.
 	 */
 	public static final int BYTES_TO_BITS = 8;
+
+	/**
+	 * Multiply by this value for converting bits to bytes.
+	 */
+	public static final double BITS_TO_BYTES = 1.0 / BYTES_TO_BITS;
+
+	/**
+	 * The number of bytes in a char.
+	 */
+	public static final long BYTES_PER_CHAR = 1;
+
+	/**
+	 * The number of bytes in a short.
+	 */
+	public static final long BYTES_PER_SHORT = 2;
+
+
+	/**
+	 * The number of bytes in an integer.
+	 */
+	public static final long BYTES_PER_INT = 4;
+
+	/**
+	 * The number of bytes in a long.
+	 */
+	public static final long BYTES_PER_LONG = 8;
 
 	/**
 	 * Multiply by these values for converting KB to bytes ("kilo" meaning 10^3, "kibi" meaning 2^10).

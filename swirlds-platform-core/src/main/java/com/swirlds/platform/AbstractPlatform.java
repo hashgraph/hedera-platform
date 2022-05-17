@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -19,6 +19,7 @@ import com.swirlds.common.InvalidNodeIdException;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.Platform;
 import com.swirlds.common.SwirldMain;
+import com.swirlds.common.SwirldState;
 import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.stream.EventStreamManager;
@@ -27,17 +28,20 @@ import com.swirlds.platform.components.CriticalQuorum;
 import com.swirlds.platform.components.EventMapper;
 import com.swirlds.platform.components.EventTaskCreator;
 import com.swirlds.platform.components.SwirldMainManager;
-import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.components.TransactionTracker;
-import com.swirlds.platform.crypto.SocketFactory;
 import com.swirlds.platform.event.EventIntakeTask;
-import com.swirlds.platform.internal.SignedStateLoadingException;
+import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
+import com.swirlds.platform.eventhandling.PreConsensusEventHandler;
+import com.swirlds.platform.network.ConnectionTracker;
+import com.swirlds.platform.network.unidirectional.SharedConnectionLocks;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.SignedStateManager;
+import com.swirlds.platform.state.SwirldStateManager;
 import com.swirlds.platform.sync.ShadowGraph;
 import com.swirlds.platform.sync.ShadowGraphSynchronizer;
+import com.swirlds.platform.sync.SimultaneousSyncThrottle;
 
-public abstract class AbstractPlatform implements Platform, SwirldMainManager {
+public abstract class AbstractPlatform implements Platform, SwirldMainManager, ConnectionTracker {
 	/**
 	 * Returns the ID of the member running this Platform. This value will never change for the Platform
 	 * object.
@@ -99,9 +103,12 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	abstract SignedStateFileManager getSignedStateFileManager();
 
 	/**
-	 * @return The EventFlow object used by this platform
+	 * Performs necessary operations before a reconnect such as stopping threads, clearing queues, etc.
+	 *
+	 * @throws InterruptedException
+	 * 		if this thread is interrupted
 	 */
-	abstract AbstractEventFlow getEventFlow();
+	abstract void prepareForReconnect() throws InterruptedException;
 
 	/**
 	 * Get the Statistics object that monitors and reports on the network and syncing.
@@ -143,11 +150,6 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	abstract TransactionTracker getTransactionTracker();
 
 	/**
-	 * Return the sync server used by this platform.
-	 */
-	abstract SyncServer getSyncServer();
-
-	/**
 	 * @return the SyncManager used by this platform
 	 */
 	abstract SyncManagerImpl getSyncManager();
@@ -160,34 +162,19 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	abstract ShadowGraph getShadowGraph();
 
 	/**
-	 * @return the connection ID for this platform
-	 */
-	abstract NodeId getSelfConnectionId();
-
-	/**
 	 * @return the signed state manager for this platform
 	 */
 	abstract SignedStateManager getSignedStateManager();
 
 	/**
-	 * @return the system transaction handler for this platform
+	 * @return locks used to synchronize usage of outbound connections
 	 */
-	abstract SystemTransactionHandler getSystemTransactionHandler();
-
-	/**
-	 * @return the sync client for this platform
-	 */
-	abstract SyncClient getSyncClient();
+	abstract SharedConnectionLocks getSharedConnectionLocks();
 
 	/**
 	 * @return the cryto object for this platform
 	 */
 	abstract Crypto getCrypto();
-
-	/**
-	 * @return the connection graph of all the connections in the network
-	 */
-	abstract RandomGraph getConnectionGraph();
 
 	/**
 	 * Store the infoMember that has metadata about this (app,swirld,member) triplet. This also creates the
@@ -219,31 +206,12 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	abstract void checkPlatformStatus();
 
 	/**
-	 * Notifies the platform that a connection has been closed
-	 */
-	abstract void connectionClosed();
-
-	/**
-	 * Notifies the platform that a new connection has been opened
-	 */
-	abstract void newConnectionOpened();
-
-	abstract boolean displayDBStats();
-
-	/**
 	 * Get the ApplicationStatistics object that has user-added statistics monitoring entries
 	 *
 	 * @return the ApplicationStatistics object associated with this platform
 	 * @see ApplicationStatistics
 	 */
 	public abstract ApplicationStatistics getAppStats();
-
-	/**
-	 * get database statistics
-	 *
-	 * @return DBStatistics
-	 */
-	abstract DBStatistics getDBStatistics();
 
 	public abstract SwirldMain getAppMain();
 
@@ -308,12 +276,12 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	abstract EventStreamManager<EventImpl> getEventStreamManager();
 
 	/**
-	 * Loads the signed state data into consensus and event intake
+	 * Loads the signed state data into consensus and event mapper
 	 *
 	 * @param signedState
 	 * 		the state to get the data from
 	 */
-	abstract void loadIntoConsensusAndEventIntake(SignedState signedState) throws SignedStateLoadingException;
+	abstract void loadIntoConsensusAndEventMapper(final SignedState signedState);
 
 	/**
 	 * Sets event creation to be frozen, platform's status will be MAINTENANCE after this method is called
@@ -323,11 +291,25 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager {
 	/**
 	 * @return the platform instance of the {@link ShadowGraphSynchronizer}
 	 */
-	public abstract ShadowGraphSynchronizer getShadographSynchronizer();
+	public abstract ShadowGraphSynchronizer getShadowGraphSynchronizer();
 
 	/**
-	 * @return the instance that creates and connects sockets
+	 * @return the instance that throttles simultaneous syncs
 	 */
-	public abstract SocketFactory getSocketFactory();
+	public abstract SimultaneousSyncThrottle getSimultaneousSyncThrottle();
 
+	/**
+	 * @return the instance that manages interactions with the {@link SwirldState}
+	 */
+	public abstract SwirldStateManager getSwirldStateManager();
+
+	/**
+	 * @return the handler that applies consensus events to state and creates signed states
+	 */
+	public abstract ConsensusRoundHandler getConsensusHandler();
+
+	/**
+	 * @return the handler that applies pre-consensus events to state
+	 */
+	public abstract PreConsensusEventHandler getPreConsensusHandler();
 }

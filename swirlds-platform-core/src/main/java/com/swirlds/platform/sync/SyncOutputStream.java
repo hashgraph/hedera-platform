@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -16,10 +16,9 @@ package com.swirlds.platform.sync;
 
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.SerializableDataOutputStream;
-import com.swirlds.common.io.extendable.CountingStreamExtension;
-import com.swirlds.common.io.extendable.ExtendableOutputStream;
-import com.swirlds.common.io.extendable.StreamExtensionList;
+import com.swirlds.common.io.extendable.extensions.CountingStreamExtension;
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.network.ByteConstants;
 
 import java.io.BufferedOutputStream;
 import java.io.IOException;
@@ -27,6 +26,8 @@ import java.io.OutputStream;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static com.swirlds.common.io.extendable.ExtendableOutputStream.extendOutputStream;
 
 public class SyncOutputStream extends SerializableDataOutputStream {
 	private final CountingStreamExtension syncByteCounter;
@@ -49,10 +50,7 @@ public class SyncOutputStream extends SerializableDataOutputStream {
 		// we write the data to the buffer first, for efficiency
 		return new SyncOutputStream(
 				new BufferedOutputStream(
-						new ExtendableOutputStream<>(
-								out,
-								new StreamExtensionList(syncByteCounter, connectionByteCounter)
-						),
+						extendOutputStream(out, syncByteCounter, connectionByteCounter),
 						bufferSize),
 				syncByteCounter,
 				connectionByteCounter
@@ -81,7 +79,7 @@ public class SyncOutputStream extends SerializableDataOutputStream {
 	 * 		if a stream exception occurs
 	 */
 	public void requestSync() throws IOException {
-		writeByte(SyncConstants.COMM_SYNC_REQUEST);
+		writeByte(ByteConstants.COMM_SYNC_REQUEST);
 		requestSent.set(Instant.now());
 	}
 
@@ -92,7 +90,7 @@ public class SyncOutputStream extends SerializableDataOutputStream {
 	 * 		if a stream exception occurs
 	 */
 	public void acceptSync() throws IOException {
-		writeByte(SyncConstants.COMM_SYNC_ACK);
+		writeByte(ByteConstants.COMM_SYNC_ACK);
 	}
 
 	/**
@@ -102,7 +100,7 @@ public class SyncOutputStream extends SerializableDataOutputStream {
 	 * 		if a stream exception occurs
 	 */
 	public void rejectSync() throws IOException {
-		writeByte(SyncConstants.COMM_SYNC_NACK);
+		writeByte(ByteConstants.COMM_SYNC_NACK);
 	}
 
 	/**

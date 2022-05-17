@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -35,15 +36,16 @@ import static com.swirlds.logging.LogMarker.ERROR;
  * @param <T>
  * 		the type of the item in the queue
  */
-public class QueueThread<T> implements BlockingQueue<T> {
+public class QueueThread<T> implements BlockingQueue<T>, StoppableThread {
 
 	private static final Logger log = LogManager.getLogger();
 
 	private static final int WAIT_FOR_WORK_DELAY_MS = 10;
 
-	private final BlockingQueue<T> queue;
+	protected final BlockingQueue<T> queue;
 
 	private final int bufferSize;
+	
 	private final List<T> buffer;
 
 	private final List<QueueThreadThreshold> thresholds;
@@ -52,9 +54,10 @@ public class QueueThread<T> implements BlockingQueue<T> {
 
 	private final StoppableThread stoppableThread;
 
+	private final InterruptableRunnable waitForItemRunnable;
+
 	/**
-	 * This constructor is intentionally package private. All instances of this class should be created via
-	 * the appropriate configuration object.
+	 * All instances of this class should be created via the appropriate configuration object.
 	 * <p>
 	 * Unlike previous iterations of this class, this constructor DOES NOT start the background handler thread.
 	 * Call {@link #start()} to start the handler thread.
@@ -62,13 +65,19 @@ public class QueueThread<T> implements BlockingQueue<T> {
 	 * @param configuration
 	 * 		the configuration object
 	 */
-	QueueThread(final QueueThreadConfiguration<T> configuration) {
+	protected QueueThread(final QueueThreadConfiguration<T> configuration) {
 		final int capacity = configuration.getCapacity();
-		if (capacity >= 0) {
+		if (configuration.getQueue() != null) {
+			queue = configuration.getQueue();
+		} else if (capacity > 0) {
 			queue = new LinkedBlockingQueue<>(capacity);
-			bufferSize = Math.min(capacity, configuration.getMaxBufferSize());
 		} else {
 			queue = new LinkedBlockingQueue<>();
+		}
+
+		if (capacity > 0) {
+			bufferSize = Math.min(capacity, configuration.getMaxBufferSize());
+		} else {
 			bufferSize = configuration.getMaxBufferSize();
 		}
 
@@ -78,90 +87,94 @@ public class QueueThread<T> implements BlockingQueue<T> {
 
 		handler = configuration.getHandler();
 
+		this.waitForItemRunnable = Objects.requireNonNullElseGet(configuration.getWaitForItemRunnable(),
+				() -> this::waitForItem);
+
 		stoppableThread = configuration.getStoppableThreadConfiguration()
 				.setWork(this::doWork)
+				.setInterruptable(configuration.isInterruptable())
 				.setFinalCycleWork(this::doFinalCycleWork)
 				.build();
 	}
 
 	/**
-	 * Start the thread.
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void start() {
 		stoppableThread.start();
 	}
 
 	/**
-	 * Causes the thread to finish the current call to {@link #doWork()} and to then block. Thread remains blocked
-	 * until {@link #resume()} is called.
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void pause() throws InterruptedException {
 		stoppableThread.pause();
 	}
 
 	/**
-	 * This method can be called to resume work on the thread after a {@link #pause()} call.
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void resume() {
 		stoppableThread.resume();
 	}
 
 	/**
-	 * Join the thread. Equivalent to {@link Thread#join()}.
-	 *
-	 * @throws InterruptedException
-	 * 		if interrupted before join is complete
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void join() throws InterruptedException {
 		stoppableThread.join();
 	}
 
 	/**
-	 * Join the thread. Equivalent to {@link Thread#join(long)}.
-	 *
-	 * @throws InterruptedException
-	 * 		if interrupted before join is complete
+	 * {@inheritDoc}
 	 */
-	public void join(long millis) throws InterruptedException {
+	@Override
+	public void join(final long millis) throws InterruptedException {
 		stoppableThread.join(millis);
 	}
 
 	/**
-	 * Join the thread. Equivalent to {@link Thread#join(long, int)}.
-	 *
-	 * @throws InterruptedException
-	 * 		if interrupted before join is complete
+	 * {@inheritDoc}
 	 */
-	public void join(long millis, int nanos) throws InterruptedException {
+	@Override
+	public void join(final long millis, final int nanos) throws InterruptedException {
 		stoppableThread.join(millis, nanos);
 	}
 
 	/**
-	 * <p>
-	 * Attempt to gracefully stop the thread.
-	 * </p>
-	 *
-	 * <p>
-	 * Do not call this method inside the internal thread (i.e. the one calling the handler over and over). This
-	 * method joins on that thread, and will deadlock if it attempts to join on itself.
-	 * </p>
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void stop() {
 		stoppableThread.stop();
 	}
 
 	/**
-	 * Interrupt this thread.
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void interrupt() {
 		stoppableThread.interrupt();
 	}
 
 	/**
-	 * Check if this thread is currently alive.
+	 * {@inheritDoc}
 	 */
+	@Override
 	public boolean isAlive() {
 		return stoppableThread.isAlive();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isHanging() {
+		return stoppableThread.isHanging();
 	}
 
 	/**
@@ -185,7 +198,7 @@ public class QueueThread<T> implements BlockingQueue<T> {
 
 		queue.drainTo(buffer, bufferSize);
 		if (buffer.size() == 0) {
-			waitForWork();
+			waitForItemRunnable.run();
 			return;
 		}
 
@@ -202,7 +215,7 @@ public class QueueThread<T> implements BlockingQueue<T> {
 	 * @throws InterruptedException
 	 * 		if this method is interrupted during execution
 	 */
-	private void waitForWork() throws InterruptedException {
+	private void waitForItem() throws InterruptedException {
 		final T item = queue.poll(WAIT_FOR_WORK_DELAY_MS, TimeUnit.MILLISECONDS);
 		if (item != null) {
 			handler.handle(item);
@@ -218,6 +231,7 @@ public class QueueThread<T> implements BlockingQueue<T> {
 			for (final T item : buffer) {
 				handler.handle(item);
 			}
+			buffer.clear();
 		}
 	}
 
@@ -354,9 +368,14 @@ public class QueueThread<T> implements BlockingQueue<T> {
 	 */
 	@Override
 	public void clear() {
+		if (!isAlive()) {
+			queue.clear();
+			return;
+		}
+
 		try {
 			pause();
-		} catch (InterruptedException e) {
+		} catch (final InterruptedException e) {
 			log.error(ERROR.getMarker(),
 					"interrupted while attempting to clear queue thread {}", this.stoppableThread.getName());
 			Thread.currentThread().interrupt();

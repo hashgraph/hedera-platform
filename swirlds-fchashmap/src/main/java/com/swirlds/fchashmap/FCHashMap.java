@@ -1,32 +1,37 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
 package com.swirlds.fchashmap;
 
 import com.swirlds.common.FastCopyable;
+import com.swirlds.common.ReferenceCountException;
 import com.swirlds.common.utility.ValueReference;
 import com.swirlds.fchashmap.internal.FCHashMapEntrySet;
-import com.swirlds.fchashmap.internal.FCHashMapGarbageCollector;
+import com.swirlds.fchashmap.internal.GarbageCollectionEvent;
 import com.swirlds.fchashmap.internal.Mutation;
 
 import java.util.AbstractMap;
+import java.util.Deque;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * <p>
@@ -64,18 +69,36 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 */
 	private boolean immutable;
 
+	/**
+	 * Contains the data of this map and all copies that have not been garbage collected.
+	 */
 	private final Map<K, Mutation<V>> data;
 
+	/**
+	 * All copies of the map that have not yet been garbage collected. New copies are added to the end,
+	 * old copies are removed from the beginning.
+	 */
+	private final Deque<FCHashMap<K, V>> copies;
+
+	/**
+	 * Contains a record of things that need to be garbage collected.
+	 */
+	private final Deque<GarbageCollectionEvent<K>> garbageCollectionEvents;
+
+	/**
+	 * Prevents multiple threads from attempting to do simultaneous garbage collection.
+	 */
+	private final Lock garbageCollectionLock;
+
+	/**
+	 * The current size of the map.
+	 */
 	private final AtomicInteger size;
-
-	private final CountDownLatch releasedLatch;
-
-	private final FCHashMapGarbageCollector<K, V> garbageCollector;
 
 	/**
 	 * Tracks if this particular object has been deleted.
 	 */
-	private boolean deleted;
+	private final AtomicBoolean released = new AtomicBoolean(false);
 
 	/**
 	 * Create a new FCHashMap.
@@ -88,59 +111,42 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 * Create a new FCHashMap.
 	 *
 	 * @param capacity
-	 * 		the initial capacity
+	 * 		the initial capacity of the map
 	 */
 	public FCHashMap(final int capacity) {
-		this(capacity, FCHashMapGarbageCollector::new);
-	}
-
-	/**
-	 * Create a new FCHashMap.
-	 *
-	 * @param capacity
-	 * 		the initial capacity of the map
-	 * @param gcBuilder
-	 * 		garbage collector constructor
-	 */
-	protected FCHashMap(final int capacity,
-			Function<Map<K, Mutation<V>>, FCHashMapGarbageCollector<K, V>> gcBuilder) {
 
 		data = new ConcurrentHashMap<>(capacity);
+
+		copies = new ConcurrentLinkedDeque<>();
+
+		garbageCollectionEvents = new ConcurrentLinkedDeque<>();
+		garbageCollectionLock = new ReentrantLock();
+
 		immutable = false;
 		version = 0;
-		garbageCollector = gcBuilder.apply(data);
-		garbageCollector.start();
-		deleted = false;
-		releasedLatch = new CountDownLatch(1);
 		size = new AtomicInteger(0);
-	}
 
-	/**
-	 * Get the garbage collector. Useful for testing.
-	 */
-	protected FCHashMapGarbageCollector<K, V> getGarbageCollector() {
-		return garbageCollector;
+		copies.add(this);
 	}
 
 	/**
 	 * Copy constructor.
 	 *
-	 * @param other
+	 * @param that
 	 * 		the map to copy
 	 */
-	protected FCHashMap(final FCHashMap<K, V> other) {
-		data = other.data;
-		size = new AtomicInteger(other.size.get());
-		garbageCollector = other.garbageCollector;
-		deleted = false;
+	protected FCHashMap(final FCHashMap<K, V> that) {
+		data = that.data;
+		copies = that.copies;
+		garbageCollectionLock = that.garbageCollectionLock;
+		garbageCollectionEvents = that.garbageCollectionEvents;
+		size = new AtomicInteger(that.size.get());
 
 		immutable = false;
-		other.immutable = true;
-		version = other.version + 1;
+		that.immutable = true;
+		version = that.version + 1;
 
-		releasedLatch = new CountDownLatch(1);
-
-		garbageCollector.registerCopy(other);
+		copies.add(this);
 	}
 
 	/**
@@ -152,6 +158,16 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 		throwIfImmutable();
 		throwIfReleased();
 		return new FCHashMap<>(this);
+	}
+
+	/**
+	 * Exposed for testing. Get the total number of copies that have not been fully garbage collected (including
+	 * copies not eligible for garbage collection).
+	 *
+	 * @return the number of un-garbage-collected copies
+	 */
+	protected int copyCount() {
+		return copies.size();
 	}
 
 	/**
@@ -171,10 +187,11 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 */
 	@Override
 	public synchronized void release() {
-		throwIfReleased();
-		releasedLatch.countDown();
-		deleted = true;
-		garbageCollector.decrementReferenceCount();
+		final boolean previouslyReleased = released.getAndSet(true);
+		if (previouslyReleased) {
+			throw new ReferenceCountException("this object has already been released");
+		}
+		doGarbageCollection();
 	}
 
 	/**
@@ -182,14 +199,94 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 */
 	@Override
 	public boolean isReleased() {
-		return deleted;
+		return released.get();
 	}
 
 	/**
-	 * Block until this FCHashMap has been released.
+	 * Perform garbage collection on this copy of the map.
 	 */
-	public void waitUntilReleased() throws InterruptedException {
-		releasedLatch.await();
+	private void doGarbageCollection() {
+		if (!garbageCollectionLock.tryLock()) {
+			// Another thread is currently doing garbage collection. That thread will do GC
+			// for this copy, or else the next release of a copy will do GC for this copy.
+			return;
+		}
+
+		try {
+			final Iterator<FCHashMap<K, V>> iterator = copies.iterator();
+
+			while (iterator.hasNext()) {
+				final FCHashMap<K, V> copy = iterator.next();
+				if (!copy.isReleased()) {
+					// Stop when the first unreleased copy is discovered.
+					return;
+				}
+
+				GarbageCollectionEvent<K> event;
+				while ((event = garbageCollectionEvents.peekFirst()) != null) {
+					if (event.getVersion() > copy.version) {
+						// Stop when the first event from the next version is discovered.
+						break;
+					}
+
+					garbageCollectionEvents.pop();
+					cleanOldMutations(event.getKey(), copy.version);
+				}
+				iterator.remove();
+			}
+		} finally {
+			garbageCollectionLock.unlock();
+		}
+	}
+
+	/**
+	 * Given a queue and a version, remove mutations that are no longer needed by any copies.
+	 *
+	 * @param key
+	 * 		the key that requires garbage collection
+	 * @param version
+	 * 		the version of the map that has been released
+	 */
+	private void cleanOldMutations(final K key, final long version) {
+		data.compute(key, (final K k, final Mutation<V> mutationHead) -> {
+			if (mutationHead == null) {
+				return null;
+			}
+
+			Mutation<V> parent = mutationHead;
+			Mutation<V> target = parent.getPrevious();
+
+			while (target != null) {
+
+				// truncate all older mutations
+				if (target.getVersion() <= version) {
+					parent.setPrevious(null);
+					break;
+				}
+
+				parent = target;
+				target = parent.getPrevious();
+			}
+
+			if (mutationHead.getPrevious() == null && mutationHead.getValue() == null) {
+				// entry can be deleted if just a single deletion record remains
+				return null;
+			}
+
+			return mutationHead;
+		});
+	}
+
+	/**
+	 * Register an operation that causes the need for future garbage collection
+	 *
+	 * @param key
+	 * 		the key that points to a list of mutations that require garbage collection
+	 * @param version
+	 * 		that version that, when deleted, will require garbage collection to be done
+	 */
+	private void registerGarbageCollectionEvent(final K key, final long version) {
+		garbageCollectionEvents.addLast(new GarbageCollectionEvent<>(key, version));
 	}
 
 	/**
@@ -283,7 +380,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 			// are released, no mutations before the current mutations will be reachable. So request
 			// a garbage collection operation on this list of mutations when the version right before
 			// the current version is released.
-			garbageCollector.registerGarbageCollectionEvent(key, version - 1);
+			registerGarbageCollectionEvent(key, version - 1);
 		}
 
 		return originalValue;
@@ -378,7 +475,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 			// are released, no mutations before the current mutations will be reachable. So request
 			// a garbage collection operation on this list of mutations when the version right before
 			// the current version is released.
-			garbageCollector.registerGarbageCollectionEvent(key, version - 1);
+			registerGarbageCollectionEvent(key, version - 1);
 		}
 
 		return new ModifiableValue<>(mutation.getValue(), original.getValue());
@@ -436,14 +533,5 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 */
 	protected Map<K, Mutation<V>> getData() {
 		return data;
-	}
-
-	/**
-	 * Utility function for testing garbage collector cleanup.
-	 *
-	 * @return if the garbage collection thread is still running.
-	 */
-	protected boolean isGarbageCollectorStillRunning() {
-		return garbageCollector.isRunning();
 	}
 }

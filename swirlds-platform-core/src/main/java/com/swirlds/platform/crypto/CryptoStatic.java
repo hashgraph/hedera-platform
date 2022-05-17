@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -55,6 +55,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
 import static com.swirlds.common.CommonUtils.nameToAlias;
+import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.platform.crypto.CryptoConstants.PUBLIC_KEYS_FILE;
 
 /**
@@ -500,5 +501,26 @@ public final class CryptoStatic {
 			}
 		}
 		return array;
+	}
+
+	/**
+	 * Return the nondeterministic secure random number generator stored in this Crypto instance. If it
+	 * doesn't already exist, create it.
+	 *
+	 * @return the stored SecureRandom object
+	 */
+	public static SecureRandom getNonDetRandom() {
+		final SecureRandom nonDetRandom;
+		try {
+			nonDetRandom = SecureRandom.getInstanceStrong();
+		} catch (final NoSuchAlgorithmException e) {
+			throw new CryptographyException(e, EXCEPTION);
+		}
+		// call nextBytes before setSeed, because some algorithms (like SHA1PRNG) become
+		// deterministic if you don't. This call might hang if the OS has too little entropy
+		// collected. Or it might be that nextBytes doesn't hang but getSeed does. The behavior is
+		// different for different choices of OS, Java version, and JDK library implementation.
+		nonDetRandom.nextBytes(new byte[1]);
+		return nonDetRandom;
 	}
 }

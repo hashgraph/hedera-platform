@@ -1,19 +1,20 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
 package com.swirlds.platform.observers;
 
+import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 
 import java.util.ArrayList;
@@ -24,10 +25,10 @@ import java.util.List;
  * the implied observer DAG.
  */
 public class EventObserverDispatcher implements
-		ConsensusEventObserver,
+		ConsensusRoundObserver,
 		EventAddedObserver,
 		PreConsensusEventObserver,
-		StaleEventObserver {
+		StaleEventObserver{
 
 	/**
 	 * A list of implementors of the {@link EventAddedObserver} interface
@@ -45,9 +46,9 @@ public class EventObserverDispatcher implements
 	private final List<StaleEventObserver> staleEventObservers;
 
 	/**
-	 * A list of implementors of the {@link ConsensusEventObserver} interface
+	 * A list of implementors of the {@link ConsensusRoundObserver} interface
 	 */
-	private final List<ConsensusEventObserver> consensusEventObservers;
+	private final List<ConsensusRoundObserver> consensusRoundObservers;
 
 	/**
 	 * Constructor
@@ -59,21 +60,10 @@ public class EventObserverDispatcher implements
 		eventAddedObservers = new ArrayList<>();
 		preConsensusEventObservers = new ArrayList<>();
 		staleEventObservers = new ArrayList<>();
-		consensusEventObservers = new ArrayList<>();
+		consensusRoundObservers = new ArrayList<>();
 
 		for (final EventObserver observer : observers) {
-			if (observer instanceof EventAddedObserver) {
-				eventAddedObservers.add((EventAddedObserver) observer);
-			}
-			if (observer instanceof PreConsensusEventObserver) {
-				preConsensusEventObservers.add((PreConsensusEventObserver) observer);
-			}
-			if (observer instanceof StaleEventObserver) {
-				staleEventObservers.add((StaleEventObserver) observer);
-			}
-			if (observer instanceof ConsensusEventObserver) {
-				consensusEventObservers.add((ConsensusEventObserver) observer);
-			}
+			addObserver(observer);
 		}
 	}
 
@@ -88,12 +78,33 @@ public class EventObserverDispatcher implements
 	}
 
 	/**
+	 * Adds an observer
+	 *
+	 * @param observer
+	 * 		the observer to add
+	 */
+	public void addObserver(final EventObserver observer) {
+		if (observer instanceof EventAddedObserver o) {
+			eventAddedObservers.add(o);
+		}
+		if (observer instanceof PreConsensusEventObserver o) {
+			preConsensusEventObservers.add(o);
+		}
+		if (observer instanceof StaleEventObserver o) {
+			staleEventObservers.add(o);
+		}
+		if (observer instanceof ConsensusRoundObserver o) {
+			consensusRoundObservers.add(o);
+		}
+	}
+
+	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void consensusEvent(final EventImpl event) {
-		for (final ConsensusEventObserver observer : consensusEventObservers) {
-			observer.consensusEvent(event);
+	public void consensusRound(final ConsensusRound consensusRound) {
+		for (final ConsensusRoundObserver observer : consensusRoundObservers) {
+			observer.consensusRound(consensusRound);
 		}
 	}
 

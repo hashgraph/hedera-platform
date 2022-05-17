@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -180,9 +180,22 @@ public class ThreadConfiguration {
 	}
 
 	/**
-	 * Build a new thread.
+	 * Build a new thread. Do not start it automatically.
+	 *
+	 * @return a thread built using this configuration
 	 */
 	public Thread build() {
+		return build(false);
+	}
+
+	/**
+	 * Build a new thread.
+	 *
+	 * @param start
+	 * 		if true then start the thread before returning it
+	 * @return a thread built using this configuration
+	 */
+	public Thread build(final boolean start) {
 		if (runnable == null) {
 			throw new NullPointerException("runnable must not be null");
 		}
@@ -194,6 +207,10 @@ public class ThreadConfiguration {
 		thread.setUncaughtExceptionHandler(getExceptionHandler());
 		if (getContextClassLoader() != null) {
 			thread.setContextClassLoader(getContextClassLoader());
+		}
+
+		if (start) {
+			thread.start();
 		}
 
 		return thread;

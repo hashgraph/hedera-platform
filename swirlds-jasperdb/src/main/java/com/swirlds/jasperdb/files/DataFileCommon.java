@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -111,11 +111,12 @@ public final class DataFileCommon {
 	 * Size of metadata footer written at end of file
 	 */
 	public static final int FOOTER_SIZE = PAGE_SIZE;
-	/**
-	 * Comparator for comparing DataFileReaders by file creation time
-	 */
+	/** Comparator for comparing DataFileReaders by file creation time */
 	private static final Comparator<DataFileReader> DATA_FILE_READER_CREATION_TIME_COMPARATOR =
 			Comparator.comparing(o -> o.getMetadata().getCreationDate());
+	/** Comparator for comparing DataFileReaders by file creation time reversed */
+	private static final Comparator<DataFileReader> DATA_FILE_READER_CREATION_TIME_COMPARATOR_REVERSED =
+			DATA_FILE_READER_CREATION_TIME_COMPARATOR.reversed();
 
 	private DataFileCommon() {
 		throw new IllegalStateException("Utility class; should not be instantiated.");
@@ -134,8 +135,7 @@ public final class DataFileCommon {
 
 		return dataFileReaders -> {
 			final List<DataFileReader> filesNewestFirst = dataFileReaders.stream()
-					.sorted(DATA_FILE_READER_CREATION_TIME_COMPARATOR.reversed())
-					.collect(Collectors.toList());
+					.sorted(DATA_FILE_READER_CREATION_TIME_COMPARATOR_REVERSED).toList();
 			final ArrayList<DataFileReader> smallEnoughFiles = new ArrayList<>(filesNewestFirst.size());
 			for (final DataFileReader file : filesNewestFirst) {
 				long size = file.getSize();
@@ -408,16 +408,12 @@ public final class DataFileCommon {
 	 *
 	 * @param mergingPaused
 	 * 		AtomicBoolean to check if merging should be paused.
+	 * @throws InterruptedException when the thread is interrupted while waiting here
 	 */
 	@SuppressWarnings("BusyWait")
-	public static void waitIfMergingPaused(AtomicBoolean mergingPaused) {
+	public static void waitIfMergingPaused(AtomicBoolean mergingPaused) throws InterruptedException {
 		while (mergingPaused.get()) {
-			try {
-				Thread.sleep(100);
-			} catch (InterruptedException e) {
-				LOG.warn(EXCEPTION.getMarker(), "Interrupted while waiting on merge paused.", e);
-				Thread.currentThread().interrupt();
-			}
+			Thread.sleep(100);
 		}
 	}
 

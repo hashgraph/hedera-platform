@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -17,8 +17,6 @@ package com.swirlds.platform.reconnect;
 import com.swirlds.common.AddressBook;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.io.BadIOException;
-import com.swirlds.common.io.extendable.CountingStreamExtension;
-import com.swirlds.common.io.extendable.ExtendableInputStream;
 import com.swirlds.common.merkle.io.MerkleDataInputStream;
 import com.swirlds.common.merkle.io.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.LearningSynchronizer;
@@ -28,12 +26,12 @@ import com.swirlds.platform.Crypto;
 import com.swirlds.platform.ReconnectStatistics;
 import com.swirlds.platform.SyncConnection;
 import com.swirlds.platform.Utilities;
+import com.swirlds.platform.network.ByteConstants;
 import com.swirlds.platform.state.SigInfo;
 import com.swirlds.platform.state.SigSet;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateSettings;
-import com.swirlds.platform.sync.SyncConstants;
 import com.swirlds.platform.sync.SyncInputStream;
 import com.swirlds.platform.sync.SyncOutputStream;
 import org.apache.logging.log4j.LogManager;
@@ -47,6 +45,7 @@ import java.util.concurrent.Future;
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
+import static com.swirlds.platform.state.PlatformState.getInfoString;
 
 /**
  * This class encapsulates reconnect logic for the out of date node which is
@@ -176,17 +175,17 @@ public class ReconnectLearner {
 		final SyncOutputStream dos = connection.getDos();
 
 		// send the request
-		dos.write(SyncConstants.COMM_STATE_REQUEST);
+		dos.write(ByteConstants.COMM_STATE_REQUEST);
 		dos.flush();
 		LOG.info(RECONNECT.getMarker(), "Requesting to reconnect with node {}.", otherId);
 
 		// read the response
 		final byte stateResponse = dis.readByte();
-		if (stateResponse == SyncConstants.COMM_STATE_ACK) {
+		if (stateResponse == ByteConstants.COMM_STATE_ACK) {
 			LOG.info(RECONNECT.getMarker(),
 					"Node {} is willing to help this node to reconnect.", otherId);
 			return true;
-		} else if (stateResponse == SyncConstants.COMM_STATE_NACK) {
+		} else if (stateResponse == ByteConstants.COMM_STATE_NACK) {
 			LOG.info(RECONNECT.getMarker(),
 					new ReconnectFailurePayload("Node " + otherId
 							+ " is unwilling to help this node to reconnect.",
@@ -206,20 +205,21 @@ public class ReconnectLearner {
 	 */
 	private void reconnect() throws InterruptedException {
 		statistics.incrementReceiverStartTimes();
-		final ExtendableInputStream<CountingStreamExtension> countingStream =
-				new ExtendableInputStream<>(connection.getDis(), new CountingStreamExtension());
 
-		MerkleDataInputStream in = new MerkleDataInputStream(countingStream);
+		MerkleDataInputStream in = new MerkleDataInputStream(connection.getDis());
 		MerkleDataOutputStream out = new MerkleDataOutputStream(connection.getDos());
 
+		connection.getDis().getSyncByteCounter().resetCount();
+		connection.getDos().getSyncByteCounter().resetCount();
+
 		final LearningSynchronizer synchronizer = new LearningSynchronizer(in, out, currentState,
-				() -> connection.disconnect(false, 0));
+				connection::disconnect);
 		synchronizer.synchronize();
 
 		final State state = (State) synchronizer.getRoot();
 		signedState = new SignedState(state);
 
-		final double mbReceived = countingStream.getExtension().getCount() / 1024.0 / 1024.0;
+		final double mbReceived = connection.getDis().getSyncByteCounter().getMebiBytes();
 		LOG.info(RECONNECT.getMarker(), () -> new ReconnectDataUsagePayload(
 				"Reconnect data usage report",
 				mbReceived).toString());
@@ -276,7 +276,8 @@ public class ReconnectLearner {
 		LOG.info(RECONNECT.getMarker(), "StrongMinority status: {}",
 				Utilities.isStrongMinority(validStake, addressBook.getTotalStake()));
 		if (!Utilities.isStrongMinority(validStake, addressBook.getTotalStake())) {
-			LOG.error(RECONNECT.getMarker(), "Hash information for failed reconnect state:\n{}",
+			LOG.error(RECONNECT.getMarker(), "Information for failed reconnect state:\n{}\n{}",
+					() -> getInfoString(signedState.getState().getPlatformState()),
 					() -> generateHashDebugString(signedState.getState(), StateSettings.getDebugHashDepth()));
 			throw new ReconnectException(String.format(
 					"Error: Received signed state does not have enough valid signatures! validCount:%d, addressBook " +

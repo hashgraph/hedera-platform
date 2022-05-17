@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -202,10 +202,11 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>> implements AutoClo
 	 * 		AtomicBoolean to monitor if we should pause merging
 	 * @throws IOException
 	 * 		if there was a problem merging
+	 * @throws InterruptedException If the merge thread was interupted
 	 */
 	public void merge(final Function<List<DataFileReader<Bucket<K>>>,
 			List<DataFileReader<Bucket<K>>>> filterForFilesToMerge, final AtomicBoolean mergingPaused,
-			final int minNumberOfFilesToMerge) throws IOException {
+			final int minNumberOfFilesToMerge) throws IOException, InterruptedException {
 		final long START = System.currentTimeMillis();
 		final List<DataFileReader<Bucket<K>>> allFilesBefore = fileCollection.getAllFilesAvailableForMerge();
 		final List<DataFileReader<Bucket<K>>> filesToMerge = filterForFilesToMerge.apply(allFilesBefore);

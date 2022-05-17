@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -20,10 +20,10 @@ import com.swirlds.common.merkle.synchronization.TeachingSynchronizer;
 import com.swirlds.logging.payloads.ReconnectFinishPayload;
 import com.swirlds.logging.payloads.ReconnectStartPayload;
 import com.swirlds.platform.ReconnectStatistics;
-import com.swirlds.platform.SocketSyncConnection;
+import com.swirlds.platform.SyncConnection;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.StateSettings;
-import com.swirlds.platform.sync.SyncConstants;
+import com.swirlds.platform.network.ByteConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,6 +32,7 @@ import java.net.SocketException;
 
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.RECONNECT;
+import static com.swirlds.platform.state.PlatformState.getInfoString;
 
 /**
  * This class encapsulates reconnect logic for the up to date node which is
@@ -42,7 +43,7 @@ public class ReconnectTeacher {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger LOG = LogManager.getLogger(ReconnectTeacher.class);
 
-	private final SocketSyncConnection connection;
+	private final SyncConnection connection;
 	private final SignedState signedState;
 	private final int reconnectSocketTimeout;
 
@@ -62,7 +63,7 @@ public class ReconnectTeacher {
 	private boolean stateIsReleased;
 
 	public ReconnectTeacher(
-			final SocketSyncConnection connection,
+			final SyncConnection connection,
 			final SignedState signedState,
 			final int reconnectSocketTimeout,
 			final ReconnectThrottle reconnectThrottle,
@@ -90,8 +91,8 @@ public class ReconnectTeacher {
 	 */
 	private void increaseSocketTimeout() throws ReconnectException {
 		try {
-			originalSocketTimeout = connection.getSocket().getSoTimeout();
-			connection.getSocket().setSoTimeout(reconnectSocketTimeout);
+			originalSocketTimeout = connection.getTimeout();
+			connection.setTimeout(reconnectSocketTimeout);
 		} catch (final SocketException e) {
 			throw new ReconnectException(e);
 		}
@@ -112,7 +113,7 @@ public class ReconnectTeacher {
 		}
 
 		try {
-			connection.getSocket().setSoTimeout(originalSocketTimeout);
+			connection.setTimeout(originalSocketTimeout);
 		} catch (final SocketException e) {
 			throw new ReconnectException(e);
 		}
@@ -179,7 +180,7 @@ public class ReconnectTeacher {
 	 * 		thrown when any I/O related errors occur
 	 */
 	private void confirmReconnect() throws IOException {
-		connection.getDos().write(SyncConstants.COMM_STATE_ACK);
+		connection.getDos().write(ByteConstants.COMM_STATE_ACK);
 		connection.getDos().flush();
 	}
 
@@ -190,7 +191,7 @@ public class ReconnectTeacher {
 	 * 		thrown when any I/O related errors occur
 	 */
 	private void denyReconnect() throws IOException {
-		connection.getDos().write(SyncConstants.COMM_STATE_NACK);
+		connection.getDos().write(ByteConstants.COMM_STATE_NACK);
 		connection.getDos().flush();
 	}
 
@@ -201,7 +202,8 @@ public class ReconnectTeacher {
 				selfId,
 				otherId,
 				lastRoundReceived));
-		LOG.info(RECONNECT.getMarker(), "The following state will be sent to the learner:\n{}",
+		LOG.info(RECONNECT.getMarker(), "The following state will be sent to the learner:\n{}\n{}",
+				() -> getInfoString(signedState.getState().getPlatformState()),
 				() -> generateHashDebugString(signedState.getState(), StateSettings.getDebugHashDepth()));
 	}
 
@@ -224,11 +226,14 @@ public class ReconnectTeacher {
 		LOG.info(RECONNECT.getMarker(), "Starting synchronization in the role of the sender.");
 		statistics.incrementSenderStartTimes();
 
+		connection.getDis().getSyncByteCounter().resetCount();
+		connection.getDos().getSyncByteCounter().resetCount();
+
 		final TeachingSynchronizer synchronizer = new TeachingSynchronizer(
 				new MerkleDataInputStream(connection.getDis()),
 				new MerkleDataOutputStream(connection.getDos()).setExternal(false),
 				signedState.getState(),
-				() -> connection.disconnect(false, 0));
+				connection::disconnect);
 
 		// State is acquired via SignedStateManager.getLastCompleteSignedState(), which acquires
 		// a weak reservation. The synchronizer manually acquires references to merkle nodes in the

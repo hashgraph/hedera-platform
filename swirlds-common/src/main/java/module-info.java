@@ -1,43 +1,55 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 module com.swirlds.common {
+
+	/* Exported packages. This list should remain alphabetized. */
 	exports com.swirlds.common;
-	exports com.swirlds.common.classscan;
+	exports com.swirlds.common.bloom;
+	exports com.swirlds.common.bloom.hasher;
 	exports com.swirlds.common.constructable;
 	exports com.swirlds.common.crypto;
+	exports com.swirlds.common.events;
 	exports com.swirlds.common.futures;
 	exports com.swirlds.common.io;
 	exports com.swirlds.common.io.extendable;
-	exports com.swirlds.common.notification;
-	exports com.swirlds.common.notification.listeners;
-	exports com.swirlds.common.settings;
-	exports com.swirlds.common.threading;
-	exports com.swirlds.common.throttle;
-
+	exports com.swirlds.common.io.extendable.extensions;
+	exports com.swirlds.common.locks;
 	exports com.swirlds.common.merkle;
+	exports com.swirlds.common.merkle.copy;
 	exports com.swirlds.common.merkle.exceptions;
 	exports com.swirlds.common.merkle.hash;
 	exports com.swirlds.common.merkle.io;
 	exports com.swirlds.common.merkle.iterators;
 	exports com.swirlds.common.merkle.route;
 	exports com.swirlds.common.merkle.synchronization;
+	exports com.swirlds.common.merkle.synchronization.internal;
+	exports com.swirlds.common.merkle.synchronization.settings;
+	exports com.swirlds.common.merkle.synchronization.streams;
+	exports com.swirlds.common.merkle.synchronization.utility;
+	exports com.swirlds.common.merkle.synchronization.views;
 	exports com.swirlds.common.merkle.utility;
 	exports com.swirlds.common.utility;
+	exports com.swirlds.common.notification;
+	exports com.swirlds.common.notification.listeners;
+	exports com.swirlds.common.settings;
+	exports com.swirlds.common.stream;
+	exports com.swirlds.common.threading;
+	exports com.swirlds.common.throttle;
 
+	/* Targeted exports */
 	exports com.swirlds.common.transaction.internal to com.swirlds.platform, com.swirlds.common.test,
 			com.swirlds.platform.test;
-	exports com.swirlds.common.events;
 	exports com.swirlds.common.internal to com.swirlds.platform, com.swirlds.platform.test,
 			com.swirlds.common.test, com.swirlds.regression, com.swirlds.demo.platform;
 	exports com.swirlds.common.list to com.swirlds.platform, com.swirlds.fcqueue;
@@ -46,23 +58,17 @@ module com.swirlds.common {
 	exports com.swirlds.common.notification.internal to com.swirlds.common.test;
 	exports com.swirlds.common.signingtool to com.swirlds.common.test, com.swirlds.demo.platform,
 			com.swirlds.regression;
-	exports com.swirlds.common.stream;
 	exports com.swirlds.common.crypto.engine to com.swirlds.common.test;
 
 	opens com.swirlds.common.crypto to com.fasterxml.jackson.databind;
 	opens com.swirlds.common.merkle.utility to com.fasterxml.jackson.databind;
 	opens com.swirlds.common.throttle to com.fasterxml.jackson.databind;
-	exports com.swirlds.common.merkle.copy;
 	opens com.swirlds.common.stream to com.fasterxml.jackson.databind;
-	exports com.swirlds.common.merkle.synchronization.views;
-	exports com.swirlds.common.merkle.synchronization.settings;
-	exports com.swirlds.common.merkle.synchronization.streams;
-	exports com.swirlds.common.merkle.synchronization.utility;
 	exports com.swirlds.common.statistics;
 	exports com.swirlds.common.statistics.internal to com.swirlds.common.test, com.swirlds.demo.platform,
 			com.swirlds.platform, com.swirlds.platform.test, com.swirlds.regression;
 	opens com.swirlds.common.merkle.copy to com.fasterxml.jackson.databind;
-	exports com.swirlds.common.merkle.synchronization.internal;
+	exports com.swirlds.common.io.extendable.extensions.internal to com.swirlds.common.test;
 
 	requires com.swirlds.logging;
 

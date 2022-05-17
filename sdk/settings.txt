@@ -13,8 +13,5 @@ showDbStats,               0
 doUpnp,                    false
 useLoopbackIp,             false
 csvFileName,               PlatformTesting
-dbConnection.active,       1
-dbBackup.active,           1
-dbRestore.active,          1
 checkSignedStateFromDisk,  1
 loadKeysFromPfxFiles,      0

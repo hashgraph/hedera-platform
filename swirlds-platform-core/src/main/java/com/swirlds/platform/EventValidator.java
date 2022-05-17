@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -19,10 +19,9 @@ import com.swirlds.common.NodeId;
 import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.events.BaseEventHashedData;
-import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.platform.crypto.CryptoStatic;
 import com.swirlds.platform.event.EventConstants;
+import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.stats.HashgraphStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -231,14 +230,12 @@ public class EventValidator {
 	 * (e) adds the event to the hashgraph intake queue, if it is a valid event.
 	 * </pre>
 	 *
-	 * @param hashedData
-	 * 		the hashed data for the event
-	 * @param unhashedData
-	 * 		the unhashed data for the event
+	 * @param gossipEvent
+	 * 		event received from gossip
 	 */
-	public void validateEvent(final BaseEventHashedData hashedData, final BaseEventUnhashedData unhashedData) {
+	public void validateEvent(final GossipEvent gossipEvent) {
 		try {
-			final EventImpl event = buildEvent(hashedData, unhashedData);
+			final EventImpl event = buildEvent(gossipEvent);
 			final EventStatus eventStatus = getStatus(event);
 
 			updateStats(event, eventStatus);
@@ -324,21 +321,21 @@ public class EventValidator {
 	/**
 	 * Build the event.
 	 *
-	 * @param hashedData
-	 * 		the hashed data for the event
-	 * @param unhashedData
-	 * 		the unhashed data for the event
+	 * @param gossipEvent
+	 * 		event received from gossip
 	 */
-	private EventImpl buildEvent(final BaseEventHashedData hashedData, final BaseEventUnhashedData unhashedData) {
+	private EventImpl buildEvent(final GossipEvent gossipEvent) {
 
 		final EventImpl event = new EventImpl(
-				hashedData,
-				unhashedData,
-				eventByHash.apply(hashedData.getSelfParentHash()),
-				eventByHash.apply(hashedData.getOtherParentHash()));
+				gossipEvent,
+				eventByHash.apply(gossipEvent.getHashedData().getSelfParentHash()),
+				eventByHash.apply(gossipEvent.getHashedData().getOtherParentHash())
+		);
 
-		CryptoFactory.getInstance().digestSync(event.getBaseEventHashedData());
-
+		if (event.getBaseEventHashedData().getHash() == null) {
+			// only hash if it hasn't been already hashed
+			CryptoFactory.getInstance().digestSync(event.getBaseEventHashedData());
+		}
 		return event;
 	}
 

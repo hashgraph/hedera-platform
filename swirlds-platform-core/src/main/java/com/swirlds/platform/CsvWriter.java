@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -55,11 +55,6 @@ class CsvWriter implements Runnable {
 	private final boolean showInternalStats;
 
 	/**
-	 * if true, then statistics with the category "database" are written to the CSV file
-	 */
-	private final boolean showDbStats;
-
-	/**
 	 * if true, then the file will be appended to continuing from the last record written; otherwise the file will be
 	 * truncated and headers written
 	 */
@@ -83,12 +78,9 @@ class CsvWriter implements Runnable {
 	 * 		overwritten
 	 * @param showInternalStats
 	 * 		if true all statistics with the "internal" category will be included in the CSV file output
-	 * @param showDbStats
-	 * 		if true then statistics with the "database" category will be included in the CSV file output
 	 */
 	public CsvWriter(final AbstractPlatform platform, final NodeId selfId, final String folderName,
-			final String fileNamePrefix, final int writePeriod, final boolean append, final boolean showInternalStats,
-			final boolean showDbStats) {
+			final String fileNamePrefix, final int writePeriod, final boolean append, final boolean showInternalStats) {
 
 		if (fileNamePrefix == null || fileNamePrefix.isBlank()) {
 			throw new IllegalArgumentException("fileNamePrefix");
@@ -106,7 +98,6 @@ class CsvWriter implements Runnable {
 		this.csvFilePath = new File(folderPath, String.format("%s%s.csv", fileNamePrefix, selfId)).getAbsoluteFile();
 		this.writePeriod = (writePeriod > 0) ? writePeriod : DEFAULT_WRITE_PERIOD;
 		this.showInternalStats = showInternalStats;
-		this.showDbStats = showDbStats;
 		this.append = append;
 	}
 
@@ -145,14 +136,10 @@ class CsvWriter implements Runnable {
 	 */
 	@Override
 	public void run() {
-		final AbstractStatistics[] statisticsObjs = new AbstractStatistics[(showDbStats) ? 4 : 3];
+		final AbstractStatistics[] statisticsObjs = new AbstractStatistics[3];
 		statisticsObjs[0] = platform.getStats();
 		statisticsObjs[1] = CryptoStatistics.getInstance();
 		statisticsObjs[2] = platform.getAppStats();
-
-		if (showDbStats) {
-			statisticsObjs[3] = platform.getDBStatistics();
-		}
 
 		log.info(STARTUP.getMarker(),
 				"CsvWriter: Initializing statistics output in CSV format [ writePeriod = '{}', csvOutputFolder = " +

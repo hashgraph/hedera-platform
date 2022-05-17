@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -23,12 +23,11 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import java.io.IOException;
 
 public class SyncGenerations implements GraphGenerations, SelfSerializable {
+	/** The generations at genesis */
+	public static final GraphGenerations GENESIS_GENERATIONS = new SyncGenerations(
+			GraphGenerations.FIRST_GENERATION, GraphGenerations.FIRST_GENERATION, GraphGenerations.FIRST_GENERATION
+	);
 	private static final long CLASS_ID = 0x2d745f265302ccfbL;
-
-	private static final class ClassVersion {
-		public static final int ORIGINAL = 1;
-	}
-
 	/** The minimum famous witness generation number from the minimum (oldest) non-expired round. */
 	private long minRoundGeneration;
 	/** the minimum generation of all the judges that are not ancient */
@@ -43,6 +42,12 @@ public class SyncGenerations implements GraphGenerations, SelfSerializable {
 	 * No-args constructor for RuntimeConstructable
 	 */
 	public SyncGenerations() {
+	}
+
+	public SyncGenerations(final GraphGenerations generations) {
+		this(generations.getMinRoundGeneration(),
+				generations.getMinGenerationNonAncient(),
+				generations.getMaxRoundGeneration());
 	}
 
 	public SyncGenerations(final long minRoundGeneration, final long minGenNonAncient, final long maxRoundGeneration) {
@@ -75,7 +80,7 @@ public class SyncGenerations implements GraphGenerations, SelfSerializable {
 	}
 
 	@Override
-	public void deserialize(final SerializableDataInputStream in, int version) throws IOException {
+	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
 		minRoundGeneration = in.readLong();
 		minGenNonAncient = in.readLong();
 		maxRoundGeneration = in.readLong();
@@ -116,5 +121,9 @@ public class SyncGenerations implements GraphGenerations, SelfSerializable {
 		if (maxRoundGeneration < minGenNonAncient) {
 			throw new IllegalArgumentException("maxRoundGeneration cannot be smaller than minGenNonAncient! " + this);
 		}
+	}
+
+	private static final class ClassVersion {
+		public static final int ORIGINAL = 1;
 	}
 }

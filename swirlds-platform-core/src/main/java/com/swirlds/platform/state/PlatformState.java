@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -286,5 +286,32 @@ public class PlatformState extends AbstractMerkleLeaf {
 				.append("consensusTimestamp", consensusTimestamp)
 				.append("minGenInfo", minGenInfo)
 				.toString();
+	}
+
+	/**
+	 * Generates a one-line summary of important fields from the <code>PlatformState</code>, meant to be logged at the
+	 * same time as a call to <code>MerkleHashChecker.generateHashDebugString()</code>.
+	 */
+	public static String getInfoString(final PlatformState platformState) {
+		final StringBuilder sb = new StringBuilder();
+		sb.append("Round = ");
+		sb.append(platformState.round);
+		sb.append(", number of consensus events = ");
+		sb.append(platformState.numEventsCons);
+		sb.append(", consensus timestamp = ");
+		if (platformState.consensusTimestamp == null) {
+			sb.append("null");
+		} else {
+			sb.append(platformState.consensusTimestamp.toString());
+		}
+		sb.append(", last timestamp = ");
+		if (platformState.lastTransactionTimestamp == null) {
+			sb.append("null");
+		} else {
+			sb.append(platformState.lastTransactionTimestamp.toString());
+		}
+		sb.append(", consensus Events running hash = ");
+		sb.append(platformState.hashEventsCons);
+		return sb.toString();
 	}
 }

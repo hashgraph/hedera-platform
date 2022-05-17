@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ (c) 2016-2022 Swirlds, Inc.
+  ~ Copyright 2016-2022 Hedera Hashgraph, LLC
   ~
-  ~ This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+  ~ This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
   ~ intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
   ~ not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
   ~
   ~ https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
   ~
-  ~ SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
-  ~ INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+  ~ HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+  ~ IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
   ~ OR NON-INFRINGEMENT.
   -->
 
@@ -24,7 +24,7 @@
 	<parent>
 		<groupId>com.swirlds</groupId>
 		<artifactId>swirlds-platform</artifactId>
-		<version>0.24.0-orvw.1</version>
+		<version>0.25.3-orvw.1</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -49,13 +49,13 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-common</artifactId>
-			<version>0.24.0-orvw.1</version>
+			<version>0.25.3-orvw.1</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-logging</artifactId>
-			<version>0.24.0-orvw.1</version>
+			<version>0.25.3-orvw.1</version>
 		</dependency>
 
 		
@@ -118,23 +118,6 @@
 			<artifactId>bcpkix-jdk15on</artifactId>
 		</dependency>
 
-		<!-- PostgreSQL & Hikari -->
-		<dependency>
-			<groupId>com.zaxxer</groupId>
-			<artifactId>HikariCP</artifactId>
-		</dependency>
-
-		<dependency>
-			<groupId>org.postgresql</groupId>
-			<artifactId>postgresql</artifactId>
-		</dependency>
-
-		<!-- FlywayDB -->
-		<dependency>
-			<groupId>org.flywaydb</groupId>
-			<artifactId>flyway-core</artifactId>
-		</dependency>
-
 		<!-- JavaFX -->
 		<dependency>
 			<groupId>org.openjfx</groupId>
@@ -150,21 +133,21 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-fchashmap</artifactId>
-			<version>0.24.0-orvw.1</version>
+			<version>0.25.3-orvw.1</version>
 			<scope>compile</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-virtualmap</artifactId>
-			<version>0.24.0-orvw.1</version>
+			<version>0.25.3-orvw.1</version>
 			<scope>compile</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-jasperdb</artifactId>
-			<version>0.24.0-orvw.1</version>
+			<version>0.25.3-orvw.1</version>
 			<scope>compile</scope>
 		</dependency>
 	</dependencies>
@@ -172,47 +155,6 @@
 	<!-- Build Configuration -->
 	<build>
 		<plugins>
-			<plugin>
-				<groupId>org.flywaydb</groupId>
-				<artifactId>flyway-maven-plugin</artifactId>
-				<executions>
-					<execution>
-						<id>flyway-clean</id>
-						<phase>pre-clean</phase>
-						<goals>
-							<goal>clean</goal>
-						</goals>
-					</execution>
-					<execution>
-						<id>flyway-migrate</id>
-						<phase>test-compile</phase>
-						<goals>
-							<goal>migrate</goal>
-						</goals>
-					</execution>
-				</executions>
-
-				<configuration>
-					<url>jdbc:postgresql://localhost:5432/fcfs</url>
-					<user>swirlds</user>
-					<password>password</password>
-
-					<schemas>
-						<schema>public</schema>
-					</schemas>
-
-					<placeholders>
-						<PH_BLOB_TYPE>bytea</PH_BLOB_TYPE>
-						<PH_FS_HASH_TYPE>bytea</PH_FS_HASH_TYPE>
-						<PH_FS_META_TYPE>bytea</PH_FS_META_TYPE>
-						<PH_BYTE_TYPE>smallint</PH_BYTE_TYPE>
-					</placeholders>
-					<locations>
-						<location>classpath:/com/swirlds/blob/internal/db/migration/common</location>
-						<location>classpath:/com/swirlds/blob/internal/db/migration/postgres</location>
-					</locations>
-				</configuration>
-			</plugin>
 
 			
 
@@ -263,12 +205,10 @@
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-surefire-plugin</artifactId>
 						<configuration>
-							<argLine>@{argLine} --add-opens com.swirlds.platform/com.swirlds.platform=ALL-UNNAMED
-								--add-opens
-								com.swirlds.platform/com.swirlds.blob.internal.db.migration.common=ALL-UNNAMED
+							<argLine>@{argLine}
+								--add-opens com.swirlds.platform/com.swirlds.platform=ALL-UNNAMED
 								--add-opens com.swirlds.platform/com.swirlds.platform.sync=ALL-UNNAMED
-								--add-opens
-								com.swirlds.platform/com.swirlds.platform.state=ALL-UNNAMED
+								--add-opens com.swirlds.platform/com.swirlds.platform.state=ALL-UNNAMED
 							</argLine>
 							<forkCount>1</forkCount>
 							<reuseForks>false</reuseForks>

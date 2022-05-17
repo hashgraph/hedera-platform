@@ -1,22 +1,19 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
 package com.swirlds.platform;
 
-import com.swirlds.blob.internal.db.SnapshotManager;
-import com.swirlds.blob.internal.db.SnapshotTask;
-import com.swirlds.blob.internal.db.SnapshotTaskType;
 import com.swirlds.common.CommonUtils;
 import com.swirlds.common.NodeId;
 import com.swirlds.common.crypto.Hash;
@@ -51,7 +48,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STATE_TO_DISK;
-
+import static com.swirlds.platform.state.PlatformState.getInfoString;
 
 public class SignedStateFileManager implements Runnable {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
@@ -89,7 +86,7 @@ public class SignedStateFileManager implements Runnable {
 
 				switch (task.operation) {
 					case WRITE:
-						writeSignedStateToDisk(task.signedState, task.snapshotTask, task.description, task.getDir());
+						writeSignedStateToDisk(task.signedState, task.description, task.getDir());
 						break;
 					case DELETE:
 						deleteRecursively(task.getDir());
@@ -125,13 +122,18 @@ public class SignedStateFileManager implements Runnable {
 	 * 		the directory where the state is being written
 	 */
 	private static void writeHashInfoFile(final State state, final File dir) {
+		final String platformInfo = getInfoString(state.getPlatformState());
 		final String hashInfo = generateHashDebugString(state, StateSettings.getDebugHashDepth());
-		log.info(STATE_TO_DISK.getMarker(), "Hash information for state written to disk:\n{}", hashInfo);
+		log.info(STATE_TO_DISK.getMarker(), "Information for state written to disk:\n{}\n{}", platformInfo,
+				hashInfo);
 
 		final File hashInfoFile = CommonUtils.canonicalFile(dir, HASH_INFO_FILE_NAME);
 
 		try (final BufferedWriter writer = new BufferedWriter(new FileWriter(hashInfoFile));) {
+			writer.write(platformInfo);
+			writer.newLine();
 			writer.write(hashInfo);
+			writer.flush();
 		} catch (final IOException e) {
 			log.error(EXCEPTION.getMarker(), "Unable to write hash info file", e);
 		}
@@ -142,8 +144,6 @@ public class SignedStateFileManager implements Runnable {
 	 *
 	 * @param signedState
 	 * 		the object to be written. Will have already been reserved for archival.
-	 * @param snapshotTask
-	 * 		an optional database snapshot operation to be performed when the object is written to disk
 	 * @param taskDescription
 	 * 		a description of the task
 	 * @param dir
@@ -151,7 +151,7 @@ public class SignedStateFileManager implements Runnable {
 	 * @throws IOException
 	 * 		if there is any problems with writing to a file
 	 */
-	void writeSignedStateToDisk(final SignedState signedState, final SnapshotTask snapshotTask,
+	void writeSignedStateToDisk(final SignedState signedState,
 			final String taskDescription, File dir) throws IOException {
 
 		try {
@@ -172,11 +172,6 @@ public class SignedStateFileManager implements Runnable {
 			File tmpEvents = getSavedStateFile(dir, SignedStateFileType.EVENTS, true);
 
 			throwIfExists(stateFile, tmpStateFile, events, tmpEvents);
-
-			// we should prepare the snapshot if requested
-			if (snapshotTask != null) {
-				SnapshotManager.prepareSnapshot(snapshotTask);
-			}
 
 			try {
 				writeAndRename(dir, stateFile, tmpStateFile, out -> {
@@ -208,12 +203,6 @@ public class SignedStateFileManager implements Runnable {
 						"Exception when writing the signed state for round {} to disk:",
 						signedState.getLastRoundReceived(), e);
 				return;
-			}
-
-			// if we are taking a database snapshot then we should wait on completion
-			if (snapshotTask != null) {
-				log.info(STATE_TO_DISK.getMarker(), "'{}' waiting for snapshotTask", taskDescription);
-				snapshotTask.waitFor();
 			}
 
 			// Notify any registered listeners that we have written a signed state to disk
@@ -379,20 +368,11 @@ public class SignedStateFileManager implements Runnable {
 	 */
 	public boolean saveSignedStateToDisk(SignedState signedState) {
 		String taskDesc = "Signed state for round " + signedState.getLastRoundReceived();
-		SnapshotTask snapshotTask = Settings.dbBackup.isActive()
-				? new SnapshotTask(
-				SnapshotTaskType.BACKUP,
-				platform.getMainClassName(),
-				platform.getSwirldName(),
-				platform.getSelfId(),
-				signedState.getLastRoundReceived())
-				: null;
 
 		return offerTask(new FileManagerTask(
 				FileManagerOperation.WRITE,
 				signedState,
 				signedState.getLastRoundReceived(),
-				snapshotTask,
 				taskDesc,
 				getSignedStateDir(signedState.getLastRoundReceived())));
 	}
@@ -407,15 +387,12 @@ public class SignedStateFileManager implements Runnable {
 	 * 		the signed state to be saved which has an ISS
 	 */
 	public void saveIssStateToDisk(final SignedState signedState) {
-		final String taskDesc = "ISS signed state for round " + signedState.getLastRoundReceived();
-
 		offerTask(
 				new FileManagerTask(
 						FileManagerOperation.WRITE,
 						signedState,
 						signedState.getLastRoundReceived(),
 						null,
-						taskDesc,
 						CommonUtils.canonicalFile(
 								Settings.savedDirPath,
 								"iss",
@@ -444,7 +421,6 @@ public class SignedStateFileManager implements Runnable {
 				FileManagerOperation.WRITE,
 				signedState,
 				signedState.getLastRoundReceived(),
-				null,
 				taskDesc,
 				CommonUtils.canonicalFile(
 						Settings.savedDirPath,
@@ -474,7 +450,6 @@ public class SignedStateFileManager implements Runnable {
 						FileManagerOperation.DELETE,
 						null,
 						roundNumber,
-						null,
 						"delete task",
 						getSignedStateDir(roundNumber)
 				));
@@ -492,6 +467,7 @@ public class SignedStateFileManager implements Runnable {
 			log.error(EXCEPTION.getMarker(),
 					"SignedStateFileManager task: '{}' for round {} cannot be added because queue is full!",
 					task.getDescription(), task.getRound());
+			task.signedState.weakReleaseState();
 			return false;
 		}
 		return true;
@@ -621,7 +597,6 @@ public class SignedStateFileManager implements Runnable {
 		/** the round number of the signed state */
 		private final long round;
 		/** an optional database snapshot task to be executed in tandem with the object file operation */
-		private final SnapshotTask snapshotTask;
 		/** a description of the task */
 		private final String description;
 		/** the directory where the files are stored */
@@ -643,11 +618,10 @@ public class SignedStateFileManager implements Runnable {
 		}
 
 		public FileManagerTask(FileManagerOperation operation, SignedState signedState, long round,
-				SnapshotTask snapshotTask, String description, File dir) {
+				String description, File dir) {
 			this.operation = operation;
 			this.signedState = signedState;
 			this.round = round;
-			this.snapshotTask = snapshotTask;
 			this.description = description;
 			this.dir = dir;
 		}
@@ -662,10 +636,6 @@ public class SignedStateFileManager implements Runnable {
 
 		public long getRound() {
 			return round;
-		}
-
-		public SnapshotTask getSnapshotTask() {
-			return snapshotTask;
 		}
 
 		public String getDescription() {

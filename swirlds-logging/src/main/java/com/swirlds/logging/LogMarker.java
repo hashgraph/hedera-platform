@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -115,9 +115,9 @@ public enum LogMarker {
 	SYNC_CONNECTION(LogMarkerType.INFO),
 
 	/**
-	 * connection error C or L -1 or -2
+	 * All network related
 	 */
-	SYNC_ERROR(LogMarkerType.INFO), // doesn't seem to be an actual error, should be renamed
+	NETWORK(LogMarkerType.INFO),
 
 	/**
 	 * log each new event created (not received)
@@ -140,9 +140,15 @@ public enum LogMarker {
 	EXPIRE_EVENT(LogMarkerType.INFO),
 
 	/**
-	 * log when events enter and leave the various event queues in eventFlow
+	 * log when events enter and leave the various event queues managed by the Event Handlers and
+	 * SwirldStateManagerSingle
 	 */
 	QUEUES(LogMarkerType.INFO),
+
+	/**
+	 * log when threads are being stopped and/or joined
+	 */
+	THREADS(LogMarkerType.INFO),
 
 	/**
 	 * log the sending and receiving of the heartbeats from SyncHeartbeat to SyncListener

@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -26,7 +26,10 @@ import java.net.SocketException;
  */
 public interface SyncConnection {
 
-	void disconnect(final boolean caller, final int debug);
+	/**
+	 * Close this connection
+	 */
+	void disconnect();
 
 	/**
 	 * Returns the {@link NodeId} of this node.
@@ -66,6 +69,15 @@ public interface SyncConnection {
 	boolean connected();
 
 	/**
+	 * Returns the current timeout value of this connection.
+	 *
+	 * @return the current timeout value in milliseconds
+	 * @throws SocketException
+	 * 		if there is an error in the underlying protocol, such as a TCP error.
+	 */
+	int getTimeout() throws SocketException;
+
+	/**
 	 * Sets the timeout of this connection.
 	 *
 	 * @param timeoutMillis
@@ -76,28 +88,12 @@ public interface SyncConnection {
 	void setTimeout(final int timeoutMillis) throws SocketException;
 
 	/**
-	 * Returns the current timeout value of this connection.
-	 *
-	 * @return the current timeout value in milliseconds
-	 * @throws SocketException
-	 * 		if there is an error in the underlying protocol, such as a TCP error.
-	 */
-	int getTimeout() throws SocketException;
-
-	/**
 	 * Initialize {@code this} instance for a gossip session.
 	 *
 	 * @throws IOException
 	 * 		if the connection is broken
 	 */
 	void initForSync() throws IOException;
-
-	/**
-	 * Called on the connection at the end of a sync
-	 */
-	default void syncDone(){
-		// do nothing by default
-	}
 
 	/**
 	 * Is this an outbound or an inbound connection. For outbound connections, we initiate the creation of the

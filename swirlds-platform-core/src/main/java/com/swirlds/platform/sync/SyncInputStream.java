@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -19,16 +19,17 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.events.BaseEventHashedData;
 import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.extendable.CountingStreamExtension;
-import com.swirlds.common.io.extendable.ExtendableInputStream;
-import com.swirlds.common.io.extendable.HashingStreamExtension;
-import com.swirlds.common.io.extendable.StreamExtensionList;
-import com.swirlds.platform.event.ValidateEventTask;
+import com.swirlds.platform.event.GossipEvent;
+import com.swirlds.common.io.extendable.extensions.CountingStreamExtension;
+import com.swirlds.common.io.extendable.extensions.HashingStreamExtension;
+import com.swirlds.platform.network.ByteConstants;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
+
+import static com.swirlds.common.io.extendable.ExtendableInputStream.extendInputStream;
 
 public class SyncInputStream extends SerializableDataInputStream {
 
@@ -50,10 +51,7 @@ public class SyncInputStream extends SerializableDataInputStream {
 
 		// the buffered reader reads data first, for efficiency
 		return new SyncInputStream(
-				new ExtendableInputStream<>(
-						new BufferedInputStream(in, bufferSize),
-						new StreamExtensionList(syncCounter, hasher)
-				),
+				extendInputStream(new BufferedInputStream(in, bufferSize), syncCounter, hasher),
 				syncCounter,
 				hasher
 		);
@@ -78,11 +76,11 @@ public class SyncInputStream extends SerializableDataInputStream {
 	 */
 	public boolean readSyncRequestResponse() throws IOException, SyncException {
 		final byte b = readByte();
-		if (b == SyncConstants.COMM_SYNC_NACK) {
+		if (b == ByteConstants.COMM_SYNC_NACK) {
 			// sync rejected
 			return false;
 		}
-		if (b != SyncConstants.COMM_SYNC_ACK) {
+		if (b != ByteConstants.COMM_SYNC_ACK) {
 			throw new SyncException(String.format(
 					"COMM_SYNC_REQUEST was sent but reply was %02x instead of COMM_SYNC_ACK or COMM_SYNC_NACK", b));
 		}
@@ -112,10 +110,10 @@ public class SyncInputStream extends SerializableDataInputStream {
 				Hash::new);
 	}
 
-	public ValidateEventTask readEventData() throws IOException {
+	public GossipEvent readEventData() throws IOException {
 		final BaseEventHashedData hashedData = readSerializable(false, BaseEventHashedData::new);
 		final BaseEventUnhashedData unhashedData = readSerializable(false, BaseEventUnhashedData::new);
 
-		return new ValidateEventTask(hashedData, unhashedData);
+		return new GossipEvent(hashedData, unhashedData);
 	}
 }

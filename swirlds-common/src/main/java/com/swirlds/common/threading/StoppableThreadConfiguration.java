@@ -1,25 +1,33 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
 package com.swirlds.common.threading;
 
+import com.swirlds.common.threading.internal.StoppableThreadImpl;
+
 import java.time.Duration;
+
+import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
+import static com.swirlds.common.Units.SECONDS_TO_NANOSECONDS;
 
 /**
  * An object responsible for configuring and constructing {@link StoppableThread}s.
+ *
+ * @param <T>
+ * 		the type of instance that will do work
  */
-public class StoppableThreadConfiguration {
+public class StoppableThreadConfiguration<T extends InterruptableRunnable> {
 
 	/**
 	 * Can this thread be interrupted?
@@ -37,9 +45,14 @@ public class StoppableThreadConfiguration {
 	private boolean pausable;
 
 	/**
+	 * If not null, then this is the minimum amount of time that a cycle is allowed to take.
+	 */
+	private Duration minimumPeriod;
+
+	/**
 	 * The work to be performed on the thread. Called over and over until the thread is stopped.
 	 */
-	private InterruptableRunnable work;
+	private T work;
 
 	/**
 	 * A method that is called right before stopping the thread. Ignored if thread is interruptable.
@@ -75,10 +88,29 @@ public class StoppableThreadConfiguration {
 	}
 
 	/**
-	 * Build a new thread.
+	 * Build a new thread. Do not start it automatically.
+	 *
+	 * @return a stoppable thread built using this configuration
 	 */
-	public StoppableThread build() {
-		return new StoppableThread(this);
+	public TypedStoppableThread<T> build() {
+		return build(false);
+	}
+
+	/**
+	 * Build a new thread.
+	 *
+	 * @param start
+	 * 		if true then start the thread before returning it
+	 * @return a stoppable thread built using this configuration
+	 */
+	public TypedStoppableThread<T> build(final boolean start) {
+		final TypedStoppableThread<T> thread = new StoppableThreadImpl<>(this);
+
+		if (start) {
+			thread.start();
+		}
+
+		return thread;
 	}
 
 	/**
@@ -93,7 +125,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setFinalCycleWork(final InterruptableRunnable finalCycleWork) {
+	public StoppableThreadConfiguration<T> setFinalCycleWork(final InterruptableRunnable finalCycleWork) {
 		this.finalCycleWork = finalCycleWork;
 		return this;
 	}
@@ -101,7 +133,7 @@ public class StoppableThreadConfiguration {
 	/**
 	 * Get the work that will be run on the thread.
 	 */
-	public InterruptableRunnable getWork() {
+	public T getWork() {
 		return work;
 	}
 
@@ -110,7 +142,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setWork(final InterruptableRunnable work) {
+	public StoppableThreadConfiguration<T> setWork(final T work) {
 		this.work = work;
 		return this;
 	}
@@ -127,7 +159,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setInterruptable(final boolean interruptable) {
+	public StoppableThreadConfiguration<T> setInterruptable(final boolean interruptable) {
 		this.interruptable = interruptable;
 		return this;
 	}
@@ -144,8 +176,59 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setPausable(final boolean pausable) {
+	public StoppableThreadConfiguration<T> setPausable(final boolean pausable) {
 		this.pausable = pausable;
+		return this;
+	}
+
+	/**
+	 * Get the minimum amount of time that a single cycle is allowed to take, or null if no such minimum is defined.
+	 *
+	 * @return the minimum cycle time
+	 */
+	public Duration getMinimumPeriod() {
+		return minimumPeriod;
+	}
+
+	/**
+	 * Set the minimum amount of time that a single cycle is allowed to take, or null if no such minimum is defined.
+	 *
+	 * @param minimumPeriod
+	 * 		the minimum cycle time
+	 * @return this object
+	 */
+	public StoppableThreadConfiguration<T> setMinimumPeriod(final Duration minimumPeriod) {
+		this.minimumPeriod = minimumPeriod;
+		return this;
+	}
+
+	/**
+	 * Get the maximum rate in cycles per second that this operation is permitted to run at.
+	 *
+	 * @return the maximum rate
+	 */
+	public double getMaximumRate() {
+		if (minimumPeriod == null) {
+			return -1;
+		}
+
+		return 1 / (minimumPeriod.toNanos() * NANOSECONDS_TO_SECONDS);
+	}
+
+	/**
+	 * Set the maximum rate in cycles per second that this operation is permitted to run at.
+	 *
+	 * @param hz
+	 * 		the rate, in hertz
+	 * @return this object
+	 */
+	public StoppableThreadConfiguration<T> setMaximumRate(final double hz) {
+		if (hz <= 0) {
+			throw new IllegalArgumentException("invalid hertz value " + hz);
+		}
+
+		minimumPeriod = Duration.ofNanos((long) ((1 / hz) * SECONDS_TO_NANOSECONDS));
+
 		return this;
 	}
 
@@ -161,7 +244,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setJoinWaitMs(final int joinWaitMs) {
+	public StoppableThreadConfiguration<T> setJoinWaitMs(final int joinWaitMs) {
 		this.joinWaitMs = joinWaitMs;
 		return this;
 	}
@@ -178,7 +261,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setThreadGroup(final ThreadGroup threadGroup) {
+	public StoppableThreadConfiguration<T> setThreadGroup(final ThreadGroup threadGroup) {
 		threadConfiguration.setThreadGroup(threadGroup);
 		return this;
 	}
@@ -195,7 +278,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setDaemon(final boolean daemon) {
+	public StoppableThreadConfiguration<T> setDaemon(final boolean daemon) {
 		threadConfiguration.setDaemon(daemon);
 		return this;
 	}
@@ -212,7 +295,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setPriority(final int priority) {
+	public StoppableThreadConfiguration<T> setPriority(final int priority) {
 		threadConfiguration.setPriority(priority);
 		return this;
 	}
@@ -229,7 +312,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setContextClassLoader(final ClassLoader contextClassLoader) {
+	public StoppableThreadConfiguration<T> setContextClassLoader(final ClassLoader contextClassLoader) {
 		threadConfiguration.setContextClassLoader(contextClassLoader);
 		return this;
 	}
@@ -246,7 +329,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setExceptionHandler(final Thread.UncaughtExceptionHandler exceptionHandler) {
+	public StoppableThreadConfiguration<T> setExceptionHandler(final Thread.UncaughtExceptionHandler exceptionHandler) {
 		threadConfiguration.setExceptionHandler(exceptionHandler);
 		return this;
 	}
@@ -263,7 +346,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setNodeId(final long nodeId) {
+	public StoppableThreadConfiguration<T> setNodeId(final long nodeId) {
 		threadConfiguration.setNodeId(nodeId);
 		return this;
 	}
@@ -280,7 +363,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setComponent(final String component) {
+	public StoppableThreadConfiguration<T> setComponent(final String component) {
 		threadConfiguration.setComponent(component);
 		return this;
 	}
@@ -297,7 +380,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setThreadName(final String threadName) {
+	public StoppableThreadConfiguration<T> setThreadName(final String threadName) {
 		threadConfiguration.setThreadName(threadName);
 		return this;
 	}
@@ -314,7 +397,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setOtherNodeId(final long otherNodeId) {
+	public StoppableThreadConfiguration<T> setOtherNodeId(final long otherNodeId) {
 		threadConfiguration.setOtherNodeId(otherNodeId);
 		return this;
 	}
@@ -335,7 +418,7 @@ public class StoppableThreadConfiguration {
 	 *
 	 * @return this object
 	 */
-	public StoppableThreadConfiguration setHangingThreadPeriod(final Duration hangingThreadPeriod) {
+	public StoppableThreadConfiguration<T> setHangingThreadPeriod(final Duration hangingThreadPeriod) {
 		this.hangingThreadPeriod = hangingThreadPeriod;
 		return this;
 	}
@@ -343,7 +426,7 @@ public class StoppableThreadConfiguration {
 	/**
 	 * Intentionally package private. Get the underlying thread configuration object.
 	 */
-	ThreadConfiguration getThreadConfiguration() {
+	public ThreadConfiguration getThreadConfiguration() {
 		return threadConfiguration;
 	}
 }

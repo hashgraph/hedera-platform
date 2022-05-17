@@ -1,19 +1,18 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 package com.swirlds.platform;
 
-import com.swirlds.blob.BinaryObjectStore;
 import com.swirlds.common.Address;
 import com.swirlds.common.AddressBook;
 import com.swirlds.common.CommonUtils;
@@ -763,9 +762,6 @@ public abstract class Browser {
 
 		log.debug(STARTUP.getMarker(), "Starting platforms");
 
-		// Invoke startInit hooks
-		startInit();
-
 		// Try to load the app
 		SwirldAppLoader appLoader;
 		try {
@@ -788,18 +784,9 @@ public abstract class Browser {
 		// Create all instances for all nodes that should run locally
 		createLocalPlatforms(appDefinition, crypto, infoSwirld, appLoader);
 
-		// Invoke stopInit hooks
-		stopInit();
-
 		// Partially initialize the platforms before we dispatch the StateLoadedFromDiskNotification
 		for (SwirldsPlatform platform : platforms) {
-			try {
-				platform.initializeFirstStep();
-			} catch (SignedStateLoadingException e) {
-				log.error(EXCEPTION.getMarker(), "Issue with initializing saved state:", e);
-				// there is not much we can do at this point
-				SystemUtils.exitSystem(SystemExitReason.SAVED_STATE_NOT_LOADED);
-			}
+			platform.initializeFirstStep();
 		}
 
 		// Notify listeners that loading state from disk has been completed successfully
@@ -867,27 +854,6 @@ public abstract class Browser {
 			return;
 		}
 		browserWindow = new WinBrowser();
-	}
-
-	/**
-	 * Called prior to loading save state and before the {@link Platform} objects are instantiated to allow
-	 * subsystems to
-	 * prepare for recovery from the saved state.
-	 */
-	protected static void startInit() {
-		if (Settings.dbConnection.isActive()) {
-			BinaryObjectStore.getInstance().startInit();
-		}
-	}
-
-	/**
-	 * Called after the saved state is loaded and after the {@link Platform} objects are instantiated but before the
-	 * platforms are started to allow subsystems to perform any additional operations after the state is recovered.
-	 */
-	protected static void stopInit() {
-		if (Settings.dbConnection.isActive()) {
-			BinaryObjectStore.getInstance().stopInit();
-		}
 	}
 
 	protected static void populateSettingsCommon() {

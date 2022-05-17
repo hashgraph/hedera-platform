@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -17,6 +17,7 @@ package com.swirlds.platform.components;
 import com.swirlds.common.NodeId;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.event.EventConstants;
+import com.swirlds.platform.event.SelfEventStorage;
 import com.swirlds.platform.observers.EventAddedObserver;
 
 import java.util.HashMap;
@@ -29,7 +30,7 @@ import java.util.stream.Collectors;
  * recent event added and will not check the ordering of these events. If a fork exists, it will track whichever fork is
  * added last.
  */
-public class EventMapper implements EventAddedObserver {
+public class EventMapper implements EventAddedObserver, SelfEventStorage {
 	private static final EventMapping DEFAULT_RETURN = new EventMapping(null);
 	/**
 	 * Contains the most recent event added from each node, with information about its descendants
@@ -96,6 +97,22 @@ public class EventMapper implements EventAddedObserver {
 	 */
 	public synchronized EventImpl getMostRecentEvent(final long nodeId) {
 		return mappings.getOrDefault(nodeId, DEFAULT_RETURN).getEvent();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public synchronized EventImpl getMostRecentSelfEvent() {
+		return getMostRecentEvent(selfId.getId());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public synchronized void setMostRecentSelfEvent(final EventImpl selfEvent) {
+		// does nothing, self events will be added through the eventAdded() method
 	}
 
 	/**

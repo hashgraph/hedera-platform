@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 package com.swirlds.platform;
@@ -16,9 +16,6 @@ package com.swirlds.platform;
 import com.swirlds.common.CommonUtils;
 import com.swirlds.common.settings.SettingsException;
 import com.swirlds.platform.internal.CryptoSettings;
-import com.swirlds.platform.internal.DatabaseBackupSettings;
-import com.swirlds.platform.internal.DatabaseRestoreSettings;
-import com.swirlds.platform.internal.DatabaseSettings;
 import com.swirlds.platform.internal.SubSetting;
 import com.swirlds.platform.reconnect.ReconnectSettingsImpl;
 import com.swirlds.platform.state.SignedStateManager;
@@ -97,7 +94,7 @@ class Settings {
 	///////////////////////////////////////////
 	// settings from settings.txt file
 	static String about = """
-			Swirlds browser v. 0.24.0
+			Swirlds browser v. 0.25.3
 			(c)2016-2022 Swirlds Inc
 			This is an early alpha version.
 			The Swirlds™ software is covered by one or more patents
@@ -112,7 +109,6 @@ class Settings {
 
 	/** show the user all statistics, including those with category "internal"? */
 	static boolean showInternalStats = false;
-	static boolean showDBStats = false;
 	/** show expand statistics values, inlcude mean, min, max, stdDev */
 	static boolean verboseStatistics = false;
 
@@ -133,7 +129,7 @@ class Settings {
 	 * every other round, and so on. If the value is 0 or less, no states will be signed
 	 */
 	static int signedStateFreq = 1;
-	/** max events that can be put in the forCons queue in EventFlow (0 for infinity) */
+	/** max events that can be put in the forCons queue (q2) in ConsensusEventHandler (0 for infinity) */
 	static int maxEventQueueForCons = 500;
 	/**
 	 * Stop accepting new non-system transactions into the 4 transaction queues if any of them have more
@@ -165,12 +161,6 @@ class Settings {
 	static int numConnections = 40; // probably 40 is a good number
 	/** maximum number of simultaneous outgoing syncs initiated by me */
 	static int maxOutgoingSyncs = 2;
-	/**
-	 * the number of random callers out of the total number of callers defined by maxOutgoingSyncs. The
-	 * callers that are not random callers will be priority callers. If maxOutgoingRandomSyncs >=
-	 * maxOutgoingSyncs, then all the callers will be random, and none will be prioritized.
-	 */
-	static int maxOutgoingRandomSyncs = 1000;
 	/**
 	 * maximum number of simultaneous incoming syncs initiated by others, minus maxOutgoingSyncs. If there
 	 * is a moment where each member has maxOutgoingSyncs outgoing syncs in progress, then a fraction of at
@@ -226,12 +216,7 @@ class Settings {
 	static int statUpdatePeriod = 1000;
 
 	/** send a heartbeat byte on each comm channel to keep it open, every this many milliseconds */
-	static long sleepHeartbeat = 500;
-
-	/** sleep this many milliseconds, once, at the start of syncListener */
-	static long sleepSyncListenerStart = 0;
-	/** after binding to a new socket */
-	static long sleepSyncServerSocketBind = 100;
+	static int sleepHeartbeat = 500;
 	/**
 	 * the working state (stateWork) resets to a copy of the consensus state (stateCons) (which is called a
 	 * shuffle) when its queue is empty and the two are equal, but never twice within this many milliseconds
@@ -242,10 +227,6 @@ class Settings {
 	static long callerSkipsBeforeSleep = 30;
 	/** caller sleeps this many milliseconds if it failed to connect to callerSkipsBeforeSleep in a row */
 	static long sleepCallerSkips = 50;
-	/** listener sleeps this many milliseconds if there isn't a valid connection */
-	static long sleepListenerDisconnected = 100;
-	/** wake up (while blocked on a socket) every this many milliseconds to check if it's still valid */
-	static int waitListenerRead = 500;
 
 	/** number of bins to store for the history (in StatsBuffer etc.) */
 	static int statsBufferSize = 100;
@@ -307,15 +288,6 @@ class Settings {
 	 * Settings controlling JasperDB.
 	 */
 	static JasperDbSettingsImpl jasperDb = new JasperDbSettingsImpl();
-
-	/** settings related to database connectivity */
-	static DatabaseSettings dbConnection = new DatabaseSettings();
-
-	/** settings related to database backup */
-	static DatabaseBackupSettings dbBackup = new DatabaseBackupSettings();
-
-	/** settings related to database restore */
-	static DatabaseRestoreSettings dbRestore = new DatabaseRestoreSettings();
 
 	/**
 	 * if on, transThrottle will stop initiating syncs and thus stop generating events if the are no non consensus user
@@ -434,6 +406,10 @@ class Settings {
 	static String playbackStreamFileDirectory = "";
 	/** last time stamp (inclusive) to stop the playback, format is "2019-10-02T19:46:30.037063163Z" */
 	static String playbackEndTimeStamp = "";
+	/** whether to use chatter for event gossiping and creation, if false, it will use the sync protocol */
+	static boolean useChatter = false;
+	/** how many event do we attempt to create per second when running chatter */
+	static int attemptedChatterEventPerSecond = 100;
 
 	private Settings() {
 	}
@@ -583,10 +559,10 @@ class Settings {
 		}
 
 		if (!good) {
-			final String err = "ERROR: " + pars[0] + " is not a valid setting name.";
+			final String err = "WARNING: " + pars[0] + " is not a valid setting name.";
 			// this only happens if settings.txt exist, so it's internal, not users, so print it
 			CommonUtils.tellUserConsole(err);
-			log.error(EXCEPTION.getMarker(), err);
+			log.warn(STARTUP.getMarker(), err);
 			return false;
 		}
 		return true;

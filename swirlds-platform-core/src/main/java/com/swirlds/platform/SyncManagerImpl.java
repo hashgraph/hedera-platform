@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 package com.swirlds.platform;
@@ -22,8 +22,8 @@ import com.swirlds.platform.components.TransThrottleSyncAndCreateRules;
 import com.swirlds.platform.components.TransThrottleSyncRule;
 import com.swirlds.platform.components.TransactionTracker;
 import com.swirlds.platform.event.EventIntakeTask;
+import com.swirlds.platform.network.RandomGraph;
 import com.swirlds.platform.sync.FallenBehindManager;
-import com.swirlds.platform.sync.SyncCallerType;
 import com.swirlds.platform.sync.SyncManager;
 import com.swirlds.platform.sync.SyncResult;
 import com.swirlds.platform.sync.SyncUtils;
@@ -65,9 +65,6 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 
 	/** A list of rules for checking if this not should sync with other nodes */
 	private final List<TransThrottleSyncRule> transThrottleSyncRules;
-
-	/** Returns the number of threads currently in a sync. */
-	private final Supplier<Integer> numListenerSyncs;
 
 	/** Returns the round number of the latest round saved to disk. */
 	private final Supplier<Long> lastRoundSavedToDisk;
@@ -137,8 +134,6 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 	 * @param transThrottleSyncAndCreateRules
 	 * 		Contains a list of rules for checking whether should initiate a sync and create an event for that sync or
 	 * 		not
-	 * @param numListenerSyncs
-	 * 		A binding of syncServer.numListenerSyncs.get().
 	 * @param lastRoundSavedToDisk
 	 * 		A binding of signedStateMgr.getLastRoundSavedToDisk().
 	 * @param lastCompletedRound
@@ -153,7 +148,6 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 			final EventCreationRules eventCreationRules,
 			final List<TransThrottleSyncRule> transThrottleSyncRules,
 			final TransThrottleSyncAndCreateRules transThrottleSyncAndCreateRules,
-			final Supplier<Integer> numListenerSyncs,
 			final Supplier<Long> lastRoundSavedToDisk,
 			final Supplier<Long> lastCompletedRound,
 			final Runnable notifyPlatform,
@@ -170,7 +164,6 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 		this.transThrottleSyncRules = transThrottleSyncRules;
 		this.transThrottleSyncAndCreateRules = transThrottleSyncAndCreateRules;
 
-		this.numListenerSyncs = numListenerSyncs;
 		this.lastRoundSavedToDisk = lastRoundSavedToDisk;
 		this.lastCompletedRound = lastCompletedRound;
 		this.notifyPlatform = notifyPlatform;
@@ -204,14 +197,6 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 					intakeQueueSize);
 			return false;
 		}
-
-		final int numListenerSyncsValue = numListenerSyncs.get();
-		if (numListenerSyncsValue > Settings.maxIncomingSyncsInc + Settings.maxOutgoingSyncs) {
-			LogManager.getLogger().debug(SYNC.getMarker(),
-					"don't accept sync because numListenerSyncs can't exceed limit, size: {}",
-					numListenerSyncsValue);
-			return false;
-		}
 		return true;
 	}
 
@@ -229,39 +214,32 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 	/**
 	 * Retrieves a list of neighbors in order of syncing priority
 	 *
-	 * @param callerType
-	 * 		the type of caller to create a list for
 	 * @return a list of neighbors
 	 */
 	@Override
-	public List<Long> getNeighborsToCall(final SyncCallerType callerType) {
+	public List<Long> getNeighborsToCall() {
 		// if there is an indication we might have fallen behind, calling nodes to establish this takes priority
 		List<Long> list = getNeededForFallenBehind();
 		if (list != null) {
 			return list;
 		}
-		switch (callerType) {
-			case RANDOM:
-			case PRIORITY:
-				list = new LinkedList<>();
-				for (int i = 0; i < MAXIMUM_NEIGHBORS_TO_QUERY; i++) {
-					final long neighbor = connectionGraph.randomNeighbor(selfId.getIdAsInt());
+		list = new LinkedList<>();
+		for (int i = 0; i < MAXIMUM_NEIGHBORS_TO_QUERY; i++) {
+			final long neighbor = connectionGraph.randomNeighbor(selfId.getIdAsInt());
 
-					// don't add duplicated nodes here
-					if (list.contains(neighbor)) {
-						continue;
-					}
+			// don't add duplicated nodes here
+			if (list.contains(neighbor)) {
+				continue;
+			}
 
-					// we try to call a neighbor in the bottom 1/3 by number of events created in the latest round, if
-					// we fail to find one after 10 tries, we just call the last neighbor we find
-					if (criticalQuorum.isInCriticalQuorum(neighbor) || i == MAXIMUM_NEIGHBORS_TO_QUERY - 1) {
-						list.add(neighbor);
-					}
-				}
-
-				return list;
+			// we try to call a neighbor in the bottom 1/3 by number of events created in the latest round, if
+			// we fail to find one after 10 tries, we just call the last neighbor we find
+			if (criticalQuorum.isInCriticalQuorum(neighbor) || i == MAXIMUM_NEIGHBORS_TO_QUERY - 1) {
+				list.add(neighbor);
+			}
 		}
-		return null;
+
+		return list;
 	}
 
 	/**

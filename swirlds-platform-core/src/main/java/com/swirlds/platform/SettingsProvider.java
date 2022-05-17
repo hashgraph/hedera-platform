@@ -1,20 +1,21 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
 package com.swirlds.platform;
 
 import com.swirlds.platform.internal.CryptoSettings;
+import com.swirlds.platform.state.StateSettings;
 
 /**
  * A temporary interface to bridge circumvent the fact that the Settings class is package private
@@ -95,6 +96,11 @@ public interface SettingsProvider {
 	int getTimeoutSyncClientConnect();
 
 	/**
+	 * @see Settings#timeoutServerAcceptConnect
+	 */
+	int getTimeoutServerAcceptConnect();
+
+	/**
 	 * @see Settings#tcpNoDelay
 	 */
 	boolean isTcpNoDelay();
@@ -103,4 +109,39 @@ public interface SettingsProvider {
 	 * @see CryptoSettings#getKeystorePassword()
 	 */
 	String getKeystorePassword();
+
+	/**
+	 * @see Settings#enableStateRecovery
+	 */
+	boolean isEnableStateRecovery();
+
+	/**
+	 * @see Settings#state
+	 */
+	StateSettings getStateSettings();
+
+	/**
+	 * @see Settings#throttleTransactionQueueSize
+	 */
+	int getThrottleTransactionQueueSize();
+
+	/**
+	 * @see Settings#maxTransactionBytesPerEvent
+	 */
+	int getMaxTransactionBytesPerEvent();
+
+	/**
+	 * @see Settings#useLoopbackIp
+	 */
+	boolean useLoopbackIp();
+
+	/**
+	 * @see Settings#bufferSize
+	 */
+	int connectionStreamBufferSize();
+
+	/**
+	 * @see Settings#sleepHeartbeat
+	 */
+	int sleepHeartbeatMillis();
 }

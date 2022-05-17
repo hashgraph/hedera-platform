@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 package com.swirlds.platform.state;
@@ -49,7 +49,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import static com.swirlds.common.Units.BYTES_TO_BITS;
 import static com.swirlds.common.Units.MILLISECONDS_TO_SECONDS;
-import static com.swirlds.common.Units.SECONDS_TO_MILLISECONDS;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.FREEZE;
 import static com.swirlds.logging.LogMarker.LAST_COMPLETE_SIGNED_STATE;
@@ -567,7 +566,7 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 			if (!newSignedStateQueue.offer(ss)) {
 				ss.releaseState();
 				log.error(SIGNED_STATE.getMarker(),
-						"During State Recvoer offer Failed - NewSignedStateQueue [ round = {} ]",
+						"During State Recover offer Failed - NewSignedStateQueue [ round = {} ]",
 						ss::getLastRoundReceived);
 			}
 			// save the last recovered state, even state save period requirement is not met
@@ -794,8 +793,8 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 		if (!stateSettings.dumpStateOnISS) {
 			return;
 		}
-		double currentTimeSeconds = (double) System.currentTimeMillis() * SECONDS_TO_MILLISECONDS;
-		double timeElapsed = currentTimeSeconds - lastISSDumpTimestampSeconds;
+		final double currentTimeSeconds = System.currentTimeMillis() * MILLISECONDS_TO_SECONDS;
+		final double timeElapsed = currentTimeSeconds - lastISSDumpTimestampSeconds;
 		if (timeElapsed < stateSettings.secondsBetweenISSDumps) {
 			return;
 		}

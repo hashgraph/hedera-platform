@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -33,6 +33,7 @@ import com.swirlds.common.io.SerializableDataInputStream;
 import com.swirlds.common.io.SerializableDataOutputStream;
 import com.swirlds.common.stream.Timestamped;
 import com.swirlds.platform.event.EventCounter;
+import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.event.InternalEventData;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
@@ -50,10 +51,8 @@ import java.util.ArrayList;
 public class EventImpl extends AbstractSerializableHashable implements Comparable<EventImpl>, Event,
 		OptionalSelfSerializable<EventSerializationOptions>, Timestamped, SerializableRunningHashable {
 
-	/** The hashed part of a base event */
-	private BaseEventHashedData baseEventHashedData;
-	/** The part of a base event which is not hashed */
-	private BaseEventUnhashedData baseEventUnhashedData;
+	/** The base event information, including some gossip specific information */
+	private GossipEvent baseEvent;
 	/** Consensus data calculated for an event */
 	private ConsensusData consensusData;
 	/** Internal data used for calculating consensus */
@@ -81,11 +80,20 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		this(baseEventHashedData, baseEventUnhashedData, consensusData, null, null);
 	}
 
-	public EventImpl(final BaseEventHashedData baseEventHashedData,
+	public EventImpl(
+			final BaseEventHashedData baseEventHashedData,
 			final BaseEventUnhashedData baseEventUnhashedData,
 			final EventImpl selfParent,
 			final EventImpl otherParent) {
 		this(baseEventHashedData, baseEventUnhashedData, new ConsensusData(), selfParent, otherParent);
+		updateConsensusDataGeneration();
+	}
+
+	public EventImpl(
+			final GossipEvent gossipEvent,
+			final EventImpl selfParent,
+			final EventImpl otherParent) {
+		this(gossipEvent, new ConsensusData(), selfParent, otherParent);
 		updateConsensusDataGeneration();
 	}
 
@@ -98,17 +106,26 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		buildFromConsensusEvent(consensusEvent);
 	}
 
-	public EventImpl(final BaseEventHashedData baseEventHashedData,
+	public EventImpl(
+			final BaseEventHashedData baseEventHashedData,
 			final BaseEventUnhashedData baseEventUnhashedData,
 			final ConsensusData consensusData,
 			final EventImpl selfParent,
 			final EventImpl otherParent) {
-		CommonUtils.throwArgNull(baseEventHashedData, "baseEventDataHashed");
-		CommonUtils.throwArgNull(baseEventUnhashedData, "baseEventDataNotHashed");
+		this(new GossipEvent(baseEventHashedData, baseEventUnhashedData), consensusData, selfParent, otherParent);
+	}
+
+	public EventImpl(
+			final GossipEvent baseEvent,
+			final ConsensusData consensusData,
+			final EventImpl selfParent,
+			final EventImpl otherParent) {
+		CommonUtils.throwArgNull(baseEvent, "baseEvent");
+		CommonUtils.throwArgNull(baseEvent.getHashedData(), "baseEventDataHashed");
+		CommonUtils.throwArgNull(baseEvent.getUnhashedData(), "baseEventDataNotHashed");
 		CommonUtils.throwArgNull(consensusData, "consensusData");
 
-		this.baseEventHashedData = baseEventHashedData;
-		this.baseEventUnhashedData = baseEventUnhashedData;
+		this.baseEvent = baseEvent;
 		this.consensusData = consensusData;
 		this.internalEventData = new InternalEventData(selfParent, otherParent);
 
@@ -122,6 +139,9 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	private void setDefaultValues() {
 		runningHash = new RunningHash();
+		if (baseEvent.getHashedData().getHash() != null) {
+			baseEvent.buildDescriptor();
+		}
 	}
 
 	/**
@@ -131,7 +151,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	@Deprecated(forRemoval = true) // there is no need to store the events generation inside consensusData
 	public void updateConsensusDataGeneration() {
-		consensusData.setGeneration(baseEventHashedData.getGeneration());
+		consensusData.setGeneration(baseEvent.getHashedData().getGeneration());
 	}
 
 	/**
@@ -155,7 +175,8 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 * @param avgOtherReceivedTimestamp
 	 * 		other event consensus timestamp minus time received
 	 */
-	synchronized void estimateTime(NodeId selfId, double avgSelfCreatedTimestamp, double avgOtherReceivedTimestamp) {
+	public synchronized void estimateTime(final NodeId selfId, final double avgSelfCreatedTimestamp,
+			final double avgOtherReceivedTimestamp) {
 		/* a base time */
 		Instant t;
 		/* number of seconds to add to the base time */
@@ -225,8 +246,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 		final EventImpl event = (EventImpl) o;
 
 		return new EqualsBuilder()
-				.append(baseEventHashedData, event.baseEventHashedData)
-				.append(baseEventUnhashedData, event.baseEventUnhashedData)
+				.append(baseEvent, event.baseEvent)
 				.append(consensusData, event.consensusData)
 				.isEquals();
 	}
@@ -237,8 +257,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	@Override
 	public int hashCode() {
 		return new HashCodeBuilder(17, 37)
-				.append(baseEventHashedData)
-				.append(baseEventUnhashedData)
+				.append(baseEvent)
 				.append(consensusData)
 				.toHashCode();
 	}
@@ -274,7 +293,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	@Override
 	public void serialize(SerializableDataOutputStream out, EventSerializationOptions option) throws IOException {
-		ConsensusEvent.serialize(out, baseEventHashedData, baseEventUnhashedData, consensusData, option);
+		ConsensusEvent.serialize(out, baseEvent.getHashedData(), baseEvent.getUnhashedData(), consensusData, option);
 	}
 
 	/**
@@ -294,8 +313,10 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 * @param consensusEvent
 	 */
 	void buildFromConsensusEvent(final ConsensusEvent consensusEvent) {
-		baseEventHashedData = consensusEvent.getBaseEventHashedData();
-		baseEventUnhashedData = consensusEvent.getBaseEventUnhashedData();
+		baseEvent = new GossipEvent(
+				consensusEvent.getBaseEventHashedData(),
+				consensusEvent.getBaseEventUnhashedData()
+		);
 		consensusData = consensusEvent.getConsensusData();
 		internalEventData = new InternalEventData();
 
@@ -324,17 +345,24 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	//////////////////////////////////////////
 
 	/**
+	 * @return the base event
+	 */
+	public GossipEvent getBaseEvent() {
+		return baseEvent;
+	}
+
+	/**
 	 * @return The hashed part of a base event
 	 */
 	public BaseEventHashedData getBaseEventHashedData() {
-		return baseEventHashedData;
+		return baseEvent.getHashedData();
 	}
 
 	/**
 	 * @return The part of a base event which is not hashed
 	 */
 	public BaseEventUnhashedData getBaseEventUnhashedData() {
-		return baseEventUnhashedData;
+		return baseEvent.getUnhashedData();
 	}
 
 	/**
@@ -360,41 +388,41 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	//////////////////////////////////////////
 
 	public Instant getTimeCreated() {
-		return baseEventHashedData.getTimeCreated();
+		return baseEvent.getHashedData().getTimeCreated();
 	}
 
 	public long getSelfParentGen() {
-		return baseEventHashedData.getSelfParentGen();
+		return baseEvent.getHashedData().getSelfParentGen();
 	}
 
 	public long getOtherParentGen() {
-		return baseEventHashedData.getOtherParentGen();
+		return baseEvent.getHashedData().getOtherParentGen();
 	}
 
 	public Hash getSelfParentHash() {
-		return baseEventHashedData.getSelfParentHash();
+		return baseEvent.getHashedData().getSelfParentHash();
 	}
 
 	public Hash getOtherParentHash() {
-		return baseEventHashedData.getOtherParentHash();
+		return baseEvent.getHashedData().getOtherParentHash();
 	}
 
 	public Hash getBaseHash() {
-		return baseEventHashedData.getHash();
+		return baseEvent.getHashedData().getHash();
 	}
 
 	/**
 	 * @return array of transactions inside this event instance
 	 */
 	public Transaction[] getTransactions() {
-		return baseEventHashedData.getTransactions();
+		return baseEvent.getHashedData().getTransactions();
 	}
 
 	public int getNumTransactions() {
-		if (baseEventHashedData.getTransactions() == null) {
+		if (baseEvent.getHashedData().getTransactions() == null) {
 			return 0;
 		} else {
-			return baseEventHashedData.getTransactions().length;
+			return baseEvent.getHashedData().getTransactions().length;
 		}
 	}
 
@@ -407,7 +435,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	}
 
 	public boolean hasUserTransactions() {
-		return baseEventHashedData.hasUserTransactions();
+		return baseEvent.getHashedData().hasUserTransactions();
 	}
 
 	//////////////////////////////////////////
@@ -415,7 +443,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	//////////////////////////////////////////
 
 	public byte[] getSignature() {
-		return baseEventUnhashedData.getSignature();
+		return baseEvent.getUnhashedData().getSignature();
 	}
 
 	//////////////////////////////////////////
@@ -791,7 +819,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	@Override
 	public long getOtherId() {
-		return baseEventUnhashedData.getOtherId();
+		return baseEvent.getUnhashedData().getOtherId();
 	}
 
 	/**
@@ -815,7 +843,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	@Override
 	public long getGeneration() {
-		return baseEventHashedData.getGeneration();
+		return baseEvent.getHashedData().getGeneration();
 	}
 
 	/**
@@ -839,7 +867,7 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	@Override
 	public long getCreatorId() {
-		return baseEventHashedData.getCreatorId();
+		return baseEvent.getHashedData().getCreatorId();
 	}
 
 	/**

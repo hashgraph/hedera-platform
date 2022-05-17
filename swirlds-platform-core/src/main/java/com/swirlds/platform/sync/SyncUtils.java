@@ -1,32 +1,27 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
 package com.swirlds.platform.sync;
 
 import com.swirlds.platform.EventImpl;
-import com.swirlds.platform.Utilities;
 import com.swirlds.platform.consensus.GraphGenerations;
-import org.apache.logging.log4j.Marker;
 
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
-
-import static com.swirlds.logging.LogMarker.EXCEPTION;
-import static com.swirlds.logging.LogMarker.SOCKET_EXCEPTIONS;
 
 /**
  * Various static utility method used in syncing
@@ -102,17 +97,4 @@ public final class SyncUtils {
 		sendList.sort((EventImpl e1, EventImpl e2) -> (int) (e1.getGeneration() - e2.getGeneration()));
 	}
 
-	/**
-	 * Determines the log marker to use for a connection exception based on the nested exception types
-	 *
-	 * @param e
-	 * 		the exception thrown during a network operations
-	 * @return the marker to use for logging
-	 */
-	public static Marker determineExceptionMarker(final Exception e) {
-		return Utilities.isCausedByIOException(e) ||
-				Utilities.isRootCauseSuppliedType(e, SyncTimeoutException.class)
-				? SOCKET_EXCEPTIONS.getMarker()
-				: EXCEPTION.getMarker();
-	}
 }

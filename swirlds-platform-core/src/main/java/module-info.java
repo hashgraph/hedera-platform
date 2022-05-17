@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 /**
@@ -17,17 +17,11 @@
 module com.swirlds.platform {
 
 	/* Public Package Exports */
-	exports com.swirlds.blob;
 	exports com.swirlds.platform;
 	exports com.swirlds.platform.state;
 
 	/* Targeted Exports to External Libraries */
-	exports com.swirlds.blob.internal to org.apache.logging.log4j, com.swirlds.demo.platform,
-			com.swirlds.demo.fcm.stats;
-	exports com.swirlds.blob.internal.db to org.apache.logging.log4j, com.swirlds.demo.platform,
-			com.swirlds.platform.test, com.swirlds.merkle.test, com.swirlds.regression;
-	exports com.swirlds.blob.internal.db.migration to org.apache.logging.log4j, com.swirlds.demo.platform;
-	exports com.swirlds.platform.event to com.swirlds.platform.test, com.fasterxml.jackson.core,
+	exports com.swirlds.platform.event to com.swirlds.platform.test, com.swirlds.common, com.fasterxml.jackson.core,
 			com.fasterxml.jackson.databind;
 	exports com.swirlds.platform.internal to com.swirlds.platform.test, com.fasterxml.jackson.core,
 			com.fasterxml.jackson.databind;
@@ -35,10 +29,24 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.stats;
 	exports com.swirlds.platform.components to com.swirlds.platform.test;
 	exports com.swirlds.platform.observers to com.swirlds.platform.test;
-	exports com.swirlds.platform.eventhandling to com.swirlds.platform.test;
+	exports com.swirlds.platform.eventhandling;
 	exports com.swirlds.platform.sync;
 	exports com.swirlds.platform.consensus to com.swirlds.platform.test;
 	exports com.swirlds.platform.system;
+	exports com.swirlds.platform.crypto to com.swirlds.platform.test;
+	exports com.swirlds.platform.network;
+	exports com.swirlds.platform.network.unidirectional;
+	exports com.swirlds.platform.network.connectivity;
+	exports com.swirlds.platform.network.connection;
+	exports com.swirlds.platform.network.topology;
+	exports com.swirlds.platform.chatter.protocol.messages;
+	exports com.swirlds.platform.chatter.protocol.input;
+	exports com.swirlds.platform.chatter.protocol.output;
+	exports com.swirlds.platform.chatter.protocol.peer;
+	exports com.swirlds.platform.chatter.protocol;
+	exports com.swirlds.platform.chatter;
+	exports com.swirlds.platform.chatter.protocol.purgable.twomaps;
+	exports com.swirlds.platform.chatter.protocol.purgable;
 
 	/* Swirlds Libraries */
 	requires transitive com.swirlds.common;
@@ -72,9 +80,6 @@ module com.swirlds.platform {
 	requires org.bouncycastle.provider;
 
 	/* Database Libraries */
-	requires org.flywaydb.core;
-	requires com.zaxxer.hikari;
-	requires org.postgresql.jdbc;
 	requires com.swirlds.fchashmap;
 	requires com.swirlds.jasperdb;
 	requires com.swirlds.virtualmap;

@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -40,8 +40,11 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	/** receives consensus events from EventFlow.forConsPut(), then passes to hashQueueThread and writeQueueThread */
-	private MultiStream<T> multiStream;
+	/**
+	 * receives consensus events from ConsensusEventHandler.addEvent(), then passes to hashQueueThread and
+	 * writeQueueThread
+	 */
+	private final MultiStream<T> multiStream;
 
 	/** receives consensus events from multiStream, then passes to hashCalculator */
 	private QueueThreadObjectStream<T> hashQueueThread;
@@ -50,8 +53,6 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 	 * runningHashCalculator
 	 */
 	private HashCalculatorForStream<T> hashCalculator;
-	/** receives consensus events from hashCalculator, calculates and set runningHash for this event */
-	private RunningHashCalculatorForStream<T> runningHashCalculator;
 
 	/** receives consensus events from multiStream, then passes to streamFileWriter */
 	private QueueThreadObjectStream<T> writeQueueThread;
@@ -60,13 +61,6 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 
 	/** initialHash loaded from signed state */
 	private Hash initialHash = new ImmutableHash(new byte[DigestType.SHA_384.digestLength()]);
-
-	/**
-	 * when event streaming is started after reconnect, or at state recovering, startWriteAtCompleteWindow should be set
-	 * to be true;
-	 * when event streaming is started after restart, it should be set to be false
-	 */
-	private boolean startWriteAtCompleteWindow = false;
 
 	/**
 	 * When we freeze the platform, the last event to be written to EventStream file is the last event in the freeze
@@ -78,7 +72,7 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 	/**
 	 * check whether this event is the last event before restart
 	 */
-	private Predicate<T> isLastEventInFreezeCheck;
+	private final Predicate<T> isLastEventInFreezeCheck;
 
 	/**
 	 * @param platform
@@ -108,14 +102,17 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 			final Predicate<T> isLastEventInFreezeCheck) throws NoSuchAlgorithmException, IOException {
 		if (enableEventStreaming) {
 			// the directory to which event stream files are written
-			String eventStreamDir = eventsLogDir + "/events_" + nodeName;
+			final String eventStreamDir = eventsLogDir + "/events_" + nodeName;
 			Files.createDirectories(Paths.get(eventStreamDir));
 
 			streamFileWriter = new TimestampStreamFileWriter<>(
 					eventStreamDir,
 					eventsLogPeriod * SECONDS_TO_MILLISECONDS,
 					platform,
-					startWriteAtCompleteWindow,
+					/** when event streaming is started after reconnect, or at state recovering,
+					 * startWriteAtCompleteWindow should be set to be true; when event streaming is started after
+					 * restart, it should be set to be false */
+					false,
 					EventStreamType.EVENT);
 
 			writeQueueThread = new QueueThreadObjectStreamConfiguration<T>()
@@ -127,7 +124,8 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 			writeQueueThread.start();
 		}
 
-		runningHashCalculator = new RunningHashCalculatorForStream<>();
+		// receives consensus events from hashCalculator, calculates and set runningHash for this event
+		final RunningHashCalculatorForStream<T> runningHashCalculator = new RunningHashCalculatorForStream<>();
 		hashCalculator = new HashCalculatorForStream<>(runningHashCalculator);
 		hashQueueThread = new QueueThreadObjectStreamConfiguration<T>()
 				.setNodeId(platform.getSelfId().getId())
@@ -146,7 +144,7 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 
 	/**
 	 * @param multiStream
-	 * 		the instance which receives consensus events from EventFlow, then passes to nextStreams
+	 * 		the instance which receives consensus events from ConsensusEventHandler, then passes to nextStreams
 	 * @param isLastEventInFreezeCheck
 	 * 		a predicate which checks whether this event is the last event before restart
 	 */
@@ -158,8 +156,12 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 	}
 
 
+	public void addEvents(final List<T> events) {
+		events.forEach(this::addEvent);
+	}
+
 	/**
-	 * receives a consensus event from EventFlow each time,
+	 * receives a consensus event from ConsensusEventHandler each time,
 	 * sends it to multiStream which then sends to two queueThread for calculating runningHash and writing to file
 	 *
 	 * @param event
@@ -199,7 +201,7 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 	 * @param startWriteAtCompleteWindow
 	 * 		whether the writer should not write until the first complete window
 	 */
-	public void setStartWriteAtCompleteWindow(boolean startWriteAtCompleteWindow) {
+	public void setStartWriteAtCompleteWindow(final boolean startWriteAtCompleteWindow) {
 		if (streamFileWriter != null) {
 			streamFileWriter.setStartWriteAtCompleteWindow(startWriteAtCompleteWindow);
 		}

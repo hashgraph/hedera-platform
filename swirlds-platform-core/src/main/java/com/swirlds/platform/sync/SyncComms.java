@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -17,7 +17,8 @@ package com.swirlds.platform.sync;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SyncConnection;
-import com.swirlds.platform.event.ValidateEventTask;
+import com.swirlds.platform.event.GossipEvent;
+import com.swirlds.platform.network.ByteConstants;
 import com.swirlds.platform.stats.SyncStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -38,7 +39,7 @@ import static com.swirlds.logging.LogMarker.SYNC_INFO;
 public final class SyncComms {
 	private static final Logger LOG = LogManager.getLogger();
 	/**
-	 * send a {@link SyncConstants#COMM_SYNC_ONGOING} every this many milliseconds after we are done writing events,
+	 * send a {@link ByteConstants#COMM_SYNC_ONGOING} every this many milliseconds after we are done writing events,
 	 * until we are done reading events
 	 */
 	private static final int SYNC_ONGOING_SEND_EVERY_MS = 500;
@@ -165,10 +166,10 @@ public final class SyncComms {
 			LOG.info(SYNC_INFO.getMarker(), "{} writing events start. send list size: {}",
 					conn.getDescription(), events.size());
 			for (final EventImpl event : events) {
-				conn.getDos().writeByte(SyncConstants.COMM_EVENT_NEXT);
+				conn.getDos().writeByte(ByteConstants.COMM_EVENT_NEXT);
 				conn.getDos().writeEventData(event);
 			}
-			conn.getDos().writeByte(SyncConstants.COMM_EVENT_DONE);
+			conn.getDos().writeByte(ByteConstants.COMM_EVENT_DONE);
 			conn.getDos().flush();
 
 			LOG.info(SYNC_INFO.getMarker(), "{} writing events done, wrote {} events",
@@ -176,14 +177,14 @@ public final class SyncComms {
 
 			// if we are still reading events, send keepalive messages
 			while (!eventReadingDone.await(SYNC_ONGOING_SEND_EVERY_MS, TimeUnit.MILLISECONDS)) {
-				conn.getDos().writeByte(SyncConstants.COMM_SYNC_ONGOING);
+				conn.getDos().writeByte(ByteConstants.COMM_SYNC_ONGOING);
 				conn.getDos().flush();
 			}
 
 			// we have now finished reading and writing all the events of a sync. the remote node may not have
 			// finished reading and processing all the events this node has sent. so we write a byte to tell the remote
 			// node we have finished, and the reader will wait for it to send us the same byte.
-			conn.getDos().writeByte(SyncConstants.COMM_SYNC_DONE);
+			conn.getDos().writeByte(ByteConstants.COMM_SYNC_DONE);
 			conn.getDos().flush();
 
 			LOG.debug(SYNC_INFO.getMarker(), "{} sent COMM_SYNC_DONE", conn.getDescription());
@@ -195,7 +196,7 @@ public final class SyncComms {
 
 	public static Callable<Integer> phase3Read(
 			final SyncConnection conn,
-			final Consumer<ValidateEventTask> eventHandler,
+			final Consumer<GossipEvent> eventHandler,
 			final SyncStats stats,
 			final CountDownLatch eventReadingDone) {
 		return () -> {
@@ -210,12 +211,12 @@ public final class SyncComms {
 					// this timeout will be triggered
 					checkPhase3Time(startTime);
 					switch (next) {
-						case SyncConstants.COMM_EVENT_NEXT -> {
-							final ValidateEventTask validateEventTask = conn.getDis().readEventData();
-							eventHandler.accept(validateEventTask);
+						case ByteConstants.COMM_EVENT_NEXT -> {
+							final GossipEvent gossipEvent = conn.getDis().readEventData();
+							eventHandler.accept(gossipEvent);
 							eventsRead++;
 						}
-						case SyncConstants.COMM_EVENT_DONE -> {
+						case ByteConstants.COMM_EVENT_DONE -> {
 							stats.eventsReceived(startTime, eventsRead);
 							LOG.info(SYNC_INFO.getMarker(), "{} reading events done, read {} events",
 									conn.getDescription(), eventsRead);
@@ -224,11 +225,11 @@ public final class SyncComms {
 						}
 						// while we are waiting for the peer to tell us they are done, they might send COMM_SYNC_ONGOING
 						// if they are still busy reading events
-						case SyncConstants.COMM_SYNC_ONGOING ->
+						case ByteConstants.COMM_SYNC_ONGOING ->
 								// peer is still reading events, waiting for them to finish
 								LOG.debug(SYNC_INFO.getMarker(), "{} received COMM_SYNC_ONGOING",
 										conn.getDescription());
-						case SyncConstants.COMM_SYNC_DONE -> {
+						case ByteConstants.COMM_SYNC_DONE -> {
 							LOG.debug(SYNC_INFO.getMarker(), "{} received COMM_SYNC_DONE", conn.getDescription());
 							return eventsRead;
 						}

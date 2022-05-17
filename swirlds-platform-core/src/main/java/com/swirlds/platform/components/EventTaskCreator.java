@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 package com.swirlds.platform.components;
@@ -20,7 +20,7 @@ import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.event.CreateEventTask;
 import com.swirlds.platform.event.EventIntakeTask;
-import com.swirlds.platform.event.ValidateEventTask;
+import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.stats.HashgraphStats;
 import com.swirlds.platform.sync.SyncManager;
 import com.swirlds.platform.sync.SyncResult;
@@ -36,7 +36,7 @@ import static com.swirlds.logging.LogMarker.STALE_EVENTS;
 import static com.swirlds.logging.LogMarker.SYNC;
 
 /**
- * Responsible for creating and enqueuing event tasks. Event tasks can either be {@link ValidateEventTask} or {@link
+ * Responsible for creating and enqueuing event tasks. Event tasks can either be {@link GossipEvent} or {@link
  * CreateEventTask}
  */
 public class EventTaskCreator {
@@ -198,42 +198,23 @@ public class EventTaskCreator {
 				(addressBook.isZeroStakeNode(selfId.getId()) || addressBook.isZeroStakeNode(otherId))) {
 			return;
 		}
-		enqueue(new CreateEventTask(otherId));
+		addEvent(new CreateEventTask(otherId));
 	}
 
 	/**
-	 * Insert an event task to create a self-event into the hashgraph intake queue
-	 *
-	 * @param createEventTask
-	 * 		the event task to insert
-	 */
-	private void enqueue(CreateEventTask createEventTask) {
-		try {
-			eventIntakeQueue.put(createEventTask);
-		} catch (InterruptedException e) {
-			// should never happen, and we don't have a simple way of recovering from it
-			LOG.error(EXCEPTION.getMarker(),
-					"CRITICAL ERROR, adding createEventTask to the event intake queue failed", e);
-			Thread.currentThread().interrupt();
-		}
-
-	}
-
-
-	/**
-	 * Add an event to the queue to be instantiated by other threads in parallel. The instantiated event will
+	 * Add an event task to the queue to be instantiated by other threads in parallel. The instantiated event will
 	 * eventually be added to the hashgraph by the pollIntakeQueue method.
 	 *
-	 * @param validateEventTask
-	 * 		a task whose event is to be added to the hashgraph. This task's event is received by gossip.
+	 * @param intakeTask
+	 * 		a task whose event is to be added to the hashgraph
 	 */
-	public void addEvent(final ValidateEventTask validateEventTask) {
+	public void addEvent(final EventIntakeTask intakeTask) {
 		try {
-			eventIntakeQueue.put(validateEventTask);
+			eventIntakeQueue.put(intakeTask);
 		} catch (InterruptedException e) {
 			// should never happen, and we don't have a simple way of recovering from it
 			LOG.error(EXCEPTION.getMarker(),
-					"CRITICAL ERROR, adding validateEventTask to the event intake queue failed", e);
+					"CRITICAL ERROR, adding intakeTask to the event intake queue failed", e);
 			Thread.currentThread().interrupt();
 		}
 	}

@@ -1,14 +1,14 @@
 /*
- * (c) 2016-2022 Swirlds, Inc.
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
  *
- * This software is owned by Swirlds, Inc., which retains title to the software. This software is protected by various
+ * This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
  * intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
  * not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
  *
  * https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
  *
- * SWIRLDS MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ * HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
  * OR NON-INFRINGEMENT.
  */
 
@@ -46,6 +46,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -496,13 +497,6 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 				mergingFuture = null;
 			}
 		}
-	}
-
-	/**
-	 * Get if background compaction is currently active and will run periodically.
-	 */
-	public boolean isBackgroundCompactionActive() {
-		return mergingFuture != null;
 	}
 
 	/**
@@ -1197,12 +1191,18 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 	 * Start a Merge if needed, this is called by default every 30 seconds if a merge is not already running. This
 	 * implements the logic for how often and with what files we merge.
 	 * <p><b>
+	 * IMPORTANT: This method is called on a thread that can be interrupted, so it needs to gracefully stop when it
+	 * is interrupted.
+	 * </b></p>
+	 * <p><b>
 	 * IMPORTANT: The set of files we merge must always be contiguous in order of time contained data created. As merged
 	 * files have a later index but old data the index can not be used alone to work out order of files to merge.
 	 * </b></p>
+	 *
+	 * @return true if merging completed successfully, false if it was interrupted or an exception occurred.
 	 */
 	@SuppressWarnings({ "rawtypes", "unchecked", "ConstantConditions" })
-	void doMerge() {
+	boolean doMerge() {
 		try {
 			// calls to Instant.now() are expensive, so we only call it four times (or three if isLongKeyMode)
 			// rather than having separate "start" and "end" Instants for each of the two/three sub merges.
@@ -1234,92 +1234,94 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 				LOG.info(JASPER_DB.getMarker(), "[{}] Starting Small Merge", label);
 			}
 
-			try {
-				// we need to merge disk files for internal hashes if they exist and pathToHashKeyValue store
-				if (hasDiskStoreForInternalHashes) {
-					// horrible hack to get around generics because file filters work on any type of DataFileReader
-					final UnaryOperator<List<DataFileReader<VirtualInternalRecord>>> internalRecordFileFilter =
-							(UnaryOperator<List<DataFileReader<VirtualInternalRecord>>>) ((Object) filesToMergeFilter);
-					internalHashStoreDisk.merge(internalRecordFileFilter, mergingPaused,
-							settings.getMinNumberOfFilesInMerge());
-					afterInternalHashStoreDiskMerge = Instant.now(clock);
-				} else {
-					afterInternalHashStoreDiskMerge = now;    // zero elapsed time
-				}
-				waitIfMergingPaused(mergingPaused);
-				// merge objectKeyToPath files
-				if (isLongKeyMode) {
-					// third "now" is replaced by copying second "now"
-					afterObjectKeyToPathMerge = afterInternalHashStoreDiskMerge;
-				} else {
-					// horrible hack to get around generics because file filters work on any type of DataFileReader
-					final UnaryOperator<List<DataFileReader<Bucket<K>>>> bucketFileFilter =
-							(UnaryOperator<List<DataFileReader<Bucket<K>>>>) ((Object) filesToMergeFilter);
-					objectKeyToPath.merge(bucketFileFilter, mergingPaused, settings.getMinNumberOfFilesInMerge());
-					// set third "now"
-					afterObjectKeyToPathMerge = Instant.now(clock);
-				}
-				waitIfMergingPaused(mergingPaused);
-				// now do main merge of pathToHashKeyValue store
+			waitIfMergingPaused(mergingPaused);
+			// we need to merge disk files for internal hashes if they exist and pathToHashKeyValue store
+			if (hasDiskStoreForInternalHashes) {
 				// horrible hack to get around generics because file filters work on any type of DataFileReader
-				final UnaryOperator<List<DataFileReader<VirtualLeafRecord<K, V>>>> leafRecordFileFilter =
-						(UnaryOperator<List<DataFileReader<VirtualLeafRecord<K, V>>>>) ((Object) filesToMergeFilter);
-				pathToHashKeyValue.merge(leafRecordFileFilter, mergingPaused, settings.getMinNumberOfFilesInMerge());
-				// set fourth "now"
-				afterPathToHashKeyValueMerge = Instant.now(clock);
-
-				// determine how long each of the sub-merges took.
-				final Duration firstMergeDuration = Duration.between(now, afterInternalHashStoreDiskMerge);
-				final Duration secondMergeDuration =
-						Duration.between(afterInternalHashStoreDiskMerge, afterObjectKeyToPathMerge);
-				final Duration thirdMergeDuration =
-						Duration.between(afterObjectKeyToPathMerge, afterPathToHashKeyValueMerge);
-
-				// update the 3 appropriate "Merge" statistics, based on isSmallMerge/isMediumMerge/isLargeMerge
-				if (isSmallMerge) {
-					if (hasDiskStoreForInternalHashes) {
-						statistics.setInternalHashesStoreSmallMergeTime(firstMergeDuration.toSeconds() +
-								firstMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
-					}
-					if (!isLongKeyMode) {
-						statistics.setLeafKeyToPathStoreSmallMergeTime(secondMergeDuration.toSeconds() +
-								secondMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
-					}
-					statistics.setLeafPathToHashKeyValueStoreSmallMergeTime(thirdMergeDuration.toSeconds() +
-							thirdMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
-				} else if (isMediumMerge) {
-					if (hasDiskStoreForInternalHashes) {
-						statistics.setInternalHashesStoreMediumMergeTime(firstMergeDuration.toSeconds() +
-								firstMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
-					}
-					if (!isLongKeyMode) {
-						statistics.setLeafKeyToPathStoreMediumMergeTime(secondMergeDuration.toSeconds() +
-								secondMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
-					}
-					statistics.setLeafPathToHashKeyValueStoreMediumMergeTime(thirdMergeDuration.toSeconds() +
-							thirdMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
-				} else if (isLargeMerge) {
-					if (hasDiskStoreForInternalHashes) {
-						statistics.setInternalHashesStoreLargeMergeTime(firstMergeDuration.toSeconds() +
-								firstMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
-					}
-					if (!isLongKeyMode) {
-						statistics.setLeafKeyToPathStoreLargeMergeTime(secondMergeDuration.toSeconds() +
-								secondMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
-					}
-					statistics.setLeafPathToHashKeyValueStoreLargeMergeTime(thirdMergeDuration.toSeconds() +
-							thirdMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
-				}
-			} catch (IOException | IllegalArgumentException | IllegalStateException e) {
-				LOG.error(EXCEPTION.getMarker(), "[{}] Merge failed", label, e);
+				final UnaryOperator<List<DataFileReader<VirtualInternalRecord>>> internalRecordFileFilter =
+						(UnaryOperator<List<DataFileReader<VirtualInternalRecord>>>) ((Object) filesToMergeFilter);
+				internalHashStoreDisk.merge(internalRecordFileFilter, mergingPaused,
+						settings.getMinNumberOfFilesInMerge());
+				afterInternalHashStoreDiskMerge = Instant.now(clock);
+			} else {
+				afterInternalHashStoreDiskMerge = now;    // zero elapsed time
 			}
+			waitIfMergingPaused(mergingPaused);
+			// merge objectKeyToPath files
+			if (isLongKeyMode) {
+				// third "now" is replaced by copying second "now"
+				afterObjectKeyToPathMerge = afterInternalHashStoreDiskMerge;
+			} else {
+				// horrible hack to get around generics because file filters work on any type of DataFileReader
+				final UnaryOperator<List<DataFileReader<Bucket<K>>>> bucketFileFilter =
+						(UnaryOperator<List<DataFileReader<Bucket<K>>>>) ((Object) filesToMergeFilter);
+				objectKeyToPath.merge(bucketFileFilter, mergingPaused, settings.getMinNumberOfFilesInMerge());
+				// set third "now"
+				afterObjectKeyToPathMerge = Instant.now(clock);
+			}
+			waitIfMergingPaused(mergingPaused);
+			// now do main merge of pathToHashKeyValue store
+			// horrible hack to get around generics because file filters work on any type of DataFileReader
+			final UnaryOperator<List<DataFileReader<VirtualLeafRecord<K, V>>>> leafRecordFileFilter =
+					(UnaryOperator<List<DataFileReader<VirtualLeafRecord<K, V>>>>) ((Object) filesToMergeFilter);
+			pathToHashKeyValue.merge(leafRecordFileFilter, mergingPaused, settings.getMinNumberOfFilesInMerge());
+			// set fourth "now"
+			afterPathToHashKeyValueMerge = Instant.now(clock);
 
+			// determine how long each of the sub-merges took.
+			final Duration firstMergeDuration = Duration.between(now, afterInternalHashStoreDiskMerge);
+			final Duration secondMergeDuration =
+					Duration.between(afterInternalHashStoreDiskMerge, afterObjectKeyToPathMerge);
+			final Duration thirdMergeDuration =
+					Duration.between(afterObjectKeyToPathMerge, afterPathToHashKeyValueMerge);
+
+			// update the 3 appropriate "Merge" statistics, based on isSmallMerge/isMediumMerge/isLargeMerge
+			if (isSmallMerge) {
+				if (hasDiskStoreForInternalHashes) {
+					statistics.setInternalHashesStoreSmallMergeTime(firstMergeDuration.toSeconds() +
+							firstMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
+				}
+				if (!isLongKeyMode) {
+					statistics.setLeafKeyToPathStoreSmallMergeTime(secondMergeDuration.toSeconds() +
+							secondMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
+				}
+				statistics.setLeafPathToHashKeyValueStoreSmallMergeTime(thirdMergeDuration.toSeconds() +
+						thirdMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
+			} else if (isMediumMerge) {
+				if (hasDiskStoreForInternalHashes) {
+					statistics.setInternalHashesStoreMediumMergeTime(firstMergeDuration.toSeconds() +
+							firstMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
+				}
+				if (!isLongKeyMode) {
+					statistics.setLeafKeyToPathStoreMediumMergeTime(secondMergeDuration.toSeconds() +
+							secondMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
+				}
+				statistics.setLeafPathToHashKeyValueStoreMediumMergeTime(thirdMergeDuration.toSeconds() +
+						thirdMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
+			} else if (isLargeMerge) {
+				if (hasDiskStoreForInternalHashes) {
+					statistics.setInternalHashesStoreLargeMergeTime(firstMergeDuration.toSeconds() +
+							firstMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
+				}
+				if (!isLongKeyMode) {
+					statistics.setLeafKeyToPathStoreLargeMergeTime(secondMergeDuration.toSeconds() +
+							secondMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
+				}
+				statistics.setLeafPathToHashKeyValueStoreLargeMergeTime(thirdMergeDuration.toSeconds() +
+						thirdMergeDuration.getNano() * Units.NANOSECONDS_TO_SECONDS);
+			}
 			// update file stats (those statistics don't care about small vs medium vs large merge size)
 			updateFileStats();
+			return true;
+		} catch (InterruptedException | ClosedByInterruptException e) {
+			LOG.info(JASPER_DB.getMarker(), "Interrupted while merging, this is allowed.");
+			Thread.currentThread().interrupt();
+			return false;
 		} catch (Exception e) {
 			// It is important that we capture all exceptions here, otherwise a single exception will stop all
 			// future merges from happening.
 			LOG.error(EXCEPTION.getMarker(), "[{}] Merge failed", label, e);
+			return false;
 		}
 	}
 
