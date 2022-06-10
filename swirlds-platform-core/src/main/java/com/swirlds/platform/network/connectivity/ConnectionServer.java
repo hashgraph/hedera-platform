@@ -13,8 +13,8 @@
  */
 package com.swirlds.platform.network.connectivity;
 
-import com.swirlds.common.threading.InterruptableRunnable;
-import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

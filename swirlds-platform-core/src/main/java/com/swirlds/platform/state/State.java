@@ -14,8 +14,8 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.SwirldDualState;
-import com.swirlds.common.SwirldState;
+import com.swirlds.common.system.SwirldDualState;
+import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
 import com.swirlds.common.merkle.utility.AbstractNaryMerkleInternal;

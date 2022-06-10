@@ -24,7 +24,7 @@
 	<parent>
 		<groupId>com.swirlds</groupId>
 		<artifactId>swirlds-platform</artifactId>
-		<version>0.25.3-orvw.1</version>
+		<version>0.26.2-orvw.1</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -56,19 +56,19 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-common</artifactId>
-			<version>0.25.3-orvw.1</version>
+			<version>0.26.2-orvw.1</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-logging</artifactId>
-			<version>0.25.3-orvw.1</version>
+			<version>0.26.2-orvw.1</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-virtualmap</artifactId>
-			<version>0.25.3-orvw.1</version>
+			<version>0.26.2-orvw.1</version>
 		</dependency>
 
 		<dependency>

@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
+import static com.swirlds.common.utility.Units.NANOSECONDS_TO_SECONDS;
 import static com.swirlds.logging.LogMarker.SIGNED_STATE;
 import static com.swirlds.platform.system.Fatal.fatalError;
 

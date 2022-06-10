@@ -66,7 +66,6 @@ public interface TreeView<T> extends AutoCloseable {
 	 */
 	MerkleNode getMerkleRoot(T node);
 
-
 	/**
 	 * Called when reconnect has been completed and this view is no longer required to exist.
 	 */

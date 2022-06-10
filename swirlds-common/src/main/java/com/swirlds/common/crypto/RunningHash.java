@@ -15,7 +15,7 @@
 package com.swirlds.common.crypto;
 
 import com.swirlds.common.AbstractHashable;
-import com.swirlds.common.futures.WaitingFuture;
+import com.swirlds.common.threading.futures.WaitingFuture;
 
 /**
  * Represents a single {@link Hash} instance taken of a given moment in time from a running hash chain. A given {@link

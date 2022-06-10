@@ -14,21 +14,23 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.CommonUtils;
-import com.swirlds.common.NodeId;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.merkle.io.MerkleDataInputStream;
-import com.swirlds.common.merkle.io.MerkleDataOutputStream;
+import com.swirlds.common.io.streams.MerkleDataInputStream;
+import com.swirlds.common.io.streams.MerkleDataOutputStream;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteListener;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteNotification;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.logging.LogMarker;
+import com.swirlds.platform.state.LocalStateEvents;
 import com.swirlds.platform.state.SavedStateInfo;
 import com.swirlds.platform.state.SigSet;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateSettings;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -45,10 +47,13 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import static com.swirlds.common.io.streams.StreamDebugUtils.deserializeAndDebugOnFailure;
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STATE_TO_DISK;
 import static com.swirlds.platform.state.PlatformState.getInfoString;
+import static com.swirlds.platform.system.SystemExitReason.SAVED_STATE_NOT_LOADED;
+import static com.swirlds.platform.system.SystemUtils.exitSystem;
 
 public class SignedStateFileManager implements Runnable {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
@@ -305,31 +310,40 @@ public class SignedStateFileManager implements Runnable {
 	 */
 	public static Pair<Hash, SignedState> readSavedState(final SavedStateInfo info)
 			throws IOException {
+
 		Pair<Hash, SignedState> returnState;
-		try (FileInputStream fileIn = new FileInputStream(info.getStateFile());
-			 BufferedInputStream bufIn = new BufferedInputStream(fileIn);
-			 MerkleDataInputStream in = new MerkleDataInputStream(bufIn, info.getDir())) {
 
-			byte versionByte = in.readByte();
-			if (versionByte != VERSIONED_FILE_BYTE) {
-				throw new IOException("File is not versioned -- data corrupted or is an unsupported legacy state");
-			}
+		final Triple<State, Hash, SigSet> data = deserializeAndDebugOnFailure(
+				() -> new BufferedInputStream(new FileInputStream(info.getStateFile())),
+				info.getDir(),
+				(final MerkleDataInputStream in) -> {
+					byte versionByte = in.readByte();
+					if (versionByte != VERSIONED_FILE_BYTE) {
+						throw new IOException(
+								"File is not versioned -- data corrupted or is an unsupported legacy state");
+					}
 
-			in.readInt();// file version
-			in.readProtocolVersion();
+					in.readInt();// file version
+					in.readProtocolVersion();
 
-			final State merkleState = in.readMerkleTree(MAX_MERKLE_NODES_IN_STATE);
+					final State state = in.readMerkleTree(MAX_MERKLE_NODES_IN_STATE);
+					final Hash hash = in.readSerializable();
+					final SigSet sigSet = in.readSerializable(true, () ->
+							new SigSet(state.getPlatformState().getAddressBook()));
 
-			final Hash hash = in.readSerializable();
-			final SigSet sigSet = in.readSerializable(true, () ->
-					new SigSet(merkleState.getPlatformState().getAddressBook()));
+					return Triple.of(state, hash, sigSet);
+				},
+				() -> {
+					log.error(EXCEPTION.getMarker(), "failed to load state");
+					exitSystem(SAVED_STATE_NOT_LOADED);
+				}
+		);
 
-			final SignedState newSignedState = new SignedState(merkleState);
+		final SignedState newSignedState = new SignedState(data.getLeft());
 
-			newSignedState.setSigSet(sigSet);
+		newSignedState.setSigSet(data.getRight());
 
-			returnState = Pair.of(hash, newSignedState);
-		}
+		returnState = Pair.of(data.getMiddle(), newSignedState);
 
 		if (!info.hasEvents()) {
 			log.warn(LogMarker.ERROR.getMarker(),
@@ -338,13 +352,19 @@ public class SignedStateFileManager implements Runnable {
 			return returnState;
 		}
 
-		try (FileInputStream fileIn = new FileInputStream(info.getEvents());
-			 BufferedInputStream bufIn = new BufferedInputStream(fileIn);
-			 MerkleDataInputStream in = new MerkleDataInputStream(bufIn, info.getDir())) {
-			in.readInt();// file version
-			in.readProtocolVersion();
-			returnState.getValue().setLocalStateEvents(in.readSerializable());
-		}
+		final LocalStateEvents localStateEvents = deserializeAndDebugOnFailure(
+				() -> new BufferedInputStream(new FileInputStream(info.getEvents())),
+				(final MerkleDataInputStream in) -> {
+					in.readInt();// file version
+					in.readProtocolVersion();
+					return in.readSerializable();
+				},
+				() -> {
+					log.error(EXCEPTION.getMarker(), "failed to load events");
+					exitSystem(SAVED_STATE_NOT_LOADED);
+				});
+
+		returnState.getValue().setLocalStateEvents(localStateEvents);
 
 		return returnState;
 	}

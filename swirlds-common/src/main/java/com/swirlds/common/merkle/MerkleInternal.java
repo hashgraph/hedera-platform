@@ -14,8 +14,8 @@
 
 package com.swirlds.common.merkle;
 
-import com.swirlds.common.MutabilityException;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.exceptions.MutabilityException;
 import com.swirlds.common.merkle.exceptions.MerkleRouteException;
 import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;

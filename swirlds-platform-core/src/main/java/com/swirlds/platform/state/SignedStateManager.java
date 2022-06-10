@@ -13,19 +13,19 @@
  */
 package com.swirlds.platform.state;
 
-import com.swirlds.common.AutoCloseableWrapper;
 import com.swirlds.common.InvalidSignedStateListener;
-import com.swirlds.common.NodeId;
-import com.swirlds.common.SwirldState;
-import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.stream.HashSigner;
-import com.swirlds.common.threading.ThreadConfiguration;
-import com.swirlds.common.transaction.internal.StateSignatureTransaction;
-import com.swirlds.common.transaction.internal.SystemTransactionBitsPerSecond;
-import com.swirlds.common.transaction.internal.SystemTransactionPing;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
+import com.swirlds.common.system.transaction.internal.SystemTransactionBitsPerSecond;
+import com.swirlds.common.system.transaction.internal.SystemTransactionPing;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.utility.AutoCloseableWrapper;
 import com.swirlds.platform.AbstractPlatform;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SignedStateFileManager;
@@ -47,8 +47,8 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static com.swirlds.common.Units.BYTES_TO_BITS;
-import static com.swirlds.common.Units.MILLISECONDS_TO_SECONDS;
+import static com.swirlds.common.utility.Units.BYTES_TO_BITS;
+import static com.swirlds.common.utility.Units.MILLISECONDS_TO_SECONDS;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.FREEZE;
 import static com.swirlds.logging.LogMarker.LAST_COMPLETE_SIGNED_STATE;

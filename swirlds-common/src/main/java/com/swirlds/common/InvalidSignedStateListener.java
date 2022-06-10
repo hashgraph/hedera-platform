@@ -14,7 +14,11 @@
 
 package com.swirlds.common;
 
-import com.swirlds.common.events.Event;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.Platform;
+import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.events.Event;
 
 import java.time.Instant;
 

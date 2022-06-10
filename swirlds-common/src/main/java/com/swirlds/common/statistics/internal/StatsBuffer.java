@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntBinaryOperator;
 import java.util.function.IntUnaryOperator;
 
-import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
+import static com.swirlds.common.utility.Units.NANOSECONDS_TO_SECONDS;
 
 /**
  * Keep a running history of a double value vs. time. History is divided into at most maxbins different

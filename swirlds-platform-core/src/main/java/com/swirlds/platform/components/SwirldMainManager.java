@@ -14,8 +14,10 @@
 
 package com.swirlds.platform.components;
 
+import com.swirlds.common.system.SwirldMain;
+
 /**
- * Manages the interaction with {@link com.swirlds.common.SwirldMain}
+ * Manages the interaction with {@link SwirldMain}
  */
 public interface SwirldMainManager {
 	/**

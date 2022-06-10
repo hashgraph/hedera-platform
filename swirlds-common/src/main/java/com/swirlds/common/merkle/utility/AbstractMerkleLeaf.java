@@ -14,13 +14,12 @@
 
 package com.swirlds.common.merkle.utility;
 
-import com.swirlds.common.merkle.io.SerializationStrategy;
 import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.route.MerkleRoute;
 
 import java.util.Set;
 
-import static com.swirlds.common.merkle.io.SerializationStrategy.SELF_SERIALIZATION;
+import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.SELF_SERIALIZATION;
 
 /**
  * This abstract class implements boiler plate functionality for a {@link MerkleLeaf}. Classes that implement
@@ -29,7 +28,7 @@ import static com.swirlds.common.merkle.io.SerializationStrategy.SELF_SERIALIZAT
  */
 public abstract class AbstractMerkleLeaf extends AbstractMerkleNode implements MerkleLeaf {
 
-	private static final Set<SerializationStrategy> DEFAULT_STRATEGIES = Set.of(SELF_SERIALIZATION);
+	private static final Set<MerkleSerializationStrategy> DEFAULT_STRATEGIES = Set.of(SELF_SERIALIZATION);
 
 	protected AbstractMerkleLeaf() {
 
@@ -60,7 +59,7 @@ public abstract class AbstractMerkleLeaf extends AbstractMerkleNode implements M
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Set<SerializationStrategy> supportedSerialization(final int version) {
+	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
 		return DEFAULT_STRATEGIES;
 	}
 }

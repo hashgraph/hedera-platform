@@ -52,8 +52,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static com.swirlds.common.Units.GIBIBYTES_TO_BYTES;
-import static com.swirlds.common.Units.MEBIBYTES_TO_BYTES;
+import static com.swirlds.common.utility.Units.GIBIBYTES_TO_BYTES;
+import static com.swirlds.common.utility.Units.MEBIBYTES_TO_BYTES;
 import static com.swirlds.jasperdb.KeyRange.INVALID_KEY_RANGE;
 import static com.swirlds.jasperdb.files.DataFileCommon.byteOffsetFromDataLocation;
 import static com.swirlds.jasperdb.files.DataFileCommon.dataLocationToString;
@@ -367,11 +367,9 @@ public class DataFileCollection<D> implements Snapshotable {
 		while (!blockIterators.isEmpty()) {
 			// check if we need to pause
 			waitIfMergingPaused(mergingPaused);
-			// find the lowest key any iterator has and the newest iterator that has that key
-			long lowestKey = Long.MAX_VALUE;
-			Instant newestIteratorTime = Instant.EPOCH;
-			DataFileIterator newestIteratorWithLowestKey = null;
+
 			// find the lowest key any iterator has
+			long lowestKey = Long.MAX_VALUE;
 			for (int i = 0; i < blockIterators.size(); i++) {
 				final DataFileIterator blockIterator = blockIterators.get(i);
 				final long key = blockIterator.getDataItemsKey();
@@ -407,11 +405,17 @@ public class DataFileCollection<D> implements Snapshotable {
 			// check if that key is in range
 			if (keyRange.withinRange(lowestKey)) {
 				// find which iterator is the newest that has the lowest key
+				DataFileIterator newestIteratorWithLowestKey = null;
+				Instant newestIteratorTime = Instant.EPOCH;
+				int newestIndex = Integer.MIN_VALUE;
 				for (final DataFileIterator blockIterator : blockIterators) {
 					final long key = blockIterator.getDataItemsKey();
-					if (key == lowestKey && blockIterator.getDataFileCreationDate().isAfter(newestIteratorTime)) {
-						newestIteratorTime = blockIterator.getDataFileCreationDate();
+					if (key != lowestKey) continue;
+					int cmp = blockIterator.getDataFileCreationDate().compareTo(newestIteratorTime);
+					if (cmp > 0 || (cmp == 0 && blockIterator.getDataFileIndex() > newestIndex)) {
 						newestIteratorWithLowestKey = blockIterator;
+						newestIteratorTime = blockIterator.getDataFileCreationDate();
+						newestIndex = blockIterator.getDataFileIndex();
 					}
 				}
 				assert newestIteratorWithLowestKey != null;

@@ -16,12 +16,12 @@ package com.swirlds.platform.components;
 
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.EventImpl;
-import com.swirlds.platform.EventValidator;
+import com.swirlds.platform.event.validation.EventValidator;
 import com.swirlds.platform.event.CreateEventTask;
 import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.event.ValidEvent;
-import com.swirlds.platform.stats.HashgraphStats;
+import com.swirlds.platform.stats.EventIntakeStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,7 +46,7 @@ public class EventTaskDispatcher {
 	 * A statistics accumulator for hashgraph-related quantities, used here to record
 	 * time to taken to process a task to hashgraph event
 	 */
-	private final HashgraphStats stats;
+	private final EventIntakeStats stats;
 
 	/**
 	 * Constructor
@@ -64,7 +64,7 @@ public class EventTaskDispatcher {
 			final EventValidator eventValidator,
 			final EventCreator eventCreator,
 			final Consumer<EventImpl> validEventHandler,
-			final HashgraphStats stats) {
+			final EventIntakeStats stats) {
 		this.eventValidator = eventValidator;
 		this.eventCreator = eventCreator;
 		this.validEventHandler = validEventHandler;

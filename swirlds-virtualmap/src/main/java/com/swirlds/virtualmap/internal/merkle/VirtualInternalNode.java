@@ -16,7 +16,7 @@ package com.swirlds.virtualmap.internal.merkle;
 
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.io.SerializationStrategy;
+import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
 import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
@@ -46,7 +46,7 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
 	public static final long CLASS_ID = 0xaf2482557cfdb6bfL;
 	public static final int SERIALIZATION_VERSION = 1;
 
-	private static final Set<SerializationStrategy> STRATEGIES = Set.of();
+	private static final Set<MerkleSerializationStrategy> STRATEGIES = Set.of();
 
 	public VirtualInternalNode() {
 
@@ -204,7 +204,7 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Set<SerializationStrategy> supportedSerialization(final int version) {
+	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
 		return STRATEGIES;
 	}
 

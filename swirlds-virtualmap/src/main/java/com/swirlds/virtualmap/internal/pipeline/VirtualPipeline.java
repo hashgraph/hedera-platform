@@ -14,7 +14,7 @@
 
 package com.swirlds.virtualmap.internal.pipeline;
 
-import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.utility.CompareTo;
 import com.swirlds.virtualmap.VirtualMapSettingsFactory;
 import org.apache.logging.log4j.LogManager;

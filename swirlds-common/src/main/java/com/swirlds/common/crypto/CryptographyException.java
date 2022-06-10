@@ -14,7 +14,7 @@
 
 package com.swirlds.common.crypto;
 
-import com.swirlds.common.PlatformException;
+import com.swirlds.common.exceptions.PlatformException;
 import com.swirlds.logging.LogMarker;
 
 public class CryptographyException extends PlatformException {

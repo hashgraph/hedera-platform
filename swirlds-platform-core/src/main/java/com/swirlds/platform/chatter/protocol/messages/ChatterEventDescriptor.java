@@ -14,11 +14,11 @@
 
 package com.swirlds.platform.chatter.protocol.messages;
 
-import com.swirlds.common.CommonUtils;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.utility.CommonUtils;
 
 import java.io.IOException;
 import java.util.Objects;

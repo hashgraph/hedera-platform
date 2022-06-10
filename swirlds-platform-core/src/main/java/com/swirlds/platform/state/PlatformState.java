@@ -14,12 +14,12 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.AddressBook;
+import com.swirlds.common.system.AddressBook;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.events.EventSerializationOptions;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
+import com.swirlds.common.system.events.EventSerializationOptions;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.Utilities;
 import org.apache.commons.lang3.builder.EqualsBuilder;

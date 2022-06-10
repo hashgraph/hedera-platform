@@ -14,11 +14,11 @@
 
 package com.swirlds.platform.crypto;
 
-import com.swirlds.common.CommonUtils;
 import com.swirlds.common.crypto.CryptographyException;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.stream.HashSigner;
 import com.swirlds.common.stream.Signer;
+import com.swirlds.common.utility.CommonUtils;
 
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;

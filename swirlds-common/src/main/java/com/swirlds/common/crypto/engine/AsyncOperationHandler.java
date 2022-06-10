@@ -14,7 +14,7 @@
 
 package com.swirlds.common.crypto.engine;
 
-import com.swirlds.common.futures.WaitingFuture;
+import com.swirlds.common.threading.futures.WaitingFuture;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

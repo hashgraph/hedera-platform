@@ -15,8 +15,8 @@
 package com.swirlds.common.crypto;
 
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -30,8 +30,8 @@ import java.security.SignatureException;
 import java.util.Arrays;
 import java.util.Objects;
 
-import static com.swirlds.common.CommonUtils.hex;
 import static com.swirlds.common.crypto.SignatureType.RSA;
+import static com.swirlds.common.utility.CommonUtils.hex;
 
 /**
  * Encapsulates a cryptographic signature along with its SignatureType.

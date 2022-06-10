@@ -14,16 +14,16 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.NodeId;
-import com.swirlds.common.SwirldState;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
 import com.swirlds.common.stream.EventStreamManager;
-import com.swirlds.common.threading.CachedPoolParallelExecutor;
-import com.swirlds.common.threading.ParallelExecutor;
-import com.swirlds.common.threading.QueueThread;
-import com.swirlds.common.threading.QueueThreadConfiguration;
+import com.swirlds.common.threading.pool.CachedPoolParallelExecutor;
+import com.swirlds.common.threading.pool.ParallelExecutor;
+import com.swirlds.common.threading.framework.QueueThread;
+import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.platform.components.SignatureExpander;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.crypto.KeysAndCerts;

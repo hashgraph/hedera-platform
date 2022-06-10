@@ -17,7 +17,7 @@ package com.swirlds.common.merkle.synchronization.views;
 import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.synchronization.internal.ExpectedLesson;

@@ -41,6 +41,13 @@ public interface KeySerializer<K> extends BaseSerializer<K>, SelfSerializable {
 	long getCurrentDataVersion();
 
 	/**
+	 * @return the index to use for indexing the keys that this KeySerializer creates
+	 */
+	default KeyIndexType getIndexType() {
+		return getSerializedSize() == Long.BYTES ? KeyIndexType.SEQUENTIAL_INCREMENTING_LONGS : KeyIndexType.GENERIC;
+	}
+
+	/**
 	 * Deserialize key size from the given byte buffer
 	 *
 	 * @param buffer

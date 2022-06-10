@@ -14,7 +14,7 @@
 
 package com.swirlds.jasperdb.files;
 
-import com.swirlds.common.Units;
+import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.KeyRange;
 import com.swirlds.jasperdb.Snapshotable;
 import com.swirlds.jasperdb.collections.LongList;

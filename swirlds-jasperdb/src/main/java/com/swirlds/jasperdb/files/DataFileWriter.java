@@ -14,7 +14,7 @@
 
 package com.swirlds.jasperdb.files;
 
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.jasperdb.settings.JasperDbSettings;
 import com.swirlds.jasperdb.settings.JasperDbSettingsFactory;
 

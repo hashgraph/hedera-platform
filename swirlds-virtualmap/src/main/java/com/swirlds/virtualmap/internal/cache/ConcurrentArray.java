@@ -14,6 +14,8 @@
 
 package com.swirlds.virtualmap.internal.cache;
 
+import com.swirlds.common.threading.futures.WaitingFuture;
+
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.NoSuchElementException;
@@ -328,19 +330,30 @@ final class ConcurrentArray<T> {
 		return Arrays.stream(arrays.getFirst().array, 0, size());
 	}
 
-	public void parallelTraverse(Executor executor, Consumer<T> action) {
+	public WaitingFuture<Void> parallelTraverse(Executor executor, Consumer<T> action) {
 		if (!isImmutable()) {
 			throw new IllegalArgumentException("You can not call parallelTraverse on a mutable ConcurrentArray");
 		}
+
+		final WaitingFuture<Void> result = new WaitingFuture<>();
+		final AtomicInteger count = new AtomicInteger(1);
 		for (SubArray<T> subArray : arrays) {
+			count.incrementAndGet();
 			executor.execute(() -> {
 				T[] array = subArray.array;
 				int size = subArray.size.get();
 				for (int i = 0; i < size; ++i) {
 					action.accept(array[i]);
 				}
+				if (count.decrementAndGet() == 0) {
+					result.done(null);
+				}
 			});
 		}
+		if (count.decrementAndGet() == 0) {
+			result.done(null);
+		}
+		return result;
 	}
 
 	/**

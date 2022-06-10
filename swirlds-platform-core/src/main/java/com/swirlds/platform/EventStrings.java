@@ -14,7 +14,7 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.events.BaseEvent;
+import com.swirlds.common.system.events.BaseEvent;
 import com.swirlds.platform.event.EventStringBuilder;
 
 /**

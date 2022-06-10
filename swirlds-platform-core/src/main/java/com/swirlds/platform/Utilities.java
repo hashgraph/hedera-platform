@@ -14,9 +14,8 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.io.DataStreamUtils;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.platform.internal.Deserializer;
 import com.swirlds.platform.internal.Serializer;
 import org.apache.logging.log4j.LogManager;
@@ -40,7 +39,12 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 /**
  * This is a collection of static utility methods, such as for comparing and deep cloning of arrays.
  */
-public class Utilities extends DataStreamUtils {
+public final class Utilities {
+
+	private Utilities() {
+
+	}
+
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
 

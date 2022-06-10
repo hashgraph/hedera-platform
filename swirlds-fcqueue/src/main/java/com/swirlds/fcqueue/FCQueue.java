@@ -19,9 +19,10 @@ import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
-import com.swirlds.common.list.ListDigestException;
+import com.swirlds.common.exceptions.ListDigestException;
+import com.swirlds.common.io.exceptions.InvalidStreamPosition;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
 import com.swirlds.fcqueue.internal.FCQHashAlgorithm;
 import com.swirlds.fcqueue.internal.FCQueueNode;
@@ -41,8 +42,7 @@ import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 
-import static com.swirlds.common.CommonUtils.hex;
-import static com.swirlds.common.io.DataStreamUtils.readValidInt;
+import static com.swirlds.common.utility.CommonUtils.hex;
 
 /**
  * A threadsafe fast-copyable queue, each of whose elements is fast-copyable. Elements must always be inserted at the
@@ -156,6 +156,31 @@ public class FCQueue<E extends FCQueueElement> extends AbstractMerkleLeaf implem
 		this.tail = fcQueue.tail;
 		this.runningHashSize = fcQueue.runningHashSize;
 		this.setImmutable(false);
+	}
+
+	/**
+	 * Read an integer value, and throw an exception if it does not match the expected value.
+	 *
+	 * @param dis
+	 * 		an input stream
+	 * @param markerName
+	 * 		the log marker to use
+	 * @param expectedValue
+	 * 		the expected value
+	 * @return the value read
+	 */
+	private static int readValidInt(
+			final SerializableDataInputStream dis,
+			final String markerName,
+			final int expectedValue) throws IOException {
+
+		final int value = dis.readInt();
+
+		if (value != expectedValue) {
+			throw new InvalidStreamPosition(markerName, expectedValue, value);
+		}
+
+		return value;
 	}
 
 	/** @return the number of times this queue has changed since it was instantiated by {@code new} or {@code copy} */

@@ -17,7 +17,7 @@ package com.swirlds.common.merkle.synchronization.internal;
 import com.swirlds.common.merkle.synchronization.streams.AsyncInputStream;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
 import com.swirlds.common.merkle.synchronization.views.TeacherTreeView;
-import com.swirlds.common.threading.StandardWorkGroup;
+import com.swirlds.common.threading.pool.StandardWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

@@ -14,6 +14,7 @@
 
 package com.swirlds.common.threading;
 
+import com.swirlds.common.threading.framework.StoppableThread;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

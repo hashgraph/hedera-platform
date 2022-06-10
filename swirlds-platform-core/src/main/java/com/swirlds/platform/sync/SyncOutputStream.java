@@ -15,7 +15,7 @@
 package com.swirlds.platform.sync;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.io.extendable.extensions.CountingStreamExtension;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.network.ByteConstants;

@@ -16,11 +16,11 @@ package com.swirlds.common.merkle.synchronization.streams;
 
 import com.swirlds.common.Releasable;
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.merkle.synchronization.settings.ReconnectSettings;
 import com.swirlds.common.merkle.synchronization.settings.ReconnectSettingsFactory;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
-import com.swirlds.common.threading.StandardWorkGroup;
+import com.swirlds.common.threading.pool.StandardWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

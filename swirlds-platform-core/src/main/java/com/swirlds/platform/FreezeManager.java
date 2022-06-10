@@ -14,17 +14,16 @@
 
 package com.swirlds.platform;
 
-
-import com.swirlds.common.EventCreationRule;
-import com.swirlds.common.EventCreationRuleResponse;
-import com.swirlds.common.NodeId;
-import com.swirlds.common.Transaction;
+import com.swirlds.common.system.EventCreationRule;
+import com.swirlds.common.system.EventCreationRuleResponse;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.components.TransThrottleSyncRule;
 import com.swirlds.platform.observers.EventAddedObserver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import static com.swirlds.common.TransactionType.SYS_TRANS_STATE_SIG_FREEZE;
+import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG_FREEZE;
 import static com.swirlds.logging.LogMarker.FREEZE;
 
 /**

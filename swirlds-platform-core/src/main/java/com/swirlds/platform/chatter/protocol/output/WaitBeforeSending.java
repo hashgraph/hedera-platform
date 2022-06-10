@@ -29,13 +29,20 @@ import java.util.function.Supplier;
  * 		the type of event
  */
 public class WaitBeforeSending<E extends ChatterEvent> implements SendCheck<E> {
-	private static final int WAIT_MILLIS = 500;
-	private final long selfId;
+	private final int waitMillis;
 	private final PeerGossipState state;
 	private final Supplier<Instant> now;
 
-	public WaitBeforeSending(final long selfId, final PeerGossipState state, final Supplier<Instant> now) {
-		this.selfId = selfId;
+	/**
+	 * @param waitMillis
+	 * 		wait this many milliseconds from receiving an event to sending it
+	 * @param state
+	 * 		the peer's state
+	 * @param now
+	 * 		supplies the current time
+	 */
+	public WaitBeforeSending(final int waitMillis, final PeerGossipState state, final Supplier<Instant> now) {
+		this.waitMillis = waitMillis;
 		this.state = state;
 		this.now = now;
 	}
@@ -45,14 +52,10 @@ public class WaitBeforeSending<E extends ChatterEvent> implements SendCheck<E> {
 	 */
 	@Override
 	public SendAction shouldSend(final E event) {
-		if (event.getDescriptor().getCreator() == selfId) {
-			// an event we have created can never be known by the peer before we send it, so send it immediately
-			return SendAction.SEND;
-		}
 		if (state.getPeerKnows(event.getDescriptor())) {
 			return SendAction.DISCARD;
 		}
-		if (Duration.between(event.getTimeReceived(), now.get()).toMillis() < WAIT_MILLIS) {
+		if (Duration.between(event.getTimeReceived(), now.get()).toMillis() < waitMillis) {
 			return SendAction.WAIT;
 		}
 		return SendAction.SEND;

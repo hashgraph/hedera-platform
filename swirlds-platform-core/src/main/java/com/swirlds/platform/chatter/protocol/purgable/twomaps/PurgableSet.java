@@ -15,8 +15,8 @@
 package com.swirlds.platform.chatter.protocol.purgable.twomaps;
 
 
-import com.swirlds.common.locks.Locked;
-import com.swirlds.common.locks.IndexLock;
+import com.swirlds.common.threading.locks.Locked;
+import com.swirlds.common.threading.locks.IndexLock;
 
 import java.util.HashSet;
 import java.util.Map;

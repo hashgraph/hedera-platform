@@ -13,8 +13,8 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.events.Event;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.events.Event;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

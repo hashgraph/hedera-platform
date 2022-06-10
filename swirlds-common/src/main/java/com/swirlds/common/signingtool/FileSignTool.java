@@ -15,7 +15,6 @@
 package com.swirlds.common.signingtool;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.swirlds.common.CommonUtils;
 import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.constructable.ConstructableRegistryException;
 import com.swirlds.common.crypto.Hash;
@@ -24,6 +23,8 @@ import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.stream.InvalidStreamFileException;
 import com.swirlds.common.stream.StreamType;
 import com.swirlds.common.stream.StreamTypeFromJson;
+import com.swirlds.common.utility.CommonUtils;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
@@ -53,12 +54,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static com.swirlds.common.CommonUtils.hex;
 import static com.swirlds.common.stream.EventStreamType.EVENT;
 import static com.swirlds.common.stream.LinkedObjectStreamUtilities.computeEntireHash;
 import static com.swirlds.common.stream.LinkedObjectStreamUtilities.computeMetaHash;
 import static com.swirlds.common.stream.LinkedObjectStreamUtilities.readFirstIntFromFile;
 import static com.swirlds.common.stream.TimestampStreamFileWriter.writeSignatureFile;
+import static com.swirlds.common.utility.CommonUtils.hex;
 
 /**
  * This is a standalone utility tool to generate signature files for event/record stream,

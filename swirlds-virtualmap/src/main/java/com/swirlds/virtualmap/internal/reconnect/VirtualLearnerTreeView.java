@@ -16,13 +16,15 @@ package com.swirlds.virtualmap.internal.reconnect;
 
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.synchronization.internal.ExpectedLesson;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
 import com.swirlds.common.merkle.synchronization.views.LearnerTreeView;
+import com.swirlds.common.threading.pool.StandardWorkGroup;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
+import com.swirlds.virtualmap.datasource.VirtualKeySet;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
 import com.swirlds.virtualmap.datasource.VirtualRecord;
 import com.swirlds.virtualmap.internal.RecordAccessor;
@@ -64,6 +66,16 @@ public final class VirtualLearnerTreeView<K extends VirtualKey<? super K>, V ext
 	 * (specifically, leaf 2 for a tree with only a single leaf).
 	 */
 	private static final Hash NULL_HASH = CryptoFactory.getInstance().getNullHash();
+
+	/**
+	 * Handles removal of old nodes.
+	 */
+	private ReconnectNodeRemover<K, V> nodeRemover;
+
+	/**
+	 * Keys that have been encountered during this reconnect.
+	 */
+	private final VirtualKeySet<K> encounteredKeys;
 
 	/**
 	 * As part of tracking {@link ExpectedLesson}s, this keeps track of the "nodeAlreadyPresent" boolean.
@@ -109,12 +121,16 @@ public final class VirtualLearnerTreeView<K extends VirtualKey<? super K>, V ext
 	 * 		modified <strong>reconnect</strong> tree. We only use first and last leaf path from this state.
 	 * 		Cannot be null.
 	 */
-	public VirtualLearnerTreeView(final VirtualRootNode<K, V> root,
+	public VirtualLearnerTreeView(
+			final VirtualRootNode<K, V> root,
 			final RecordAccessor<K, V> originalRecords,
+			final VirtualKeySet<K> encounteredKeys,
 			final StateAccessor originalState,
 			final StateAccessor reconnectState) {
+
 		super(root, originalState, reconnectState);
 		this.originalRecords = Objects.requireNonNull(originalRecords);
+		this.encounteredKeys = encounteredKeys;
 	}
 
 	/**
@@ -216,6 +232,7 @@ public final class VirtualLearnerTreeView<K extends VirtualKey<? super K>, V ext
 		}
 
 		final VirtualLeafRecord<K, V> leaf = in.readSerializable();
+		nodeRemover.newLeafNode(leaf.getPath(), leaf.getKey());
 		root.handleReconnectLeaf(leaf); // may block if hashing is slower than ingest
 		return leaf.getPath();
 	}
@@ -238,7 +255,9 @@ public final class VirtualLearnerTreeView<K extends VirtualKey<? super K>, V ext
 			reconnectState.setFirstLeafPath(firstLeafPath);
 			reconnectState.setLastLeafPath(lastLeafPath);
 			root.prepareReconnectHashing(firstLeafPath, lastLeafPath);
+			nodeRemover.setPathInformation(firstLeafPath, lastLeafPath);
 		}
+		nodeRemover.newInternalNode(node);
 		return node;
 	}
 
@@ -254,8 +273,23 @@ public final class VirtualLearnerTreeView<K extends VirtualKey<? super K>, V ext
 	 * {@inheritDoc}
 	 */
 	@Override
+	public void startThreads(final StandardWorkGroup workGroup) {
+		nodeRemover = new ReconnectNodeRemover<>(
+				workGroup,
+				originalRecords,
+				encounteredKeys,
+				originalState.getFirstLeafPath(),
+				originalState.getLastLeafPath());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
 	public void close() {
 		root.endLearnerReconnect();
+		nodeRemover.close();
+		encounteredKeys.close();
 	}
 
 	/**
@@ -288,5 +322,12 @@ public final class VirtualLearnerTreeView<K extends VirtualKey<? super K>, V ext
 	@Override
 	public Long convertMerkleRootToViewType(final MerkleNode node) {
 		throw new UnsupportedOperationException("Nested virtual maps not supported");
+	}
+
+	/**
+	 * Get the object responsible for removing nodes during the reconnect.
+	 */
+	public ReconnectNodeRemover<K, V> getNodeRemover() {
+		return nodeRemover;
 	}
 }

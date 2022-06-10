@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.LongStream;
 import java.util.stream.StreamSupport;
 
-import static com.swirlds.common.Units.MEBIBYTES_TO_BYTES;
+import static com.swirlds.common.utility.Units.MEBIBYTES_TO_BYTES;
 
 /**
  * A simple, random access list of <b>non-zero</b> longs designed to allow lock-free concurrency control.

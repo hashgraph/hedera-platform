@@ -16,14 +16,15 @@ package com.swirlds.common.merkle;
 
 import com.swirlds.common.FastCopyable;
 import com.swirlds.common.crypto.Hashable;
+import com.swirlds.common.exceptions.ReferenceCountException;
 import com.swirlds.common.io.SerializableDet;
 import com.swirlds.common.merkle.exceptions.MerkleRouteException;
-import com.swirlds.common.merkle.io.SerializationStrategy;
 import com.swirlds.common.merkle.iterators.MerkleIterator;
 import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.common.merkle.route.MerkleRouteFactory;
 import com.swirlds.common.merkle.route.MerkleRouteIterator;
 import com.swirlds.common.merkle.synchronization.views.CustomReconnectRoot;
+import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
 
 import java.util.Set;
 import java.util.function.Consumer;
@@ -72,7 +73,7 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 	 * 		the version in question
 	 * @return a set of supported strategies
 	 */
-	Set<SerializationStrategy> supportedSerialization(int version);
+	Set<MerkleSerializationStrategy> supportedSerialization(int version);
 
 	/**
 	 * Blindly cast this merkle node into a leaf node, will fail if node is not actually a leaf node.
@@ -151,7 +152,7 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 	 * All nodes in a tree should have a reference count of at least 1 with the exception of the root
 	 * (which will have a reference count of 0).
 	 *
-	 * @throws com.swirlds.common.ReferenceCountException
+	 * @throws com.swirlds.common.exceptions.ReferenceCountException
 	 * 		if this node has already been released
 	 */
 	void incrementReferenceCount();
@@ -162,7 +163,7 @@ public interface MerkleNode extends FastCopyable, Hashable, SerializableDet {
 	 * If the reference count drops to 0, this method is responsible for deleting external data held by the node
 	 * and for decrementing the reference count of children (if this node has children).
 	 *
-	 * @throws com.swirlds.common.ReferenceCountException
+	 * @throws com.swirlds.common.exceptions.ReferenceCountException
 	 * 		if the reference count is 0 or of the node has already been released
 	 */
 	void decrementReferenceCount();

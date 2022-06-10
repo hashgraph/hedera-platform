@@ -13,16 +13,16 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.NodeId;
 import com.swirlds.common.StartupTime;
 import com.swirlds.common.crypto.CryptoFactory;
-import com.swirlds.common.locks.MaybeLocked;
-import com.swirlds.common.locks.MaybeLockedResource;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
 import com.swirlds.common.notification.listeners.ReconnectCompleteNotification;
 import com.swirlds.common.stream.HashSigner;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.threading.locks.MaybeLocked;
+import com.swirlds.common.threading.locks.MaybeLockedResource;
 import com.swirlds.logging.payloads.ReconnectFailurePayload;
 import com.swirlds.logging.payloads.ReconnectFinishPayload;
 import com.swirlds.logging.payloads.ReconnectLoadFailurePayload;
@@ -34,6 +34,7 @@ import com.swirlds.platform.network.ConnectionManager;
 import com.swirlds.platform.network.NetworkUtils;
 import com.swirlds.platform.reconnect.ReconnectException;
 import com.swirlds.platform.reconnect.ReconnectLearner;
+import com.swirlds.platform.reconnect.SignedStateValidator;
 import com.swirlds.platform.state.SigInfo;
 import com.swirlds.platform.state.SigSet;
 import com.swirlds.platform.state.SignedState;
@@ -362,8 +363,8 @@ class SyncCaller implements Runnable {
 
 		log.info(RECONNECT.getMarker(), "Hashgraph and shadow graph are now cleared");
 
-		// clear Event Handlers after finish clearing RunningHashCalculator,
-		// to make sure that forCons queue is empty during reconnect
+		// clear handlers and transaction pool to make sure that the pre-consensus event queue (q1)
+		// and consensus round queue (q2) are empty during reconnect
 		platform.prepareForReconnect();
 
 		final List<Long> reconnectNeighbors = platform.getSyncManager().getNeighborsForReconnect();
@@ -371,6 +372,7 @@ class SyncCaller implements Runnable {
 				"{} has fallen behind, will try to reconnect with {}",
 				platform::getSelfId, reconnectNeighbors::toString);
 
+		// All threads are either stopped or have an empty queue, so it's ok to work with the state directly
 		final State workingState = platform.getSwirldStateManager().getConsensusState();
 
 		// Reserve the state
@@ -497,7 +499,7 @@ class SyncCaller implements Runnable {
 				new ReconnectLearner(conn,
 						addressBook,
 						initialState,
-						platform.getCrypto(),
+						new SignedStateValidator(platform.getCrypto()),
 						Settings.reconnect.getAsyncStreamTimeoutMilliseconds(),
 						platform.getStats().getReconnectStats());
 

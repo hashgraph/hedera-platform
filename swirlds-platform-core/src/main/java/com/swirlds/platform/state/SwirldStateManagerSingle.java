@@ -14,16 +14,16 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.NodeId;
-import com.swirlds.common.SwirldState;
-import com.swirlds.common.Transaction;
 import com.swirlds.common.notification.Notification;
 import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
 import com.swirlds.common.notification.listeners.ReconnectCompleteNotification;
-import com.swirlds.common.threading.InterruptableRunnable;
-import com.swirlds.common.threading.QueueThread;
-import com.swirlds.common.threading.QueueThreadConfiguration;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.common.threading.ThreadUtils;
+import com.swirlds.common.threading.framework.QueueThread;
+import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SettingsProvider;
@@ -47,7 +47,7 @@ import java.util.concurrent.Semaphore;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import static com.swirlds.common.Units.NANOSECONDS_TO_MICROSECONDS;
+import static com.swirlds.common.utility.Units.NANOSECONDS_TO_MICROSECONDS;
 import static com.swirlds.logging.LogMarker.ERROR;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.QUEUES;
@@ -268,7 +268,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 
 		final Instant consensusTime = getConsensusTime(isConsensus, event);
 
-		transactionHandler.handleEventTransactions(event, consensusTime, isConsensus, stateCurr);
+		transactionHandler.handleEventTransactions(event, consensusTime, isConsensus, stateCurr.getState());
 
 		// Add this event to the threadWork queue it to handle
 		if (!threadWork.offer(event)) {
@@ -348,14 +348,16 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 * Applies self transactions to the current state.
 	 */
 	private void handleSelfTransactions() {
-		transactionHandler.handleTransactions(currSizeSupplier, pollCurr, consEstimateSupplier, stateCurr);
+		transactionHandler.handleTransactions(currSizeSupplier, pollCurr, consEstimateSupplier,
+				stateCurr.getState());
 	}
 
 	/**
 	 * Applies self transactions to the work state.
 	 */
 	private void handleWorkTransactions() {
-		transactionHandler.handleTransactions(workSizeSupplier, pollWork, consEstimateSupplier, stateWork);
+		transactionHandler.handleTransactions(workSizeSupplier, pollWork, consEstimateSupplier,
+				stateWork.getState());
 	}
 
 	/**
@@ -439,7 +441,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 
 		final Instant consensusTime = getConsensusTime(isConsensus, event);
 
-		transactionHandler.handleEventTransactions(event, consensusTime, isConsensus, stateWork);
+		transactionHandler.handleEventTransactions(event, consensusTime, isConsensus, stateWork.getState());
 
 		// Add this event to the forNext queue so that it can be 
 		// applied to the new forWork state after the next shuffle
@@ -477,8 +479,8 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 			// after the next shuffle.
 			final Runnable postHandle = selfId.equalsMain(event.getCreatorId()) ? transactionPool::pollCons : null;
 
-			transactionHandler.handleEventTransactions(event, event.getConsensusTimestamp(), true, stateCons,
-					postHandle);
+			transactionHandler.handleEventTransactions(event, event.getConsensusTimestamp(), true,
+					stateCons.getState(), postHandle);
 		}
 	}
 
@@ -521,10 +523,8 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 */
 	@Override
 	public void savedStateInFreezePeriod() {
-		synchronized (stateCons) {
-			// set current DualState's lastFrozenTime to be current freezeTime
-			stateCons.getState().getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
-		}
+		// set consensus DualState's lastFrozenTime to be current freezeTime
+		stateCons.getState().getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
 	}
 
 	/**
@@ -583,6 +583,8 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	private static void releaseState(final StateInfo stateInfo) {
 		try {
 			if (stateInfo != null) {
+				// There should be no threads modifying the state at this point,
+				// so these operations are safe to do serially
 				stateInfo.getState().getSwirldState().noMoreTransactions();
 				stateInfo.getState().release();
 			}
@@ -605,8 +607,14 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 */
 	@Override
 	public void clearFreezeTimes() {
-		stateCons.getState().getPlatformDualState().setFreezeTime(null);
-		stateCons.getState().getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
+		// It is possible, though unlikely, that this operation is executed multiple times. Each failed attempt will
+		// leak a state, but since this is only called during recovery after which the node shuts down, it is
+		// acceptable. This leak will be eliminated with ticket swirlds/swirlds-platform/issues/5256.
+		stateCons.updateState(s -> {
+			s.getPlatformDualState().setFreezeTime(null);
+			s.getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
+			return s;
+		});
 	}
 
 	/**

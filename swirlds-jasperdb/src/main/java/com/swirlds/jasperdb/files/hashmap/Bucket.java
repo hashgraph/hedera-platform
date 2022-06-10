@@ -14,8 +14,8 @@
 
 package com.swirlds.jasperdb.files.hashmap;
 
-import com.swirlds.common.Units;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.files.DataFileOutputStream;
 import com.swirlds.virtualmap.VirtualKey;
 import org.apache.logging.log4j.LogManager;

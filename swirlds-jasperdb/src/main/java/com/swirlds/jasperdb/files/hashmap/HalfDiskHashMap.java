@@ -14,7 +14,7 @@
 
 package com.swirlds.jasperdb.files.hashmap;
 
-import com.swirlds.common.Units;
+import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.Snapshotable;
 import com.swirlds.jasperdb.collections.LongListBufferedWrapper;
 import com.swirlds.jasperdb.collections.LongListDisk;
@@ -192,6 +192,16 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>> implements AutoClo
 		fileCollection = new DataFileCollection<>(storeDir, storeName, bucketSerializer, loadedDataCallback);
 	}
 
+
+	/**
+	 * Get the key serializer.
+	 *
+	 * @return the key serializer
+	 */
+	public KeySerializer<K> getKeySerializer() {
+		return bucketSerializer.getKeySerializer();
+	}
+
 	/**
 	 * Merge all read only files that match provided filter. Important the set of files must be contiguous in time
 	 * otherwise the merged data will be invalid.
@@ -202,7 +212,8 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>> implements AutoClo
 	 * 		AtomicBoolean to monitor if we should pause merging
 	 * @throws IOException
 	 * 		if there was a problem merging
-	 * @throws InterruptedException If the merge thread was interupted
+	 * @throws InterruptedException
+	 * 		If the merge thread was interupted
 	 */
 	public void merge(final Function<List<DataFileReader<Bucket<K>>>,
 			List<DataFileReader<Bucket<K>>>> filterForFilesToMerge, final AtomicBoolean mergingPaused,

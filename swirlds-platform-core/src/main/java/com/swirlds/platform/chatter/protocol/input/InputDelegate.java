@@ -18,6 +18,7 @@ import com.swirlds.common.constructable.ClassIdFormatter;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.platform.chatter.protocol.PeerMessageException;
 import com.swirlds.platform.chatter.protocol.PeerMessageHandler;
+import com.swirlds.platform.stats.PerSecondStat;
 
 import java.util.List;
 
@@ -26,9 +27,13 @@ import java.util.List;
  */
 public class InputDelegate implements PeerMessageHandler {
 	private final List<MessageTypeHandler<? extends SelfSerializable>> handlers;
+	private final PerSecondStat msgPerSecond;
 
-	public InputDelegate(final List<MessageTypeHandler<? extends SelfSerializable>> handlers) {
+	public InputDelegate(
+			final List<MessageTypeHandler<? extends SelfSerializable>> handlers,
+			final PerSecondStat msgPerSecond) {
 		this.handlers = handlers;
+		this.msgPerSecond = msgPerSecond;
 	}
 
 	/**
@@ -36,6 +41,7 @@ public class InputDelegate implements PeerMessageHandler {
 	 */
 	@Override
 	public void handleMessage(final SelfSerializable message) throws PeerMessageException {
+		msgPerSecond.increment();
 		for (final MessageTypeHandler<?> caster : handlers) {
 			if (caster.castHandleMessage(message)) {
 				return;

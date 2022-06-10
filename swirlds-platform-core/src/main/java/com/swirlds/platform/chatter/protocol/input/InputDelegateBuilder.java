@@ -15,15 +15,18 @@
 package com.swirlds.platform.chatter.protocol.input;
 
 import com.swirlds.common.io.SelfSerializable;
+import com.swirlds.platform.stats.PerSecondStat;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * A builder for {@link InputDelegate}
  */
 public final class InputDelegateBuilder {
 	private final List<MessageTypeHandler<? extends SelfSerializable>> messageTypeHandlers = new ArrayList<>();
+	private PerSecondStat stat;
 
 	private InputDelegateBuilder() {
 	}
@@ -48,9 +51,24 @@ public final class InputDelegateBuilder {
 	}
 
 	/**
+	 * Use this statistic to track the number messages received per second
+	 *
+	 * @param stat
+	 * 		the instance that will track
+	 * @return this instance
+	 */
+	public InputDelegateBuilder setStat(final PerSecondStat stat) {
+		this.stat = stat;
+		return this;
+	}
+
+	/**
 	 * @return a new {@link InputDelegate}
 	 */
 	public InputDelegate build() {
-		return new InputDelegate(messageTypeHandlers);
+		if (messageTypeHandlers.isEmpty()) {
+			throw new IllegalStateException("Add least 1 handler should be added");
+		}
+		return new InputDelegate(messageTypeHandlers, Objects.requireNonNull(stat));
 	}
 }

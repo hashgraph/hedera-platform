@@ -24,8 +24,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
-import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
 import static com.swirlds.common.utility.CompareTo.isGreaterThanOrEqualTo;
+import static com.swirlds.common.utility.Units.NANOSECONDS_TO_SECONDS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**

@@ -14,8 +14,9 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.NodeId;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.common.statistics.internal.AbstractStatistics;
+import com.swirlds.common.system.Platform;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,7 +43,7 @@ class CsvWriter implements Runnable {
 	 */
 	public static final int DEFAULT_WRITE_PERIOD = 3000;
 
-	/** the {@link com.swirlds.common.Platform} instance that owns this {@link CsvWriter} */
+	/** the {@link Platform} instance that owns this {@link CsvWriter} */
 	private final AbstractPlatform platform;
 
 	/** path and filename of the .csv file to write to */

@@ -18,6 +18,7 @@ import com.swirlds.common.statistics.StatEntry;
 
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -139,10 +140,19 @@ public class CycleTimingStat {
 		totalCycleTimeStat.update(t[0], t[t.length - 1]);
 	}
 
-	public List<StatEntry> getAllEntries() {
+	public List<StatEntry> getAverageEntries() {
 		final List<StatEntry> statEntries =
 				timePointStats.stream().map(TimeStat::getAverageStat).collect(Collectors.toList());
 		statEntries.add(totalCycleTimeStat.getAverageStat());
+		return statEntries;
+	}
+
+	public List<StatEntry> getAllEntries() {
+		final List<StatEntry> statEntries = timePointStats.stream()
+				.map(TimeStat::getAllEntries)
+				.flatMap(Collection::stream)
+				.collect(Collectors.toList());
+		statEntries.addAll(totalCycleTimeStat.getAllEntries());
 		return statEntries;
 	}
 

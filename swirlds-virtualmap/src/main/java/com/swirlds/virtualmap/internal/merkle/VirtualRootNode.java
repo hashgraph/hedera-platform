@@ -16,11 +16,10 @@ package com.swirlds.virtualmap.internal.merkle;
 
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.ExternalSelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
-import com.swirlds.common.merkle.io.SerializationStrategy;
 import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
 import com.swirlds.common.merkle.synchronization.views.CustomReconnectRoot;
@@ -28,8 +27,9 @@ import com.swirlds.common.merkle.synchronization.views.LearnerTreeView;
 import com.swirlds.common.merkle.synchronization.views.TeacherTreeView;
 import com.swirlds.common.merkle.utility.AbstractMerkleInternal;
 import com.swirlds.common.merkle.utility.DebugIterationEndpoint;
+import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
 import com.swirlds.common.statistics.StatEntry;
-import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualMap;
 import com.swirlds.virtualmap.VirtualMapSettings;
@@ -69,7 +69,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-import static com.swirlds.common.merkle.io.SerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
+import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.VIRTUAL_MERKLE_STATS;
 import static com.swirlds.virtualmap.internal.Path.FIRST_LEFT_PATH;
@@ -144,7 +144,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * A static set of supported serialization strategies. This is static just to cut down on garbage
 	 * generation at runtime and a little overhead.
 	 */
-	private static final Set<SerializationStrategy> STRATEGIES = Set.of(EXTERNAL_SELF_SERIALIZATION);
+	private static final Set<MerkleSerializationStrategy> STRATEGIES = Set.of(EXTERNAL_SELF_SERIALIZATION);
 
 	/**
 	 * The number of elements to have in the buffer used during reconnect on a learner when passing
@@ -902,8 +902,8 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 			final Stream<VirtualLeafRecord<K, V>> sortedDirtyLeaves =
 					cacheToFlush.dirtyLeaves(stateToUse.getFirstLeafPath(), stateToUse.getLastLeafPath());
 
-			// Get the leaves that were deleted and sort them by path so that lower paths come first
-			final Stream<VirtualLeafRecord<K, V>> sortedDeletedLeaves =
+			// Get the deleted leaves
+			final Stream<VirtualLeafRecord<K, V>> deletedLeaves =
 					cacheToFlush.deletedLeaves();
 
 			// Save the dirty internals
@@ -915,7 +915,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 					stateToUse.getLastLeafPath(),
 					sortedDirtyInternals,
 					sortedDirtyLeaves,
-					sortedDeletedLeaves);
+					deletedLeaves);
 
 		} catch (final IOException ex) {
 			LOG.error(EXCEPTION.getMarker(), "Error while flushing VirtualMap", ex);
@@ -931,7 +931,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Set<SerializationStrategy> supportedSerialization(final int version) {
+	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
 		return STRATEGIES;
 	}
 
@@ -1191,7 +1191,11 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 		reconnectRecords = new RecordAccessorImpl<>(reconnectState, snapshotCache, dataSource);
 
 		// During reconnect we want to look up state from the original records
-		learnerTreeView = new VirtualLearnerTreeView<>(this, originalMap.records, originalMap.getState(),
+		learnerTreeView = new VirtualLearnerTreeView<>(
+				this,
+				originalMap.records,
+				dataSource.buildKeySet(),
+				originalMap.getState(),
 				reconnectState);
 
 		// Current statistics can only be registered when the node boots, requiring statistics
@@ -1259,8 +1263,11 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 
 	public void prepareReconnectHashing(final long firstLeafPath, final long lastLeafPath) {
 		// The hash listener will be responsible for flushing stuff to the reconnect data source
-		final ReconnectHashListener<K, V> hashListener =
-				new ReconnectHashListener<>(firstLeafPath, lastLeafPath, reconnectRecords.getDataSource());
+		final ReconnectHashListener<K, V> hashListener = new ReconnectHashListener<>(
+				firstLeafPath,
+				lastLeafPath,
+				reconnectRecords.getDataSource(),
+				learnerTreeView.getNodeRemover());
 
 		// This background thread will be responsible for hashing the tree and sending the
 		// data to the hash listener to flush.

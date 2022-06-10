@@ -14,24 +14,20 @@
 
 package com.swirlds.platform.reconnect;
 
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.NodeId;
-import com.swirlds.common.io.BadIOException;
-import com.swirlds.common.merkle.io.MerkleDataInputStream;
-import com.swirlds.common.merkle.io.MerkleDataOutputStream;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.io.exceptions.BadIOException;
+import com.swirlds.common.io.streams.MerkleDataInputStream;
+import com.swirlds.common.io.streams.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.LearningSynchronizer;
 import com.swirlds.logging.payloads.ReconnectDataUsagePayload;
 import com.swirlds.logging.payloads.ReconnectFailurePayload;
-import com.swirlds.platform.Crypto;
 import com.swirlds.platform.ReconnectStatistics;
 import com.swirlds.platform.SyncConnection;
-import com.swirlds.platform.Utilities;
 import com.swirlds.platform.network.ByteConstants;
-import com.swirlds.platform.state.SigInfo;
 import com.swirlds.platform.state.SigSet;
 import com.swirlds.platform.state.SignedState;
 import com.swirlds.platform.state.State;
-import com.swirlds.platform.state.StateSettings;
 import com.swirlds.platform.sync.SyncInputStream;
 import com.swirlds.platform.sync.SyncOutputStream;
 import org.apache.logging.log4j.LogManager;
@@ -39,13 +35,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.net.SocketException;
-import java.security.PublicKey;
-import java.util.concurrent.Future;
 
-import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
-import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
-import static com.swirlds.platform.state.PlatformState.getInfoString;
 
 /**
  * This class encapsulates reconnect logic for the out of date node which is
@@ -58,7 +49,7 @@ public class ReconnectLearner {
 
 	private final SyncConnection connection;
 	private final AddressBook addressBook;
-	private final Crypto crypto;
+	private final SignedStateValidator signedStateValidator;
 
 	private final State currentState;
 	private final int reconnectSocketTimeout;
@@ -76,7 +67,7 @@ public class ReconnectLearner {
 			final SyncConnection connection,
 			final AddressBook addressBook,
 			final State currentState,
-			final Crypto crypto,
+			final SignedStateValidator signedStateValidator,
 			final int reconnectSocketTimeout,
 			final ReconnectStatistics statistics) {
 
@@ -86,7 +77,7 @@ public class ReconnectLearner {
 		this.connection = connection;
 		this.addressBook = addressBook;
 		this.currentState = currentState;
-		this.crypto = crypto;
+		this.signedStateValidator = signedStateValidator;
 		this.reconnectSocketTimeout = reconnectSocketTimeout;
 		this.statistics = statistics;
 	}
@@ -148,7 +139,7 @@ public class ReconnectLearner {
 
 			reconnect();
 			receiveSignatures();
-			validate();
+			signedStateValidator.validate(signedState, addressBook);
 
 		} catch (final IOException e) {
 			throw new ReconnectException(e);
@@ -206,8 +197,8 @@ public class ReconnectLearner {
 	private void reconnect() throws InterruptedException {
 		statistics.incrementReceiverStartTimes();
 
-		MerkleDataInputStream in = new MerkleDataInputStream(connection.getDis());
-		MerkleDataOutputStream out = new MerkleDataOutputStream(connection.getDos());
+		final MerkleDataInputStream in = new MerkleDataInputStream(connection.getDis());
+		final MerkleDataOutputStream out = new MerkleDataOutputStream(connection.getDos());
 
 		connection.getDis().getSyncByteCounter().resetCount();
 		connection.getDos().getSyncByteCounter().resetCount();
@@ -225,67 +216,6 @@ public class ReconnectLearner {
 				mbReceived).toString());
 
 		statistics.incrementReceiverEndTimes();
-	}
-
-	/**
-	 * Validate that the state matches the signatures.
-	 *
-	 * @throws ReconnectException
-	 * 		thrown when received signed state does not have enough valid signatures
-	 */
-	private void validate() throws ReconnectException {
-
-		// validate the signatures from the received state
-		LOG.info(RECONNECT.getMarker(), "Validating signatures of the received state");
-		final int numSigs = signedState.getSigSet().getNumMembers();
-		final Future<Boolean>[] validFutures = new Future[numSigs];
-		for (int i = 0; i < numSigs; i++) {
-			final PublicKey key = addressBook.getAddress(i).getSigPublicKey();
-			final SigInfo sigInfo = signedState.getSigSet().getSigInfo(i);
-			if (sigInfo == null) {
-				continue;
-			}
-			validFutures[i] = crypto.verifySignatureParallel(
-					signedState.getStateHashBytes(),
-					sigInfo.getSig(),
-					key,
-					(Boolean b) -> {
-					});
-		}
-		int validCount = 0; //how many valid signatures
-		long validStake = 0; //how much stake owned by members with valid signatures
-		for (int i = 0; i < numSigs; i++) {
-			if (validFutures[i] == null) {
-				continue;
-			}
-			try {
-				if (validFutures[i].get()) {
-					validCount++;
-					validStake += signedState.getAddressBook().getStake(i);
-				}
-			} catch (final InterruptedException e) {
-				Thread.currentThread().interrupt();
-				LOG.warn(RECONNECT.getMarker(), "interrupted while validating signatures");
-			} catch (final Exception e) {
-				LOG.info(EXCEPTION.getMarker(), "Error while validating signature from received state: ", e);
-			}
-		}
-
-		LOG.info(RECONNECT.getMarker(), "Signed State valid Stake :{} ", validStake);
-		LOG.info(RECONNECT.getMarker(), "AddressBook Stake :{} ", addressBook.getTotalStake());
-		LOG.info(RECONNECT.getMarker(), "StrongMinority status: {}",
-				Utilities.isStrongMinority(validStake, addressBook.getTotalStake()));
-		if (!Utilities.isStrongMinority(validStake, addressBook.getTotalStake())) {
-			LOG.error(RECONNECT.getMarker(), "Information for failed reconnect state:\n{}\n{}",
-					() -> getInfoString(signedState.getState().getPlatformState()),
-					() -> generateHashDebugString(signedState.getState(), StateSettings.getDebugHashDepth()));
-			throw new ReconnectException(String.format(
-					"Error: Received signed state does not have enough valid signatures! validCount:%d, addressBook " +
-							"size:%d, validStake:%d, addressBook total stake:%d",
-					validCount, addressBook.getSize(), validStake, addressBook.getTotalStake()));
-		}
-
-		LOG.info(RECONNECT.getMarker(), "State is valid");
 	}
 
 	/**

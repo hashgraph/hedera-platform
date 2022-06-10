@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.Transaction;
+import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.TransactionSubmitter;
 
 /**

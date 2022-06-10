@@ -14,7 +14,7 @@
 package com.swirlds.platform.sync;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.events.Event;
+import com.swirlds.common.system.events.Event;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.stats.SyncStats;

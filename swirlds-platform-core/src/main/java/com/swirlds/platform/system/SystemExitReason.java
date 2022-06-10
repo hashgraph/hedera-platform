@@ -32,6 +32,10 @@ public enum SystemExitReason {
 	 */
 	KEY_LOADING_FAILED(204),
 	/**
+	 * The machine IP addresses did not match any address in the address book.
+	 */
+	NODE_ADDRESS_MISMATCH(205),
+	/**
 	 * An unrecoverable error.
 	 */
 	FATAL_ERROR(255);

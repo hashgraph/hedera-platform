@@ -14,8 +14,8 @@
 
 package com.swirlds.virtualmap.internal.merkle;
 
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
 import com.swirlds.virtualmap.VirtualMap;
 import com.swirlds.virtualmap.internal.Path;

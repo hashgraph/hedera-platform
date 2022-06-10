@@ -13,8 +13,8 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.NodeId;
-import com.swirlds.common.io.BadIOException;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.io.exceptions.BadIOException;
 import com.swirlds.platform.network.ConnectionTracker;
 import com.swirlds.platform.network.NetworkUtils;
 import com.swirlds.platform.sync.SyncInputStream;

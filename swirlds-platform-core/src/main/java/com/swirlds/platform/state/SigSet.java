@@ -14,13 +14,13 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.AddressBook;
+import com.swirlds.common.system.AddressBook;
 import com.swirlds.common.FastCopyable;
 import com.swirlds.common.constructable.ConstructableIgnored;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.platform.Utilities;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;

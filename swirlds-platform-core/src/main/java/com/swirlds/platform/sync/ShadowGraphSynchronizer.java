@@ -14,8 +14,8 @@
 
 package com.swirlds.platform.sync;
 
-import com.swirlds.common.threading.ParallelExecutionException;
-import com.swirlds.common.threading.ParallelExecutor;
+import com.swirlds.common.threading.pool.ParallelExecutionException;
+import com.swirlds.common.threading.pool.ParallelExecutor;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.SyncConnection;

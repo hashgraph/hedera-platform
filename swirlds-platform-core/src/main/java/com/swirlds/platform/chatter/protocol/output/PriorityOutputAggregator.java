@@ -16,6 +16,7 @@ package com.swirlds.platform.chatter.protocol.output;
 
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
+import com.swirlds.platform.stats.PerSecondStat;
 
 import java.util.List;
 
@@ -25,9 +26,11 @@ import java.util.List;
  */
 public class PriorityOutputAggregator implements MessageProvider {
 	private final List<MessageProvider> providers;
+	private final PerSecondStat msgsPerSec;
 
-	public PriorityOutputAggregator(final List<MessageProvider> providers) {
+	public PriorityOutputAggregator(final List<MessageProvider> providers, final PerSecondStat msgsPerSec) {
 		this.providers = providers;
+		this.msgsPerSec = msgsPerSec;
 	}
 
 	/**
@@ -38,6 +41,7 @@ public class PriorityOutputAggregator implements MessageProvider {
 		for (final MessageProvider provider : providers) {
 			final SelfSerializable message = provider.getMessage();
 			if (message != null) {
+				msgsPerSec.increment();
 				return message;
 			}
 		}

@@ -14,8 +14,8 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.EventCreationRule;
-import com.swirlds.common.EventCreationRuleResponse;
+import com.swirlds.common.system.EventCreationRule;
+import com.swirlds.common.system.EventCreationRuleResponse;
 
 public interface TransactionPool extends EventCreationRule {
 	/**

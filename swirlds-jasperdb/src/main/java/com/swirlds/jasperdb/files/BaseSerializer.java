@@ -14,7 +14,7 @@
 
 package com.swirlds.jasperdb.files;
 
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;

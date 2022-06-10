@@ -14,10 +14,10 @@
 
 package com.swirlds.virtualmap.internal.merkle;
 
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleLeaf;
-import com.swirlds.common.merkle.io.SerializationStrategy;
+import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
@@ -38,7 +38,7 @@ public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends Vi
 		public static final int ORIGINAL = 1;
 	}
 
-	private static final Set<SerializationStrategy> STRATEGIES = Set.of();
+	private static final Set<MerkleSerializationStrategy> STRATEGIES = Set.of();
 
 	public VirtualLeafNode() {
 	}
@@ -69,7 +69,7 @@ public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends Vi
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Set<SerializationStrategy> supportedSerialization(final int version) {
+	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
 		return STRATEGIES;
 	}
 

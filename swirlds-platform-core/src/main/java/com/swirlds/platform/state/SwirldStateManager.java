@@ -14,11 +14,11 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.SwirldDualState;
-import com.swirlds.common.SwirldState;
-import com.swirlds.common.SwirldTransaction;
-import com.swirlds.common.Transaction;
-import com.swirlds.common.threading.InterruptableRunnable;
+import com.swirlds.common.system.SwirldDualState;
+import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.FreezePeriodChecker;
@@ -42,7 +42,7 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 
 	/**
 	 * Handles an event before it reaches consensus. Implementations are responsible for passing each to
-	 * {@link com.swirlds.common.SwirldState#handleTransaction(long, boolean, Instant, Instant, SwirldTransaction,
+	 * {@link SwirldState#handleTransaction(long, boolean, Instant, Instant, SwirldTransaction,
 	 * SwirldDualState)} with {@code consensus} equal to {@code false}.
 	 *
 	 * @param event
@@ -90,7 +90,7 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 
 	/**
 	 * Handles the events in a consensus round. Implementations are responsible for invoking {@link
-	 * com.swirlds.common.SwirldState#handleTransaction(long, boolean, Instant, Instant, SwirldTransaction,
+	 * SwirldState#handleTransaction(long, boolean, Instant, Instant, SwirldTransaction,
 	 * SwirldDualState)} on all user transactions in the contained events with {@code consensus}
 	 * equal to {@code true}.
 	 *
@@ -114,6 +114,10 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 
 	/**
 	 * Invoked when a signed state is about to be created for the current freeze period.
+	 * <p>
+	 * Invoked only by the consensus handling thread, so there is no chance of the state being modified by a concurrent
+	 * thread.
+	 * </p>
 	 */
 	void savedStateInFreezePeriod();
 
@@ -134,7 +138,8 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 	SwirldState getCurrentSwirldState();
 
 	/**
-	 * Returns the consensus state.
+	 * Returns the consensus state. The consensus state could become immutable at any time. Modifications must not be
+	 * made to the returned state.
 	 */
 	State getConsensusState();
 

@@ -19,6 +19,7 @@ import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteListener;
 import com.swirlds.common.statistics.StatEntry;
 import com.swirlds.common.statistics.StatsRunningAverage;
+import com.swirlds.common.system.SwirldMain;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.File;
@@ -30,7 +31,7 @@ import static com.swirlds.common.statistics.internal.AbstractStatistics.INTERNAL
 
 /**
  * Tool for tracking {@link SignedStateFileManager} statistics. This is the primary entry
- * point for all {@link com.swirlds.common.SwirldMain} implementations that wish to track
+ * point for all {@link SwirldMain} implementations that wish to track
  * {@link SignedStateFileManager} statistics.
  */
 public final class SavedFileStatistics {

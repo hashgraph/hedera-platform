@@ -14,8 +14,8 @@
 
 package com.swirlds.platform.reconnect;
 
-import com.swirlds.common.merkle.io.MerkleDataInputStream;
-import com.swirlds.common.merkle.io.MerkleDataOutputStream;
+import com.swirlds.common.io.streams.MerkleDataInputStream;
+import com.swirlds.common.io.streams.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.TeachingSynchronizer;
 import com.swirlds.logging.payloads.ReconnectFinishPayload;
 import com.swirlds.logging.payloads.ReconnectStartPayload;

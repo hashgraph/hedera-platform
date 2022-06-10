@@ -14,18 +14,19 @@
 
 package com.swirlds.platform.event;
 
-import com.swirlds.common.NodeId;
-import com.swirlds.common.threading.StoppableThread;
-import com.swirlds.common.threading.StoppableThreadConfiguration;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.threading.framework.StoppableThread;
+import com.swirlds.common.threading.framework.config.StoppableThreadConfiguration;
 import com.swirlds.platform.crypto.CryptoStatic;
 import com.swirlds.platform.network.topology.NetworkTopology;
 import com.swirlds.platform.sync.SyncResult;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.function.LongConsumer;
+import java.util.Random;
+import java.util.function.LongPredicate;
 import java.util.function.Predicate;
-import java.util.random.RandomGenerator;
 
 /**
  * An independent thread that creates new events periodically
@@ -33,18 +34,16 @@ import java.util.random.RandomGenerator;
 public class EventCreatorThread {
 	private final StoppableThread creatorThread;
 	private final List<NodeId> allNeighbors;
-	private final RandomGenerator random;
+	private final Random random;
 	private final Predicate<SyncResult> creationCheck;
-	private final LongConsumer eventCreator;
-	private final int createEventSleepMs;
+	private final LongPredicate eventCreator;
 
 	public EventCreatorThread(
 			final NodeId selfId,
 			final int attemptedChatterEventPerSecond,
 			final NetworkTopology topology,
 			final Predicate<SyncResult> creationCheck,
-			final LongConsumer eventCreator) {
-		this.createEventSleepMs = 1000 / attemptedChatterEventPerSecond;
+			final LongPredicate eventCreator) {
 		this.creationCheck = creationCheck;
 		this.eventCreator = eventCreator;
 		this.allNeighbors = new ArrayList<>(topology.getNeighbors());
@@ -53,26 +52,27 @@ public class EventCreatorThread {
 		creatorThread = new StoppableThreadConfiguration<>()
 				.setPriority(Thread.NORM_PRIORITY)
 				.setNodeId(selfId.getId())
+				.setMaximumRate(attemptedChatterEventPerSecond)
 				.setComponent("Chatter")
 				.setThreadName("EventGenerator")
 				.setWork(this::createEvent)
 				.build();
 	}
 
-	private void createEvent() throws InterruptedException {
-		final NodeId otherId = allNeighbors.get(random.nextInt(allNeighbors.size()));
-		final SyncResult syncResult = new SyncResult(
-				false, // not relevant with Chatter
-				otherId,
-				0, // not relevant with Chatter
-				0 // not relevant with Chatter
-		);
-
-		if (this.creationCheck.test(syncResult)) {
-			this.eventCreator.accept(otherId.getId());
+	private void createEvent() {
+		Collections.shuffle(allNeighbors, random);
+		for (final NodeId neighbor : allNeighbors) {
+			final SyncResult syncResult = new SyncResult(
+					false, // not relevant with Chatter
+					neighbor,
+					0, // not relevant with Chatter
+					0 // not relevant with Chatter
+			);
+			if (this.creationCheck.test(syncResult) && this.eventCreator.test(neighbor.getId())) {
+				// try all neighbors until we create an event
+				break;
+			}
 		}
-
-		Thread.sleep(createEventSleepMs);
 	}
 
 	public void start() {

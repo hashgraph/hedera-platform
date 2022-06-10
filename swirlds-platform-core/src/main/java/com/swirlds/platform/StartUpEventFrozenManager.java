@@ -14,8 +14,8 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.EventCreationRule;
-import com.swirlds.common.EventCreationRuleResponse;
+import com.swirlds.common.system.EventCreationRule;
+import com.swirlds.common.system.EventCreationRuleResponse;
 import com.swirlds.platform.components.TransThrottleSyncRule;
 import com.swirlds.platform.stats.PlatformStatistics;
 

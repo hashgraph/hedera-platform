@@ -14,14 +14,14 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.PlatformStatus;
-import com.swirlds.common.Transaction;
+import com.swirlds.common.system.PlatformStatus;
+import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.stats.TransactionStatistics;
 
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import static com.swirlds.common.Units.NANOSECONDS_TO_MICROSECONDS;
+import static com.swirlds.common.utility.Units.NANOSECONDS_TO_MICROSECONDS;
 
 /**
  * Submits valid transactions received from the application to a consumer. Invalid transactions are rejected.

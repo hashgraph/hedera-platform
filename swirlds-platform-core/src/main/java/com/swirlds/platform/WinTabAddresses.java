@@ -13,7 +13,7 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.Platform;
+import com.swirlds.common.system.Platform;
 
 import javax.swing.JTextArea;
 import java.util.Arrays;

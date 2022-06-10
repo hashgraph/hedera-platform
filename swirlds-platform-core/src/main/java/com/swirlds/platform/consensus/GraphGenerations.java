@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.consensus;
 
-import com.swirlds.common.events.Event;
+import com.swirlds.common.system.events.Event;
 
 public interface GraphGenerations {
 	long FIRST_GENERATION = 0;

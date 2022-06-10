@@ -16,6 +16,7 @@ package com.swirlds.platform.chatter.protocol.output;
 
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
+import com.swirlds.platform.stats.StatsProvider;
 
 /**
  * Manages messages that need to be sent to multiple peers
@@ -23,7 +24,7 @@ import com.swirlds.platform.chatter.protocol.MessageProvider;
  * @param <T>
  * 		the type of message managed
  */
-public interface MessageOutput<T extends SelfSerializable> {
+public interface MessageOutput<T extends SelfSerializable> extends StatsProvider {
 	/**
 	 * Creates an instance responsible for sending messages to one particular peer
 	 *

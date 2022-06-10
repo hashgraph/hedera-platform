@@ -14,12 +14,14 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.EventCreationRule;
-import com.swirlds.common.EventCreationRuleResponse;
+import com.swirlds.common.system.EventCreationRule;
+import com.swirlds.common.system.EventCreationRuleResponse;
+import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.event.creation.ParentBasedCreationRule;
 
 import java.util.List;
 
-import static com.swirlds.common.EventCreationRuleResponse.PASS;
+import static com.swirlds.common.system.EventCreationRuleResponse.PASS;
 
 /**
  * This class is used for checking whether should create an event or not.
@@ -27,27 +29,47 @@ import static com.swirlds.common.EventCreationRuleResponse.PASS;
  * Once a rule has a firm answer such as CREATE or DONT_CREATE, the answer is returned; else we continue checking the
  * next rule.
  */
-public class EventCreationRules {
+public class EventCreationRules implements EventCreationRule, ParentBasedCreationRule {
+	private final List<EventCreationRule> basicRules;
+	private final List<ParentBasedCreationRule> parentRules;
 
-	/**
-	 * a list of rules based on which we check whether should create an event or not
-	 */
-	private final List<EventCreationRule> rules;
+	public EventCreationRules(final List<EventCreationRule> rules) {
+		this(rules, null);
+	}
 
-	public EventCreationRules(List<EventCreationRule> rules) {
-		this.rules = rules;
+	public EventCreationRules(
+			final List<EventCreationRule> basicRules,
+			final List<ParentBasedCreationRule> parentRules) {
+		this.basicRules = basicRules;
+		this.parentRules = parentRules;
 	}
 
 	/**
-	 * check whether should create an event based on the rules
-	 *
-	 * @return whether should create an event based on the rules
+	 * {@inheritDoc}
 	 */
+	@Override
 	public EventCreationRuleResponse shouldCreateEvent() {
-		for (EventCreationRule rule : rules) {
-			EventCreationRuleResponse response = rule.shouldCreateEvent();
+		for (final EventCreationRule rule : basicRules) {
+			final EventCreationRuleResponse response = rule.shouldCreateEvent();
 			// if the response is CREATE or DONT_CREATE, we should return
 			// else we continue checking subsequent rules
+			if (response != PASS) {
+				return response;
+			}
+		}
+		return PASS;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public EventCreationRuleResponse shouldCreateEvent(final EventImpl selfParent, final EventImpl otherParent) {
+		if (parentRules == null) {
+			return PASS;
+		}
+		for (final ParentBasedCreationRule rule : parentRules) {
+			final EventCreationRuleResponse response = rule.shouldCreateEvent(selfParent, otherParent);
 			if (response != PASS) {
 				return response;
 			}

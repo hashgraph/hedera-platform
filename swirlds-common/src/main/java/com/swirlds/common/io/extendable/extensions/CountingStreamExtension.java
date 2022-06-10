@@ -14,7 +14,7 @@
 
 package com.swirlds.common.io.extendable.extensions;
 
-import com.swirlds.common.Units;
+import com.swirlds.common.utility.Units;
 import com.swirlds.common.io.extendable.extensions.internal.Counter;
 import com.swirlds.common.io.extendable.extensions.internal.StandardCounter;
 import com.swirlds.common.io.extendable.extensions.internal.ThreadSafeCounter;

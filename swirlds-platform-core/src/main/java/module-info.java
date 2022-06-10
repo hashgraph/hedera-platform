@@ -21,8 +21,9 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.state;
 
 	/* Targeted Exports to External Libraries */
-	exports com.swirlds.platform.event to com.swirlds.platform.test, com.swirlds.common, com.fasterxml.jackson.core,
-			com.fasterxml.jackson.databind;
+	exports com.swirlds.platform.event to com.swirlds.platform.test, com.swirlds.common, com.swirlds.common.test,
+			com.fasterxml.jackson.core, com.fasterxml.jackson.databind;
+	exports com.swirlds.platform.event.creation to com.swirlds.platform.test;
 	exports com.swirlds.platform.internal to com.swirlds.platform.test, com.fasterxml.jackson.core,
 			com.fasterxml.jackson.databind;
 	exports com.swirlds.platform.swirldapp to com.swirlds.platform.test;
@@ -39,6 +40,8 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.network.connectivity;
 	exports com.swirlds.platform.network.connection;
 	exports com.swirlds.platform.network.topology;
+	exports com.swirlds.platform.network.communication;
+	exports com.swirlds.platform.chatter.communication;
 	exports com.swirlds.platform.chatter.protocol.messages;
 	exports com.swirlds.platform.chatter.protocol.input;
 	exports com.swirlds.platform.chatter.protocol.output;
@@ -47,6 +50,10 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.chatter;
 	exports com.swirlds.platform.chatter.protocol.purgable.twomaps;
 	exports com.swirlds.platform.chatter.protocol.purgable;
+	exports com.swirlds.platform.event.validation;
+	exports com.swirlds.platform.event.linking to com.swirlds.common, com.swirlds.platform.test;
+	exports com.swirlds.platform.intake;
+	exports com.swirlds.platform.network.protocol;
 
 	/* Swirlds Libraries */
 	requires transitive com.swirlds.common;

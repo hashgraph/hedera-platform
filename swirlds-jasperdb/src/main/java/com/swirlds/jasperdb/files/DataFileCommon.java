@@ -43,9 +43,9 @@ import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
-import static com.swirlds.common.Units.GIBIBYTES_TO_BYTES;
-import static com.swirlds.common.Units.KIBIBYTES_TO_BYTES;
-import static com.swirlds.common.Units.MEBIBYTES_TO_BYTES;
+import static com.swirlds.common.utility.Units.GIBIBYTES_TO_BYTES;
+import static com.swirlds.common.utility.Units.KIBIBYTES_TO_BYTES;
+import static com.swirlds.common.utility.Units.MEBIBYTES_TO_BYTES;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.JASPER_DB;
 

@@ -16,7 +16,7 @@ package com.swirlds.platform;
 
 import java.util.concurrent.TimeUnit;
 
-import static com.swirlds.common.Units.MILLISECONDS_TO_NANOSECONDS;
+import static com.swirlds.common.utility.Units.MILLISECONDS_TO_NANOSECONDS;
 
 /**
  * For detecting JVM pause

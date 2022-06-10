@@ -14,8 +14,8 @@
 
 package com.swirlds.common.merkle.route.internal;
 
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.route.MerkleRoute;
 
 import java.io.IOException;

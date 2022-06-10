@@ -146,4 +146,44 @@ public interface JasperDbSettings {
 	 * in production environments.
 	 */
 	boolean isReconnectKeyLeakMitigationEnabled();
+
+	/**
+	 * Configuration used during a reconnect. The number of hashes used per element inserted into a bloom filter.
+	 * The number of elements that may be inserted into the bloom filter is equal to the number of leaf nodes
+	 * transmitted during the reconnect for a single virtual map. This value should be chosen so that the bloom
+	 * filter has an acceptable false positive rate when a number of elements equal to the largest virtual map
+	 * in the state are inserted into the bloom filter.
+	 *
+	 * @return the number of hashes to use per element for the bloom filter used during reconnect
+	 */
+	int getKeySetBloomFilterHashCount();
+
+	/**
+	 * Configuration used during a reconnect. The in-memory size of the bloom filter, in bytes.
+	 * This value should be chosen so that the bloom filter has an acceptable false positive rate when a
+	 * number of elements equal to the largest virtual map in the state are inserted into the bloom filter.
+	 * This value should be chosen with the memory available during a reconnect kept in mind.
+	 * Only one such bloom filter will be in memory at any specific point in time.
+	 *
+	 * @return the size of the bloom filter instantiated for reconnect
+	 */
+	long getKeySetBloomFilterSizeInBytes();
+
+	/**
+	 * Configuration used during a reconnect. A half disk hash map is instanced during a reconnect. This parameter
+	 * configures the size of the half disk hash map. The number of elements that may be inserted into the half disk
+	 * hash map is equal to the number of leaf nodes transmitted during the reconnect for a single virtual map.
+	 * This number should be chosen so that it accommodates the largest virtual map in the state.
+	 *
+	 * @return the size of the half disk hash map instantiated for reconnect
+	 */
+	long getKeySetHalfDiskHashMapSize();
+
+	/**
+	 * Configuration used during a reconnect. This configures the size of an in-memory buffer that is used when
+	 * writing to the half disk hash map configured by {@link #getKeySetHalfDiskHashMapSize()}.
+	 *
+	 * @return the size of the half disk hash map in-memory buffer
+	 */
+	int getKeySetHalfDiskHashMapBuffer();
 }

@@ -17,11 +17,11 @@
  */
 package com.swirlds.common.statistics.internal;
 
-import com.swirlds.common.CommonUtils;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.statistics.StatEntry;
 import com.swirlds.common.statistics.Statistics;
 import com.swirlds.common.statistics.StatsBuffered;
+import com.swirlds.common.utility.CommonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;

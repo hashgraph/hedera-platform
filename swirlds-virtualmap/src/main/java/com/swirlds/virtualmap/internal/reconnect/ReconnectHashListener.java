@@ -52,9 +52,9 @@ import java.util.stream.Stream;
  * So we store each rank as a separate array and then stream them out in the proper order to disk.
  *
  * @param <K>
- *     	The key
+ * 		The key
  * @param <V>
- *     	The value
+ * 		The value
  */
 public class ReconnectHashListener<K extends VirtualKey<? super K>, V extends VirtualValue>
 		implements VirtualHashListener<K, V> {
@@ -62,6 +62,7 @@ public class ReconnectHashListener<K extends VirtualKey<? super K>, V extends Vi
 	// Maybe it would be better to have the whole state instead of just first/last leaf path so we can use stats
 	// while flushing and reconnecting...
 	private final VirtualDataSource<K, V> dataSource;
+	private final ReconnectNodeRemover<K, V> nodeRemover;
 	private final long firstLeafPath;
 	private final long lastLeafPath;
 	private final List<List<VirtualLeafRecord<K, V>>> batchLeaves = new ArrayList<>();
@@ -79,8 +80,11 @@ public class ReconnectHashListener<K extends VirtualKey<? super K>, V extends Vi
 	 * @param dataSource
 	 * 		The data source. Cannot be null.
 	 */
-	public ReconnectHashListener(final long firstLeafPath, final long lastLeafPath,
-			final VirtualDataSource<K, V> dataSource) {
+	public ReconnectHashListener(
+			final long firstLeafPath,
+			final long lastLeafPath,
+			final VirtualDataSource<K, V> dataSource,
+			final ReconnectNodeRemover<K, V> nodeRemover) {
 
 		if (firstLeafPath != Path.INVALID_PATH && !(firstLeafPath > 0 && firstLeafPath <= lastLeafPath)) {
 			throw new IllegalArgumentException("The first leaf path is invalid. firstLeafPath=" + firstLeafPath
@@ -95,6 +99,7 @@ public class ReconnectHashListener<K extends VirtualKey<? super K>, V extends Vi
 		this.firstLeafPath = firstLeafPath;
 		this.lastLeafPath = lastLeafPath;
 		this.dataSource = Objects.requireNonNull(dataSource);
+		this.nodeRemover = nodeRemover;
 	}
 
 	/**
@@ -145,15 +150,27 @@ public class ReconnectHashListener<K extends VirtualKey<? super K>, V extends Vi
 	 */
 	@Override
 	public void onBatchCompleted() {
+		long maxPath = -1;
+
 		Stream<VirtualInternalRecord> sortedDirtyInternals = Stream.of();
 		for (int i = batchInternals.size() - 1; i >= 0; i--) {
-			sortedDirtyInternals = Stream.concat(sortedDirtyInternals, batchInternals.get(i).stream());
+			final List<VirtualInternalRecord> batch = batchInternals.get(i);
+			if (!batch.isEmpty()) {
+				sortedDirtyInternals = Stream.concat(sortedDirtyInternals, batch.stream());
+				maxPath = Math.max(maxPath, batch.get(batch.size() - 1).getPath());
+			}
 		}
 
 		Stream<VirtualLeafRecord<K, V>> sortedDirtyLeaves = Stream.of();
 		for (int i = batchLeaves.size() - 1; i >= 0; i--) {
-			sortedDirtyLeaves = Stream.concat(sortedDirtyLeaves, batchLeaves.get(i).stream());
+			final List<VirtualLeafRecord<K, V>> batch = batchLeaves.get(i);
+			if (!batch.isEmpty()) {
+				sortedDirtyLeaves = Stream.concat(sortedDirtyLeaves, batch.stream());
+				maxPath = Math.max(maxPath, batch.get(batch.size() - 1).getPath());
+			}
 		}
+
+		final Stream<VirtualLeafRecord<K, V>> leavesToRemove = nodeRemover.getRecordsToDelete(maxPath);
 
 		// flush it down
 		try {
@@ -162,7 +179,7 @@ public class ReconnectHashListener<K extends VirtualKey<? super K>, V extends Vi
 					lastLeafPath,
 					sortedDirtyInternals,
 					sortedDirtyLeaves,
-					Stream.empty());
+					leavesToRemove);
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}

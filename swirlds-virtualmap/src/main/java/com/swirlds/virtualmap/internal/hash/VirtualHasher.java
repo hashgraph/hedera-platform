@@ -17,7 +17,7 @@ package com.swirlds.virtualmap.internal.hash;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.HashBuilder;
-import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualMap;
 import com.swirlds.virtualmap.VirtualMapSettingsFactory;
@@ -254,7 +254,8 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 
 		// We don't want to include null checks everywhere, so let the listener be NoopListener if null
 		if (listener == null) {
-			listener = new VirtualHashListener<>() { /* noop */ };
+			listener = new VirtualHashListener<>() { /* noop */
+			};
 		}
 
 		// Given some tree, leaves will be on the rank of the lastLeafPath, and the rank of the firstLeafPath.
@@ -647,14 +648,20 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 									// it were dirty this round, it would have been in the work queue and part
 									// of this unit.
 
-									final VirtualLeafRecord<K, V> sibling =
-											Objects.requireNonNull(leafReader.apply(siblingPath),
-													"Failed to find leaf for " + siblingPath +
-															", which is a sibling of " + nodePath);
+									final VirtualLeafRecord<K, V> sibling = leafReader.apply(siblingPath);
+
+									if (sibling == null) {
+										throw new NullPointerException("Failed to find leaf for " +
+												siblingPath + ", which is a sibling of " + nodePath);
+									}
+
 									final Hash siblingHash = sibling.getHash();
-									Objects.requireNonNull(siblingHash,
-											"Failed to find leaf hash for " + siblingPath +
-													", which is a sibling of " + nodePath);
+
+									if (siblingHash == null) {
+										throw new IllegalStateException("Failed to find leaf hash for " +
+												siblingPath + ", which is a sibling of " + nodePath);
+									}
+
 									final Hash leftHash = nodePath < siblingPath ? hashJob.getHash() : siblingHash;
 									final Hash rightHash = nodePath < siblingPath ? siblingHash : hashJob.getHash();
 									pendingQueue.addHashJob(pendingQueueIndex).dirtyInternal(
@@ -665,9 +672,12 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
 									final VirtualInternalRecord siblingInternal = internalReader.apply(siblingPath);
 									assert siblingInternal != null : "Should never be able to be null";
 									final Hash siblingHash = siblingInternal.getHash();
-									Objects.requireNonNull(siblingHash,
-											"Failed to find internal hash for " + siblingPath +
-													", which is a sibling of " + nodePath);
+
+									if (siblingHash == null) {
+										throw new IllegalStateException("Failed to find internal hash for " +
+												siblingPath + ", which is a sibling of " + nodePath);
+									}
+
 									final Hash leftHash = nodePath < siblingPath ? hashJob.getHash() : siblingHash;
 									final Hash rightHash = nodePath < siblingPath ? siblingHash : hashJob.getHash();
 									pendingQueue.addHashJob(pendingQueueIndex).dirtyInternal(

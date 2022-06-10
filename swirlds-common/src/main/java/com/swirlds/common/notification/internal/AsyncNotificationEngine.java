@@ -14,13 +14,13 @@
 
 package com.swirlds.common.notification.internal;
 
-import com.swirlds.common.futures.WaitingFuture;
 import com.swirlds.common.notification.DispatchMode;
 import com.swirlds.common.notification.DispatchOrder;
 import com.swirlds.common.notification.Listener;
 import com.swirlds.common.notification.NoListenersAvailableException;
 import com.swirlds.common.notification.Notification;
 import com.swirlds.common.notification.NotificationResult;
+import com.swirlds.common.threading.futures.WaitingFuture;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

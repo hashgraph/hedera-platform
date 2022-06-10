@@ -14,9 +14,9 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.NodeId;
-import com.swirlds.common.SwirldState;
-import com.swirlds.common.Transaction;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SettingsProvider;
@@ -119,7 +119,7 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 
 		// Say that this event is not consensus, even if it is, to keep the contract that every
 		// transaction is handled twice, once with isConsensus = false and once with isConsensus = true
-		eventHandler.handleEventTransactions(event, consensusTime, false, stateCurrAndCons);
+		eventHandler.handleEventTransactions(event, consensusTime, false, stateCurrAndCons.getState());
 
 		stats.preConsensusHandleTime(startTime, System.nanoTime());
 	}
@@ -129,10 +129,9 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 */
 	@Override
 	public void handleConsensusRound(final ConsensusRound round) {
-		synchronized (stateCurrAndCons) {
-			for (final EventImpl event : round.getConsensusEvents()) {
-				eventHandler.handleEventTransactions(event, event.getConsensusTimestamp(), true, stateCurrAndCons);
-			}
+		final State state = stateCurrAndCons.getState();
+		for (final EventImpl event : round.getConsensusEvents()) {
+			eventHandler.handleEventTransactions(event, event.getConsensusTimestamp(), true, state);
 		}
 	}
 
@@ -173,14 +172,15 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 */
 	@Override
 	public void savedStateInFreezePeriod() {
-		synchronized (stateCurrAndCons) {
-			// set current DualState's lastFrozenTime to be current freezeTime
-			stateCurrAndCons.getState().getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
-		}
+		// set current DualState's lastFrozenTime to be current freezeTime
+		stateCurrAndCons.getState().getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
 	}
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * Called only on startup and after reconnect. In both cases, the pre-consensus and consensus handling threads are
+	 * stopped, so it is safe to perform multiple operations on {@code stateCurrAndCons} without synchronization.
 	 */
 	@Override
 	public void setState(final State state) {
@@ -194,13 +194,19 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * Only invoked during state recovery.
 	 */
 	@Override
 	public void clearFreezeTimes() {
-		synchronized (stateCurrAndCons) {
-			stateCurrAndCons.getState().getPlatformDualState().setFreezeTime(null);
-			stateCurrAndCons.getState().getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
-		}
+		// It is possible, though unlikely, that this operation is executed multiple times. Each failed attempt will
+		// leak a state, but since this is only called during recovery after which the node shuts down, it is
+		// acceptable. This leak will be eliminated with ticket swirlds/swirlds-platform/issues/5256.
+		stateCurrAndCons.updateState(s -> {
+			s.getPlatformDualState().setFreezeTime(null);
+			s.getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
+			return s;
+		});
 	}
 
 	/**
@@ -221,6 +227,8 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * Only invoked by the consensus handler thread
 	 */
 	@Override
 	public State getStateForSigning() {

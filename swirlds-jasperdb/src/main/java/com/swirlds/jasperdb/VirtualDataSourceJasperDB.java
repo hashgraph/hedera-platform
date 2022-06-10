@@ -14,10 +14,10 @@
 
 package com.swirlds.jasperdb;
 
-import com.swirlds.common.Units;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.statistics.StatEntry;
-import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.collections.HashList;
 import com.swirlds.jasperdb.collections.HashListBufferedWrapper;
 import com.swirlds.jasperdb.collections.HashListByteBuffer;
@@ -27,10 +27,13 @@ import com.swirlds.jasperdb.collections.LongListDisk;
 import com.swirlds.jasperdb.collections.LongListOffHeap;
 import com.swirlds.jasperdb.files.DataFileCollection.LoadedDataCallback;
 import com.swirlds.jasperdb.files.DataFileReader;
+import com.swirlds.jasperdb.files.hashmap.KeyIndexType;
 import com.swirlds.jasperdb.files.MemoryIndexDiskKeyValueStore;
 import com.swirlds.jasperdb.files.hashmap.Bucket;
 import com.swirlds.jasperdb.files.hashmap.HalfDiskHashMap;
+import com.swirlds.jasperdb.files.hashmap.HalfDiskVirtualKeySet;
 import com.swirlds.jasperdb.files.hashmap.KeySerializer;
+import com.swirlds.jasperdb.files.hashmap.VirtualKeySetSerializer;
 import com.swirlds.jasperdb.settings.JasperDbSettings;
 import com.swirlds.jasperdb.settings.JasperDbSettingsFactory;
 import com.swirlds.virtualmap.VirtualKey;
@@ -38,6 +41,7 @@ import com.swirlds.virtualmap.VirtualLongKey;
 import com.swirlds.virtualmap.VirtualValue;
 import com.swirlds.virtualmap.datasource.VirtualDataSource;
 import com.swirlds.virtualmap.datasource.VirtualInternalRecord;
+import com.swirlds.virtualmap.datasource.VirtualKeySet;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -71,6 +75,7 @@ import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
+import static com.swirlds.common.utility.Units.BYTES_TO_BITS;
 import static com.swirlds.jasperdb.KeyRange.INVALID_KEY_RANGE;
 import static com.swirlds.jasperdb.files.DataFileCommon.deleteDirectoryAndContents;
 import static com.swirlds.jasperdb.files.DataFileCommon.newestFilesSmallerThan;
@@ -417,7 +422,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 				: null;
 		// Create Key to Path store
 		final LoadedDataCallback loadedDataCallback;
-		if (keySerializer.getSerializedSize() == Long.BYTES) {
+		if (keySerializer.getIndexType() == KeyIndexType.SEQUENTIAL_INCREMENTING_LONGS) {
 			isLongKeyMode = true;
 			objectKeyToPath = null;
 			if (Files.exists(dbPaths.longKeyToPathFile)) {
@@ -497,6 +502,24 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 				mergingFuture = null;
 			}
 		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@SuppressWarnings("unchecked")
+	@Override
+	public VirtualKeySet<K> buildKeySet() {
+
+		final KeySerializer<K> keySerializer = isLongKeyMode ?
+				(KeySerializer<K>) new VirtualKeySetSerializer() : objectKeyToPath.getKeySerializer();
+
+		return new HalfDiskVirtualKeySet<>(
+				keySerializer,
+				settings.getKeySetBloomFilterHashCount(),
+				settings.getKeySetBloomFilterSizeInBytes() * BYTES_TO_BITS,
+				settings.getKeySetHalfDiskHashMapSize(),
+				settings.getKeySetHalfDiskHashMapBuffer());
 	}
 
 	/**
@@ -1331,6 +1354,14 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 
 	private boolean isTimeForMediumMerge(final Instant startMerge) {
 		return startMerge.minus(settings.getMediumMergePeriod(), settings.getMergePeriodUnit()).isAfter(lastMediumMerge);
+	}
+
+	/**
+	 * Used for tests.
+	 * @return true if we are in "long key" mode.
+	 */
+	boolean isLongKeyMode() {
+		return isLongKeyMode;
 	}
 
 	/**

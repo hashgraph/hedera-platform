@@ -13,9 +13,9 @@
  */
 package com.swirlds.platform.state;
 
-import com.swirlds.common.AddressBook;
+import com.swirlds.common.system.AddressBook;
 import com.swirlds.common.Releasable;
-import com.swirlds.common.SwirldState;
+import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.EventImpl;
 import org.apache.commons.lang3.builder.EqualsBuilder;

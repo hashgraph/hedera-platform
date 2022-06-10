@@ -13,7 +13,7 @@
  */
 package com.swirlds.platform.eventhandling;
 
-import com.swirlds.common.Transaction;
+import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRule;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
@@ -24,7 +24,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.LinkedList;
 
-import static com.swirlds.common.TransactionType.SYS_TRANS_STATE_SIG_FREEZE;
+import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG_FREEZE;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.FREEZE;
 import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.PASS;

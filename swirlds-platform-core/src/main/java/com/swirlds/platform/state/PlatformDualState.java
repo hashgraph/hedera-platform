@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.DualState;
+import com.swirlds.common.system.DualState;
 import com.swirlds.platform.FreezePeriodChecker;
 
 /**

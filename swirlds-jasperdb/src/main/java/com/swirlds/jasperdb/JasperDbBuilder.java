@@ -14,8 +14,8 @@
 
 package com.swirlds.jasperdb;
 
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.jasperdb.files.hashmap.KeySerializer;
 import com.swirlds.jasperdb.settings.JasperDbSettings;
 import com.swirlds.jasperdb.settings.JasperDbSettingsFactory;
@@ -29,7 +29,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.Objects;
 
-import static com.swirlds.common.CommonUtils.hardLinkTree;
+import static com.swirlds.common.utility.CommonUtils.hardLinkTree;
 
 /**
  * An implementation of {@link VirtualDataSourceBuilder} for building {@link VirtualDataSourceJasperDB}

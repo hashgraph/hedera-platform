@@ -96,4 +96,9 @@ public interface PurgableMap<K, V> extends Purgable {
 	 * 		this method is passed each value that is purged
 	 */
 	void purge(long smallerThanGeneration, BiConsumer<K, V> purgedValueHandler);
+
+	/**
+	 * @return the number of entries in this map
+	 */
+	int getSize();
 }

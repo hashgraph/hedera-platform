@@ -14,24 +14,26 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.CommonUtils;
-import com.swirlds.common.NodeId;
-import com.swirlds.common.Transaction;
 import com.swirlds.common.constructable.ConstructableIgnored;
 import com.swirlds.common.crypto.AbstractSerializableHashable;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.RunningHash;
-import com.swirlds.common.crypto.SerializableRunningHashable;
-import com.swirlds.common.events.BaseEventHashedData;
-import com.swirlds.common.events.BaseEventUnhashedData;
-import com.swirlds.common.events.ConsensusData;
-import com.swirlds.common.events.ConsensusEvent;
-import com.swirlds.common.events.Event;
-import com.swirlds.common.events.EventSerializationOptions;
+import com.swirlds.common.crypto.RunningHashable;
 import com.swirlds.common.io.OptionalSelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.stream.StreamAligned;
 import com.swirlds.common.stream.Timestamped;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.events.BaseEvent;
+import com.swirlds.common.system.events.BaseEventHashedData;
+import com.swirlds.common.system.events.BaseEventUnhashedData;
+import com.swirlds.common.system.events.ConsensusData;
+import com.swirlds.common.system.events.ConsensusEvent;
+import com.swirlds.common.system.events.Event;
+import com.swirlds.common.system.events.EventSerializationOptions;
+import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.platform.event.EventCounter;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.event.InternalEventData;
@@ -48,8 +50,10 @@ import java.util.ArrayList;
  * which is a public-facing form of an event.
  */
 @ConstructableIgnored
-public class EventImpl extends AbstractSerializableHashable implements Comparable<EventImpl>, Event,
-		OptionalSelfSerializable<EventSerializationOptions>, Timestamped, SerializableRunningHashable {
+public class EventImpl
+		extends AbstractSerializableHashable
+		implements BaseEvent, Comparable<EventImpl>, Event, OptionalSelfSerializable<EventSerializationOptions>,
+		RunningHashable, StreamAligned, Timestamped {
 
 	/** The base event information, including some gossip specific information */
 	private GossipEvent baseEvent;
@@ -363,6 +367,16 @@ public class EventImpl extends AbstractSerializableHashable implements Comparabl
 	 */
 	public BaseEventUnhashedData getBaseEventUnhashedData() {
 		return baseEvent.getUnhashedData();
+	}
+
+	@Override
+	public BaseEventHashedData getHashedData() {
+		return getBaseEventHashedData();
+	}
+
+	@Override
+	public BaseEventUnhashedData getUnhashedData() {
+		return getBaseEventUnhashedData();
 	}
 
 	/**

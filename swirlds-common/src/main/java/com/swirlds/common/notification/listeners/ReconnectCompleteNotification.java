@@ -14,7 +14,7 @@
 
 package com.swirlds.common.notification.listeners;
 
-import com.swirlds.common.SwirldState;
+import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.notification.AbstractNotification;
 
 import java.time.Instant;

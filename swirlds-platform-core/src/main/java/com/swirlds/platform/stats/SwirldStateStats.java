@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.SwirldState;
+import com.swirlds.common.system.SwirldState;
 
 public interface SwirldStateStats {
 

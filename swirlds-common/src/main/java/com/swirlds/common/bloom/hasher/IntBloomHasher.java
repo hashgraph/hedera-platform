@@ -15,8 +15,8 @@
 package com.swirlds.common.bloom.hasher;
 
 import com.swirlds.common.bloom.BloomHasher;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 
 import java.io.IOException;
 

@@ -15,9 +15,12 @@
 package com.swirlds.platform;
 
 import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.events.ConsensusEvent;
+import com.swirlds.common.crypto.ImmutableHash;
 import com.swirlds.common.io.SelfSerializable;
+import com.swirlds.common.stream.EventStreamManager;
+import com.swirlds.common.system.events.ConsensusEvent;
 import com.swirlds.logging.payloads.StreamParseErrorPayload;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -59,16 +62,22 @@ public class StreamEventParser extends Thread {
 	private final Instant endTimestamp;
 	private long eventsCounter;
 	private EventImpl prevParsedEvent;
+	private final EventStreamManager<EventImpl> eventStreamManager;
+	private boolean setInitRunningHashAlready = false;
+	private Hash initialHash = new ImmutableHash(new byte[DigestType.SHA_384.digestLength()]);
 
 	/**
 	 * current event stream version
 	 */
 	public static final int EVENT_STREAM_FILE_VERSION = 5;
 
-	StreamEventParser(String fileDir, Instant startTimestamp, Instant endTimestamp) {
+	StreamEventParser(final String fileDir, final Instant startTimestamp, final Instant endTimestamp,
+			final EventStreamManager<EventImpl> eventStreamManager) {
 		this.fileDir = fileDir;
 		this.startTimestamp = startTimestamp;
 		this.endTimestamp = endTimestamp;
+		this.eventStreamManager = eventStreamManager;
+		eventStreamManager.setInitialHash(initialHash);
 	}
 
 	public EventImpl getNextEvent() {
@@ -178,6 +187,9 @@ public class StreamEventParser extends Thread {
 						files[index]::getName,
 						() -> startTimestamp,
 						() -> nextTimestamp);
+				// keep tracking the endRunningHash of the previous event file, so it can be used as
+				// the initial hash once we start generate recovered event files
+				initialHash = readEndRunningHash(files[index]);
 			}
 		} else {
 			// last file will always be opened and parsed since we could not know
@@ -199,7 +211,7 @@ public class StreamEventParser extends Thread {
 	 * 		call back function for handling parsed event object
 	 * @return return false if experienced any error otherwise return true
 	 */
-	private static boolean parseEventFile(final File file, EventConsumer eventHandler) {
+	private boolean parseEventFile(final File file, final EventConsumer eventHandler) {
 		if (!file.exists()) {
 			LOGGER.error(EXCEPTION.getMarker(), "File {} does not exist: ", file::getName);
 			return false;
@@ -315,8 +327,8 @@ public class StreamEventParser extends Thread {
 			return false;
 		}
 		// events saved in stream file are consensus events
-		// we need to setConsensus to be true, otherwise we will got `ConsensusEventHandler queue has non consensus
-		// event` error in ConsensusEventHandler.applyConsensusEventToState() when handling this event during state
+		// we need to setConsensus to be true, otherwise we will got `ConsensusRoundHandler queue has non consensus
+		// event` error in ConsensusRoundHandler.applyConsensusEventToState() when handling this event during state
 		// recovery
 		event.setConsensus(true);
 
@@ -338,6 +350,9 @@ public class StreamEventParser extends Thread {
 			if (prevParsedEvent != null) {
 				//this is not the first parsed event, push prevParsedEvent to queue
 				addToQueue(prevParsedEvent);
+			} else {
+				// This is the first recovered event, also could be the first event within current file
+				trySetInitialRunningHash();
 			}
 			prevParsedEvent = event;
 			shouldContinue = true;
@@ -347,9 +362,53 @@ public class StreamEventParser extends Thread {
 			shouldContinue = false;
 
 		} else {
+			// for event not playing back in swirldsState, insert to event stream manager to get
+			// the same event stream file as the original one.
+			// skip being played back by handleTransaction function
+			LOGGER.info(EVENT_PARSER.getMarker(), "Adding event {} to stream writer directly", event.getConsensusTimestamp());
 			shouldContinue = true;
+			trySetInitialRunningHash();
+			eventStreamManager.addEvent(event);
 		}
 		return shouldContinue;
+	}
+
+	/**
+	 * Set initial hash only once
+	 */
+	private void trySetInitialRunningHash() {
+		if (!setInitRunningHashAlready && initialHash != null) {
+			LOGGER.info(EVENT_PARSER.getMarker(), "Set init hash as {}", initialHash);
+			eventStreamManager.setInitialHash(initialHash);
+			setInitRunningHashAlready = true;
+		}
+	}
+
+	/**
+	 * Iterate a stream file and extract its endRunningHash
+	 *
+	 * @param file
+	 * 		event stream file
+	 * @return return endRunning hash if found one or return null if could not
+	 */
+	private Hash readEndRunningHash(final File file) {
+		Iterator<SelfSerializable> iterator = parseStreamFile(file, EVENT);
+		boolean isStartRunningHash = true;
+		while (iterator.hasNext()) {
+			SelfSerializable object = iterator.next();
+			if (object == null) { // iterator.next() returns null if any error occurred
+				return null;
+			}
+			if (isStartRunningHash) {
+				isStartRunningHash = false;
+			} else if (object instanceof Hash) {
+				LOGGER.info(EVENT_PARSER.getMarker(), "Found file {} endRunningHash = {}",
+						file::getName,
+						() -> object);
+				return (Hash) object;
+			}
+		}
+		return null;
 	}
 
 	@Override

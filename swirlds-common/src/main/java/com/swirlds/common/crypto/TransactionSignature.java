@@ -15,7 +15,8 @@
 package com.swirlds.common.crypto;
 
 import com.swirlds.common.internal.HashUtils;
-import com.swirlds.common.io.BadIOException;
+import com.swirlds.common.io.exceptions.BadIOException;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -436,7 +437,9 @@ public class TransactionSignature implements Comparable<TransactionSignature> {
 	 * 		if the internal checksum cannot be
 	 * 		validated
 	 */
-	public static TransactionSignature deserialize(final DataInputStream dis, final int[] byteCount) throws IOException {
+	public static TransactionSignature deserialize(final SerializableDataInputStream dis, final int[] byteCount)
+			throws IOException {
+
 		if (dis == null) {
 			throw new NullPointerException("dis");
 		}

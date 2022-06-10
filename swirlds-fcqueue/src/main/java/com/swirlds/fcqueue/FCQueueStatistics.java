@@ -14,13 +14,14 @@
 
 package com.swirlds.fcqueue;
 
-import com.swirlds.common.Platform;
+import com.swirlds.common.system.Platform;
 import com.swirlds.common.statistics.StatEntry;
 import com.swirlds.common.statistics.StatsRunningAverage;
+import com.swirlds.common.system.SwirldMain;
 
 /**
  * Singleton factory for loading and registering {@link FCQueue} statistics. This is the primary entry point for all
- * {@link com.swirlds.common.SwirldMain} implementations that wish to track {@link FCQueue} statistics.
+ * {@link SwirldMain} implementations that wish to track {@link FCQueue} statistics.
  */
 public class FCQueueStatistics {
 
@@ -70,7 +71,7 @@ public class FCQueueStatistics {
 	}
 
 	/**
-	 * Gets a value indicating whether the {@link com.swirlds.common.SwirldMain} has called the {@link
+	 * Gets a value indicating whether the {@link SwirldMain} has called the {@link
 	 * #register(Platform)} method on this factory.
 	 *
 	 * @return true if these statistics have been registered by the application; otherwise false

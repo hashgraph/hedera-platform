@@ -166,10 +166,20 @@ public interface VirtualDataSource<K extends VirtualKey<? super K>, V extends Vi
 	/**
 	 * Start background compaction process, if it is not already running.
 	 */
-	default void startBackgroundCompaction(){}
+	default void startBackgroundCompaction() {
+	}
 
 	/**
 	 * Stop background compaction process, if it is running.
 	 */
-	default void stopBackgroundCompaction(){}
+	default void stopBackgroundCompaction() {
+	}
+
+	/**
+	 * Build an empty {@link VirtualKeySet}. This key set should be compatible with data in this data source,
+	 * but should otherwise have no direct connection to the data in this data source.
+	 *
+	 * @return a new key set
+	 */
+	VirtualKeySet<K> buildKeySet();
 }

@@ -15,7 +15,7 @@
 package com.swirlds.fchashmap;
 
 import com.swirlds.common.FastCopyable;
-import com.swirlds.common.ReferenceCountException;
+import com.swirlds.common.exceptions.ReferenceCountException;
 import com.swirlds.common.utility.ValueReference;
 import com.swirlds.fchashmap.internal.FCHashMapEntrySet;
 import com.swirlds.fchashmap.internal.GarbageCollectionEvent;

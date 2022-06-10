@@ -320,7 +320,7 @@ public class ConsensusQueue implements BlockingQueue<ConsensusRound> {
 	 */
 	@Override
 	public boolean isEmpty() {
-		return false;
+		return queue.isEmpty();
 	}
 
 	/**

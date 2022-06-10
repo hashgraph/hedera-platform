@@ -22,7 +22,7 @@ import com.swirlds.logging.LogMarker;
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
 
-import static com.swirlds.common.CommonUtils.hex;
+import static com.swirlds.common.utility.CommonUtils.hex;
 
 
 /**

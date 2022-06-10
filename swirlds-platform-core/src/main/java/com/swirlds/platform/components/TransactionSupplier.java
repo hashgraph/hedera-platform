@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.Transaction;
+import com.swirlds.common.system.transaction.Transaction;
 
 /**
  * A source of transactions.

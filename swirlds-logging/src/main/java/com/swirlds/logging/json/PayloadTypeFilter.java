@@ -62,6 +62,6 @@ public class PayloadTypeFilter implements Predicate<JsonLogEntry> {
 			return false;
 		}
 		final String type = extractPayloadType(entry.getRawPayload());
-		return types.contains(type);
+		return types.stream().anyMatch(type::contains);
 	}
 }

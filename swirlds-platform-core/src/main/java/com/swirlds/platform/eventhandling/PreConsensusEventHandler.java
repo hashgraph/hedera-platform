@@ -14,13 +14,13 @@
 
 package com.swirlds.platform.eventhandling;
 
-import com.swirlds.common.NodeId;
 import com.swirlds.common.notification.Notification;
 import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
 import com.swirlds.common.notification.listeners.ReconnectCompleteNotification;
-import com.swirlds.common.threading.QueueThread;
-import com.swirlds.common.threading.QueueThreadConfiguration;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.ThreadUtils;
+import com.swirlds.common.threading.framework.QueueThread;
+import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.observers.PreConsensusEventObserver;
@@ -144,6 +144,7 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Reco
 		// Furthermore, we don't want to validate signatures contained in an event that is invalid.
 		swirldStateManager.expandSignatures(event);
 
+		// Temporarily disabled. This will be re-enabled in release 27.
 //		try {
 		// update the estimate now, so the queue can sort on it
 		event.estimateTime(selfId, stats.getAvgSelfCreatedTimestamp(), stats.getAvgOtherReceivedTimestamp());

@@ -19,8 +19,8 @@ import com.swirlds.common.merkle.MerkleNode;
 
 import java.util.function.Predicate;
 
-import static com.swirlds.common.merkle.io.SerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
-import static com.swirlds.common.merkle.io.SerializationStrategy.SELF_SERIALIZATION;
+import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
+import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.SELF_SERIALIZATION;
 
 /**
  * This class provides utility methods for initializing trees.

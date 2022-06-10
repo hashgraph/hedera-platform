@@ -18,7 +18,7 @@ import com.swirlds.common.notification.DispatchException;
 import com.swirlds.common.notification.Listener;
 import com.swirlds.common.notification.Notification;
 import com.swirlds.common.notification.NotificationResult;
-import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;

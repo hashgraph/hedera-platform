@@ -14,8 +14,8 @@
 
 package com.swirlds.platform.sync;
 
-import com.swirlds.common.CommonUtils;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.platform.EventStrings;
 
 import java.util.Collection;

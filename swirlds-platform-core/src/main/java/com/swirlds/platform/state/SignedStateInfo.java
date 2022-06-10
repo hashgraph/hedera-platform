@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.AddressBook;
+import com.swirlds.common.system.AddressBook;
 
 /**
  * Contains information about a signed state. A SignedStateInfo object is still ok to read after the

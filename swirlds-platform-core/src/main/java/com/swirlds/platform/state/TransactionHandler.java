@@ -14,11 +14,12 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.NodeId;
-import com.swirlds.common.SwirldDualState;
-import com.swirlds.common.SwirldTransaction;
-import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.TransactionSignature;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.SwirldDualState;
+import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.stats.SwirldStateStats;
@@ -32,14 +33,14 @@ import java.util.concurrent.Future;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
+import static com.swirlds.common.utility.Units.NANOSECONDS_TO_SECONDS;
 import static com.swirlds.logging.LogMarker.EVENT_CONTENT;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT;
 import static com.swirlds.platform.event.EventUtils.toShortString;
 
 /**
- * Handles transactions by passing them to a {@link com.swirlds.common.SwirldState#handleTransaction(long, boolean,
+ * Handles transactions by passing them to a {@link SwirldState#handleTransaction(long, boolean,
  * Instant, Instant, SwirldTransaction, SwirldDualState)}.
  */
 public class TransactionHandler {
@@ -74,7 +75,7 @@ public class TransactionHandler {
 
 	/**
 	 * Handles all the transactions in a given event. Equivalent to {@link #handleEventTransactions(EventImpl, Instant,
-	 * boolean, StateInfo, Runnable)} with a no-op runnable.
+	 * boolean, State, Runnable)} with a no-op runnable.
 	 *
 	 * @param event
 	 * 		the event to handle
@@ -82,12 +83,12 @@ public class TransactionHandler {
 	 * 		the event's actual or estimated consensus time
 	 * @param isConsensus
 	 * 		if this event has reached consensus
-	 * @param stateInfo
+	 * @param state
 	 * 		the state to apply transaction to
 	 */
 	public void handleEventTransactions(final EventImpl event, final Instant consTime, final boolean isConsensus,
-			final StateInfo stateInfo) {
-		handleEventTransactions(event, consTime, isConsensus, stateInfo, null);
+			final State state) {
+		handleEventTransactions(event, consTime, isConsensus, state, null);
 	}
 
 	/**
@@ -99,13 +100,13 @@ public class TransactionHandler {
 	 * 		the event's actual or estimated consensus time
 	 * @param isConsensus
 	 * 		if this event has reached consensus
-	 * @param stateInfo
+	 * @param state
 	 * 		the state to apply transaction to
 	 * @param postHandle
 	 * 		a runnable to execute after handling each transaction
 	 */
 	public void handleEventTransactions(final EventImpl event, final Instant consTime, final boolean isConsensus,
-			final StateInfo stateInfo, final Runnable postHandle) {
+			final State state, final Runnable postHandle) {
 		if (event.isEmpty()) {
 			return;
 		}
@@ -122,12 +123,7 @@ public class TransactionHandler {
 		for (int i = 0; i < transactions.length; i++) {
 			final Instant transConsTime = consTime.plusNanos(i * MIN_TRANS_TIMESTAMP_INCR_NANOS);
 
-			// Synchronizing on each transaction is more performant than synchronizing on the entire event. It prevents
-			// the consensus handler thread from waiting too long to acquire the lock to make a fast copy
-			synchronized (stateInfo) {
-				handleTransaction(event, isConsensus, creator, timeCreated, transConsTime, transactions[i],
-						stateInfo);
-			}
+			handleTransaction(event, isConsensus, creator, timeCreated, transConsTime, transactions[i], state);
 
 			if (runPostHandle) {
 				postHandle.run();
@@ -154,17 +150,11 @@ public class TransactionHandler {
 	 */
 	public void handleTransaction(final EventImpl event, final boolean isConsensus, final long creator,
 			final Instant timeCreated, final Instant transConsTime, final Transaction trans,
-			final StateInfo stateInfo) {
+			final State state) {
 
 		// system transactions are handled pre-consensus in SystemTransactionHandlerImpl, so don't handle them here
 		// unless they have reached consensus
 		if (trans.isSystem() && !isConsensus) {
-			return;
-		}
-
-		// don't send a state any transactions after we promised not to.
-		if (stateInfo.isFrozen()) {
-			LOG.error("ERROR: handleTransaction was given a transaction for a frozen state");
 			return;
 		}
 
@@ -186,14 +176,13 @@ public class TransactionHandler {
 
 				final long startTime = System.nanoTime();
 
-				stateInfo.getState().getSwirldState().handleTransaction(
+				state.getSwirldState().handleTransaction(
 						creator,
 						isConsensus,
 						timeCreated,
 						transConsTime,
 						swirldTransaction,
-						stateInfo.getState().getSwirldDualState()
-				);
+						state.getSwirldDualState());
 
 				// clear sigs to free up memory, since we don't need them anymore
 				if (isConsensus) {
@@ -206,15 +195,19 @@ public class TransactionHandler {
 				if (event != null && isConsensus) {
 					stats.consensusTransHandleTime((System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
 					stats.consensusTransHandled();
-					stats.consensusToHandleTime(
-							event.getReachedConsTimestamp().until(Instant.now(),
-									ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
+					// events being played back from the stream files during recovery do not have reachedConsTimestamp
+					// set, since reachedConsTimestamp is not serialized and saved to the stream file.
+					if (event.getReachedConsTimestamp() != null) {
+						stats.consensusToHandleTime(
+								event.getReachedConsTimestamp().until(Instant.now(),
+										ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
+					}
 				}
 			}
 		} catch (final InterruptedException ex) {
 			handleInterruptedException();
 		} catch (final Exception ex) {
-			handleException(event, trans, stateInfo, ex);
+			handleException(event, trans, state, ex);
 		}
 	}
 
@@ -226,11 +219,11 @@ public class TransactionHandler {
 		Thread.currentThread().interrupt();
 	}
 
-	private void handleException(final EventImpl event, final Transaction trans, final StateInfo stateInfo,
+	private void handleException(final EventImpl event, final Transaction trans, final State state,
 			final Exception ex) {
 		LOG.error(EXCEPTION.getMarker(),
 				"error while calculating parameters to send {} or while calling it with event {}",
-				((stateInfo == null || stateInfo.getState() == null)
+				(state == null
 						? "platform.handleTransaction"
 						: "the app's SwirldState.handleTransaction"),
 				toShortString(event), ex);
@@ -249,12 +242,12 @@ public class TransactionHandler {
 	 * 		a supplier for the number of transactions the {@code transSupplier} can provide
 	 * @param transSupplier
 	 * 		the supplier of transactions to apply
-	 * @param stateInfo
+	 * @param state
 	 * 		the state to apply the transactions to
 	 */
 	public void handleTransactions(final IntSupplier numTransSupplier,
 			final Supplier<Transaction> transSupplier, final Supplier<Instant> consEstimateSupplier,
-			final StateInfo stateInfo) {
+			final State state) {
 
 		final int numTrans = numTransSupplier.getAsInt();
 
@@ -266,18 +259,15 @@ public class TransactionHandler {
 		// being put into an event and having consensus reached on them
 		final Instant baseTime = consEstimateSupplier.get();
 
-		synchronized (stateInfo) {
-			for (int i = 0; i < numTrans; i++) {
-				// This call must acquire a lock
-				final Transaction trans = transSupplier.get();
-				if (trans == null) {
-					// this shouldn't be necessary, but it's here just for safety
-					break;
-				}
-				final Instant transConsTime = baseTime.plusNanos(i * MIN_TRANS_TIMESTAMP_INCR_NANOS);
-				handleTransaction(null, false, selfId.getId(), Instant.now(), transConsTime, trans,
-						stateInfo);
+		for (int i = 0; i < numTrans; i++) {
+			// This call must acquire a lock
+			final Transaction trans = transSupplier.get();
+			if (trans == null) {
+				// this shouldn't be necessary, but it's here just for safety
+				break;
 			}
+			final Instant transConsTime = baseTime.plusNanos(i * MIN_TRANS_TIMESTAMP_INCR_NANOS);
+			handleTransaction(null, false, selfId.getId(), Instant.now(), transConsTime, trans, state);
 		}
 	}
 

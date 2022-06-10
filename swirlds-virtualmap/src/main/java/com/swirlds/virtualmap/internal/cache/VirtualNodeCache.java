@@ -15,12 +15,14 @@
 package com.swirlds.virtualmap.internal.cache;
 
 import com.swirlds.common.FastCopyable;
-import com.swirlds.common.MutabilityException;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.exceptions.MutabilityException;
+import com.swirlds.common.exceptions.PlatformException;
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
-import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.threading.futures.WaitingFuture;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualMap;
 import com.swirlds.virtualmap.VirtualMapSettingsFactory;
@@ -45,6 +47,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
+
+import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 /**
  * A cache for virtual merkel trees.
@@ -141,12 +145,6 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 	 */
 	private static final Comparator<Mutation<VirtualLeafRecord<?, ?>>> DIRTY_LEAF_COMPARATOR
 			= new MutationComparator<>();
-
-	/**
-	 * A singleton comparator used for sorting dirty leaf mutations.
-	 */
-	private static final Comparator<Mutation<VirtualLeafRecord<?, ?>>> DELETED_LEAF_COMPARATOR
-			= new DeletedMutationComparator<>();
 
 	/**
 	 * A singleton comparator used for sorting dirty internal mutations.
@@ -613,7 +611,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 	 * 		copy in the chain), or null if there is not one.
 	 * @throws NullPointerException
 	 * 		if the key is null
-	 * @throws com.swirlds.common.ReferenceCountException
+	 * @throws com.swirlds.common.exceptions.ReferenceCountException
 	 * 		if the cache has already been released
 	 */
 	public VirtualLeafRecord<K, V> lookupLeafByKey(K key, boolean forModify) {
@@ -676,7 +674,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 	 * 		modify the value, then you do not need to make any additional calls.
 	 * @return A {@link VirtualLeafRecord} if there is one in the cache (this instance or a previous
 	 * 		copy in the chain), or null if there is not one.
-	 * @throws com.swirlds.common.ReferenceCountException
+	 * @throws com.swirlds.common.exceptions.ReferenceCountException
 	 * 		if the cache has already been released
 	 */
 	public VirtualLeafRecord<K, V> lookupLeafByPath(long path, boolean forModify) {
@@ -739,25 +737,37 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 	}
 
 	/**
-	 * Gets a sorted stream of deleted leaves <strong>from this cache instance</strong>.
+	 * Gets a stream of deleted leaves <strong>from this cache instance</strong>.
 	 * <p>
 	 * This method may be called concurrently from multiple threads (although in practice, this should never happen).
 	 *
-	 * @return A non-null stream of deleted leaves. May be empty. Will not contain duplicate records. Will be sorted
-	 * 		by path, with the lowest (root-most) path first.
+	 * @return A non-null stream of deleted leaves. May be empty. Will not contain duplicate records.
 	 * @throws MutabilityException
 	 * 		if called on a cache that still allows dirty leaves to be added
 	 */
+	@SuppressWarnings("unchecked")
 	public Stream<VirtualLeafRecord<K, V>> deletedLeaves() {
 		if (!dirtyLeaves.isImmutable()) {
 			throw new MutabilityException("Cannot call on a cache that is still mutable for dirty leaves");
 		}
 
-		final AtomicReference<Mutation<VirtualLeafRecord<K, V>>> lastSeen = new AtomicReference<>();
-		return dirtyLeaves.sortedStream(deletedLeafComparator())
-				.filter(mutation -> dedupeByKey(mutation, lastSeen))
-				.filter(mutation -> mutation.deleted)
-				.map(mutation -> mutation.value);
+		final Map<K, VirtualLeafRecord<K, V>> leaves = new ConcurrentHashMap<>();
+		final WaitingFuture<Void> result = dirtyLeaves.parallelTraverse(CLEANING_POOL, element -> {
+			if (element.deleted) {
+				K key = (K) element.key;
+				Mutation<VirtualLeafRecord<K, V>> mutation = lookup(keyToDirtyLeafIndex.get(key));
+				if (mutation != null && mutation.deleted) {
+					leaves.putIfAbsent(key, element.value);
+				}
+			}
+		});
+		try {
+			result.get();
+		} catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			throw new PlatformException("VirtualNodeCache.deletedLeaves() interrupted", ex, EXCEPTION);
+		}
+		return leaves.values().stream();
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -825,7 +835,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 	 * 		returned record, if it exists.
 	 * @return A {@link VirtualInternalRecord} if there is one in the cache (this instance or a previous
 	 * 		copy in the chain), or null if there is not one.
-	 * @throws com.swirlds.common.ReferenceCountException
+	 * @throws com.swirlds.common.exceptions.ReferenceCountException
 	 * 		if the cache has already been released
 	 */
 	public VirtualInternalRecord lookupInternalByPath(final long path, final boolean forModify) {
@@ -1411,17 +1421,6 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 	}
 
 	/**
-	 * Gets a singleton instance to a comparator for sorting deleted virtual leaf records.
-	 * Helper method for generics.
-	 *
-	 * @return The non-null comparator.
-	 */
-	@SuppressWarnings("unchecked")
-	private Comparator<Mutation<VirtualLeafRecord<K, V>>> deletedLeafComparator() {
-		return (Comparator<Mutation<VirtualLeafRecord<K, V>>>) (Object) DELETED_LEAF_COMPARATOR;
-	}
-
-	/**
 	 * Gets a singleton instance to a comparator for sorting virtual internal records.
 	 * Helper method for generics.
 	 *
@@ -1459,38 +1458,6 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 		final long lastPath = last == null || last.value == null ? Long.MAX_VALUE : last.value.getPath();
 		final long path = mutation.value == null ? Long.MAX_VALUE : mutation.value.getPath();
 		if (last != null && lastPath == path) {
-			return false;
-		} else {
-			lastSeen.set(mutation);
-			return true;
-		}
-	}
-
-	/**
-	 * A helper method called by a stream to filter out mutations that are "over-ridden" by other mutations.
-	 * The stream has been pre-sorted such that the best answer comes first in the stream. As the stream is
-	 * processed, we maintain a reference to the "lastSeen" mutation. If the "lastSeen" mutation is for the
-	 * same item as the mutation supplied in this call, then the mutation is skipped. In this way, we can
-	 * filter out any over-ridden mutations cheaply. We also filter out any mutations that represent deleted
-	 * entries (we don't need them for archiving).
-	 *
-	 * @param mutation
-	 * 		The current mutation to consider. Cannot be null.
-	 * @param lastSeen
-	 * 		The last mutation we have seen. Cannot be null, but may hold a null value.
-	 * @return {@code true} if this mutation should be included, {@code false} if it should be filtered out.
-	 */
-	private boolean dedupeByKey(
-			final Mutation<VirtualLeafRecord<K, V>> mutation,
-			final AtomicReference<Mutation<VirtualLeafRecord<K, V>>> lastSeen) {
-		// This invariant should *ALWAYS* be true by the nature of the rest of the cache. It should
-		// be completely impossible for it to be null. We assert this to find bugs during testing / refactoring.
-		assert mutation != null : "The mutation was unexpectedly null!";
-		assert mutation.value != null : "Key mutations never hold a null key!";
-		final Mutation<VirtualLeafRecord<K, V>> last = lastSeen.get();
-		final K lastKey = (last == null || last.value == null) ? null : last.value.getKey();
-		final K key = mutation.value.getKey();
-		if (last != null && key.equals(lastKey)) {
 			return false;
 		} else {
 			lastSeen.set(mutation);
@@ -1568,54 +1535,6 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 				// to check one of them.
 				assert order != 0 || a.deleted :
 						"Error: Found two mutations for the same version=" + a.version + " and path=" + aPath;
-
-				return order;
-			} catch (final Exception ex) {
-				throw new RuntimeException(ex);
-			}
-		}
-	}
-
-	/**
-	 * A comparator that sorts mutations first by key, then by version
-	 *
-	 * @param <R>
-	 */
-	private static final class DeletedMutationComparator<R extends VirtualLeafRecord<?, ?>>
-			implements Comparator<Mutation<R>> {
-
-		@SuppressWarnings({ "rawtypes", "unchecked" })
-		@Override
-		public int compare(final Mutation<R> a, final Mutation<R> b) {
-			try {
-				// Note: NONE OF THESE ELEMENTS MAY BE NULL!!
-				assert a != null : "Mutation 'a' was unexpectedly null!";
-				assert b != null : "Mutation 'b' was unexpectedly null!";
-
-				final R aRec = a.value;
-				final R bRec = b.value;
-
-				assert aRec != null : "Records seen by DeletedMutationComparator cannot ever be null";
-				assert bRec != null : "Records seen by DeletedMutationComparator cannot ever be null";
-
-				// Sort first by key
-				final VirtualKey aKey = aRec.getKey();
-				final VirtualKey bKey = bRec.getKey();
-
-				assert aKey != null : "Keys seen by DeletedMutationComparator cannot ever be null";
-				assert bKey != null : "Keys seen by DeletedMutationComparator cannot ever be null";
-
-				int order = aKey.compareTo(bKey);
-				if (order != 0) {
-					return order;
-				}
-
-				// Then by version (higher version first)
-				// NOTE: Critical, we sort the newest (largest) version first
-				order = Long.compare(b.version, a.version);
-				if (order != 0) {
-					return order;
-				}
 
 				return order;
 			} catch (final Exception ex) {

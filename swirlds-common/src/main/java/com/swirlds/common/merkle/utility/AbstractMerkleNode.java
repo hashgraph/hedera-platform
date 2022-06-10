@@ -15,7 +15,7 @@
 package com.swirlds.common.merkle.utility;
 
 import com.swirlds.common.AbstractHashable;
-import com.swirlds.common.ReferenceCountException;
+import com.swirlds.common.exceptions.ReferenceCountException;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.MerkleRouteException;
 import com.swirlds.common.merkle.route.MerkleRoute;

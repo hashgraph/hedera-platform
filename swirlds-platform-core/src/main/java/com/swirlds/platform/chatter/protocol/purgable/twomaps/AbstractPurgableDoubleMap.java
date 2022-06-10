@@ -256,7 +256,9 @@ public abstract class AbstractPurgableDoubleMap<K, V> implements PurgableMap<K, 
 
 		for (final K key : keys) {
 			final V value = data.remove(key);
-			if (purgedValueHandler != null) {
+			// if an entry has been removed, it is only removed from the data map, not the generation map
+			// in this case, the value might be null, so we don't provide it to the value handler
+			if (value != null && purgedValueHandler != null) {
 				purgedValueHandler.accept(key, value);
 			}
 		}
@@ -287,5 +289,13 @@ public abstract class AbstractPurgableDoubleMap<K, V> implements PurgableMap<K, 
 		for (long generation = smallestAllowedGeneration; generation < smallerThanGeneration; generation++) {
 			purgeGeneration(generation, purgedValueHandler);
 		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getSize() {
+		return data.size();
 	}
 }

@@ -16,13 +16,15 @@ package com.swirlds.virtualmap;
 
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.ExternalSelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.MerkleDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.io.SerializationStrategy;
 import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
+import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
 import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.utility.ValueReference;
 import com.swirlds.virtualmap.datasource.VirtualDataSource;
 import com.swirlds.virtualmap.datasource.VirtualDataSourceBuilder;
 import com.swirlds.virtualmap.internal.merkle.StateAccessorImpl;
@@ -40,9 +42,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 
-import static com.swirlds.common.CommonUtils.getNormalisedStringBytes;
-import static com.swirlds.common.merkle.io.SerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
-
+import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
+import static com.swirlds.common.io.streams.StreamDebugUtils.deserializeAndDebugOnFailure;
+import static com.swirlds.common.utility.CommonUtils.getNormalisedStringBytes;
 
 /**
  * A {@link MerkleInternal} node that virtualizes all of its children, such that the child nodes
@@ -143,7 +145,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	 * A static set of supported serialization strategies. This is static just to cut down on garbage
 	 * generation at runtime and a little overhead.
 	 */
-	private static final Set<SerializationStrategy> STRATEGIES = Set.of(EXTERNAL_SELF_SERIALIZATION);
+	private static final Set<MerkleSerializationStrategy> STRATEGIES = Set.of(EXTERNAL_SELF_SERIALIZATION);
 
 	/**
 	 * A reference to the first child, the {@link VirtualMapState}. Ideally this would be final
@@ -289,7 +291,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Set<SerializationStrategy> supportedSerialization(final int version) {
+	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
 		return STRATEGIES;
 	}
 
@@ -339,13 +341,25 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	 * 		For problems.
 	 */
 	public void loadFromFile(final File inputFile) throws IOException {
-		try (SerializableDataInputStream serin = new SerializableDataInputStream(
-				new BufferedInputStream(new FileInputStream(inputFile)))) {
-			state = serin.readSerializable();
-			root = new VirtualRootNode<>();
-			root.deserializeExternal(serin, inputFile.getParentFile(), null, serin.readInt());
-			addDeserializedChildren(List.of(state, root), getVersion());
-		}
+
+		final ValueReference<VirtualMapState> virtualMapState = new ValueReference<>();
+		final ValueReference<VirtualRootNode<K, V>> virtualRootNode = new ValueReference<>();
+
+		deserializeAndDebugOnFailure(
+				() -> new SerializableDataInputStream(new BufferedInputStream(new FileInputStream(inputFile))),
+				inputFile.getParentFile(),
+				(final MerkleDataInputStream stream) -> {
+					virtualMapState.setValue(stream.readSerializable());
+					virtualRootNode.setValue(new VirtualRootNode<>());
+					virtualRootNode.getValue().deserializeExternal(
+							stream, inputFile.getParentFile(), null, stream.readInt());
+					return null;
+				},
+				null);
+
+		state = virtualMapState.getValue();
+		root = virtualRootNode.getValue();
+		addDeserializedChildren(List.of(state, root), getVersion());
 	}
 
 	/*-----------------------------------------------------------------------------

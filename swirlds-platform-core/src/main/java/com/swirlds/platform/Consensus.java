@@ -14,7 +14,7 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.AddressBook;
+import com.swirlds.common.system.AddressBook;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.consensus.RoundNumberProvider;

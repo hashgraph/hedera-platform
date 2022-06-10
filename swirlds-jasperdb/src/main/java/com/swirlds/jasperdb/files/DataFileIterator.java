@@ -190,6 +190,15 @@ public final class DataFileIterator implements AutoCloseable {
 		return metadata.getCreationDate();
 	}
 
+	/**
+	 * Get the index of the data file we are iterating over
+	 *
+	 * @return data file index
+	 */
+	public int getDataFileIndex() {
+		return metadata.getIndex();
+	}
+
 	/** toString for debugging */
 	@Override
 	public String toString() {

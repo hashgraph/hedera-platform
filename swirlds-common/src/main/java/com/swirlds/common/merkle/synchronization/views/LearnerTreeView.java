@@ -16,10 +16,11 @@ package com.swirlds.common.merkle.synchronization.views;
 
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
+import com.swirlds.common.threading.pool.StandardWorkGroup;
 
 import java.io.IOException;
 
@@ -32,6 +33,16 @@ import java.io.IOException;
  */
 public interface LearnerTreeView<T>
 		extends LearnerExpectedLessonQueue<T>, LearnerInitializer<T>, TreeView<T> {
+
+	/**
+	 * Start any required background threads. Threads should be created on the provided work group.
+	 *
+	 * @param workGroup
+	 * 		a work group responsible for managing threads
+	 */
+	default void startThreads(final StandardWorkGroup workGroup) {
+
+	}
 
 	/**
 	 * Check if this view represents the root of the state.

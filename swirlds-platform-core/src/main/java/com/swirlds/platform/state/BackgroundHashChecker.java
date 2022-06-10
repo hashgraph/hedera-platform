@@ -14,9 +14,9 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.AutoCloseableWrapper;
-import com.swirlds.common.threading.StoppableThread;
-import com.swirlds.common.threading.StoppableThreadConfiguration;
+import com.swirlds.common.threading.framework.StoppableThread;
+import com.swirlds.common.threading.framework.config.StoppableThreadConfiguration;
+import com.swirlds.common.utility.AutoCloseableWrapper;
 
 import java.util.function.Consumer;
 import java.util.function.Supplier;

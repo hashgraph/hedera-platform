@@ -14,23 +14,23 @@
 
 package com.swirlds.common.crypto;
 
-import com.swirlds.common.io.BadIOException;
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.exceptions.BadIOException;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-import static com.swirlds.common.CommonUtils.hex;
+import static com.swirlds.common.utility.CommonUtils.hex;
 
 /**
  * A cryptographic hash of some data.
  */
 public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
-
+	private static final int SHORT_STRING_BYTES = 4;
 	private static final long CLASS_ID = 0xf422da83a251741eL;
 	private static final int CLASS_VERSION = 1;
 
@@ -205,11 +205,9 @@ public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
 			return true;
 		}
 
-		if (!(obj instanceof Hash)) {
+		if (!(obj instanceof final Hash that)) {
 			return false;
 		}
-
-		final Hash that = (Hash) obj;
 
 		return digestType.id() == that.digestType.id() && Arrays.equals(value, that.value);
 	}
@@ -250,6 +248,10 @@ public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
 	@Override
 	public String toString() {
 		return (value == null) ? null : hex(value);
+	}
+
+	public String toShortString(){
+		return (value == null) ? null : hex(value, SHORT_STRING_BYTES);
 	}
 
 	/**

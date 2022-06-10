@@ -14,7 +14,7 @@
 
 package com.swirlds.jasperdb.files.hashmap;
 
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.jasperdb.files.DataFileCommon;
 import com.swirlds.jasperdb.files.DataItemHeader;
 import com.swirlds.jasperdb.files.DataItemSerializer;
@@ -58,6 +58,14 @@ public class BucketSerializer<K extends VirtualKey<? super K>> implements DataIt
 		currentSerializationVersion =
 				(keySerializer.getCurrentDataVersion() << LOW_ORDER_BYTES_FOR_NON_KEY_SERIALIZATION_VERSION) |
 						BUCKET_SERIALIZATION_VERSION;
+	}
+
+	/**
+	 * Get the key serializer.
+	 * @return a key serializer
+	 */
+	public KeySerializer<K> getKeySerializer() {
+		return keySerializer;
 	}
 
 	/**

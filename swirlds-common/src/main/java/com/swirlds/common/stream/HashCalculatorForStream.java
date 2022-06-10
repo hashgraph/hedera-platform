@@ -16,7 +16,8 @@ package com.swirlds.common.stream;
 
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
-import com.swirlds.common.crypto.SerializableRunningHashable;
+import com.swirlds.common.crypto.RunningHashable;
+import com.swirlds.common.crypto.SerializableHashable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -31,7 +32,9 @@ import static com.swirlds.logging.LogMarker.OBJECT_STREAM;
  * @param <T>
  * 		type of the objects
  */
-public class HashCalculatorForStream<T extends SerializableRunningHashable> extends AbstractLinkedObjectStream<T> {
+public class HashCalculatorForStream<T extends RunningHashable & SerializableHashable>
+		extends AbstractLinkedObjectStream<T> {
+
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger LOGGER = LogManager.getLogger();
 	/** Used for hashing */

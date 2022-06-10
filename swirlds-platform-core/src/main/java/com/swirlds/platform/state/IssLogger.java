@@ -136,6 +136,7 @@ public class IssLogger {
 				StringBuilder sb = new StringBuilder();
 				for (EventImpl event : signedState.getEvents()) {
 					sb.append(event.toMediumString());
+					sb.append(" ct: ").append(event.getConsensusTimestamp());
 					sb.append('\n');
 				}
 				return sb;

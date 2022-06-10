@@ -13,11 +13,6 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.Address;
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.CommonUtils;
-import com.swirlds.common.NodeId;
-import com.swirlds.common.Platform;
 import com.swirlds.common.StartupTime;
 import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.constructable.ConstructableRegistryException;
@@ -31,9 +26,15 @@ import com.swirlds.common.merkle.synchronization.settings.ReconnectSettingsFacto
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskCompleteListener;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskNotification;
-import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.common.system.Address;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.Platform;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.fchashmap.FCHashMapSettingsFactory;
 import com.swirlds.jasperdb.settings.JasperDbSettingsFactory;
+import com.swirlds.logging.payloads.NodeAddressMismatchPayload;
 import com.swirlds.logging.payloads.NodeStartPayload;
 import com.swirlds.p2p.portforwarding.PortForwarder;
 import com.swirlds.p2p.portforwarding.PortMapping;
@@ -92,13 +93,15 @@ import java.util.jar.Attributes;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 
-import static com.swirlds.common.CommonUtils.canonicalFile;
+import static com.swirlds.common.utility.CommonUtils.canonicalFile;
 import static com.swirlds.logging.LogMarker.CERTIFICATES;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.JVM_PAUSE_WARN;
 import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.platform.Settings.JVMPauseDetectorSleepMs;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
+import static com.swirlds.platform.system.SystemExitReason.NODE_ADDRESS_MISMATCH;
+import static com.swirlds.platform.system.SystemUtils.exitSystem;
 
 /**
  * The Browser that launches the Platforms that run the apps. The Browser has only one public method, which
@@ -171,7 +174,7 @@ public abstract class Browser {
 	 * Shut down the browser and all platforms
 	 */
 	static void stopBrowser() {
-		SystemUtils.exitSystem(SystemExitReason.BROWSER_WINDOW_CLOSED, true);
+		exitSystem(SystemExitReason.BROWSER_WINDOW_CLOSED, true);
 	}
 
 	/**
@@ -333,7 +336,7 @@ public abstract class Browser {
 				CommonUtils.tellUserConsole(
 						"This computer has an internal IP address:  "
 								+ Network.getInternalIPAddress());
-				log.info("All of this computer's addresses: {}",
+				log.trace(STARTUP.getMarker(), "All of this computer's addresses: {}",
 						() -> (Arrays.toString(Network.getOwnAddresses2())));
 
 				// port forwarding
@@ -547,8 +550,8 @@ public abstract class Browser {
 									-1, // portInternalIpv6
 									null, // addressExternalIpv6
 									-1, // portExternalIpv6
-									(SerializablePublicKey) null, // sigPublicKey
-									(SerializablePublicKey) null, // encPublicKey
+									null, // sigPublicKey
+									null, // encPublicKey
 									(SerializablePublicKey) null, // agreePublicKey
 									parsOriginalCase[8] // memo, optional
 							));
@@ -691,7 +694,7 @@ public abstract class Browser {
 
 				platformRunThreads[ownHostIndex] = new ThreadConfiguration()
 						.setPriority(Settings.threadPriorityNonSync)
-						.setNodeId(ownHostIndex)
+						.setNodeId((long) ownHostIndex)
 						.setComponent(PLATFORM_THREAD_POOL_NAME)
 						.setThreadName("platformRun")
 						.setRunnable(platform::run)
@@ -734,6 +737,15 @@ public abstract class Browser {
 			addressBook = appDefinition.getAddressBook();
 		} catch (ConfigurationException ex) {
 			return;
+		}
+
+		// if the local machine did not match any address in the address book then we should log an error and exit
+		if (addressBook.getOwnHostCount() < 1) {
+			final String externalIpAddress = (Network.getExternalIpAddress() != null) ?
+					Network.getExternalIpAddress().getIpAddress() : null;
+			log.error(EXCEPTION.getMarker(),
+					new NodeAddressMismatchPayload(Network.getInternalIPAddress(), externalIpAddress));
+			SystemUtils.exitSystem(NODE_ADDRESS_MISMATCH);
 		}
 
 		// the thread for each Platform.run

@@ -14,9 +14,9 @@
 
 package com.swirlds.platform.network.connectivity;
 
-import com.swirlds.common.Address;
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.NodeId;
+import com.swirlds.common.system.Address;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.SocketSyncConnection;
 import com.swirlds.platform.SyncConnection;

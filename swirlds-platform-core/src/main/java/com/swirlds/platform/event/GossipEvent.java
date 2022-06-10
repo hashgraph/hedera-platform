@@ -14,11 +14,11 @@
 
 package com.swirlds.platform.event;
 
-import com.swirlds.common.events.BaseEvent;
-import com.swirlds.common.events.BaseEventHashedData;
-import com.swirlds.common.events.BaseEventUnhashedData;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.system.events.BaseEvent;
+import com.swirlds.common.system.events.BaseEventHashedData;
+import com.swirlds.common.system.events.BaseEventUnhashedData;
 import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEvent;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEventDescriptor;
@@ -164,9 +164,11 @@ public class GossipEvent implements EventIntakeTask, BaseEvent, ChatterEvent {
 	 */
 	@Override
 	public int hashCode() {
-		return new HashCodeBuilder(17, 37).append(hashedData).append(unhashedData).append(descriptor).append(
-				timeReceived).toHashCode();
+		return new HashCodeBuilder(17, 37)
+				.append(hashedData).append(unhashedData).append(descriptor).toHashCode();
 	}
+
+
 
 	private static final class ClassVersion {
 		public static final int ORIGINAL = 1;

@@ -14,10 +14,12 @@
 
 package com.swirlds.platform.chatter.protocol;
 
+import com.swirlds.platform.network.NetworkProtocolException;
+
 /**
  * Thrown when a message received from a peer cannot be handled
  */
-public class PeerMessageException extends Exception {
+public class PeerMessageException extends NetworkProtocolException {
 	public PeerMessageException(final String message) {
 		super(message);
 	}

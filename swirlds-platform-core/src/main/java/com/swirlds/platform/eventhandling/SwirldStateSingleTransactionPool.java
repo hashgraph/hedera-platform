@@ -13,7 +13,7 @@
  */
 package com.swirlds.platform.eventhandling;
 
-import com.swirlds.common.Transaction;
+import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.SettingsProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

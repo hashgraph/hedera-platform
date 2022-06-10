@@ -15,11 +15,11 @@
 package com.swirlds.platform.state;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.events.BaseEventHashedData;
-import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.system.events.BaseEventHashedData;
+import com.swirlds.common.system.events.BaseEventUnhashedData;
 import com.swirlds.platform.EventImpl;
 
 import java.io.IOException;

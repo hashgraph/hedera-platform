@@ -13,6 +13,8 @@
  */
 package com.swirlds.common;
 
+import com.swirlds.common.exceptions.MutabilityException;
+
 /**
  * An interface for classes that can be copied and serialized in a way specific to the Swirlds platform. If
  * a class implements the FastCopyable interface, then it should use a copy-on-write strategy so that calls
@@ -20,7 +22,7 @@ package com.swirlds.common;
  * the details on what they should do, and how they differ from the usual Java <code>copy</code> and
  * <code>serialize</code> methods.
  */
-public interface FastCopyable extends Releasable {
+public interface FastCopyable extends Copyable, Mutable, Releasable {
 
 	/**
 	 * If a class ExampleClass implements the FastCopyable interface, and an object x is of class
@@ -46,39 +48,19 @@ public interface FastCopyable extends Releasable {
 	 * It is strongly suggested that each implementing class override the return type of this method to its self
 	 * type. So if class Foo extends FastCopyable then Foo's copy signature should look like "public Foo copy()".
 	 *
-	 * @param <T>
-	 * 		the expected return type, should match the type of the object being copied
 	 * @return the new copy that was made
 	 */
-	<T extends FastCopyable> T copy();
+	@Override
+	<T extends Copyable> T copy();
 
 	/**
 	 * Determines if an object/copy is immutable or not.
-	 * Only the most recent copy must be mutable
+	 * Only the most recent copy must be mutable.
 	 *
-	 * @return Whether is immutable or not
+	 * @return Whether the object is immutable or not
 	 */
+	@Override
 	default boolean isImmutable() {
 		return true;
-	}
-
-	/**
-	 * @throws MutabilityException
-	 * 		if {@link #isImmutable()}} returns {@code true}
-	 */
-	default void throwIfImmutable() {
-		throwIfImmutable("This operation is not permitted on an immutable object.");
-	}
-
-	/**
-	 * @param errorMessage
-	 * 		an error message for the exception
-	 * @throws MutabilityException
-	 * 		if {@link #isImmutable()}} returns {@code true}
-	 */
-	default void throwIfImmutable(final String errorMessage) {
-		if (this.isImmutable()) {
-			throw new MutabilityException(errorMessage);
-		}
 	}
 }

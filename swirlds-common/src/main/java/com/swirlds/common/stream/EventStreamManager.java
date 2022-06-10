@@ -14,11 +14,12 @@
 
 package com.swirlds.common.stream;
 
-import com.swirlds.common.Platform;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
-import com.swirlds.common.crypto.SerializableRunningHashable;
+import com.swirlds.common.crypto.RunningHashable;
+import com.swirlds.common.crypto.SerializableHashable;
+import com.swirlds.common.system.Platform;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -29,19 +30,19 @@ import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.function.Predicate;
 
-import static com.swirlds.common.Units.SECONDS_TO_MILLISECONDS;
+import static com.swirlds.common.utility.Units.SECONDS_TO_MILLISECONDS;
 import static com.swirlds.logging.LogMarker.EVENT_STREAM;
 
 /**
  * This class is used for generating event stream files when enableEventStreaming is true,
  * and for calculating runningHash for consensus Events.
  */
-public class EventStreamManager<T extends Timestamped & SerializableRunningHashable> {
+public class EventStreamManager<T extends StreamAligned & Timestamped & RunningHashable & SerializableHashable> {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger LOGGER = LogManager.getLogger();
 
 	/**
-	 * receives consensus events from ConsensusEventHandler.addEvent(), then passes to hashQueueThread and
+	 * receives consensus events from ConsensusRoundHandler.addEvent(), then passes to hashQueueThread and
 	 * writeQueueThread
 	 */
 	private final MultiStream<T> multiStream;
@@ -144,7 +145,7 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 
 	/**
 	 * @param multiStream
-	 * 		the instance which receives consensus events from ConsensusEventHandler, then passes to nextStreams
+	 * 		the instance which receives consensus events from ConsensusRoundHandler, then passes to nextStreams
 	 * @param isLastEventInFreezeCheck
 	 * 		a predicate which checks whether this event is the last event before restart
 	 */
@@ -161,7 +162,7 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 	}
 
 	/**
-	 * receives a consensus event from ConsensusEventHandler each time,
+	 * receives a consensus event from ConsensusRoundHandler each time,
 	 * sends it to multiStream which then sends to two queueThread for calculating runningHash and writing to file
 	 *
 	 * @param event
@@ -177,6 +178,8 @@ public class EventStreamManager<T extends Timestamped & SerializableRunningHasha
 								"{}", event::getTimestamp);
 				multiStream.close();
 			}
+		} else {
+			LOGGER.warn(EVENT_STREAM.getMarker(), "Event {} dropped after freezePeriodStarted!", event.getTimestamp());
 		}
 	}
 

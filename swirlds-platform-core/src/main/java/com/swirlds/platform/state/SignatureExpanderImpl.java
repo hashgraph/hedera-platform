@@ -14,10 +14,10 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.SwirldTransaction;
-import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.TransactionSignature;
+import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.CryptoStatistics;
 import com.swirlds.platform.components.SignatureExpander;
 import org.apache.logging.log4j.LogManager;
@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.LinkedList;
 import java.util.List;
 
-import static com.swirlds.common.Units.NANOSECONDS_TO_MILLISECONDS;
+import static com.swirlds.common.utility.Units.NANOSECONDS_TO_MILLISECONDS;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 public class SignatureExpanderImpl implements SignatureExpander {

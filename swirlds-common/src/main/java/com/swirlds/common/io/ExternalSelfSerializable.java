@@ -15,6 +15,8 @@
 package com.swirlds.common.io;
 
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 
 import java.io.File;
 import java.io.IOException;

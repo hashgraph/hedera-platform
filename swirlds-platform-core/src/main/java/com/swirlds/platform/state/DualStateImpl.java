@@ -14,9 +14,9 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.SwirldDualState;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.system.SwirldDualState;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
 import com.swirlds.logging.payloads.SetFreezeTimePayload;
 import com.swirlds.logging.payloads.SetLastFrozenTimePayload;

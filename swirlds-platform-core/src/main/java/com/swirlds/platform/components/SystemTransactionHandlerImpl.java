@@ -14,9 +14,9 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.NodeId;
-import com.swirlds.common.Transaction;
-import com.swirlds.common.transaction.internal.StateSignatureTransaction;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.observers.PreConsensusEventObserver;
 import org.apache.logging.log4j.LogManager;
@@ -111,7 +111,7 @@ public class SystemTransactionHandlerImpl implements SystemTransactionHandler, P
 				// All system transactions are handled twice, once with consensus false, and once with true.
 				// This is the first time a system transaction is handled while its consensus is not yet
 				// known. The second time it will be handled is in TransactionHandler by the thread-cons thread (lives
-				// in ConsensusEventHandler)
+				// in ConsensusRoundHandler)
 				handleSystemTransaction(event.getCreatorId(), false,
 						event.getTimeCreated(),
 						event.getTimeCreated().plusNanos(i), trans[i]);

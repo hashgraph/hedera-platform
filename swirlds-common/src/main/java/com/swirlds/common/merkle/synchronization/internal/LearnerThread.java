@@ -14,7 +14,6 @@
 
 package com.swirlds.common.merkle.synchronization.internal;
 
-import com.swirlds.common.ThresholdLimitingHandler;
 import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.MerkleNode;
@@ -23,7 +22,8 @@ import com.swirlds.common.merkle.synchronization.streams.AsyncOutputStream;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
 import com.swirlds.common.merkle.synchronization.views.CustomReconnectRoot;
 import com.swirlds.common.merkle.synchronization.views.LearnerTreeView;
-import com.swirlds.common.threading.StandardWorkGroup;
+import com.swirlds.common.threading.pool.StandardWorkGroup;
+import com.swirlds.common.utility.ThresholdLimitingHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -227,7 +227,9 @@ public class LearnerThread<T> {
 	private void run() {
 		boolean firstLesson = true;
 
-		try (in; out) {
+		try (in; out; view) {
+
+			view.startThreads(workGroup);
 
 			view.expectLessonFor(null, 0, view.getOriginalRoot(), false);
 			in.anticipateMessage();
@@ -263,7 +265,6 @@ public class LearnerThread<T> {
 		} catch (final Exception ex) {
 			throw new MerkleSynchronizationException("exception in the learner's receiving thread", ex);
 		}
-
 	}
 
 }

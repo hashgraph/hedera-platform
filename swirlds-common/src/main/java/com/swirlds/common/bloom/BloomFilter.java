@@ -15,15 +15,15 @@
 package com.swirlds.common.bloom;
 
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 
 import java.io.IOException;
 import java.util.Objects;
 
-import static com.swirlds.common.Units.BITS_TO_BYTES;
-import static com.swirlds.common.Units.BYTES_PER_INT;
-import static com.swirlds.common.Units.BYTES_TO_BITS;
+import static com.swirlds.common.utility.Units.BITS_TO_BYTES;
+import static com.swirlds.common.utility.Units.BYTES_PER_INT;
+import static com.swirlds.common.utility.Units.BYTES_TO_BITS;
 
 /**
  * <p>
@@ -59,12 +59,12 @@ public class BloomFilter<T> implements SelfSerializable {
 	/**
 	 * The number of bits in an integer.
 	 */
-	private static final long BITS_PER_INT = BYTES_PER_INT * BYTES_TO_BITS;
+	private static final int BITS_PER_INT = BYTES_PER_INT * BYTES_TO_BITS;
 
 	/**
 	 * The number of bits in an array of maximum size (as configured by {@link #MAX_ARRAY_SIZE}).
 	 */
-	private static final long BITS_PER_ARRAY = BITS_PER_INT * MAX_ARRAY_SIZE;
+	private static final long BITS_PER_ARRAY = ((long) BITS_PER_INT) * MAX_ARRAY_SIZE;
 
 	/**
 	 * A constant used for bit shifting.
@@ -135,6 +135,15 @@ public class BloomFilter<T> implements SelfSerializable {
 	}
 
 	/**
+	 * Convenience method. Create a new buffer of the appropriate length to hold hashes.
+	 *
+	 * @return an appropriately sized hash buffer
+	 */
+	public long[] buildNewBuffer() {
+		return new long[hashCount];
+	}
+
+	/**
 	 * Allocate the memory for the bloom filter.
 	 *
 	 * @return the bloom filter array
@@ -186,6 +195,37 @@ public class BloomFilter<T> implements SelfSerializable {
 		for (final long hash : hashes) {
 			setBit(hash);
 		}
+	}
+
+	/**
+	 * <p>
+	 * Check if an element is in the filter, and then add it to the filter.
+	 * </p>
+	 *
+	 * <p>
+	 * This method uses the internal buffer, and so it is not thread safe.
+	 * </p>
+	 *
+	 * @param element
+	 * 		the element to check and then add
+	 * @return true if the element may have been in the filter before it was added
+	 */
+	public boolean checkAndAdd(final T element) {
+		return checkAndAdd(element, hashBuffer);
+	}
+
+	/**
+	 * Check if an element is in the filter, and then add it to the filter.
+	 *
+	 * @param element
+	 * 		the element to check and then add
+	 * @return true if the element may have been in the filter before it was added
+	 */
+	public boolean checkAndAdd(final T element, final long[] hashes) {
+		hash(element, hashes);
+		final boolean isContained = contains(hashes);
+		add(hashes);
+		return isContained;
 	}
 
 	/**

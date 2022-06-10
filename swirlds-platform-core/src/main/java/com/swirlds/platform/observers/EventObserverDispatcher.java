@@ -16,6 +16,7 @@ package com.swirlds.platform.observers;
 
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.event.GossipEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,30 +26,22 @@ import java.util.List;
  * the implied observer DAG.
  */
 public class EventObserverDispatcher implements
-		ConsensusRoundObserver,
-		EventAddedObserver,
+		EventReceivedObserver,
 		PreConsensusEventObserver,
-		StaleEventObserver{
+		EventAddedObserver,
+		ConsensusRoundObserver,
+		StaleEventObserver {
 
-	/**
-	 * A list of implementors of the {@link EventAddedObserver} interface
-	 */
-	private final List<EventAddedObserver> eventAddedObservers;
-
-	/**
-	 * A list of implementors of the {@link PreConsensusEventObserver} interface
-	 */
+	/** A list of implementors of the {@link EventReceivedObserver} interface */
+	private final List<EventReceivedObserver> eventReceivedObservers;
+	/** A list of implementors of the {@link PreConsensusEventObserver} interface */
 	private final List<PreConsensusEventObserver> preConsensusEventObservers;
-
-	/**
-	 * A list of implementors of the {@link StaleEventObserver} interface
-	 */
-	private final List<StaleEventObserver> staleEventObservers;
-
-	/**
-	 * A list of implementors of the {@link ConsensusRoundObserver} interface
-	 */
+	/** A list of implementors of the {@link EventAddedObserver} interface */
+	private final List<EventAddedObserver> eventAddedObservers;
+	/** A list of implementors of the {@link ConsensusRoundObserver} interface */
 	private final List<ConsensusRoundObserver> consensusRoundObservers;
+	/** A list of implementors of the {@link StaleEventObserver} interface */
+	private final List<StaleEventObserver> staleEventObservers;
 
 	/**
 	 * Constructor
@@ -57,10 +50,11 @@ public class EventObserverDispatcher implements
 	 * 		a list of {@link EventObserver} implementors
 	 */
 	public EventObserverDispatcher(final List<EventObserver> observers) {
-		eventAddedObservers = new ArrayList<>();
+		eventReceivedObservers = new ArrayList<>();
 		preConsensusEventObservers = new ArrayList<>();
-		staleEventObservers = new ArrayList<>();
+		eventAddedObservers = new ArrayList<>();
 		consensusRoundObservers = new ArrayList<>();
+		staleEventObservers = new ArrayList<>();
 
 		for (final EventObserver observer : observers) {
 			addObserver(observer);
@@ -84,17 +78,20 @@ public class EventObserverDispatcher implements
 	 * 		the observer to add
 	 */
 	public void addObserver(final EventObserver observer) {
-		if (observer instanceof EventAddedObserver o) {
-			eventAddedObservers.add(o);
+		if (observer instanceof EventReceivedObserver o) {
+			eventReceivedObservers.add(o);
 		}
 		if (observer instanceof PreConsensusEventObserver o) {
 			preConsensusEventObservers.add(o);
 		}
-		if (observer instanceof StaleEventObserver o) {
-			staleEventObservers.add(o);
+		if (observer instanceof EventAddedObserver o) {
+			eventAddedObservers.add(o);
 		}
 		if (observer instanceof ConsensusRoundObserver o) {
 			consensusRoundObservers.add(o);
+		}
+		if (observer instanceof StaleEventObserver o) {
+			staleEventObservers.add(o);
 		}
 	}
 
@@ -102,9 +99,19 @@ public class EventObserverDispatcher implements
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void consensusRound(final ConsensusRound consensusRound) {
-		for (final ConsensusRoundObserver observer : consensusRoundObservers) {
-			observer.consensusRound(consensusRound);
+	public void receivedEvent(final GossipEvent event) {
+		for (final EventReceivedObserver observer : eventReceivedObservers) {
+			observer.receivedEvent(event);
+		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void preConsensusEvent(final EventImpl event) {
+		for (final PreConsensusEventObserver observer : preConsensusEventObservers) {
+			observer.preConsensusEvent(event);
 		}
 	}
 
@@ -122,9 +129,9 @@ public class EventObserverDispatcher implements
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void preConsensusEvent(final EventImpl event) {
-		for (final PreConsensusEventObserver observer : preConsensusEventObservers) {
-			observer.preConsensusEvent(event);
+	public void consensusRound(final ConsensusRound consensusRound) {
+		for (final ConsensusRoundObserver observer : consensusRoundObservers) {
+			observer.consensusRound(consensusRound);
 		}
 	}
 

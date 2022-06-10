@@ -14,6 +14,8 @@
 
 package com.swirlds.common;
 
+import com.swirlds.common.exceptions.ReferenceCountException;
+
 /**
  * A Releasable object is an object that expects to be deleted when it is done being used.
  * This paradigm is needed when objects manage resources that are not automatically cleaned

@@ -20,30 +20,108 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A wrapper for a LongList that has two modes, direct pass though or an overlaid cache buffer. Important, any changes
  * directly to the wrapped list while it is wrapped will cause this classes state to get out of sync.
  * <p>
- * We block all threads calling put methods while we are switching between modes.
- * </p>
  */
 public class LongListBufferedWrapper extends LongList implements Closeable {
 
 	private static final int PARALLELISM_THRESHOLD = 100_000;
+	private static final long FLAG = (1L << 63);
+	private static final long INCREMENT0 = 1L;
+	private static final long MASK0 = 0xffffffffL;
+	private static final long INCREMENT1 = (1L << 32);
+	private static final long MASK1 = 0x7fffffff00000000L;
+
 
 	/** The LongList we are wrapping and providing an overlay cache to */
 	private final LongList wrappedLongList;
-	/** Atomic reference to overlay cache, reference can be to null if we are not currently using an overlay cache. */
-	private final AtomicReference<ConcurrentHashMap<Long, Long>> cachedChanges = new AtomicReference<>(null);
-	/**
-	 * Indicates whether fresh changes should prefer being written directly to the wrappedLongList,
-	 * even if the cache exists. The only time when this is true that a change will still update the
-	 * overlay cache, is if the change is still in the cache and hasn't been written down to the
-	 * wrappedLongList yet.
-	 */
-	private final AtomicBoolean skipCacheOnWrite = new AtomicBoolean(false);
+
+	class Overlay {
+
+		/** Overlay cache, reference can be set to null if we are not currently using an overlay cache. */
+		private final AtomicReference<ConcurrentHashMap<Long, Long>> cachedChanges = new AtomicReference<>();
+		/**
+		 * Indicates whether fresh changes should prefer being written directly to the wrappedLongList,
+		 * even if the cache exists. The only time when this is true that a change will still update the
+		 * overlay cache, is if the change is still in the cache and hasn't been written down to the
+		 * wrappedLongList yet.
+		 */
+		volatile boolean skipCacheOnWrite = true;
+		/**
+		 * Operation barrier - a mechanism to count operations between switching state and ensure all
+		 * current operations finish and all new operations see all changes preceding the switch.
+		 */
+		private final AtomicLong ops = new AtomicLong(0);
+
+		private void flushOps() {
+			long curValue = ops.get();
+			for (;;) {
+				final long oldValue = curValue;
+				curValue = ops.compareAndExchange(curValue, curValue ^ FLAG);
+				if (curValue == oldValue) break;
+			}
+			final long mask = (curValue & FLAG) == 0 ? MASK0 : MASK1;
+			while ((curValue & mask) != 0) {
+				curValue = ops.get();
+			}
+		}
+
+		long acquire() {
+			long curValue = ops.get();
+			for (;;) {
+				final long inc = (curValue & FLAG) == 0 ? INCREMENT0 : INCREMENT1;
+				final long oldValue = curValue;
+				curValue = ops.compareAndExchange(curValue, curValue + inc);
+				if (curValue == oldValue) return inc;
+			}
+		}
+
+		void release(long inc) {
+			ops.addAndGet(-inc);
+		}
+
+		void start() {
+			if (!skipCacheOnWrite) return;	// already started
+			skipCacheOnWrite = false;
+			cachedChanges.set(new ConcurrentHashMap<>());
+			// Ensure all operations see cachedChanges != null
+			flushOps();
+		}
+
+		void stop() {
+			if (skipCacheOnWrite) return;	//already stopped
+			skipCacheOnWrite = true;
+			// Ensure all operations see skipCacheOnWrite == true
+			flushOps();
+
+			// Flush all cached values from overlay to wrappedLongList
+			final ConcurrentHashMap<Long, Long> cache = cachedChanges.get();
+			cache.forEachKey(PARALLELISM_THRESHOLD, k -> cache.compute(k, (key, value) -> {
+				assert value != null : "We only iterate over known values and nobody else removes them";
+				wrappedLongList.put(key, value);
+				return null;
+			}));
+			assert cache.isEmpty() : "Cache not empty";
+			cachedChanges.set(null);
+			// Ensure all operations see cachedChanges == null
+			flushOps();
+		}
+
+		ConcurrentHashMap<Long, Long> getCache() {
+			return cachedChanges.get();
+		}
+
+		boolean skipCache() {
+			return skipCacheOnWrite;
+		}
+	}
+
+	private final Overlay overlay = new Overlay();
 
 	/**
 	 * Construct a new BufferedLongListWrapper wrapping the given LongList
@@ -77,23 +155,10 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 	 * 		true puts us in overlay mode and false puts us in pass though mode.
 	 */
 	public synchronized void setUseOverlay(final boolean useOverlay) {
-		final ConcurrentHashMap<Long, Long> cache = cachedChanges.get();
-		final boolean usingOverlayMode = cache != null;
-		if (useOverlay == usingOverlayMode) {
-			return;
-		}
-		if (usingOverlayMode) { // stop using overlay
-			// write all cached values down to wrapped long list
-			skipCacheOnWrite.set(true);
-			cache.forEachKey(PARALLELISM_THRESHOLD, k -> cache.compute(k, (key, value) -> {
-				assert value != null : "We only iterate over known values and nobody else removes them";
-				wrappedLongList.put(key, value);
-				return null;
-			}));
-			cachedChanges.set(null);
-		} else { // start using cache
-			skipCacheOnWrite.set(false);
-			cachedChanges.set(new ConcurrentHashMap<>());
+		if (useOverlay) {
+			overlay.start();
+		} else {
+			overlay.stop();
 		}
 	}
 
@@ -110,7 +175,7 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 	 */
 	@Override
 	public long get(final long index, final long defaultValue) {
-		final ConcurrentHashMap<Long, Long> cache = cachedChanges.get();
+		final ConcurrentHashMap<Long, Long> cache = overlay.getCache();
 		if (cache != null) {
 			final Long cachedValue = cache.get(index);
 			if (cachedValue != null) {
@@ -134,11 +199,12 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 	 */
 	@Override
 	public void put(final long index, final long value) {
-		// get a read lock on cachedChanges state, so we know it is not changing
-		final ConcurrentHashMap<Long, Long> cache = cachedChanges.get();
+		final long token = overlay.acquire();
+
+		final ConcurrentHashMap<Long, Long> cache = overlay.getCache();
 		if (cache != null) {
 			cache.compute(index, (k, v) -> {
-				if (skipCacheOnWrite.get() && v == null) {
+				if (overlay.skipCache() && v == null) {
 					wrappedLongList.put(index, value);
 					return null;
 				} else {
@@ -148,6 +214,8 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 		} else {
 			wrappedLongList.put(index, value);
 		}
+
+		overlay.release(token);
 		size.getAndUpdate(oldSize -> index >= oldSize ? (index + 1) : oldSize);
 	}
 
@@ -168,12 +236,14 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 	 */
 	@Override
 	public boolean putIfEqual(final long index, final long oldValue, final long newValue) {
+		final long token = overlay.acquire();
+
 		final AtomicBoolean valueWasSet = new AtomicBoolean(false);
 		// get a read lock on cachedChanges state, so we know it is not changing
-		final ConcurrentHashMap<Long, Long> cache = cachedChanges.get();
+		final ConcurrentHashMap<Long, Long> cache = overlay.getCache();
 		if (cache != null) {
 			cache.compute(index, (k, v) -> {
-				if (skipCacheOnWrite.get() && v == null) {
+				if (overlay.skipCache() && v == null) {
 					// We're supposed to skip writing to the cache and go directly to the main index,
 					// because the overlay is being written to the main index and there is no entry
 					// in the overlay cache for this key, so we will just write directly to the
@@ -208,6 +278,7 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 			valueWasSet.set(wrappedLongList.putIfEqual(index, oldValue, newValue));
 		}
 
+		overlay.release(token);
 		if (valueWasSet.get()) {
 			size.getAndUpdate(oldSize -> index >= oldSize ? (index + 1) : oldSize);
 			return true;

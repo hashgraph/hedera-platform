@@ -15,7 +15,7 @@
 package com.swirlds.common.stream;
 
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.logging.payloads.StreamParseErrorPayload;
 import org.apache.logging.log4j.LogManager;

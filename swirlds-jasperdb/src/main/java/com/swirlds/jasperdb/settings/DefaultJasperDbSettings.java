@@ -19,6 +19,8 @@ import com.swirlds.jasperdb.collections.ThreeLongsList;
 import java.nio.file.Path;
 import java.time.temporal.ChronoUnit;
 
+import static com.swirlds.common.utility.Units.GIBIBYTES_TO_BYTES;
+
 /**
  * {@link JasperDbSettings} implementation with defaults appropriate for JUnit tests.
  *
@@ -44,7 +46,14 @@ public class DefaultJasperDbSettings implements JasperDbSettings {
 	public static final long DEFAULT_MEDIUM_MERGE_PERIOD = 60L; // 1h
 	public static final long DEFAULT_FULL_MERGE_PERIOD = 1440L; // 24h in min
 	public static final long DEFAULT_MAX_FILE_SIZE_BYTES = 64L * 1024 * 1024 * 1024;
-	public static final boolean DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED = true;
+	public static final boolean DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED = false;
+
+	// These default parameters result in a bloom filter false positive rate of less than 1/1000 when 1 billion
+	// leaf nodes are transmitted during a reconnect. https://hur.st/bloomfilter/?n=1000000000&p=1.0E-3&m=&k=
+	public static final int DEFAULT_KEY_SET_BLOOM_FILTER_HASH_COUNT = 10;
+	public static final long DEFAULT_KEY_SET_BLOOM_FILTER_SIZE_IN_BYTES = 2L * GIBIBYTES_TO_BYTES;
+	public static final long DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_SIZE = 1_000_000_000;
+	public static final int DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_BUFFER = 1_000_000;
 
 	/**
 	 * {@inheritDoc}
@@ -180,5 +189,37 @@ public class DefaultJasperDbSettings implements JasperDbSettings {
 	@Override
 	public boolean isReconnectKeyLeakMitigationEnabled() {
 		return DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getKeySetBloomFilterHashCount() {
+		return DEFAULT_KEY_SET_BLOOM_FILTER_HASH_COUNT;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public long getKeySetBloomFilterSizeInBytes() {
+		return DEFAULT_KEY_SET_BLOOM_FILTER_SIZE_IN_BYTES;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public long getKeySetHalfDiskHashMapSize() {
+		return DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_SIZE;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getKeySetHalfDiskHashMapBuffer() {
+		return DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_BUFFER;
 	}
 }

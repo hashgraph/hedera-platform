@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.NodeId;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.event.SelfEventStorage;

@@ -14,24 +14,28 @@
 
 package com.swirlds.platform.chatter.protocol;
 
+import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.platform.chatter.protocol.input.InputDelegate;
 import com.swirlds.platform.chatter.protocol.input.InputDelegateBuilder;
 import com.swirlds.platform.chatter.protocol.input.MessageTypeHandlerBuilder;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEvent;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEventDescriptor;
+import com.swirlds.platform.chatter.protocol.output.AgeBasedDelay;
 import com.swirlds.platform.chatter.protocol.output.MessageOutput;
 import com.swirlds.platform.chatter.protocol.output.PriorityOutputAggregator;
 import com.swirlds.platform.chatter.protocol.output.SendAction;
-import com.swirlds.platform.chatter.protocol.output.WaitBeforeSending;
 import com.swirlds.platform.chatter.protocol.output.queue.QueueOutputMain;
 import com.swirlds.platform.chatter.protocol.peer.PeerGossipState;
 import com.swirlds.platform.chatter.protocol.peer.PeerInstance;
+import com.swirlds.platform.stats.AverageStat;
+import com.swirlds.platform.stats.PerSecondStat;
+import com.swirlds.platform.stats.PerSecondStatsProvider;
+import com.swirlds.platform.stats.StatsProvider;
 
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
 
 /**
  * Links all components of chatter together. Constructs and keeps track of peer instances.
@@ -39,38 +43,53 @@ import java.util.function.Supplier;
  * @param <E>
  * 		the type of {@link ChatterEvent} used
  */
-public class ChatterCore<E extends ChatterEvent> implements Purgable, MessageHandler<E> {
-	private final long selfId;
+public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvider, PerSecondStatsProvider {
+	public static final int GEN_DIFF_SEND = 200;
 	private final Class<E> eventClass;
 	private final MessageHandler<E> prepareReceivedEvent;
-	private final Supplier<Instant> now;
-	private final MessageOutput<E> eventOutput;
+	private final MessageOutput<E> selfEventOutput;
+	private final MessageOutput<E> otherEventOutput;
 	private final MessageOutput<ChatterEventDescriptor> hashOutput;
 	private final Map<Long, PeerInstance> peerInstances;
 
+	private final PerSecondStat msgsPerSecRead;
+	private final PerSecondStat msgsPerSecWrit;
+
 	/**
-	 * @param selfId
-	 * 		the ID of this node
 	 * @param eventClass
 	 * 		the class of the type of event used
 	 * @param prepareReceivedEvent
 	 * 		the first handler to be called when an event is received, this should do any preparation work that might be
 	 * 		needed by other handlers (such as hashing)
-	 * @param now
-	 * 		supplies the current wall clock time
 	 */
 	public ChatterCore(
-			final long selfId,
 			final Class<E> eventClass,
-			final MessageHandler<E> prepareReceivedEvent,
-			final Supplier<Instant> now) {
-		this.selfId = selfId;
+			final MessageHandler<E> prepareReceivedEvent) {
 		this.eventClass = eventClass;
 		this.prepareReceivedEvent = prepareReceivedEvent;
-		this.now = now;
-		this.eventOutput = new QueueOutputMain<>();
-		this.hashOutput = new QueueOutputMain<>();
+		this.selfEventOutput = new QueueOutputMain<>("selfEvent");
+		this.otherEventOutput = new QueueOutputMain<>("otherEvent");
+		this.hashOutput = new QueueOutputMain<>("descriptor");
 		this.peerInstances = new HashMap<>();
+
+		this.msgsPerSecRead = new PerSecondStat(
+				new AverageStat(
+						"chatter",
+						"msgsPerSecRead",
+						"number of chatter messages read per second",
+						"%,8.1f",
+						AverageStat.WEIGHT_VOLATILE
+				)
+		);
+		this.msgsPerSecWrit = new PerSecondStat(
+				new AverageStat(
+						"chatter",
+						"msgsPerSecWrit",
+						"number of chatter messages written per second",
+						"%,8.1f",
+						AverageStat.WEIGHT_VOLATILE
+				)
+		);
 	}
 
 	/**
@@ -83,16 +102,21 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, MessageHan
 	 */
 	public void newPeerInstance(final long peerId, final MessageHandler<E> eventHandler) {
 		final PeerGossipState state = new PeerGossipState();
-		final MessageProvider eventPeerInstance = eventOutput.createPeerInstance(
-				new WaitBeforeSending<>(selfId, state, now)
-		);
 		final MessageProvider hashPeerInstance = hashOutput.createPeerInstance(
 				d -> SendAction.SEND // always send hashes
 		);
-		final PriorityOutputAggregator outputAggregator = new PriorityOutputAggregator(List.of(
-				hashPeerInstance,
-				eventPeerInstance
-		));
+		final MessageProvider selfEventPeerInstance = selfEventOutput.createPeerInstance(
+				d -> SendAction.SEND // always send self events
+		);
+		final MessageProvider otherEventPeerInstance = otherEventOutput.createPeerInstance(
+				new AgeBasedDelay<>(GEN_DIFF_SEND, state)
+		);
+		final PriorityOutputAggregator outputAggregator = new PriorityOutputAggregator(
+				List.of(
+						hashPeerInstance,
+						selfEventPeerInstance,
+						otherEventPeerInstance),
+				msgsPerSecWrit);
 		final InputDelegate inputDelegate = InputDelegateBuilder.builder()
 				.addHandler(MessageTypeHandlerBuilder.builder(eventClass)
 						.addHandler(prepareReceivedEvent)
@@ -102,6 +126,7 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, MessageHan
 				.addHandler(MessageTypeHandlerBuilder.builder(ChatterEventDescriptor.class)
 						.addHandler(state::handleDescriptor)
 						.build())
+				.setStat(msgsPerSecRead)
 				.build();
 		final PeerInstance peerInstance = new PeerInstance(
 				state,
@@ -121,15 +146,24 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, MessageHan
 	}
 
 	/**
-	 * Enqueue an event and its descriptor to be sent to appropriate peers
+	 * Notify chatter that a new event has been created
 	 *
 	 * @param event
-	 * 		the event to send
+	 * 		the new event
 	 */
-	@Override
-	public void handleMessage(final E event) {
+	public void eventCreated(final E event) {
+		selfEventOutput.send(event);
+	}
+
+	/**
+	 * Notify chatter that an event has been received and validated
+	 *
+	 * @param event
+	 * 		the event received
+	 */
+	public void eventReceived(final E event) {
 		hashOutput.send(event.getDescriptor());
-		eventOutput.send(event);
+		otherEventOutput.send(event);
 	}
 
 	/**
@@ -140,5 +174,25 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, MessageHan
 		for (final PeerInstance peer : peerInstances.values()) {
 			peer.state().purge(olderThan);
 		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public List<StatEntry> getStats() {
+		return CommonUtils.joinLists(
+				hashOutput.getStats(),
+				selfEventOutput.getStats(),
+				otherEventOutput.getStats()
+		);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public List<PerSecondStat> getPerSecondStats() {
+		return List.of(msgsPerSecRead, msgsPerSecWrit);
 	}
 }

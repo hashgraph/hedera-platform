@@ -22,15 +22,19 @@ import java.time.temporal.ChronoUnit;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_FULL_MERGE_PERIOD;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_INTERNAL_HASHES_RAM_TO_DISK_THRESHOLD;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_ITERATOR_INPUT_BUFFER_BYTES;
+import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_KEY_SET_BLOOM_FILTER_HASH_COUNT;
+import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_KEY_SET_BLOOM_FILTER_SIZE_IN_BYTES;
+import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_BUFFER;
+import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_SIZE;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_FILE_SIZE_BYTES;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_GB_RAM_FOR_MERGING;
+import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_NUMBER_OF_FILES_IN_MERGE;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_NUM_OF_KEYS;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MEDIUM_MERGE_CUTOFF_MB;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MEDIUM_MERGE_PERIOD;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MERGE_ACTIVATED_PERIOD;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MIN_NUMBER_OF_FILES_IN_MERGE;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MOVE_LIST_CHUNK_SIZE;
-import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_NUMBER_OF_FILES_IN_MERGE;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_SMALL_MERGE_CUTOFF_MB;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_STORAGE_DIRECTORY;
@@ -57,6 +61,10 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 	public int minNumberOfFilesInMerge = DEFAULT_MIN_NUMBER_OF_FILES_IN_MERGE;
 	public boolean reconnectKeyLeakMitigationEnabled = DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED;
 	public String mergePeriodUnit = "MINUTES";
+	public int keySetBloomFilterHashCount = DEFAULT_KEY_SET_BLOOM_FILTER_HASH_COUNT;
+	public long keySetBloomFilterSizeInBytes = DEFAULT_KEY_SET_BLOOM_FILTER_SIZE_IN_BYTES;
+	public long keySetHalfDiskHashMapSize = DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_SIZE;
+	public int keySetHalfDiskHashMapBuffer = DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_BUFFER;
 
 	/**
 	 * {@inheritDoc}
@@ -185,6 +193,7 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 
 	/**
 	 * {@inheritDoc}
+	 *
 	 * @return
 	 */
 	@Override
@@ -203,6 +212,7 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 
 	/**
 	 * {@inheritDoc}
+	 *
 	 * @return
 	 */
 	@Override
@@ -214,7 +224,7 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 		if (minNumberOfFilesInMerge < 2 || minNumberOfFilesInMerge >= maxNumberOfFilesInMerge) {
 			throw new IllegalArgumentException(
 					"Cannot configure minNumberOfFilesInMerge to " + minNumberOfFilesInMerge +
-							", it must be >= 2 and < "+maxNumberOfFilesInMerge);
+							", it must be >= 2 and < " + maxNumberOfFilesInMerge);
 		}
 		this.minNumberOfFilesInMerge = minNumberOfFilesInMerge;
 	}
@@ -293,6 +303,38 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 	@Override
 	public boolean isReconnectKeyLeakMitigationEnabled() {
 		return reconnectKeyLeakMitigationEnabled;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getKeySetBloomFilterHashCount() {
+		return keySetBloomFilterHashCount;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public long getKeySetBloomFilterSizeInBytes() {
+		return keySetBloomFilterSizeInBytes;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public long getKeySetHalfDiskHashMapSize() {
+		return keySetHalfDiskHashMapSize;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getKeySetHalfDiskHashMapBuffer() {
+		return keySetHalfDiskHashMapBuffer;
 	}
 
 	public void setWriterOutputBufferBytes(final int writerOutputBufferBytes) {

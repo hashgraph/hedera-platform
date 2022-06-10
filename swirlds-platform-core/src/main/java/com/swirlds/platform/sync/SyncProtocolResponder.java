@@ -14,8 +14,8 @@
 
 package com.swirlds.platform.sync;
 
-import com.swirlds.common.locks.MaybeLocked;
-import com.swirlds.common.threading.ParallelExecutionException;
+import com.swirlds.common.threading.locks.MaybeLocked;
+import com.swirlds.common.threading.pool.ParallelExecutionException;
 import com.swirlds.platform.SyncConnection;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.unidirectional.NetworkProtocolResponder;

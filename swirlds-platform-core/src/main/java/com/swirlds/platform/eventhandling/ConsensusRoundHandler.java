@@ -13,7 +13,6 @@
  */
 package com.swirlds.platform.eventhandling;
 
-import com.swirlds.common.AddressBook;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
@@ -23,9 +22,10 @@ import com.swirlds.common.notification.Notification;
 import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
 import com.swirlds.common.notification.listeners.ReconnectCompleteNotification;
 import com.swirlds.common.stream.EventStreamManager;
-import com.swirlds.common.threading.QueueThread;
-import com.swirlds.common.threading.QueueThreadConfiguration;
+import com.swirlds.common.system.AddressBook;
 import com.swirlds.common.threading.ThreadUtils;
+import com.swirlds.common.threading.framework.QueueThread;
+import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SettingsProvider;
@@ -196,7 +196,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, ReconnectC
 	@Override
 	public void notify(final ReconnectCompleteNotification data) {
 		start();
-		LOG.info(STARTUP.getMarker(), "ConsensusEventHandler received ReconnectCompleteNotification, " +
+		LOG.info(STARTUP.getMarker(), "ConsensusRoundHandler received ReconnectCompleteNotification, " +
 						"queueThread.size: {}, eventsAndGenerations.getNumberOfEvents(): {}",
 				queueThread == null ? null : queueThread.size(),
 				eventsAndGenerations.getNumberOfEvents());

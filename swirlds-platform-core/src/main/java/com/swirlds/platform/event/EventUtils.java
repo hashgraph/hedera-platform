@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.event;
 
-import com.swirlds.common.events.Event;
+import com.swirlds.common.system.events.Event;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.EventStrings;

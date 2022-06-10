@@ -16,8 +16,8 @@ package com.swirlds.common.merkle.utility;
 
 import com.swirlds.common.FastCopyable;
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 
 import java.io.IOException;
 import java.util.Objects;

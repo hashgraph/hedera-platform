@@ -13,7 +13,7 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.CommonUtils;
+import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.p2p.portforwarding.PortMapping;
 import com.swirlds.p2p.portforwarding.PortMappingListener;
 import com.swirlds.p2p.portforwarding.portmapper.PortMapperPortForwarder;

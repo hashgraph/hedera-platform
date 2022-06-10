@@ -19,14 +19,14 @@ import java.time.format.DateTimeParseException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.swirlds.common.Units.DAYS_TO_HOURS;
-import static com.swirlds.common.Units.HOURS_TO_MINUTES;
-import static com.swirlds.common.Units.MICROSECONDS_TO_NANOSECONDS;
-import static com.swirlds.common.Units.MILLISECONDS_TO_NANOSECONDS;
-import static com.swirlds.common.Units.MINUTES_TO_SECONDS;
-import static com.swirlds.common.Units.NANOSECONDS_TO_SECONDS;
-import static com.swirlds.common.Units.SECONDS_TO_NANOSECONDS;
-import static com.swirlds.common.Units.WEEKS_TO_DAYS;
+import static com.swirlds.common.utility.Units.DAYS_TO_HOURS;
+import static com.swirlds.common.utility.Units.HOURS_TO_MINUTES;
+import static com.swirlds.common.utility.Units.MICROSECONDS_TO_NANOSECONDS;
+import static com.swirlds.common.utility.Units.MILLISECONDS_TO_NANOSECONDS;
+import static com.swirlds.common.utility.Units.MINUTES_TO_SECONDS;
+import static com.swirlds.common.utility.Units.NANOSECONDS_TO_SECONDS;
+import static com.swirlds.common.utility.Units.SECONDS_TO_NANOSECONDS;
+import static com.swirlds.common.utility.Units.WEEKS_TO_DAYS;
 
 /**
  * This class contains utilities for parsing various types of settings.

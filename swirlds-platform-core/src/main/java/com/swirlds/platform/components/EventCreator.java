@@ -14,12 +14,12 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.EventCreationRuleResponse;
-import com.swirlds.common.NodeId;
+import com.swirlds.common.system.EventCreationRuleResponse;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.common.crypto.CryptoFactory;
-import com.swirlds.common.events.BaseEventHashedData;
-import com.swirlds.common.events.BaseEventUnhashedData;
 import com.swirlds.common.stream.Signer;
+import com.swirlds.common.system.events.BaseEventHashedData;
+import com.swirlds.common.system.events.BaseEventUnhashedData;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.EventConstants;
@@ -37,7 +37,6 @@ import static com.swirlds.logging.LogMarker.CREATE_EVENT;
  * This class encapsulates the workflow required to create new events.
  */
 public class EventCreator {
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
 
 	/**
@@ -75,7 +74,7 @@ public class EventCreator {
 	 */
 	private final EventMapper eventMapper;
 
-	/** Stores the most recent event created by me  */
+	/** Stores the most recent event created by me */
 	private final SelfEventStorage selfEventStorage;
 
 	/**
@@ -142,11 +141,8 @@ public class EventCreator {
 		this.eventCreationRules = eventCreationRules;
 	}
 
-	/**
-	 * Check if event creation should be throttled.
-	 */
-	protected boolean shouldThrottle() {
-		return eventCreationRules.shouldCreateEvent() == EventCreationRuleResponse.DONT_CREATE;
+	public void createGenesisEvent() {
+		handleNewEvent(buildEvent(null, null));
 	}
 
 	/**
@@ -155,10 +151,9 @@ public class EventCreator {
 	 * @param otherId
 	 * 		the node ID that will supply the other parent for this event
 	 */
-	public void createEvent(final long otherId) {
-
-		if (shouldThrottle()) {
-			return;
+	public boolean createEvent(final long otherId) {
+		if (eventCreationRules.shouldCreateEvent() == EventCreationRuleResponse.DONT_CREATE) {
+			return false;
 		}
 
 		// Give the app one last chance to create a non-system transaction and give the platform
@@ -169,23 +164,30 @@ public class EventCreator {
 		// already created an event with this particular other parent. We still want to create an event if there
 		// are freeze transactions
 		if (hasOtherParentAlreadyBeenUsed(otherId) && hasNoFreezeTransactions()) {
-			return;
+			return false;
 		}
 
 		final EventImpl otherParent = eventMapper.getMostRecentEvent(otherId);
 		final EventImpl selfParent = selfEventStorage.getMostRecentSelfEvent();
+
+		if (eventCreationRules.shouldCreateEvent(selfParent, otherParent) == EventCreationRuleResponse.DONT_CREATE) {
+			return false;
+		}
 
 		// Don't create an event if both parents are old.
 		if (areBothParentsAncient(selfParent, otherParent)) {
 			log.debug(CREATE_EVENT.getMarker(),
 					"Both parents are ancient, selfParent: {}, otherParent: {}",
 					() -> EventUtils.toShortString(selfParent), () -> EventUtils.toShortString(otherParent));
-			return;
+			return false;
 		}
 
-		final EventImpl event = buildEvent(selfParent, otherParent);
-		logEventCreation(event);
+		handleNewEvent(buildEvent(selfParent, otherParent));
+		return true;
+	}
 
+	private void handleNewEvent(final EventImpl event) {
+		logEventCreation(event);
 		selfEventStorage.setMostRecentSelfEvent(event);
 		newEventHandler.handleEvent(event);
 	}
@@ -314,7 +316,7 @@ public class EventCreator {
 				minimumTimeIncrement = selfParent.getTransactions().length;
 			}
 
-			Instant minimumNextEventTime = selfParent.getTimeCreated().plusNanos(minimumTimeIncrement);
+			final Instant minimumNextEventTime = selfParent.getTimeCreated().plusNanos(minimumTimeIncrement);
 
 			if (timeCreated.isBefore(minimumNextEventTime)) {
 				timeCreated = minimumNextEventTime;

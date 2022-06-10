@@ -14,8 +14,8 @@
 
 package com.swirlds.platform.sync;
 
-import com.swirlds.common.locks.AcquiredOnTry;
-import com.swirlds.common.locks.MaybeLocked;
+import com.swirlds.common.threading.locks.AcquiredOnTry;
+import com.swirlds.common.threading.locks.MaybeLocked;
 
 import java.util.concurrent.locks.Lock;
 import java.util.function.Consumer;

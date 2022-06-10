@@ -14,22 +14,11 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.Address;
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.AutoCloseableWrapper;
-import com.swirlds.common.CommonUtils;
 import com.swirlds.common.Console;
 import com.swirlds.common.InvalidSignedStateListener;
-import com.swirlds.common.NodeId;
-import com.swirlds.common.PlatformStatus;
-import com.swirlds.common.SwirldMain;
-import com.swirlds.common.SwirldState;
-import com.swirlds.common.SwirldTransaction;
-import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.events.Event;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskNotification;
@@ -37,16 +26,31 @@ import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteListene
 import com.swirlds.common.statistics.StatEntry;
 import com.swirlds.common.statistics.internal.AbstractStatistics;
 import com.swirlds.common.stream.EventStreamManager;
-import com.swirlds.common.threading.QueueThread;
-import com.swirlds.common.threading.QueueThreadConfiguration;
-import com.swirlds.common.threading.StoppableThreadConfiguration;
-import com.swirlds.common.threading.ThreadConfiguration;
+import com.swirlds.common.system.Address;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.PlatformStatus;
+import com.swirlds.common.system.SwirldMain;
+import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.events.Event;
+import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.threading.framework.QueueThread;
+import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.threading.framework.config.StoppableThreadConfiguration;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.threading.pool.CachedPoolParallelExecutor;
+import com.swirlds.common.threading.pool.ParallelExecutor;
+import com.swirlds.common.utility.AutoCloseableWrapper;
+import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.logging.payloads.PlatformStatusPayload;
 import com.swirlds.logging.payloads.RecoveredStateSavedPayload;
 import com.swirlds.logging.payloads.SavedStateLoadedPayload;
 import com.swirlds.platform.chatter.ChatterNotifier;
 import com.swirlds.platform.chatter.PrepareChatterEvent;
+import com.swirlds.platform.chatter.communication.ChatterProtocol;
 import com.swirlds.platform.chatter.protocol.ChatterCore;
+import com.swirlds.platform.chatter.protocol.messages.ChatterEventDescriptor;
 import com.swirlds.platform.chatter.protocol.peer.PeerInstance;
 import com.swirlds.platform.components.CriticalQuorum;
 import com.swirlds.platform.components.CriticalQuorumImpl;
@@ -63,14 +67,28 @@ import com.swirlds.platform.components.TransactionTracker;
 import com.swirlds.platform.event.EventCreatorThread;
 import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.event.EventUtils;
+import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.event.ThreadSafeSelfEventStorage;
 import com.swirlds.platform.event.ValidEvent;
-import com.swirlds.platform.event.GossipEvent;
+import com.swirlds.platform.event.creation.StaticCreationRules;
+import com.swirlds.platform.event.linking.EventLinker;
+import com.swirlds.platform.event.linking.InOrderLinker;
+import com.swirlds.platform.event.linking.OrphanBufferingLinker;
+import com.swirlds.platform.event.linking.ParentFinder;
+import com.swirlds.platform.event.validation.EventDeduplication;
+import com.swirlds.platform.event.validation.EventValidator;
+import com.swirlds.platform.event.validation.GossipEventValidator;
+import com.swirlds.platform.event.validation.GossipEventValidators;
+import com.swirlds.platform.event.validation.SignatureValidator;
+import com.swirlds.platform.event.validation.StaticValidators;
+import com.swirlds.platform.event.validation.TransactionSizeValidator;
+import com.swirlds.platform.event.validation.ZeroStakeValidator;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 import com.swirlds.platform.eventhandling.PreConsensusEventHandler;
+import com.swirlds.platform.intake.IntakeStats;
 import com.swirlds.platform.internal.SignedStateLoadingException;
-import com.swirlds.platform.chatter.communication.ChatterReader;
-import com.swirlds.platform.chatter.communication.ChatterWriter;
+import com.swirlds.platform.network.communication.NegotiationProtocols;
+import com.swirlds.platform.network.communication.NegotiatorThread;
 import com.swirlds.platform.network.connectivity.ConnectionServer;
 import com.swirlds.platform.network.connectivity.InboundConnectionHandler;
 import com.swirlds.platform.network.connectivity.OutboundConnectionCreator;
@@ -96,9 +114,11 @@ import com.swirlds.platform.state.SignedStateManager;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateSettings;
 import com.swirlds.platform.state.SwirldStateManager;
+import com.swirlds.platform.stats.PerSecondStat;
 import com.swirlds.platform.stats.StatConstructor;
 import com.swirlds.platform.swirldapp.SwirldAppLoader;
 import com.swirlds.platform.sync.ShadowGraph;
+import com.swirlds.platform.sync.ShadowGraphEventObserver;
 import com.swirlds.platform.sync.ShadowGraphSynchronizer;
 import com.swirlds.platform.sync.SimultaneousSyncThrottle;
 import com.swirlds.platform.sync.SyncGenerations;
@@ -121,19 +141,21 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
+import java.util.SortedMap;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 
-import static com.swirlds.common.Units.SECONDS_TO_MILLISECONDS;
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.common.merkle.utility.MerkleUtils.rehashTree;
+import static com.swirlds.common.utility.Units.SECONDS_TO_MILLISECONDS;
 import static com.swirlds.logging.LogMarker.EVENT_PARSER;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.PLATFORM_STATUS;
@@ -248,6 +270,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	private TransactionTracker transactionTracker;
 	/** Tracks recent events created in the network */
 	private CriticalQuorum criticalQuorum;
+	private final IntakeStats intakeStats;
 	private QueueThread<EventIntakeTask> intakeQueue;
 	/** sleep in ms after each sync in SyncCaller. A public setter for this exists. */
 	private long delayAfterSync = 0;
@@ -321,15 +344,29 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 		this.eventMapper = new EventMapper(selfId);
 
-		this.stats = new Statistics(
-				this,
-				List.of(StatConstructor.createEnumStat(
+		final List<StatEntry> additionalStats = new ArrayList<>();
+		final List<PerSecondStat> perSecondStats = new ArrayList<>();
+		if (Settings.useChatter) {
+			chatterCore = new ChatterCore<>(
+					GossipEvent.class,
+					new PrepareChatterEvent(CryptoFactory.getInstance())
+			);
+			additionalStats.addAll(chatterCore.getStats());
+			perSecondStats.addAll(chatterCore.getPerSecondStats());
+		} else {
+			chatterCore = null;
+		}
+		additionalStats.add(
+				StatConstructor.createEnumStat(
 						"PlatformStatus",
 						AbstractStatistics.CATEGORY,
 						PlatformStatus.values(),
 						currentPlatformStatus::get
-				))
+				)
 		);
+		this.intakeStats = new IntakeStats();
+		additionalStats.addAll(intakeStats.getAllEntries());
+		this.stats = new Statistics(this, additionalStats, perSecondStats);
 
 		this.shadowGraph = new ShadowGraph(stats, initialAddressBook.getSize());
 
@@ -379,16 +416,17 @@ public class SwirldsPlatform extends AbstractPlatform {
 				Settings.numConnections,
 				!Settings.useChatter
 		);
-		if (Settings.useChatter) {
-			chatterCore = new ChatterCore<>(
-					selfId.getId(),
-					GossipEvent.class,
-					new PrepareChatterEvent(CryptoFactory.getInstance()),
-					Instant::now
-			);
-		} else {
-			chatterCore = null;
-		}
+	}
+
+	/**
+	 * Checks if this platform is starting from genesis or a saved state.
+	 *
+	 * NOTE: this check will not work (return false) until {@link #loadSavedStateFromDisk()} is called
+	 *
+	 * @return true if we are starting from genesis, false if we are starting from a saved state
+	 */
+	private boolean startingFromGenesis() {
+		return signedState == null;
 	}
 
 	/**
@@ -624,7 +662,8 @@ public class SwirldsPlatform extends AbstractPlatform {
 		final StreamEventParser streamEventParser = new StreamEventParser(
 				Settings.playbackStreamFileDirectory + "/events_" + name,
 				loadedLastTimestamp,
-				endTimeStamp);
+				endTimeStamp,
+				eventStreamManager);
 		streamEventParser.start();
 
 
@@ -650,7 +689,11 @@ public class SwirldsPlatform extends AbstractPlatform {
 		long minGen = Long.MAX_VALUE;
 		EventImpl event;
 		EventImpl prevRecoveredEvent = null;
-		final Map<Long, List<EventImpl>> recoveredEventsByRound = new HashMap<>();
+
+		// must use sorted keys to extract values from map, otherwise eventsInRound
+		// could be added to consensusRoundHandler out of order.
+		// for example, round 101 added first, then round 100 added later
+		final SortedMap<Long, List<EventImpl>> recoveredEventsByRound = new TreeMap<>();
 		do {
 			//poll event from streamEventParser
 			event = streamEventParser.getNextEvent();
@@ -820,6 +863,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 */
 	private void buildEventIntake() {
 		final EventObserverDispatcher dispatcher = new EventObserverDispatcher(
+				new ShadowGraphEventObserver(shadowGraph),
 				consensusRoundHandler,
 				preConsensusEventHandler,
 				eventMapper,
@@ -831,15 +875,33 @@ public class SwirldsPlatform extends AbstractPlatform {
 				criticalQuorum
 		);
 		if (Settings.useChatter) {
-			dispatcher.addObserver(new ChatterNotifier(chatterCore));
+			dispatcher.addObserver(new ChatterNotifier(selfId, chatterCore));
+		}
+
+		final ParentFinder parentFinder = new ParentFinder(shadowGraph::hashgraphEvent);
+
+		final EventLinker eventLinker;
+		final List<Predicate<ChatterEventDescriptor>> isDuplicateChecks = new ArrayList<>();
+		isDuplicateChecks.add(d -> shadowGraph.isHashInGraph(d.getHash()));
+		if (Settings.useChatter) {
+			final OrphanBufferingLinker orphanBuffer = new OrphanBufferingLinker(parentFinder);
+			eventLinker = orphanBuffer;
+			// when using chatter an event could be an orphan, in this case it will be stored in the orphan set
+			// when its parents are found, or become ancient, it will move to the shadowgraph
+			// non-orphans are also stored in the shadowgraph
+			// to dedupe, we need to check both
+			isDuplicateChecks.add(orphanBuffer::isOrphan);
+		} else {
+			eventLinker = new InOrderLinker(parentFinder, eventMapper::getMostRecentEvent);
 		}
 
 		final EventIntake eventIntake = new EventIntake(
 				selfId,
+				eventLinker,
 				consensusRef::get,
 				initialAddressBook,
 				dispatcher,
-				getShadowGraph()
+				intakeStats
 		);
 
 		final EventCreator eventCreator = new EventCreator(
@@ -855,19 +917,23 @@ public class SwirldsPlatform extends AbstractPlatform {
 				swirldStateManager.getTransactionPool(),
 				new EventCreationRules(List.of(startupThrottle)));
 
+		final List<GossipEventValidator> validators = new ArrayList<>();
+		validators.add(new EventDeduplication(isDuplicateChecks, stats));
+		validators.add(StaticValidators::isParentDataValid);
+		if (Settings.enableBetaMirror) {
+			validators.add(new ZeroStakeValidator(initialAddressBook));
+		}
+		validators.add(new TransactionSizeValidator(Settings.maxTransactionBytesPerEvent));
+		if (Settings.verifyEventSigs) {
+			validators.add(new SignatureValidator(initialAddressBook));
+		}
+		final GossipEventValidators eventValidators = new GossipEventValidators(validators);
+
 		/* validates events received from gossip */
 		final EventValidator eventValidator = new EventValidator(
-				selfId,
-				shadowGraph::isHashInGraph,
-				eventMapper::getMostRecentEvent,
-				// zero-stake node predicate
-				(Long id) -> Settings.enableBetaMirror && initialAddressBook.isZeroStakeNode(id),
-				// evaluate event for public key
-				(EventImpl event) -> getAddressBook().getAddress(event.getCreatorId()).getSigPublicKey(),
-				eventIntake::addEvent,
-				stats,
-				consensusRef::get,
-				shadowGraph::hashgraphEvent);
+				eventValidators,
+				eventIntake::addUnlinkedEvent
+		);
 
 		/* dispatches tasks to the creator and validator */
 		final EventTaskDispatcher taskDispatcher = new EventTaskDispatcher(
@@ -1099,7 +1165,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 *
 	 * @return an instance that maintains connection managers for all connections to neighbors
 	 */
-	public StaticConnectionManagers startCommonNetwork(){
+	public StaticConnectionManagers startCommonNetwork() {
 		final SocketFactory socketFactory = PlatformConstructor.socketFactory(crypto.getKeysAndCerts());
 		// create an instance that can create new outbound connections
 		final OutboundConnectionCreator connectionCreator = new OutboundConnectionCreator(
@@ -1149,30 +1215,21 @@ public class SwirldsPlatform extends AbstractPlatform {
 					eventTaskCreator::addEvent
 			);
 		}
+		final ParallelExecutor parallelExecutor = new CachedPoolParallelExecutor("chatter");
 		for (final NodeId otherId : topology.getNeighbors()) {
 			final PeerInstance chatterPeer = chatterCore.getPeerInstance(otherId.getId());
 			final boolean outbound = topology.shouldConnectTo(otherId);
-			new StoppableThreadConfiguration<ChatterReader>()
+			new StoppableThreadConfiguration<>()
 					.setPriority(Thread.NORM_PRIORITY)
 					.setNodeId(selfId.getId())
 					.setComponent(PLATFORM_THREAD_POOL_NAME)
 					.setOtherNodeId(otherId.getId())
 					.setThreadName("ChatterReader")
-					.setWork(new ChatterReader(
+					.setWork(new NegotiatorThread(
 							connectionManagers.getManager(otherId, outbound),
-							chatterPeer.inputHandler()
-					))
-					.build()
-					.start();
-			new StoppableThreadConfiguration<ChatterWriter>()
-					.setPriority(Thread.NORM_PRIORITY)
-					.setNodeId(selfId.getId())
-					.setComponent(PLATFORM_THREAD_POOL_NAME)
-					.setOtherNodeId(otherId.getId())
-					.setThreadName("ChatterWriter")
-					.setWork(new ChatterWriter(
-							connectionManagers.getManager(otherId, outbound),
-							chatterPeer.outputAggregator()
+							new NegotiationProtocols(List.of(
+									new ChatterProtocol(chatterPeer, parallelExecutor)
+							))
 					))
 					.build()
 					.start();
@@ -1189,7 +1246,16 @@ public class SwirldsPlatform extends AbstractPlatform {
 				new ThreadSafeSelfEventStorage(),
 				transactionTracker,
 				swirldStateManager.getTransactionPool(),
-				new EventCreationRules(List.of(startupThrottle)));
+				new EventCreationRules(
+						List.of(startupThrottle),
+						List.of(StaticCreationRules::nullOtherParent)
+				)
+		);
+		if (startingFromGenesis()) {
+			// if we are starting from genesis, we will create a genesis event, which is the only event that will
+			// ever be created without an other-parent
+			chatterEventCreator.createGenesisEvent();
+		}
 		new EventCreatorThread(
 				selfId,
 				Settings.attemptedChatterEventPerSecond,
@@ -1515,6 +1581,8 @@ public class SwirldsPlatform extends AbstractPlatform {
 	void prepareForReconnect() throws InterruptedException {
 		preConsensusEventHandler.prepareForReconnect();
 		consensusRoundHandler.prepareForReconnect();
+		// must be called last for SwirldState1 so stateWork and
+		// stateCurr can be released without thread contention
 		swirldStateManager.prepareForReconnect();
 	}
 

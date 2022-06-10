@@ -14,8 +14,8 @@
 
 package com.swirlds.platform.network;
 
-import com.swirlds.common.locks.LockedResource;
-import com.swirlds.common.locks.ResourceLock;
+import com.swirlds.common.threading.locks.LockedResource;
+import com.swirlds.common.threading.locks.ResourceLock;
 import com.swirlds.platform.SyncConnection;
 import com.swirlds.platform.network.connection.NotConnectedConnection;
 import org.apache.logging.log4j.LogManager;

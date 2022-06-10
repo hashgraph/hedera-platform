@@ -14,21 +14,43 @@
 
 package com.swirlds.platform.chatter;
 
+import com.swirlds.common.system.NodeId;
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.chatter.protocol.ChatterCore;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.observers.ConsensusRoundObserver;
 import com.swirlds.platform.observers.EventAddedObserver;
+import com.swirlds.platform.observers.EventReceivedObserver;
 
 /**
  * Transfers information from consensus to the chatter module
  */
-public class ChatterNotifier implements EventAddedObserver, ConsensusRoundObserver {
+public class ChatterNotifier implements EventReceivedObserver, EventAddedObserver, ConsensusRoundObserver {
+	private final NodeId selfId;
 	private final ChatterCore<GossipEvent> chatterCore;
 
-	public ChatterNotifier(final ChatterCore<GossipEvent> chatterCore) {
+	public ChatterNotifier(final NodeId selfId, final ChatterCore<GossipEvent> chatterCore) {
+		this.selfId = selfId;
 		this.chatterCore = chatterCore;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void receivedEvent(final GossipEvent event) {
+		chatterCore.eventReceived(event);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void eventAdded(final EventImpl event) {
+		if (event.isCreatedBy(selfId)) {
+			chatterCore.eventCreated(event.getBaseEvent());
+		}
 	}
 
 	/**
@@ -39,13 +61,5 @@ public class ChatterNotifier implements EventAddedObserver, ConsensusRoundObserv
 		chatterCore.purge(
 				consensusRound.getGenerations().getMinRoundGeneration()
 		);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void eventAdded(final EventImpl event) {
-		chatterCore.handleMessage(event.getBaseEvent());
 	}
 }

@@ -13,8 +13,9 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.CommonUtils;
 import com.swirlds.common.settings.SettingsException;
+import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.platform.internal.CryptoSettings;
 import com.swirlds.platform.internal.SubSetting;
 import com.swirlds.platform.reconnect.ReconnectSettingsImpl;
@@ -94,7 +95,7 @@ class Settings {
 	///////////////////////////////////////////
 	// settings from settings.txt file
 	static String about = """
-			Swirlds browser v. 0.25.3
+			Swirlds browser v. 0.26.2
 			(c)2016-2022 Swirlds Inc
 			This is an early alpha version.
 			The Swirlds™ software is covered by one or more patents
@@ -129,7 +130,7 @@ class Settings {
 	 * every other round, and so on. If the value is 0 or less, no states will be signed
 	 */
 	static int signedStateFreq = 1;
-	/** max events that can be put in the forCons queue (q2) in ConsensusEventHandler (0 for infinity) */
+	/** max events that can be put in the forCons queue (q2) in ConsensusRoundHandler (0 for infinity) */
 	static int maxEventQueueForCons = 500;
 	/**
 	 * Stop accepting new non-system transactions into the 4 transaction queues if any of them have more
@@ -321,7 +322,7 @@ class Settings {
 
 	/**
 	 * The size of the event intake queue,
-	 * {@link com.swirlds.common.threading.QueueThreadConfiguration#UNLIMITED_CAPACITY} for unbounded.
+	 * {@link QueueThreadConfiguration#UNLIMITED_CAPACITY} for unbounded.
 	 * It is best that this queue is large, but not unbounded. Filling it up can cause sync threads to drop TCP
 	 * connections, but leaving it unbounded can cause out of memory errors, even with the {@link
 	 * #eventIntakeQueueThrottleSize}, because syncs that started before the throttle engages can grow the queue to very
@@ -409,7 +410,7 @@ class Settings {
 	/** whether to use chatter for event gossiping and creation, if false, it will use the sync protocol */
 	static boolean useChatter = false;
 	/** how many event do we attempt to create per second when running chatter */
-	static int attemptedChatterEventPerSecond = 100;
+	static int attemptedChatterEventPerSecond = 50;
 
 	private Settings() {
 	}

@@ -19,8 +19,8 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.HashingOutputStream;
 import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.BufferedInputStream;
@@ -34,9 +34,9 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Iterator;
 
-import static com.swirlds.common.Units.MILLISECONDS_TO_NANOSECONDS;
-import static com.swirlds.common.Units.SECONDS_TO_NANOSECONDS;
 import static com.swirlds.common.stream.TimestampStreamFileWriter.OBJECT_STREAM_VERSION;
+import static com.swirlds.common.utility.Units.MILLISECONDS_TO_NANOSECONDS;
+import static com.swirlds.common.utility.Units.SECONDS_TO_NANOSECONDS;
 
 /**
  * Utilities methods for:

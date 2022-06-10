@@ -14,23 +14,24 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.NodeId;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.platform.Consensus;
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.EventStrings;
+import com.swirlds.platform.event.GossipEvent;
+import com.swirlds.platform.event.linking.EventLinker;
+import com.swirlds.platform.event.validation.StaticValidators;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
+import com.swirlds.platform.intake.IntakeStats;
 import com.swirlds.platform.observers.EventObserverDispatcher;
-import com.swirlds.platform.sync.ShadowGraph;
-import com.swirlds.platform.sync.ShadowGraphInsertionException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.function.Supplier;
 
-import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.INTAKE_EVENT;
 import static com.swirlds.logging.LogMarker.STALE_EVENTS;
 import static com.swirlds.logging.LogMarker.SYNC;
@@ -42,37 +43,19 @@ import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONN
  * {@link com.swirlds.platform.eventhandling.PreConsensusEventHandler}.
  */
 public class EventIntake {
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
-
-	/**
-	 * The ID of this node
-	 */
+	/** The ID of this node */
 	private final NodeId selfId;
-
-	/**
-	 * A functor that provides access to a {@code Consensus} instance.
-	 */
+	private final EventLinker eventLinker;
+	/** A functor that provides access to a {@code Consensus} instance. */
 	private final Supplier<Consensus> consensusSupplier;
-
 	private final ConsensusWrapper consensusWrapper;
-
-	/**
-	 * A reference to the initial address book for this node.
-	 */
+	/** A reference to the initial address book for this node. */
 	private final AddressBook addressBook;
-
-	/**
-	 * An {@link EventObserverDispatcher} instance
-	 */
+	/** An {@link EventObserverDispatcher} instance */
 	private final EventObserverDispatcher dispatcher;
-
-	/**
-	 * A {@link ShadowGraph} instance, updated whenever the hashgraph is.
-	 * Used for gossiping.
-	 */
-	private final ShadowGraph shadowGraph;
-
+	/** Collects statistics */
+	private final IntakeStats stats;
 
 	/**
 	 * Constructor
@@ -88,16 +71,37 @@ public class EventIntake {
 	 */
 	public EventIntake(
 			final NodeId selfId,
+			final EventLinker eventLinker,
 			final Supplier<Consensus> consensusSupplier,
 			final AddressBook addressBook,
 			final EventObserverDispatcher dispatcher,
-			final ShadowGraph shadowGraph) {
+			final IntakeStats stats) {
 		this.selfId = selfId;
+		this.eventLinker = eventLinker;
 		this.consensusSupplier = consensusSupplier;
 		this.consensusWrapper = new ConsensusWrapper(consensusSupplier);
 		this.addressBook = addressBook;
 		this.dispatcher = dispatcher;
-		this.shadowGraph = shadowGraph;
+		this.stats = stats;
+	}
+
+	/**
+	 * Adds an event received from gossip that has been validated without its parents. It must be linked to its parents
+	 * before being added to consensus. The linking is done by the {@link EventLinker} provided.
+	 *
+	 * @param event
+	 * 		the event
+	 */
+	public void addUnlinkedEvent(final GossipEvent event) {
+		stats.receivedUnlinkedEvent();
+		dispatcher.receivedEvent(event);
+		stats.dispatchedReceived();
+		eventLinker.linkEvent(event);
+		stats.doneLinking();
+		while (eventLinker.hasLinkedEvents()) {
+			addEvent(eventLinker.pollLinkedEvent());
+		}
+		stats.doneAdding();
 	}
 
 	/**
@@ -107,54 +111,30 @@ public class EventIntake {
 	 * 		an event to be added
 	 */
 	public void addEvent(final EventImpl event) {
-		log.debug(SYNC.getMarker(), "{} sees {}", selfId, event);
-
-		dispatcher.preConsensusEvent(event);
-
-		log.debug(INTAKE_EVENT.getMarker(), "Adding {} ", event::toShortString);
-
+		stats.startIntake();
+		if (!StaticValidators.isValidTimeCreated(event)) {
+			event.clear();
+			return;
+		}
 		if (smallerThanMinRound(event)) {
 			return;
 		}
-
+		stats.doneValidation();
+		log.debug(SYNC.getMarker(), "{} sees {}", selfId, event);
+		dispatcher.preConsensusEvent(event);
+		log.debug(INTAKE_EVENT.getMarker(), "Adding {} ", event::toShortString);
+		stats.dispatchedPreConsensus();
 		// record the event in the hashgraph, which results in the events in consEvent reaching consensus
 		final List<ConsensusRound> consRounds = consensusWrapper.addEvent(event, addressBook);
-
-		final boolean newConsensus = consRounds != null;
-		addShadowEvent(event, newConsensus);
-
+		stats.addedToConsensus();
 		dispatcher.eventAdded(event);
-
-		if (newConsensus) {
+		stats.dispatchedAdded();
+		if (consRounds != null) {
 			consRounds.forEach(this::handleConsensus);
 		}
-
+		stats.dispatchedRound();
 		handleStale();
-	}
-
-	/**
-	 * Add an event to the shadow graph. If events reached consensus ({@code newConsensus} is true), then
-	 * expire any sufficiently old event from the shadow graph
-	 *
-	 * @param event
-	 * 		the event to reference with a new shadow event
-	 * @param newConsensus
-	 * 		true iff inserting {@code event} in the consensus instance caused events to reach consensus
-	 */
-	private void addShadowEvent(final EventImpl event, final boolean newConsensus) {
-		try {
-			shadowGraph.addEvent(event);
-		} catch (final ShadowGraphInsertionException e) {
-			log.error(EXCEPTION.getMarker(), "EventIntake: failed to add event {} to shadow graph",
-					EventStrings.toMediumString(event), e);
-		}
-
-		// If no new consensus, the expired generation has not been increased, so nothing
-		// to expire from the shadow graph.
-		if (newConsensus) {
-			shadowGraph.expireBelow(consensus().getMinRoundGeneration());
-		}
-
+		stats.dispatchedStale();
 	}
 
 	/**
@@ -168,7 +148,6 @@ public class EventIntake {
 
 				log.warn(STALE_EVENTS.getMarker(), "Stale event {}", e::toShortString);
 			}
-
 		}
 	}
 
@@ -181,18 +160,8 @@ public class EventIntake {
 	 */
 	private void handleConsensus(final ConsensusRound consensusRound) {
 		if (consensusRound != null) {
+			eventLinker.updateGenerations(consensusRound.getGenerations());
 			dispatcher.consensusRound(consensusRound);
-
-//				The local events feature is not currently in use. It will also have to be refactored when we do start
-//				using it, so for now it is commented out.
-//
-//				if (Settings.state.saveLocalEvents) {
-//					EventImpl e = consensusRound.lastEvent();
-//					platform.getSignedStateManager().consensusReachedOnRound(
-//							e.getRoundReceived(),
-//							e.getLastTransTime(),
-//							getConsensus()::getAllEvents);
-//				}
 		}
 	}
 

@@ -16,7 +16,7 @@ package com.swirlds.common.merkle.synchronization.views;
 
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;

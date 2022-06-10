@@ -76,4 +76,11 @@ public class QueueOutputPeer<T extends SelfSerializable> implements MessageProvi
 		}
 		return null;
 	}
+
+	/**
+	 * @return the size of the queue held by this instance
+	 */
+	public int getQueueSize(){
+		return queue.size();
+	}
 }

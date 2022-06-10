@@ -13,15 +13,15 @@
  */
 package com.swirlds.platform.components;
 
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.NodeId;
-import com.swirlds.common.threading.QueueThread;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.event.CreateEventTask;
 import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.event.GossipEvent;
-import com.swirlds.platform.stats.HashgraphStats;
+import com.swirlds.platform.stats.EventIntakeStats;
 import com.swirlds.platform.sync.SyncManager;
 import com.swirlds.platform.sync.SyncResult;
 import org.apache.logging.log4j.LogManager;
@@ -47,7 +47,7 @@ public class EventTaskCreator {
 	private final AddressBook addressBook; // if this code is changed to non-final, make it volatile
 
 	/** the object that tracks statistics */
-	private final HashgraphStats stats;
+	private final EventIntakeStats stats;
 
 	/** the member ID of the member running the platform using this hashgraph */
 	private final NodeId selfId;
@@ -92,7 +92,7 @@ public class EventTaskCreator {
 			final EventMapper eventMapper,
 			final AddressBook addressBook,
 			final NodeId selfId,
-			final HashgraphStats stats,
+			final EventIntakeStats stats,
 			final BlockingQueue<EventIntakeTask> eventIntakeQueue,
 			final SettingsProvider settings,
 			final SyncManager syncManager,

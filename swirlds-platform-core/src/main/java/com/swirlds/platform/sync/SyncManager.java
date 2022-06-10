@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.sync;
 
-import com.swirlds.common.NodeId;
+import com.swirlds.common.system.NodeId;
 
 import java.util.List;
 

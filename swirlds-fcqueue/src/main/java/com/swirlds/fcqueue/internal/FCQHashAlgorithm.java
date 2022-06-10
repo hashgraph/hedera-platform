@@ -15,8 +15,8 @@
 package com.swirlds.fcqueue.internal;
 
 
-import static com.swirlds.common.ByteUtils.toBytes;
-import static com.swirlds.common.ByteUtils.toLong;
+import static com.swirlds.common.utility.ByteUtils.longToByteArray;
+import static com.swirlds.common.utility.ByteUtils.byteArrayToLong;
 
 public enum FCQHashAlgorithm {
 
@@ -130,10 +130,10 @@ public enum FCQHashAlgorithm {
 		//	 but we're lazy and skipped the carry - also means this could be done as a vector[6]
 		final long power = power(HASH_RADIX, exponent);
 		for (int i = 0; i < localHash.length; i += BYTE_BLOCK) { //process 8 bytes at a time
-			final long old = toLong(localHash, i);
-			final long elm = toLong(elementHash, i);
+			final long old = byteArrayToLong(localHash, i);
+			final long elm = byteArrayToLong(elementHash, i);
 			final long value = old + power * elm;
-			toBytes(value, localHash, i);
+			longToByteArray(value, localHash, i);
 		}
 	}
 
@@ -142,19 +142,19 @@ public enum FCQHashAlgorithm {
 			final int exponent) {
 		final long power = power(HASH_RADIX, exponent);
 		for (int i = 0; i < hash.length; i += BYTE_BLOCK) {
-			final long old = toLong(hash, i);
-			final long elm = toLong(elementHash, i);
+			final long old = byteArrayToLong(hash, i);
+			final long elm = byteArrayToLong(elementHash, i);
 			final long value = old - power * elm;
-			toBytes(value, hash, i);
+			longToByteArray(value, hash, i);
 		}
 	}
 
 	public static void increaseRollingBase(final int power, final byte[] localHash) {
 		final long factor = power(HASH_RADIX, power);
 		for (int i = 0; i < localHash.length; i += BYTE_BLOCK) {
-			final long old = toLong(localHash, i);
+			final long old = byteArrayToLong(localHash, i);
 			final long value = old * factor;
-			toBytes(value, localHash, i);
+			longToByteArray(value, localHash, i);
 		}
 	}
 

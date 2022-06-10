@@ -15,7 +15,8 @@
 package com.swirlds.common.stream;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.crypto.SerializableRunningHashable;
+import com.swirlds.common.crypto.RunningHashable;
+import com.swirlds.common.crypto.SerializableHashable;
 
 import java.util.Objects;
 
@@ -25,8 +26,9 @@ import java.util.Objects;
  * @param <T>
  * 		type of the objects to be processed by this stream
  */
-public abstract class AbstractLinkedObjectStream<T extends SerializableRunningHashable>
+public abstract class AbstractLinkedObjectStream<T extends RunningHashable & SerializableHashable>
 		implements LinkedObjectStream<T> {
+
 	private LinkedObjectStream<T> nextStream;
 
 	protected AbstractLinkedObjectStream() {

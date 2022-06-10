@@ -14,10 +14,10 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.EventCreationRule;
-import com.swirlds.common.EventCreationRuleResponse;
-import com.swirlds.common.NodeId;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.EventCreationRule;
+import com.swirlds.common.system.EventCreationRuleResponse;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.observers.EventAddedObserver;
 import org.apache.logging.log4j.LogManager;
@@ -26,8 +26,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
-import static com.swirlds.common.EventCreationRuleResponse.DONT_CREATE;
-import static com.swirlds.common.EventCreationRuleResponse.PASS;
+import static com.swirlds.common.system.EventCreationRuleResponse.DONT_CREATE;
+import static com.swirlds.common.system.EventCreationRuleResponse.PASS;
 import static com.swirlds.logging.LogMarker.STARTUP;
 
 

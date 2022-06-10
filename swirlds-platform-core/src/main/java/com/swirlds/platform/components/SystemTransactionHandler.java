@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.Transaction;
+import com.swirlds.common.system.transaction.Transaction;
 
 import java.time.Instant;
 
@@ -31,7 +31,7 @@ public interface SystemTransactionHandler {
 	 * consensus being true. In other words, the platform will act like an app that implements SwirldState2
 	 * rather than an app implementing SwirldState.
 	 * <p>
-	 * This method is called by the thread-cons thread in ConsensusEventHandler, and by this::preConsensusEvent. But it
+	 * This method is called by the thread-cons thread in ConsensusRoundHandler, and by this::preConsensusEvent. But it
 	 * could have deadlock problems if it tried to get a lock on Platform or Hashgraph while, for example, one of the
 	 * syncing threads is  holding those locks and waiting for the forCons/threadCons queue to not be full. So if this
 	 * method is changed, it should avoid that.

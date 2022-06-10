@@ -38,7 +38,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * constructor allows you to define what the size of the inner buffer is.
  *
  * @param <T>
- *     The type
+ * 		The type
  */
 public class ConcurrentBlockingIterator<T> implements Iterator<T> {
 
@@ -142,8 +142,7 @@ public class ConcurrentBlockingIterator<T> implements Iterator<T> {
 	 *
 	 * @param element
 	 * 		The element to add. Cannot be null.
-	 * @return
-	 * 		true if submitted, false if the timeout was exceeded.
+	 * @return true if submitted, false if the timeout was exceeded.
 	 * @throws InterruptedException
 	 * 		If interrupted while waiting
 	 */
@@ -166,6 +165,7 @@ public class ConcurrentBlockingIterator<T> implements Iterator<T> {
 
 	/**
 	 * Adjust the max wait time.
+	 *
 	 * @param maxWaitTime
 	 * 		The maximum time to wait on the buffer before throwing an exception if it fails to deliver results.
 	 * 		Must be non-negative.

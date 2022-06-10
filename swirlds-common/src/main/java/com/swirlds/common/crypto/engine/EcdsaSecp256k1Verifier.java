@@ -36,8 +36,8 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.InvalidParameterSpecException;
 import java.util.Arrays;
 
-import static com.swirlds.common.CommonUtils.hex;
 import static com.swirlds.common.crypto.SignatureType.ECDSA_SECP256K1;
+import static com.swirlds.common.utility.CommonUtils.hex;
 
 /**
  * Verifies signatures created with a ECDSA(secp256k1) private key.

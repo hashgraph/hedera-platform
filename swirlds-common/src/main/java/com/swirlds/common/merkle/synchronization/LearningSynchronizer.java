@@ -15,10 +15,10 @@
 package com.swirlds.common.merkle.synchronization;
 
 import com.swirlds.common.crypto.CryptoFactory;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.io.MerkleDataInputStream;
-import com.swirlds.common.merkle.io.MerkleDataOutputStream;
+import com.swirlds.common.io.streams.MerkleDataInputStream;
+import com.swirlds.common.io.streams.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.internal.LearnerThread;
 import com.swirlds.common.merkle.synchronization.internal.Lesson;
 import com.swirlds.common.merkle.synchronization.internal.QueryResponse;
@@ -29,7 +29,7 @@ import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationEx
 import com.swirlds.common.merkle.synchronization.views.CustomReconnectRoot;
 import com.swirlds.common.merkle.synchronization.views.LearnerTreeView;
 import com.swirlds.common.merkle.synchronization.views.StandardLearnerTreeView;
-import com.swirlds.common.threading.StandardWorkGroup;
+import com.swirlds.common.threading.pool.StandardWorkGroup;
 import com.swirlds.logging.payloads.SynchronizationCompletePayload;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,7 +40,7 @@ import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.swirlds.common.Units.MILLISECONDS_TO_SECONDS;
+import static com.swirlds.common.utility.Units.MILLISECONDS_TO_SECONDS;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 
@@ -249,42 +249,41 @@ public class LearningSynchronizer implements ReconnectNodeCount {
 			view = ((CustomReconnectRoot<?, T>) root).buildLearnerView();
 		}
 
-		try (view) {
-			final AsyncInputStream<Lesson<T>> in = new AsyncInputStream<>(
-					inputStream, workGroup, () -> new Lesson<>(view));
-			final AsyncOutputStream<QueryResponse> out = buildOutputStream(workGroup, outputStream);
+		final AsyncInputStream<Lesson<T>> in = new AsyncInputStream<>(
+				inputStream, workGroup, () -> new Lesson<>(view));
+		final AsyncOutputStream<QueryResponse> out = buildOutputStream(workGroup, outputStream);
 
-			in.start();
-			out.start();
+		in.start();
+		out.start();
 
-			final AtomicReference<T> reconstructedRoot = new AtomicReference<>();
+		final AtomicReference<T> reconstructedRoot = new AtomicReference<>();
 
-			new LearnerThread<>(workGroup, in, out, rootsToReceive, reconstructedRoot, view, this).start();
+		new LearnerThread<>(workGroup, in, out, rootsToReceive, reconstructedRoot, view, this).start();
 
-			workGroup.waitForTermination();
+		workGroup.waitForTermination();
 
-			if (workGroup.hasExceptions()) {
+		if (workGroup.hasExceptions()) {
 
-				// Depending on where the failure occurred, there may be deserialized objects still sitting in
-				// the async input stream's queue that haven't been attached to any tree.
-				in.abort();
+			// Depending on where the failure occurred, there may be deserialized objects still sitting in
+			// the async input stream's queue that haven't been attached to any tree.
+			in.abort();
 
-				final MerkleNode merkleRoot = view.getMerkleRoot(reconstructedRoot.get());
-				if (merkleRoot != null && merkleRoot.getReferenceCount() == 0) {
-					// If the root has a reference count of 0 then it is not underneath any other tree,
-					// and this thread holds the implicit reference to the root.
-					// This is the last chance to release that tree in this scenario.
-					LOG.warn(RECONNECT.getMarker(), "deleting partially constructed subtree");
-					merkleRoot.release();
-				}
-
-				throw new MerkleSynchronizationException("Synchronization failed with exceptions");
+			final MerkleNode merkleRoot = view.getMerkleRoot(reconstructedRoot.get());
+			if (merkleRoot != null && merkleRoot.getReferenceCount() == 0) {
+				// If the root has a reference count of 0 then it is not underneath any other tree,
+				// and this thread holds the implicit reference to the root.
+				// This is the last chance to release that tree in this scenario.
+				LOG.warn(RECONNECT.getMarker(), "deleting partially constructed subtree");
+				merkleRoot.release();
 			}
 
-			viewsToInitialize.addFirst(view);
-
-			return view.getMerkleRoot(reconstructedRoot.get());
+			throw new MerkleSynchronizationException("Synchronization failed with exceptions");
 		}
+
+		viewsToInitialize.addFirst(view);
+
+		return view.getMerkleRoot(reconstructedRoot.get());
+
 	}
 
 	/**

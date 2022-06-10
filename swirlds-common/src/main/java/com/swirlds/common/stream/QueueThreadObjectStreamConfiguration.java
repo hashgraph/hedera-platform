@@ -15,7 +15,7 @@
 package com.swirlds.common.stream;
 
 import com.swirlds.common.crypto.RunningHashable;
-import com.swirlds.common.threading.QueueThreadConfiguration;
+import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 
 /**
  * Configures and builds {@link QueueThreadObjectStream} instances.

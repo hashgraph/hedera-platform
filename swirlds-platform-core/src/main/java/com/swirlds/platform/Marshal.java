@@ -14,7 +14,7 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.CommonUtils;
+import com.swirlds.common.utility.CommonUtils;
 
 import java.io.File;
 

@@ -13,7 +13,7 @@
  */
 package com.swirlds.platform.network.unidirectional;
 
-import com.swirlds.common.threading.InterruptableRunnable;
+import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 import com.swirlds.platform.SyncConnection;
 import com.swirlds.platform.network.ConnectionManager;
 import com.swirlds.platform.network.NetworkProtocolException;

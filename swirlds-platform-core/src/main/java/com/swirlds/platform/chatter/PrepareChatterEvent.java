@@ -15,7 +15,7 @@
 package com.swirlds.platform.chatter;
 
 import com.swirlds.common.crypto.Cryptography;
-import com.swirlds.common.events.BaseEventHashedData;
+import com.swirlds.common.system.events.BaseEventHashedData;
 import com.swirlds.platform.chatter.protocol.MessageHandler;
 import com.swirlds.platform.event.GossipEvent;
 

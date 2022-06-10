@@ -14,16 +14,16 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.InvalidNodeIdException;
-import com.swirlds.common.NodeId;
-import com.swirlds.common.Platform;
-import com.swirlds.common.SwirldMain;
-import com.swirlds.common.SwirldState;
-import com.swirlds.common.Transaction;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.exceptions.InvalidNodeIdException;
 import com.swirlds.common.stream.EventStreamManager;
-import com.swirlds.common.threading.QueueThread;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.Platform;
+import com.swirlds.common.system.SwirldMain;
+import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.platform.components.CriticalQuorum;
 import com.swirlds.platform.components.EventMapper;
 import com.swirlds.platform.components.EventTaskCreator;

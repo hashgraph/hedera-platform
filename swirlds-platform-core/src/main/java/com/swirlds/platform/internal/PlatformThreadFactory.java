@@ -14,13 +14,15 @@
 
 package com.swirlds.platform.internal;
 
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Help class to assign thread name to thread pool
  *
- * @deprecated use {@link com.swirlds.common.threading.ThreadConfiguration} and it's factory instead
+ * @deprecated use {@link ThreadConfiguration} and it's factory instead
  */
 @Deprecated
 public class PlatformThreadFactory implements ThreadFactory {

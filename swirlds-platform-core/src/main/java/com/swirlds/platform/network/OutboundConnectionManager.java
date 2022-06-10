@@ -14,9 +14,9 @@
 
 package com.swirlds.platform.network;
 
-import com.swirlds.common.NodeId;
-import com.swirlds.common.locks.LockedResource;
-import com.swirlds.common.locks.ResourceLock;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.threading.locks.LockedResource;
+import com.swirlds.common.threading.locks.ResourceLock;
 import com.swirlds.platform.SyncConnection;
 import com.swirlds.platform.network.connection.NotConnectedConnection;
 import com.swirlds.platform.network.connectivity.OutboundConnectionCreator;

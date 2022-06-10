@@ -14,10 +14,10 @@
 
 package com.swirlds.platform.crypto;
 
-import com.swirlds.common.Address;
-import com.swirlds.common.AddressBook;
-import com.swirlds.common.CommonUtils;
 import com.swirlds.common.crypto.CryptographyException;
+import com.swirlds.common.system.Address;
+import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -54,7 +54,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
-import static com.swirlds.common.CommonUtils.nameToAlias;
+import static com.swirlds.common.utility.CommonUtils.nameToAlias;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.platform.crypto.CryptoConstants.PUBLIC_KEYS_FILE;
 

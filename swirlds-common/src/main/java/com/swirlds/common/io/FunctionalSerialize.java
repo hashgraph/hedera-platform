@@ -14,6 +14,8 @@
 
 package com.swirlds.common.io;
 
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+
 import java.io.IOException;
 
 @FunctionalInterface

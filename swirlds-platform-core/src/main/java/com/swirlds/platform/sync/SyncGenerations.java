@@ -15,8 +15,8 @@
 package com.swirlds.platform.sync;
 
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.platform.consensus.GraphGenerations;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 

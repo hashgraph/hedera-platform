@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.AddressBook;
+import com.swirlds.common.system.AddressBook;
 import com.swirlds.platform.Consensus;
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;

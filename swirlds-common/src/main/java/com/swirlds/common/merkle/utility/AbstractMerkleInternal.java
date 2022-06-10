@@ -14,20 +14,19 @@
 
 package com.swirlds.common.merkle.utility;
 
-import com.swirlds.common.MutabilityException;
-import com.swirlds.common.ReferenceCountException;
+import com.swirlds.common.exceptions.MutabilityException;
+import com.swirlds.common.exceptions.ReferenceCountException;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildBoundsException;
 import com.swirlds.common.merkle.exceptions.IllegalChildTypeException;
-import com.swirlds.common.merkle.io.SerializationStrategy;
 import com.swirlds.common.merkle.route.MerkleRoute;
 
 import java.util.List;
 import java.util.Set;
 
-import static com.swirlds.common.io.SerializableStreamConstants.NULL_CLASS_ID;
-import static com.swirlds.common.merkle.io.SerializationStrategy.DEFAULT_MERKLE_INTERNAL;
+import static com.swirlds.common.io.streams.SerializableStreamConstants.NULL_CLASS_ID;
+import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.DEFAULT_MERKLE_INTERNAL;
 import static com.swirlds.common.merkle.utility.MerkleUtils.merkleDebugString;
 
 /**
@@ -38,7 +37,7 @@ import static com.swirlds.common.merkle.utility.MerkleUtils.merkleDebugString;
  */
 public abstract class AbstractMerkleInternal extends AbstractMerkleNode implements MerkleInternal {
 
-	private static final Set<SerializationStrategy> DEFAULT_STRATEGIES = Set.of(DEFAULT_MERKLE_INTERNAL);
+	private static final Set<MerkleSerializationStrategy> DEFAULT_STRATEGIES = Set.of(DEFAULT_MERKLE_INTERNAL);
 
 	/**
 	 * Constructor for AbstractMerkleInternal.  Optional bounds testing.
@@ -244,7 +243,7 @@ public abstract class AbstractMerkleInternal extends AbstractMerkleNode implemen
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Set<SerializationStrategy> supportedSerialization(final int version) {
+	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
 		return DEFAULT_STRATEGIES;
 	}
 

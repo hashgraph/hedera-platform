@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.swirldapp;
 
-import com.swirlds.common.SwirldMain;
+import com.swirlds.common.system.SwirldMain;
 import com.swirlds.common.constructable.URLClassLoaderWithLookup;
 
 import java.io.File;

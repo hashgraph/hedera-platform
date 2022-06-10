@@ -16,10 +16,10 @@ package com.swirlds.common.merkle.iterators.internal;
 
 import com.swirlds.common.constructable.ConstructableIgnored;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.SerializableDataInputStream;
-import com.swirlds.common.io.SerializableDataOutputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleLeaf;
-import com.swirlds.common.merkle.io.SerializationStrategy;
+import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
 import com.swirlds.common.merkle.route.MerkleRoute;
 
 import java.io.IOException;
@@ -104,7 +104,7 @@ public class NullNode implements MerkleLeaf {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Set<SerializationStrategy> supportedSerialization(final int version) {
+	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
 		throw new UnsupportedOperationException();
 	}
 

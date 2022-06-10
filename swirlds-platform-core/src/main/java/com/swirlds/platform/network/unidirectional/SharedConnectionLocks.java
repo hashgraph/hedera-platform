@@ -14,11 +14,11 @@
 package com.swirlds.platform.network.unidirectional;
 
 
-import com.swirlds.common.NodeId;
-import com.swirlds.common.locks.LockedResource;
-import com.swirlds.common.locks.MaybeLockedResource;
-import com.swirlds.common.locks.NotAcquiredResource;
-import com.swirlds.common.locks.ResourceLock;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.threading.locks.LockedResource;
+import com.swirlds.common.threading.locks.MaybeLockedResource;
+import com.swirlds.common.threading.locks.NotAcquiredResource;
+import com.swirlds.common.threading.locks.ResourceLock;
 import com.swirlds.platform.SyncConnection;
 import com.swirlds.platform.network.ConnectionManager;
 import com.swirlds.platform.network.topology.NetworkTopology;

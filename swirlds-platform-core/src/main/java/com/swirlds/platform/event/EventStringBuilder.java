@@ -14,11 +14,11 @@
 
 package com.swirlds.platform.event;
 
-import com.swirlds.common.CommonUtils;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.events.BaseEvent;
-import com.swirlds.common.events.BaseEventHashedData;
-import com.swirlds.common.events.BaseEventUnhashedData;
+import com.swirlds.common.system.events.BaseEvent;
+import com.swirlds.common.system.events.BaseEventHashedData;
+import com.swirlds.common.system.events.BaseEventUnhashedData;
+import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.platform.EventImpl;
 
 /**
@@ -62,7 +62,8 @@ public final class EventStringBuilder {
 		return builder(event.getHashedData(), event.getUnhashedData());
 	}
 
-	public static EventStringBuilder builder(BaseEventHashedData hashedData, BaseEventUnhashedData unhashedData) {
+	public static EventStringBuilder builder(final BaseEventHashedData hashedData,
+			final BaseEventUnhashedData unhashedData) {
 		if (hashedData == null) {
 			return new EventStringBuilder("(HashedData=null)");
 		}
@@ -123,17 +124,13 @@ public final class EventStringBuilder {
 	 * 		the hash of the event
 	 */
 	private void appendShortEvent(
-			long creatorId,
-			long generation,
-			Hash hash) {
+			final long creatorId,
+			final long generation,
+			final Hash hash) {
 		sb.append('(');
-		if (creatorId == EventConstants.CREATOR_ID_UNDEFINED) {
-			if (generation == EventConstants.GENERATION_UNDEFINED && hash == null) {
-				sb.append("none)");
-				return;
-			} else {
-				sb.append("MALFORMED ");
-			}
+		if (creatorId == EventConstants.CREATOR_ID_UNDEFINED || generation == EventConstants.GENERATION_UNDEFINED) {
+			sb.append("none)");
+			return;
 		}
 		sb.append(creatorId)
 				.append(',')
@@ -149,7 +146,7 @@ public final class EventStringBuilder {
 	 * @param hash
 	 * 		the hash to append
 	 */
-	private void appendHash(Hash hash) {
+	private void appendHash(final Hash hash) {
 		if (hash == null) {
 			sb.append("null");
 		} else {

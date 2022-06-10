@@ -14,7 +14,7 @@
 
 package com.swirlds.platform.internal;
 
-import com.swirlds.common.io.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
 
 import java.io.IOException;
 

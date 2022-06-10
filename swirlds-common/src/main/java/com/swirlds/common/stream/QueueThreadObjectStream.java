@@ -16,7 +16,7 @@ package com.swirlds.common.stream;
 
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.RunningHashable;
-import com.swirlds.common.threading.QueueThread;
+import com.swirlds.common.threading.framework.QueueThread;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

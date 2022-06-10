@@ -17,10 +17,13 @@ package com.swirlds.platform.state;
 import com.swirlds.common.Releasable;
 import com.swirlds.platform.EventImpl;
 
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.UnaryOperator;
+
 /** hold a SwirldState along with some information about it */
 public class StateInfo implements Releasable {
 	/** the SwirldState root that this object describes */
-	private State state;
+	private final AtomicReference<State> state = new AtomicReference<>();
 	/**
 	 * lastCons is a consensus event whose transactions have already been handled by state, as have all
 	 * consensus events before it in the consensus order.
@@ -39,14 +42,14 @@ public class StateInfo implements Releasable {
 	 * @param frozen
 	 * 		has state.freeze() been called yet, to promise never to send another transaction?
 	 */
-	public StateInfo(State state, EventImpl lastCons, boolean frozen) {
-		this.setState(state);
+	public StateInfo(final State state, final EventImpl lastCons, final boolean frozen) {
+		this.initializeState(state);
 		this.setLastCons(lastCons);
 		this.setFrozen(frozen);
 	}
 
 	private StateInfo(final StateInfo stateToCopy) {
-		this.setState(stateToCopy.getState().copy());
+		this.initializeState(stateToCopy.getState().copy());
 		this.setLastCons(stateToCopy.getLastCons());
 		this.setFrozen(stateToCopy.isFrozen());
 	}
@@ -62,34 +65,51 @@ public class StateInfo implements Releasable {
 
 	@Override
 	public void release() {
-		state.decrementReferenceCount();
+		state.get().decrementReferenceCount();
 	}
 
 	public State getState() {
-		return state;
+		return state.get();
 	}
 
-	public void setState(State state) {
-		if (this.state != null) {
-			this.state.decrementReferenceCount();
+	private void initializeState(final State newState) {
+		final State currState = state.get();
+		if (currState != null) {
+			currState.decrementReferenceCount();
 		}
-		this.state = state;
-		state.incrementReferenceCount();
+		newState.incrementReferenceCount();
+		this.state.set(newState);
+	}
+
+	public void setState(final State state) {
+		this.state.set(state);
 	}
 
 	public EventImpl getLastCons() {
 		return lastCons;
 	}
 
-	public void setLastCons(EventImpl lastCons) {
+	public void setLastCons(final EventImpl lastCons) {
 		this.lastCons = lastCons;
+	}
+
+	/**
+	 * Updates the state object using the given {@code updateFunction}. This method uses {@link
+	 * AtomicReference#getAndUpdate(UnaryOperator)} to update the state, so the update function must not have any side
+	 * effects.
+	 *
+	 * @param updateFunction
+	 * 		the side effect free update function to apply to the state
+	 */
+	protected void updateState(final UnaryOperator<State> updateFunction) {
+		state.getAndUpdate(updateFunction);
 	}
 
 	public boolean isFrozen() {
 		return frozen;
 	}
 
-	public void setFrozen(boolean frozen) {
+	public void setFrozen(final boolean frozen) {
 		this.frozen = frozen;
 	}
 }
