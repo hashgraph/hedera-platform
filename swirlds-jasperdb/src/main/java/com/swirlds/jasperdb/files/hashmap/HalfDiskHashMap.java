@@ -16,12 +16,15 @@ package com.swirlds.jasperdb.files.hashmap;
 
 import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.Snapshotable;
+import com.swirlds.jasperdb.collections.LongList;
 import com.swirlds.jasperdb.collections.LongListBufferedWrapper;
 import com.swirlds.jasperdb.collections.LongListDisk;
 import com.swirlds.jasperdb.collections.LongListOffHeap;
 import com.swirlds.jasperdb.files.DataFileCollection;
 import com.swirlds.jasperdb.files.DataFileCollection.LoadedDataCallback;
 import com.swirlds.jasperdb.files.DataFileReader;
+import com.swirlds.jasperdb.settings.JasperDbSettings;
+import com.swirlds.jasperdb.settings.JasperDbSettingsFactory;
 import com.swirlds.virtualmap.VirtualKey;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -134,6 +137,8 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>> implements AutoClo
 			final String storeName,
 			final boolean preferDiskBasedIndexes
 	) throws IOException {
+		final JasperDbSettings settings = JasperDbSettingsFactory.get();
+
 		this.mapSize = mapSize;
 		this.storeName = storeName;
 		Path indexFile = storeDir.resolve(storeName + "_bucket_index.ll");
@@ -162,7 +167,8 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>> implements AutoClo
 						"] because metadata file is missing");
 			}
 			// load or rebuild index
-			if (Files.exists(indexFile)) {
+			final boolean forceIndexRebuilding = settings.isIndexRebuildingEnforced();
+			if (Files.exists(indexFile) && !forceIndexRebuilding) {
 				bucketIndexToBucketLocation = new LongListBufferedWrapper(
 						preferDiskBasedIndexes ? new LongListDisk(indexFile) : new LongListOffHeap(indexFile));
 				loadedDataCallback = null;
@@ -237,6 +243,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>> implements AutoClo
 				"[{}] Starting merging {} files total {} Gb",
 				storeName, size, formatSizeBytes(filesToMergeSize));
 		final List<Path> newFilesCreated = fileCollection.mergeFiles(
+				(key) -> bucketIndexToBucketLocation.get(key, LongList.IMPERMISSIBLE_VALUE),
 				// update index with all moved data
 				moves -> moves.forEach(bucketIndexToBucketLocation::putIfEqual),
 				filesToMerge, mergingPaused);

@@ -20,6 +20,7 @@ import com.swirlds.platform.internal.SubSetting;
 import java.time.temporal.ChronoUnit;
 
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_FULL_MERGE_PERIOD;
+import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_INDEX_REBUILDING_ENFORCED;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_INTERNAL_HASHES_RAM_TO_DISK_THRESHOLD;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_ITERATOR_INPUT_BUFFER_BYTES;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_KEY_SET_BLOOM_FILTER_HASH_COUNT;
@@ -65,6 +66,7 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 	public long keySetBloomFilterSizeInBytes = DEFAULT_KEY_SET_BLOOM_FILTER_SIZE_IN_BYTES;
 	public long keySetHalfDiskHashMapSize = DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_SIZE;
 	public int keySetHalfDiskHashMapBuffer = DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_BUFFER;
+	public boolean indexRebuildingEnforced = DEFAULT_INDEX_REBUILDING_ENFORCED;
 
 	/**
 	 * {@inheritDoc}
@@ -343,5 +345,14 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 		}
 		this.writerOutputBufferBytes = writerOutputBufferBytes;
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isIndexRebuildingEnforced() {
+		return indexRebuildingEnforced;
+	}
+
 }
 

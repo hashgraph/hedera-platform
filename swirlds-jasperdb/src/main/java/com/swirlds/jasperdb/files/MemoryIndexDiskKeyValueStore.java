@@ -158,6 +158,7 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
 			startChecking();
 		}
 		final List<Path> newFilesCreated = fileCollection.mergeFiles(
+				(key) -> index.get(key, LongList.IMPERMISSIBLE_VALUE),
 				// update index with all moved data
 				moves -> moves.forEach((key, oldValue, newValue) -> {
 					boolean casSuccessful = index.putIfEqual(key, oldValue, newValue);

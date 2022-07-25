@@ -186,4 +186,10 @@ public interface JasperDbSettings {
 	 * @return the size of the half disk hash map in-memory buffer
 	 */
 	int getKeySetHalfDiskHashMapBuffer();
+
+	/**
+	 * Configuration used to avoid reading stored indexes from a saved state and enforce
+	 * rebuilding those indexes from data files,
+	 */
+	boolean isIndexRebuildingEnforced();
 }

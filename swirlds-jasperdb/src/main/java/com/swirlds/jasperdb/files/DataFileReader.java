@@ -203,11 +203,16 @@ public final class DataFileReader<D> implements AutoCloseable, Comparable<DataFi
 	}
 
 	/**
-	 * Compares this Data File to another based on index
+	 * Compares this Data File to another based on creation date and index
 	 */
 	@Override
 	public int compareTo(final DataFileReader o) {
-		return Integer.compare(metadata.getIndex(), Objects.requireNonNull(o).getMetadata().getIndex());
+		Objects.requireNonNull(o);
+		if (this == o) {
+			return 0;
+		}
+		final int res = metadata.getCreationDate().compareTo(o.getMetadata().getCreationDate());
+		return (res != 0) ? res : Integer.compare(metadata.getIndex(), o.getMetadata().getIndex());
 	}
 
 	/** ToString for debugging */

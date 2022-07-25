@@ -49,11 +49,13 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.LongFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.swirlds.common.utility.Units.GIBIBYTES_TO_BYTES;
 import static com.swirlds.common.utility.Units.MEBIBYTES_TO_BYTES;
+import static com.swirlds.jasperdb.KeyRange.INVALID_KEY;
 import static com.swirlds.jasperdb.KeyRange.INVALID_KEY_RANGE;
 import static com.swirlds.jasperdb.files.DataFileCommon.byteOffsetFromDataLocation;
 import static com.swirlds.jasperdb.files.DataFileCommon.dataLocationToString;
@@ -301,6 +303,7 @@ public class DataFileCollection<D> implements Snapshotable {
 	 * @throws InterruptedException If the merge thread was interrupted
 	 */
 	public synchronized List<Path> mergeFiles(
+			final LongFunction<Long> index,
 			final Consumer<ThreeLongsList> locationChangeHandler,
 			final List<DataFileReader<D>> filesToMerge,
 			final AtomicBoolean mergingPaused
@@ -402,6 +405,8 @@ public class DataFileCollection<D> implements Snapshotable {
 			long[] tmp = lastRoundsKeys;
 			lastRoundsKeys = thisRoundsKeys;
 			thisRoundsKeys = tmp;
+			long curDataLocation = index.apply(lowestKey);
+			boolean seen = false;
 			// check if that key is in range
 			if (keyRange.withinRange(lowestKey)) {
 				// find which iterator is the newest that has the lowest key
@@ -411,6 +416,9 @@ public class DataFileCollection<D> implements Snapshotable {
 				for (final DataFileIterator blockIterator : blockIterators) {
 					final long key = blockIterator.getDataItemsKey();
 					if (key != lowestKey) continue;
+					if (blockIterator.getDataItemsDataLocation() == curDataLocation) {
+						seen = true;
+					}
 					int cmp = blockIterator.getDataFileCreationDate().compareTo(newestIteratorTime);
 					if (cmp > 0 || (cmp == 0 && blockIterator.getDataFileIndex() > newestIndex)) {
 						newestIteratorWithLowestKey = blockIterator;
@@ -423,24 +431,27 @@ public class DataFileCollection<D> implements Snapshotable {
 				assert newestIteratorWithLowestKey.getDataItemsKey() >
 						lastLowestKeyWritten.getAndSet(newestIteratorWithLowestKey.getDataItemsKey()) :
 						"Fail, we should always be writing data with keys in ascending order.";
-				final long newDataLocation = newFileWriter.writeCopiedDataItem(
-						newestIteratorWithLowestKey.getMetadata().getSerializationVersion(),
-						newestIteratorWithLowestKey.getDataItemData());
-				// check if newFile is full
-				if (movesMap.size() > MAX_DATA_FILE_NUM_ITEMS ||
-						newFileWriter.getFileSizeEstimate() >= settings.getMaxDataFileBytes()) {
-					// finish writing current file, add it for reading then open new file for writing
-					closeCurrentMergeFile(
-							newFileWriter, locationChangeHandler,
-							movesMap);
-					LOG.info(JASPER_DB.getMarker(), "MovesMap.size() = {}", movesMap.size());
-					movesMap.clear();
-					newFileWriter = newDataFile(mergeTime, true);
-					newFilesCreated.add(newFileWriter.getPath());
-					lastLowestKeyWritten.set(-1);
+
+				if (seen) {
+					final long newDataLocation = newFileWriter.writeCopiedDataItem(
+							newestIteratorWithLowestKey.getMetadata().getSerializationVersion(),
+							newestIteratorWithLowestKey.getDataItemData());
+					// check if newFile is full
+					if (movesMap.size() > MAX_DATA_FILE_NUM_ITEMS ||
+							newFileWriter.getFileSizeEstimate() >= settings.getMaxDataFileBytes()) {
+						// finish writing current file, add it for reading then open new file for writing
+						closeCurrentMergeFile(
+								newFileWriter, locationChangeHandler,
+								movesMap);
+						LOG.info(JASPER_DB.getMarker(), "MovesMap.size() = {}", movesMap.size());
+						movesMap.clear();
+						newFileWriter = newDataFile(mergeTime, true);
+						newFilesCreated.add(newFileWriter.getPath());
+						lastLowestKeyWritten.set(-1);
+					}
+					// add to movesMap
+					movesMap.add(lowestKey, curDataLocation, newDataLocation);
 				}
-				// add to movesMap
-				movesMap.add(lowestKey, newestIteratorWithLowestKey.getDataItemsDataLocation(), newDataLocation);
 			}
 			// move all iterators on that contained lowestKey
 			blockIteratorsIterator = blockIterators.listIterator();

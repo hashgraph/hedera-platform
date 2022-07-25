@@ -179,8 +179,10 @@ public class LongListDisk extends LongList implements Closeable {
 	 */
 	@Override
 	public void close() throws IOException {
-		// flush
-		fileChannel.force(false);
+        // flush
+        if (fileChannel.isOpen()) {
+            fileChannel.force(false);
+		}
 		// now close
 		fileChannel.close();
 	}

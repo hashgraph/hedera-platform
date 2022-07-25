@@ -381,10 +381,11 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 		}
 
 		// create path to disk location index
+		final boolean forceIndexRebuilding = settings.isIndexRebuildingEnforced();
 		final LongList longListInternalNodes;
 		if (preferDiskBasedIndexes) {
 			longListInternalNodes = new LongListDisk(dbPaths.pathToDiskLocationInternalNodesFile);
-		} else if (Files.exists(dbPaths.pathToDiskLocationInternalNodesFile)) {
+		} else if (Files.exists(dbPaths.pathToDiskLocationInternalNodesFile) && !forceIndexRebuilding) {
 			longListInternalNodes = new LongListOffHeap(dbPaths.pathToDiskLocationInternalNodesFile);
 		} else {
 			longListInternalNodes = new LongListOffHeap();
@@ -392,7 +393,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 		final LongList longListLeafNodes;
 		if (preferDiskBasedIndexes) {
 			longListLeafNodes = new LongListDisk(dbPaths.pathToDiskLocationLeafNodesFile);
-		} else if (Files.exists(dbPaths.pathToDiskLocationLeafNodesFile)) {
+		} else if (Files.exists(dbPaths.pathToDiskLocationLeafNodesFile) && !forceIndexRebuilding) {
 			longListLeafNodes = new LongListOffHeap(dbPaths.pathToDiskLocationLeafNodesFile);
 		} else {
 			longListLeafNodes = new LongListOffHeap();

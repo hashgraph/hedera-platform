@@ -47,6 +47,7 @@ public class DefaultJasperDbSettings implements JasperDbSettings {
 	public static final long DEFAULT_FULL_MERGE_PERIOD = 1440L; // 24h in min
 	public static final long DEFAULT_MAX_FILE_SIZE_BYTES = 64L * 1024 * 1024 * 1024;
 	public static final boolean DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED = false;
+	public static final boolean DEFAULT_INDEX_REBUILDING_ENFORCED = false;
 
 	// These default parameters result in a bloom filter false positive rate of less than 1/1000 when 1 billion
 	// leaf nodes are transmitted during a reconnect. https://hur.st/bloomfilter/?n=1000000000&p=1.0E-3&m=&k=
@@ -221,5 +222,13 @@ public class DefaultJasperDbSettings implements JasperDbSettings {
 	@Override
 	public int getKeySetHalfDiskHashMapBuffer() {
 		return DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_BUFFER;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isIndexRebuildingEnforced() {
+		return DEFAULT_INDEX_REBUILDING_ENFORCED;
 	}
 }
