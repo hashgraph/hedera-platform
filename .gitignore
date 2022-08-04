@@ -100,6 +100,7 @@ bin/
 # Custom JetBrains IntelliJ IDEA Project File Excludes
 **/.idea/runConfigurations.xml
 **/.idea/misc.xml
+**/.idea/sonarlint*.xml
 
 # Ignoring only SDK folder CSV files
 sdk/*.csv
@@ -122,6 +123,7 @@ sdk/results
 # Swirlds Files
 *.swh
 *.evts
+*/swirlds-tmp
 
 # sdk binaries
 sdk/swirlds.jar
@@ -156,3 +158,4 @@ hedera/HAPI.zip
 .mvn/wrapper/maven-wrapper.jar
 
 # Other Files Added by Tools
+.idea/sonarlint

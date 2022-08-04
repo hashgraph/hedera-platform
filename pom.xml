@@ -1,15 +1,17 @@
 <!--
   ~ Copyright 2016-2022 Hedera Hashgraph, LLC
   ~
-  ~ This software is owned by Hedera Hashgraph, LLC, which retains title to the software. This software is protected by various
-  ~ intellectual property laws throughout the world, including copyright and patent laws. This software is licensed and
-  ~ not sold. You must use this software only in accordance with the terms of the Hashgraph Open Review license at
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
   ~
-  ~ https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
+  ~     https://www.apache.org/licenses/LICENSE-2.0
   ~
-  ~ HEDERA HASHGRAPH MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY OF THIS SOFTWARE, EITHER EXPRESS OR
-  ~ IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
-  ~ OR NON-INFRINGEMENT.
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
   -->
 
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
@@ -21,7 +23,7 @@
 	<!-- Project Configuration -->
 	<groupId>com.swirlds</groupId>
 	<artifactId>swirlds-platform</artifactId>
-	<version>0.26.4-orvw.1</version>
+	<version>0.26.4-orvw.2</version>
 
 	<packaging>pom</packaging>
 
@@ -153,263 +155,6 @@
 
 		
 	</properties>
-
-	<!-- Profiles -->
-	<profiles>
-		<!-- Automatic Profile (not for manual use) -->
-		<profile>
-			<id>maven_opts_defaults</id>
-			<activation>
-				<property>
-					<name>!env.MAVEN_OPTS</name>
-				</property>
-			</activation>
-			<properties>
-				<env.MAVEN_OPTS/>
-			</properties>
-		</profile>
-
-
-		<profile>
-			<id>release</id>
-			<activation>
-				<property>
-					<name>env.RELEASE</name>
-				</property>
-			</activation>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.codehaus.mojo</groupId>
-						<artifactId>build-helper-maven-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>rootloc-property</id>
-								<phase>validate</phase>
-								<goals>
-									<goal>rootlocation</goal>
-								</goals>
-								<configuration>
-									<rootLocationProperty>helper.root.dir</rootLocationProperty>
-								</configuration>
-							</execution>
-							<execution>
-								<id>timestamp-property</id>
-								<phase>validate</phase>
-								<goals>
-									<goal>timestamp-property</goal>
-								</goals>
-								<configuration>
-									<locale>en_US</locale>
-									<name>helper.current.year</name>
-									<pattern>yyyy</pattern>
-								</configuration>
-							</execution>
-						</executions>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-
-		<profile>
-			<id>release-open-review</id>
-			<activation>
-				<property>
-					<name>env.RELEASE</name>
-					<value>open-review</value>
-				</property>
-			</activation>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>com.mycila</groupId>
-						<artifactId>license-maven-plugin</artifactId>
-						<configuration>
-							<aggregate>true</aggregate>
-							<encoding>${project.build.sourceEncoding}</encoding>
-							<headerDefinitions>
-								<headerDefinition>${helper.root.dir}/.circleci/license/java_style.xml</headerDefinition>
-								<headerDefinition>${helper.root.dir}/.circleci/license/xml_tilde_style.xml
-								</headerDefinition>
-							</headerDefinitions>
-							<mapping>
-								<java>JAVA_STYLE</java>
-								<xml>XML_TILDE_STYLE</xml>
-								<pom>XML_TILDE_STYLE</pom>
-								<html>XML_TILDE_STYLE</html>
-							</mapping>
-							<licenseSets>
-								<licenseSet>
-									<header>${helper.root.dir}/.circleci/license/open_review/header.txt</header>
-									<excludes>
-										<exclude>.circleci/**</exclude>
-										<exclude>changelog.md</exclude>
-										<exclude>license.md</exclude>
-										<exclude>readme.md</exclude>
-										<exclude>docs/**</exclude>
-										<exclude>**/src/main/resources/**</exclude>
-										<exclude>**/src/test/resources/**</exclude>
-										<exclude>**/regression/**</exclude>
-										<exclude>platform-apps/**</exclude>
-										<exclude>**/sdk/data/**</exclude>
-										<exclude>**/sdk/testing/**</exclude>
-										<exclude>**/sdk/docs/**</exclude>
-										<exclude>**/sdk/kernels/**</exclude>
-										<exclude>**/sdk/settings.txt</exclude>
-										<exclude>**/sdk/config.txt</exclude>
-										<exclude>**/sdk/README.txt</exclude>
-										<exclude>archive/**</exclude>
-									</excludes>
-								</licenseSet>
-								<licenseSet>
-									<header>${helper.root.dir}/.circleci/license/apache2/header.txt</header>
-									<includes>
-										<include>platform-apps/**</include>
-									</includes>
-									<excludes>
-										<exclude>.circleci/**</exclude>
-										<exclude>changelog.md</exclude>
-										<exclude>license.md</exclude>
-										<exclude>readme.md</exclude>
-										<exclude>docs/**</exclude>
-										<exclude>**/src/main/resources/**</exclude>
-										<exclude>**/src/test/resources/**</exclude>
-										<exclude>**/regression/**</exclude>
-										<exclude>**/sdk/data/**</exclude>
-										<exclude>**/sdk/testing/**</exclude>
-										<exclude>**/sdk/docs/**</exclude>
-										<exclude>**/sdk/settings.txt</exclude>
-										<exclude>**/sdk/config.txt</exclude>
-										<exclude>**/sdk/README.txt</exclude>
-										<exclude>archive/**</exclude>
-									</excludes>
-								</licenseSet>
-							</licenseSets>
-							<properties>
-								<license.url>
-									https://github.com/hashgraph/swirlds-open-review/raw/master/LICENSE.md
-								</license.url>
-								<owner>
-									Hedera Hashgraph, LLC
-								</owner>
-								<helper.current.year>
-									${helper.current.year}
-								</helper.current.year>
-							</properties>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-
-		<profile>
-			<id>release-sonatype</id>
-			<activation>
-				<property>
-					<name>env.RELEASE</name>
-					<value>sonatype</value>
-				</property>
-			</activation>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.sonatype.plugins</groupId>
-						<artifactId>nexus-staging-maven-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>nexus-staging</id>
-								<phase>deploy</phase>
-								<goals>
-									<goal>deploy</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-gpg-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>sign-artifacts</id>
-								<phase>verify</phase>
-								<goals>
-									<goal>sign</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-javadoc-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>attach-javadoc</id>
-								<goals>
-									<goal>aggregate-jar</goal>
-								</goals>
-							</execution>
-						</executions>
-						<configuration>
-							<destDir>${project.build.directory}/apidocs</destDir>
-						</configuration>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-source-plugin</artifactId>
-						<configuration>
-							<skipSource>true</skipSource>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
-			<distributionManagement>
-				<snapshotRepository>
-					<id>ossrh</id>
-					<url>https://oss.sonatype.org/content/repositories/snapshots</url>
-				</snapshotRepository>
-				<repository>
-					<id>ossrh</id>
-					<url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-				</repository>
-			</distributionManagement>
-		</profile>
-
-		<profile>
-			<id>default-deployment</id>
-			<activation>
-				<activeByDefault>true</activeByDefault>
-				<property>
-					<name>env.RELEASE</name>
-					<value>!sonatype</value>
-				</property>
-			</activation>
-			<!-- Distribution Management -->
-			<distributionManagement>
-				<repository>
-					<id>app.repo</id>
-					<url>${app.repo}</url>
-				</repository>
-			</distributionManagement>
-
-			<!-- Repository Configuration -->
-			<repositories>
-				<repository>
-					<id>app.repo</id>
-					<name>app</name>
-					<url>${app.repo}</url>
-					<releases>
-						<enabled>true</enabled>
-						<updatePolicy>always</updatePolicy>
-					</releases>
-					<snapshots>
-						<enabled>true</enabled>
-						<updatePolicy>always</updatePolicy>
-					</snapshots>
-				</repository>
-			</repositories>
-			
-		</profile>
-	</profiles>
 
 	<!-- Sub Modules -->
 	<modules>
@@ -990,4 +735,467 @@
 		</plugins>
 	</build>
 
+	<!-- Profiles -->
+	<profiles>
+		<!-- Automatic Profile (not for manual use) -->
+		<profile>
+			<id>default-variable-maven-opts</id>
+			<activation>
+				<property>
+					<name>!env.MAVEN_OPTS</name>
+				</property>
+			</activation>
+			<properties>
+				<env.MAVEN_OPTS/>
+			</properties>
+		</profile>
+
+		<!-- Automatic Profile (not for manual use) -->
+		<profile>
+			<id>default-variable-argLine</id>
+			<activation>
+				<property>
+					<name>!argLine</name>
+				</property>
+			</activation>
+			<properties>
+				<argLine/>
+			</properties>
+		</profile>
+
+		<profile>
+			<id>release</id>
+			<activation>
+				<property>
+					<name>env.RELEASE</name>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.codehaus.mojo</groupId>
+						<artifactId>build-helper-maven-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>rootloc-property</id>
+								<phase>validate</phase>
+								<goals>
+									<goal>rootlocation</goal>
+								</goals>
+								<configuration>
+									<rootLocationProperty>helper.root.dir</rootLocationProperty>
+								</configuration>
+							</execution>
+							<execution>
+								<id>timestamp-property</id>
+								<phase>validate</phase>
+								<goals>
+									<goal>timestamp-property</goal>
+								</goals>
+								<configuration>
+									<locale>en_US</locale>
+									<name>helper.current.year</name>
+									<pattern>yyyy</pattern>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
+		<profile>
+			<id>release-open-review</id>
+			<activation>
+				<property>
+					<name>env.RELEASE</name>
+					<value>open-review</value>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>com.mycila</groupId>
+						<artifactId>license-maven-plugin</artifactId>
+						<configuration>
+							<aggregate>true</aggregate>
+							<encoding>${project.build.sourceEncoding}</encoding>
+							<headerDefinitions>
+								<headerDefinition>${helper.root.dir}/.github/workflows/support/license/java_style.xml</headerDefinition>
+								<headerDefinition>${helper.root.dir}/.github/workflows/support/license/xml_tilde_style.xml</headerDefinition>
+							</headerDefinitions>
+							<mapping>
+								<java>JAVA_STYLE</java>
+								<xml>XML_TILDE_STYLE</xml>
+								<pom>XML_TILDE_STYLE</pom>
+								<html>XML_TILDE_STYLE</html>
+							</mapping>
+							<licenseSets>
+								<licenseSet>
+									<header>${helper.root.dir}/.github/workflows/support/license/apache2/header.txt</header>
+									<excludes>
+										<exclude>.circleci/**</exclude>
+										<exclude>changelog.md</exclude>
+										<exclude>license.md</exclude>
+										<exclude>readme.md</exclude>
+										<exclude>docs/**</exclude>
+										<exclude>**/src/main/resources/**</exclude>
+										<exclude>**/src/test/resources/**</exclude>
+										<exclude>**/regression/**</exclude>
+										<exclude>platform-apps/**</exclude>
+										<exclude>**/sdk/data/**</exclude>
+										<exclude>**/sdk/testing/**</exclude>
+										<exclude>**/sdk/docs/**</exclude>
+										<exclude>**/sdk/kernels/**</exclude>
+										<exclude>**/sdk/settings.txt</exclude>
+										<exclude>**/sdk/config.txt</exclude>
+										<exclude>**/sdk/README.txt</exclude>
+										<exclude>archive/**</exclude>
+									</excludes>
+								</licenseSet>
+								<licenseSet>
+									<header>${helper.root.dir}/.github/workflows/support/license/apache2/header.txt</header>
+									<includes>
+										<include>platform-apps/**</include>
+									</includes>
+									<excludes>
+										<exclude>.circleci/**</exclude>
+										<exclude>changelog.md</exclude>
+										<exclude>license.md</exclude>
+										<exclude>readme.md</exclude>
+										<exclude>docs/**</exclude>
+										<exclude>**/src/main/resources/**</exclude>
+										<exclude>**/src/test/resources/**</exclude>
+										<exclude>**/regression/**</exclude>
+										<exclude>**/sdk/data/**</exclude>
+										<exclude>**/sdk/testing/**</exclude>
+										<exclude>**/sdk/docs/**</exclude>
+										<exclude>**/sdk/settings.txt</exclude>
+										<exclude>**/sdk/config.txt</exclude>
+										<exclude>**/sdk/README.txt</exclude>
+										<exclude>archive/**</exclude>
+									</excludes>
+								</licenseSet>
+							</licenseSets>
+							<properties>
+								<license.url>
+									https://www.apache.org/licenses/LICENSE-2.0
+								</license.url>
+								<owner>
+									Hedera Hashgraph, LLC
+								</owner>
+								<helper.current.year>
+									${helper.current.year}
+								</helper.current.year>
+							</properties>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
+		<profile>
+			<id>release-sonatype</id>
+			<activation>
+				<property>
+					<name>env.RELEASE</name>
+					<value>sonatype</value>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.sonatype.plugins</groupId>
+						<artifactId>nexus-staging-maven-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>nexus-staging</id>
+								<phase>deploy</phase>
+								<goals>
+									<goal>deploy</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-gpg-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>sign-artifacts</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>sign</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-javadoc</id>
+								<goals>
+									<goal>aggregate-jar</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<destDir>${project.build.directory}/apidocs</destDir>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<configuration>
+							<skipSource>true</skipSource>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+			<distributionManagement>
+				<snapshotRepository>
+					<id>ossrh</id>
+					<url>https://oss.sonatype.org/content/repositories/snapshots</url>
+				</snapshotRepository>
+				<repository>
+					<id>ossrh</id>
+					<url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+				</repository>
+			</distributionManagement>
+			<modules>
+				<module>swirlds-unit-tests</module>
+			</modules>
+		</profile>
+
+		<profile>
+			<id>release-develop-snapshot</id>
+			<activation>
+				<property>
+					<name>env.RELEASE</name>
+					<value>develop-snapshot</value>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-javadoc</id>
+								<goals>
+									<goal>aggregate-jar</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<destDir>${project.build.directory}/apidocs</destDir>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<configuration>
+							<skipSource>true</skipSource>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+			<distributionManagement>
+				<snapshotRepository>
+					<id>maven-develop-snapshots</id>
+					<url>artifactregistry://us-maven.pkg.dev/swirlds-registry/maven-develop-snapshots</url>
+				</snapshotRepository>
+			</distributionManagement>
+		</profile>
+
+		<profile>
+			<id>release-develop-daily-snapshot</id>
+			<activation>
+				<property>
+					<name>env.RELEASE</name>
+					<value>develop-daily-snapshot</value>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-javadoc</id>
+								<goals>
+									<goal>aggregate-jar</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<destDir>${project.build.directory}/apidocs</destDir>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<configuration>
+							<skipSource>true</skipSource>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+			<distributionManagement>
+				<snapshotRepository>
+					<id>maven-develop-snapshots</id>
+					<url>artifactregistry://us-maven.pkg.dev/swirlds-registry/maven-develop-daily-snapshots</url>
+				</snapshotRepository>
+			</distributionManagement>
+		</profile>
+
+		<profile>
+			<id>release-develop-commit</id>
+			<activation>
+				<property>
+					<name>env.RELEASE</name>
+					<value>develop-commit</value>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-javadoc</id>
+								<goals>
+									<goal>aggregate-jar</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<destDir>${project.build.directory}/apidocs</destDir>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<configuration>
+							<skipSource>true</skipSource>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+			<distributionManagement>
+				<repository>
+					<id>maven-develop-snapshots</id>
+					<url>artifactregistry://us-maven.pkg.dev/swirlds-registry/maven-develop-commits</url>
+				</repository>
+			</distributionManagement>
+		</profile>
+
+		<profile>
+			<id>release-adhoc-commit</id>
+			<activation>
+				<property>
+					<name>env.RELEASE</name>
+					<value>adhoc-commit</value>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-javadoc</id>
+								<goals>
+									<goal>aggregate-jar</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<destDir>${project.build.directory}/apidocs</destDir>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<configuration>
+							<skipSource>true</skipSource>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+			<distributionManagement>
+				<repository>
+					<id>maven-develop-snapshots</id>
+					<url>artifactregistry://us-maven.pkg.dev/swirlds-registry/maven-adhoc-commits</url>
+				</repository>
+			</distributionManagement>
+		</profile>
+
+		<profile>
+			<id>release-prerelease-channel</id>
+			<activation>
+				<property>
+					<name>env.RELEASE</name>
+					<value>prerelease-channel</value>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-javadoc</id>
+								<goals>
+									<goal>aggregate-jar</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<destDir>${project.build.directory}/apidocs</destDir>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<configuration>
+							<skipSource>true</skipSource>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+			<distributionManagement>
+				<repository>
+					<id>maven-develop-snapshots</id>
+					<url>artifactregistry://us-maven.pkg.dev/swirlds-registry/maven-prerelease-channel</url>
+				</repository>
+			</distributionManagement>
+			<modules>
+				<module>swirlds-unit-tests</module>
+			</modules>
+		</profile>
+
+		<profile>
+			<id>default-build</id>
+			<activation>
+				<activeByDefault>true</activeByDefault>
+				<property>
+					<name>env.RELEASE</name>
+					<value>!sonatype</value>
+				</property>
+			</activation>
+
+			
+
+		</profile>
+
+		
+	</profiles>
 </project>
