@@ -17,6 +17,7 @@
 package com.swirlds.jasperdb.collections;
 
 import com.swirlds.jasperdb.files.DataFileCommon;
+import com.swirlds.jasperdb.utilities.FileUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -139,7 +140,7 @@ public abstract class LongList {
 		if (fileChannel.size() > 0) {
 			// read header from existing file
 			final ByteBuffer headerBuffer = ByteBuffer.allocate(FILE_HEADER_SIZE);
-			fileChannel.read(headerBuffer);
+			FileUtils.completelyRead(fileChannel, headerBuffer);
 			headerBuffer.rewind();
 			final int formatVersion = headerBuffer.getInt();
 			if (formatVersion != FILE_FORMAT_VERSION) {
@@ -289,7 +290,7 @@ public abstract class LongList {
 		headerBuffer.putLong(maxLongs);
 		headerBuffer.flip();
 		// always write at start of file
-		fc.write(headerBuffer, 0);
+		FileUtils.completelyWrite(fc, headerBuffer, 0);
 		fc.position(FILE_HEADER_SIZE);
 	}
 

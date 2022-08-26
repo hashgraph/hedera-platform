@@ -16,16 +16,14 @@
 
 package com.swirlds.virtualmap;
 
-import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.ExternalSelfSerializable;
 import com.swirlds.common.io.streams.MerkleDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
-import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
+import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.utility.ValueReference;
 import com.swirlds.virtualmap.datasource.VirtualDataSource;
 import com.swirlds.virtualmap.datasource.VirtualDataSourceBuilder;
@@ -41,10 +39,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Consumer;
 
-import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
 import static com.swirlds.common.io.streams.StreamDebugUtils.deserializeAndDebugOnFailure;
 import static com.swirlds.common.utility.CommonUtils.getNormalisedStringBytes;
 
@@ -116,8 +112,8 @@ import static com.swirlds.common.utility.CommonUtils.getNormalisedStringBytes;
  * 		The value. Must be a {@link VirtualValue}.
  */
 public final class VirtualMap<K extends VirtualKey<? super K>, V extends VirtualValue>
-		extends AbstractBinaryMerkleInternal
-		implements ExternalSelfSerializable {
+		extends PartialBinaryMerkleInternal
+		implements ExternalSelfSerializable, MerkleInternal {
 
 	/**
 	 * Used for serialization.
@@ -127,8 +123,9 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	/**
 	 * This version number should be used to handle compatibility issues that may arise from any future changes
 	 */
-	private static class ClassVersion {
+	public static class ClassVersion {
 		public static final int ORIGINAL = 1;
+		public static final int MERKLE_SERIALIZATION_CLEANUP = 2;
 	}
 
 	private static final class ChildIndices {
@@ -142,12 +139,6 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 		 */
 		private static final int VIRTUAL_ROOT_CHILD_INDEX = 1;
 	}
-
-	/**
-	 * A static set of supported serialization strategies. This is static just to cut down on garbage
-	 * generation at runtime and a little overhead.
-	 */
-	private static final Set<MerkleSerializationStrategy> STRATEGIES = Set.of(EXTERNAL_SELF_SERIALIZATION);
 
 	/**
 	 * A reference to the first child, the {@link VirtualMapState}. Ideally this would be final
@@ -230,7 +221,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	 * @param registry
 	 * 		an object that manages statistics
 	 */
-	public void registerStatistics(final Consumer<StatEntry> registry) {
+	public void registerStatistics(final Consumer<Metric> registry) {
 		root.registerStatistics(registry);
 	}
 
@@ -245,7 +236,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 
 	@Override
 	public int getVersion() {
-		return ClassVersion.ORIGINAL;
+		return ClassVersion.MERKLE_SERIALIZATION_CLEANUP;
 	}
 
 	/**
@@ -254,7 +245,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	@Override
 	public VirtualMap<K, V> copy() {
 		throwIfImmutable();
-		throwIfReleased();
+		throwIfDestroyed();
 
 		final VirtualMap<K, V> copy = new VirtualMap<>(this);
 		setImmutable(true);
@@ -293,15 +284,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
-		return STRATEGIES;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void serializeExternal(final SerializableDataOutputStream out,
+	public void serialize(final SerializableDataOutputStream out,
 			final File outputDirectory) throws IOException {
 
 		// Create and write to state the name of the file we will expect later on deserialization
@@ -316,7 +299,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 				new BufferedOutputStream(new FileOutputStream(outputFile)))) {
 			serout.writeSerializable(state, true);
 			serout.writeInt(root.getVersion());
-			root.serializeExternal(serout, outputDirectory);
+			root.serialize(serout, outputDirectory);
 		}
 	}
 
@@ -324,8 +307,15 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void deserializeExternal(final SerializableDataInputStream in, final File inputDirectory, final Hash hash,
+	public void deserialize(
+			final SerializableDataInputStream in,
+			final File inputDirectory,
 			final int version) throws IOException {
+
+		if (version == ClassVersion.ORIGINAL) {
+			// Read and discard the hash that is in the stream at this position
+			in.readSerializable();
+		}
 
 		final int fileNameLengthInBytes = in.readInt();
 		final String inputFileName = in.readNormalisedString(fileNameLengthInBytes);
@@ -349,12 +339,11 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 
 		deserializeAndDebugOnFailure(
 				() -> new SerializableDataInputStream(new BufferedInputStream(new FileInputStream(inputFile))),
-				inputFile.getParentFile(),
 				(final MerkleDataInputStream stream) -> {
 					virtualMapState.setValue(stream.readSerializable());
 					virtualRootNode.setValue(new VirtualRootNode<>());
-					virtualRootNode.getValue().deserializeExternal(
-							stream, inputFile.getParentFile(), null, stream.readInt());
+					virtualRootNode.getValue().deserialize(
+							stream, inputFile.getParentFile(), stream.readInt());
 					return null;
 				},
 				null);

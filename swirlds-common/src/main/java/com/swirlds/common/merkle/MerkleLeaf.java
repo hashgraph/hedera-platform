@@ -17,24 +17,42 @@
 package com.swirlds.common.merkle;
 
 import com.swirlds.common.crypto.SerializableHashable;
+import com.swirlds.common.io.ExternalSelfSerializable;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+
+import java.io.File;
+import java.io.IOException;
 
 /**
- * A Merkle Leaf has the following properties:
- * <ul>
- *     <li>Has only data, no children</li>
- *     <li>Data can be internal or external</li>
- * </ul>
+ * A Merkle Leaf has only data and does not have children.
  */
-public interface MerkleLeaf extends MerkleNode, SerializableHashable {
-
-	@Override
-	default boolean isLeaf() {
-		return true;
-	}
+public interface MerkleLeaf extends MerkleNode, SerializableHashable, ExternalSelfSerializable {
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
 	MerkleLeaf copy();
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	default void serialize(final SerializableDataOutputStream out, final File outputDirectory) throws IOException {
+		// Default implementation ignores the provided directory. Override this method to utilize the directory.
+		serialize(out);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	default void deserialize(
+			final SerializableDataInputStream in,
+			final File inputDirectory,
+			final int version) throws IOException {
+		// Default implementation ignores the provided directory. Override this method to utilize the directory.
+		deserialize(in, version);
+	}
 }

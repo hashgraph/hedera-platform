@@ -20,6 +20,19 @@ package com.swirlds.common.threading.framework;
  * Describes a thread or a collection of threads that can be started, stopped, paused, resumed, and joined.
  */
 public interface Stoppable {
+	/**
+	 * The behavior of this thread when it is stopped
+	 */
+	enum StopBehavior {
+		/**
+		 * The thread will block indefinitely, until it is done stopping
+		 */
+		BLOCKING,
+		/**
+		 * The thread will be interrupted if stopping takes too long
+		 */
+		INTERRUPTABLE
+	}
 
 	/**
 	 * <p>
@@ -31,6 +44,13 @@ public interface Stoppable {
 	boolean start();
 
 	/**
+	 * <p>Calls {@link #stop(StopBehavior)} with the default {@link StopBehavior StopBehavior} defined on the object</p>
+	 *
+	 * @return true if operation was successful, or false if the thread is in the incorrect state to be stopped
+	 */
+	boolean stop();
+
+	/**
 	 * <p>
 	 * Attempt to gracefully stop the thread.
 	 * </p>
@@ -40,9 +60,11 @@ public interface Stoppable {
 	 * the seed has been built.
 	 * </p>
 	 *
+	 * @param behavior
+	 * 		the type of {@link StopBehavior} that should be used
 	 * @return true if operation was successful, or false if the thread is in the incorrect state to be stopped
 	 */
-	boolean stop();
+	boolean stop(StopBehavior behavior);
 
 	/**
 	 * <p>

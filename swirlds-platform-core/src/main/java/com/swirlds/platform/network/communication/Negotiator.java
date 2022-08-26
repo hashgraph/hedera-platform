@@ -16,15 +16,15 @@
 
 package com.swirlds.platform.network.communication;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.communication.states.InitialState;
+import com.swirlds.platform.network.communication.states.NegotiationState;
 import com.swirlds.platform.network.communication.states.ProtocolNegotiated;
 import com.swirlds.platform.network.communication.states.ReceivedInitiate;
 import com.swirlds.platform.network.communication.states.SentInitiate;
 import com.swirlds.platform.network.communication.states.SentKeepalive;
 import com.swirlds.platform.network.communication.states.Sleep;
-import com.swirlds.platform.network.communication.states.NegotiationState;
 import com.swirlds.platform.network.communication.states.WaitForAcceptReject;
 
 import java.io.IOException;
@@ -35,6 +35,7 @@ import java.io.OutputStream;
  * A state machine responsible for negotiating the protocol to run over the provided connection
  */
 public class Negotiator {
+	private final NegotiationProtocols protocols;
 	private final NegotiationState initialState;
 	private final ProtocolNegotiated protocolNegotiated;
 	private final Sleep sleep;
@@ -48,7 +49,8 @@ public class Negotiator {
 	 * @param sleepMs
 	 * 		the number of milliseconds to sleep if a negotiation fails
 	 */
-	public Negotiator(final NegotiationProtocols protocols, final SyncConnection connection, final int sleepMs) {
+	public Negotiator(final NegotiationProtocols protocols, final Connection connection, final int sleepMs) {
+		this.protocols = protocols;
 		protocolNegotiated = new ProtocolNegotiated(connection);
 		sleep = new Sleep(sleepMs);
 		final InputStream in = connection.getDis();
@@ -86,11 +88,12 @@ public class Negotiator {
 				prev = current;
 				current = current.transition();
 			} catch (final RuntimeException
-					| NegotiationException
-					| NetworkProtocolException
-					| InterruptedException
-					| IOException e) {
+						   | NegotiationException
+						   | NetworkProtocolException
+						   | InterruptedException
+						   | IOException e) {
 				errorState = true;
+				protocols.negotiationExceptionOccurred();
 				throw e;
 			}
 		}

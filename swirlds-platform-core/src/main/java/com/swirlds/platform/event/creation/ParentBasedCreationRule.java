@@ -17,7 +17,7 @@
 package com.swirlds.platform.event.creation;
 
 import com.swirlds.common.system.EventCreationRuleResponse;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.common.system.events.BaseEvent;
 
 /**
  * Determines if an event should be created by the potential parents supplied
@@ -30,5 +30,5 @@ public interface ParentBasedCreationRule {
 	 * 		the potential other-parent
 	 * @return the appropriate action to take
 	 */
-	EventCreationRuleResponse shouldCreateEvent(EventImpl selfParent, EventImpl otherParent);
+	EventCreationRuleResponse shouldCreateEvent(BaseEvent selfParent, BaseEvent otherParent);
 }

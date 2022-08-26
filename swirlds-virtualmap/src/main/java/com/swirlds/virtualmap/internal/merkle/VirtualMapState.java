@@ -18,7 +18,8 @@ package com.swirlds.virtualmap.internal.merkle;
 
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
+import com.swirlds.common.merkle.MerkleLeaf;
+import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
 import com.swirlds.virtualmap.VirtualMap;
 import com.swirlds.virtualmap.internal.Path;
 
@@ -29,7 +30,7 @@ import java.util.Objects;
  * Contains state for a {@link VirtualMap}. This state is stored in memory in the merkle tree as
  * the first (left) child of the VFCMap / {@link VirtualMap}.
  */
-public class VirtualMapState extends AbstractMerkleLeaf {
+public class VirtualMapState extends PartialMerkleLeaf implements MerkleLeaf {
 	public static final long CLASS_ID = 0x9e698c13a408250dL;
 	private static final int CLASS_VERSION = 1;
 

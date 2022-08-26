@@ -21,7 +21,7 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.iterators.MerkleIterator;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
-import com.swirlds.common.threading.futures.WaitingFuture;
+import com.swirlds.common.threading.futures.StandardFuture;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -129,9 +129,9 @@ public class MerkleHashBuilder {
 	 */
 	public Future<Hash> digestTreeAsync(MerkleNode root) {
 		if (root == null) {
-			return new WaitingFuture<>(cryptography.getNullHash(MERKLE_DIGEST_TYPE));
+			return new StandardFuture<>(cryptography.getNullHash(MERKLE_DIGEST_TYPE));
 		} else if (root.getHash() != null) {
-			return new WaitingFuture<>(root.getHash());
+			return new StandardFuture<>(root.getHash());
 		} else {
 			final FutureMerkleHash result = new FutureMerkleHash();
 			AtomicInteger activeThreadCount = new AtomicInteger(cpuThreadCount);

@@ -21,7 +21,7 @@ import com.swirlds.common.threading.locks.LockedResource;
 import com.swirlds.common.threading.locks.MaybeLockedResource;
 import com.swirlds.common.threading.locks.NotAcquiredResource;
 import com.swirlds.common.threading.locks.ResourceLock;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.ConnectionManager;
 import com.swirlds.platform.network.topology.NetworkTopology;
 import com.swirlds.platform.network.topology.StaticConnectionManagers;
@@ -59,7 +59,7 @@ public class SharedConnectionLocks {
 	}
 
 	/**
-	 * Returns a {@link MaybeLockedResource} for the {@link SyncConnection} to the member with the given ID. If the lock
+	 * Returns a {@link MaybeLockedResource} for the {@link Connection} to the member with the given ID. If the lock
 	 * is
 	 * currently being held, the lock and connection will not be acquired. If the connection isn't currently working,
 	 * then it will NOT try to connect to it.

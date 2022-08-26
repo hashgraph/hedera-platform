@@ -16,7 +16,8 @@
 
 package com.swirlds.platform.consensus;
 
-import com.swirlds.common.system.events.Event;
+import com.swirlds.common.system.events.BaseEvent;
+import com.swirlds.common.system.events.PlatformEvent;
 
 public interface GraphGenerations {
 	long FIRST_GENERATION = 0;
@@ -57,7 +58,15 @@ public interface GraphGenerations {
 	 * 		the event to check
 	 * @return true if its ancient, false otherwise
 	 */
-	default boolean isAncient(final Event event) {
+	default boolean isAncient(final PlatformEvent event) {
 		return event.getGeneration() < getMinGenerationNonAncient();
 	}
+
+	/**
+	 * Same as {@link #isAncient(PlatformEvent)} but for {@link BaseEvent}
+	 */
+	default boolean isAncient(final BaseEvent event) {
+		return event.getHashedData().getGeneration() < getMinGenerationNonAncient();
+	}
+
 }

@@ -18,6 +18,7 @@ package com.swirlds.platform.chatter.protocol.output;
 
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
+import com.swirlds.platform.chatter.protocol.peer.CommunicationState;
 import com.swirlds.platform.stats.StatsProvider;
 
 /**
@@ -30,11 +31,13 @@ public interface MessageOutput<T extends SelfSerializable> extends StatsProvider
 	/**
 	 * Creates an instance responsible for sending messages to one particular peer
 	 *
+	 * @param communicationState
+	 * 		the state of communication with this chatter peer
 	 * @param sendCheck
 	 * 		invoked before a message is about to be sent, to determine if it should be sent or not
 	 * @return a message provider for a peer
 	 */
-	MessageProvider createPeerInstance(final SendCheck<T> sendCheck);
+	MessageProvider createPeerInstance(final CommunicationState communicationState, final SendCheck<T> sendCheck);
 
 	/**
 	 * Send a message to all peers

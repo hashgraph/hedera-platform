@@ -16,11 +16,11 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.Consensus;
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
-import com.swirlds.platform.sync.SyncGenerations;
+import com.swirlds.platform.sync.Generations;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -56,7 +56,7 @@ public class ConsensusWrapper {
 
 		final List<ConsensusRound> rounds = new LinkedList<>();
 		for (final Map.Entry<Long, List<EventImpl>> entry : roundEvents.entrySet()) {
-			rounds.add(new ConsensusRound(entry.getValue(), new SyncGenerations(consensusSupplier.get())));
+			rounds.add(new ConsensusRound(entry.getValue(), new Generations(consensusSupplier.get())));
 		}
 
 		return rounds;

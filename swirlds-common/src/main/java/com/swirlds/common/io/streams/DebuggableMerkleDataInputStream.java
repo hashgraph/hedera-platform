@@ -17,7 +17,6 @@
 package com.swirlds.common.io.streams;
 
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.io.streams.internal.MerkleTreeSerializationOptions;
 import com.swirlds.common.io.streams.internal.SerializationOperation;
 import com.swirlds.common.io.streams.internal.SerializationStack;
 import com.swirlds.common.merkle.MerkleNode;
@@ -27,6 +26,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -62,6 +62,7 @@ public class DebuggableMerkleDataInputStream extends MerkleDataInputStream {
 
 	private final SerializationStack stack;
 
+
 	/**
 	 * Create a new {@link MerkleDataInputStream} that has extra debug capability.
 	 *
@@ -69,20 +70,7 @@ public class DebuggableMerkleDataInputStream extends MerkleDataInputStream {
 	 * 		the base stream
 	 */
 	public DebuggableMerkleDataInputStream(final InputStream in) {
-		this(in, null);
-	}
-
-
-	/**
-	 * Create a new {@link MerkleDataInputStream} that has extra debug capability.
-	 *
-	 * @param in
-	 * 		the base stream
-	 * @param externalDirectory
-	 * 		the directory where external data is stored
-	 */
-	public DebuggableMerkleDataInputStream(final InputStream in, final File externalDirectory) {
-		super(in, externalDirectory);
+		super(in);
 
 		final StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
 		final StackTraceElement callLocation = stackTrace[STACK_TRACE_OFFSET];
@@ -617,10 +605,13 @@ public class DebuggableMerkleDataInputStream extends MerkleDataInputStream {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public <T extends MerkleNode> T readMerkleTree(final int maxNumberOfNodes) throws IOException {
+	public <T extends MerkleNode> T readMerkleTree(
+			final File directory,
+			final int maxNumberOfNodes) throws IOException {
+
 		startOperation(SerializationOperation.READ_MERKLE_TREE);
 		try {
-			return super.readMerkleTree(maxNumberOfNodes);
+			return super.readMerkleTree(directory, maxNumberOfNodes);
 		} finally {
 			finishOperation();
 		}
@@ -630,10 +621,12 @@ public class DebuggableMerkleDataInputStream extends MerkleDataInputStream {
 	 * {@inheritDoc}
 	 */
 	@Override
-	protected void readNextNode(final MerkleTreeSerializationOptions options) throws IOException {
+	protected void readNextNode(
+			final File directory,
+			final Map<Long /* class ID */, Integer /* version */> deserializedVersions) throws IOException {
 		startOperation(SerializationOperation.READ_MERKLE_NODE);
 		try {
-			super.readNextNode(options);
+			super.readNextNode(directory, deserializedVersions);
 		} finally {
 			finishOperation();
 		}
@@ -675,6 +668,22 @@ public class DebuggableMerkleDataInputStream extends MerkleDataInputStream {
 		startOperation(SerializationOperation.READ_SERIALIZABLE_LIST);
 		try {
 			super.readSerializableIterableWithSize(maxSize, callback);
+		} finally {
+			finishOperation();
+		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public <T extends SelfSerializable> void readSerializableIterableWithSize(
+			final int size, final boolean readClassId,
+			final Supplier<T> serializableConstructor,
+			final Consumer<T> callback) throws IOException {
+		startOperation(SerializationOperation.READ_SERIALIZABLE_LIST);
+		try {
+			super.readSerializableIterableWithSize(size, readClassId, serializableConstructor, callback);
 		} finally {
 			finishOperation();
 		}

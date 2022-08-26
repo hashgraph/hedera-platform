@@ -17,7 +17,7 @@
 package com.swirlds.common.crypto;
 
 import com.swirlds.common.AbstractHashable;
-import com.swirlds.common.threading.futures.WaitingFuture;
+import com.swirlds.common.threading.futures.StandardFuture;
 
 /**
  * Represents a single {@link Hash} instance taken of a given moment in time from a running hash chain. A given {@link
@@ -37,13 +37,13 @@ public class RunningHash extends AbstractHashable implements FutureHashable {
 	/**
 	 * The {@link java.util.concurrent.Future} instance which is resolved when the hash value is provided.
 	 */
-	private final WaitingFuture<Hash> futureHash;
+	private final StandardFuture<Hash> futureHash;
 
 	/**
 	 * Creates a new instance without a hash value and an unresolved future.
 	 */
 	public RunningHash() {
-		futureHash = new WaitingFuture<>();
+		futureHash = new StandardFuture<>();
 	}
 
 	/**
@@ -53,7 +53,7 @@ public class RunningHash extends AbstractHashable implements FutureHashable {
 	 * 		the hash value with which to initialize this instance.
 	 */
 	public RunningHash(final Hash hash) {
-		futureHash = new WaitingFuture<>(hash);
+		futureHash = new StandardFuture<>(hash);
 		super.setHash(hash);
 	}
 
@@ -61,7 +61,7 @@ public class RunningHash extends AbstractHashable implements FutureHashable {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public WaitingFuture<Hash> getFutureHash() {
+	public StandardFuture<Hash> getFutureHash() {
 		return futureHash;
 	}
 
@@ -70,7 +70,7 @@ public class RunningHash extends AbstractHashable implements FutureHashable {
 	 */
 	@Override
 	public void setHash(final Hash hash) {
-		futureHash.done(hash);
+		futureHash.complete(hash);
 		super.setHash(hash);
 	}
 }

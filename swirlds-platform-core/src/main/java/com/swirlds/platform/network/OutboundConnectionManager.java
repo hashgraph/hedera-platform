@@ -19,7 +19,7 @@ package com.swirlds.platform.network;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.locks.LockedResource;
 import com.swirlds.common.threading.locks.ResourceLock;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.connection.NotConnectedConnection;
 import com.swirlds.platform.network.connectivity.OutboundConnectionCreator;
 
@@ -33,9 +33,9 @@ public class OutboundConnectionManager implements ConnectionManager {
 	private final NodeId peerId;
 	private final OutboundConnectionCreator connectionCreator;
 	/** the current connection in use, initially not connected. there is no synchronization on this variable */
-	private SyncConnection currentConn = NotConnectedConnection.getSingleton();
+	private Connection currentConn = NotConnectedConnection.getSingleton();
 	/** locks the connection managed by this instance */
-	private final ResourceLock<SyncConnection> lock = new ResourceLock<>(new ReentrantLock(), currentConn);
+	private final ResourceLock<Connection> lock = new ResourceLock<>(new ReentrantLock(), currentConn);
 
 	public OutboundConnectionManager(
 			final NodeId peerId,
@@ -48,8 +48,8 @@ public class OutboundConnectionManager implements ConnectionManager {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public SyncConnection waitForConnection() {
-		try (final LockedResource<SyncConnection> resource = lock.lock()) {
+	public Connection waitForConnection() {
+		try (final LockedResource<Connection> resource = lock.lock()) {
 			while (!resource.getResource().connected()) {
 				resource.getResource().disconnect();
 				resource.setResource(connectionCreator.createConnection(peerId));
@@ -63,7 +63,7 @@ public class OutboundConnectionManager implements ConnectionManager {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public SyncConnection getConnection() {
+	public Connection getConnection() {
 		return currentConn;
 	}
 
@@ -71,7 +71,7 @@ public class OutboundConnectionManager implements ConnectionManager {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void newConnection(final SyncConnection connection) {
+	public void newConnection(final Connection connection) {
 		throw new UnsupportedOperationException("Does not accept connections");
 	}
 }

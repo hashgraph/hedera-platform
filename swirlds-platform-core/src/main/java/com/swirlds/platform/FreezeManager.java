@@ -18,34 +18,35 @@ package com.swirlds.platform;
 
 import com.swirlds.common.system.EventCreationRule;
 import com.swirlds.common.system.EventCreationRuleResponse;
-import com.swirlds.common.system.NodeId;
-import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.components.TransThrottleSyncRule;
-import com.swirlds.platform.observers.EventAddedObserver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG_FREEZE;
 import static com.swirlds.logging.LogMarker.FREEZE;
 
 /**
- * A class that handles all freeze related functionality
- * It only uses consensus time for determining if and when to initiate a freeze.
+ * The source freeze related information.
  */
-public class FreezeManager implements EventAddedObserver, TransThrottleSyncRule, EventCreationRule {
+public class FreezeManager implements TransThrottleSyncRule, EventCreationRule {
+
 	private static final Logger log = LogManager.getLogger();
+
 	/** this boolean states whether events should be created or not */
 	private volatile boolean freezeEventCreation = false;
 
-	/** ID of the platform that owns this FreezeManager */
-	private final NodeId selfId;
+	/** the current state of the system regarding freeze */
+	private volatile FreezeStatus freezeStatus = FreezeStatus.NOT_IN_FREEZE;
 
 	/** A method to call when the freeze status changes */
 	private final Runnable freezeChangeMethod;
 
-	FreezeManager(final NodeId selfId,
-			final Runnable freezeChangeMethod) {
-		this.selfId = selfId;
+	private enum FreezeStatus {
+		NOT_IN_FREEZE,
+		IN_FREEZE,
+		FREEZE_COMPLETE
+	}
+
+	public FreezeManager(final Runnable freezeChangeMethod) {
 		this.freezeChangeMethod = freezeChangeMethod;
 	}
 
@@ -54,41 +55,53 @@ public class FreezeManager implements EventAddedObserver, TransThrottleSyncRule,
 	 *
 	 * @return true if we should create events, false otherwise
 	 */
-	boolean isEventCreationFrozen() {
-		return freezeEventCreation;
-	}
-
-	boolean shouldEnterMaintenance() {
+	public boolean isEventCreationFrozen() {
 		return freezeEventCreation;
 	}
 
 	/**
 	 * Sets event creation to be frozen
 	 */
-	void setEventCreationFrozen() {
+	public void freezeEventCreation() {
 		freezeEventCreation = true;
-		log.info(FREEZE.getMarker(), "Event creation frozen in platform {}", selfId);
+		log.info(FREEZE.getMarker(), "Event creation frozen");
+	}
+
+	/**
+	 * Sets the system in a state a freeze.
+	 */
+	public synchronized void freezeStarted() {
+		if (freezeStatus != FreezeStatus.NOT_IN_FREEZE) {
+			throw new IllegalStateException("Attempt to enter a freeze period from state {}" + freezeStatus);
+		}
+		freezeStatus = FreezeStatus.IN_FREEZE;
 		freezeChangeMethod.run();
 	}
 
-	@Override
-	public void eventAdded(EventImpl event) {
-		if (!event.isCreatedBy(selfId)) {
-			// we only freeze event creation when we have created an event with a freeze transaction
-			return;
+	/**
+	 * Returns true if the system is currently in a freeze
+	 */
+	public boolean isFreezeStarted() {
+		return freezeStatus == FreezeStatus.IN_FREEZE;
+	}
+
+	/**
+	 * Sets the system in a freeze state in which no more consensus transactions will be handled. Only valid if {@link
+	 * #freezeStarted()} was previously called.
+	 */
+	public synchronized void freezeComplete() {
+		if (freezeStatus != FreezeStatus.IN_FREEZE) {
+			throw new IllegalStateException("Attempt to complete freeze before freeze started.");
 		}
-		final Transaction[] transactions = event.getTransactions();
-		if (transactions == null) {
-			return;
-		}
-		// Check all the system transactions that are put in an Event. If there is a
-		// SYS_TRANS_STATE_SIG_FREEZE transaction then invoke callback.
-		for (Transaction trans : transactions) {
-			if (trans.getTransactionType() == SYS_TRANS_STATE_SIG_FREEZE) {
-				setEventCreationFrozen();
-				break;
-			}
-		}
+		freezeStatus = FreezeStatus.FREEZE_COMPLETE;
+		freezeChangeMethod.run();
+	}
+
+	/**
+	 * Returns true if the system is no longer handling consensus transactions
+	 */
+	public boolean isFreezeComplete() {
+		return freezeStatus == FreezeStatus.FREEZE_COMPLETE;
 	}
 
 	/**

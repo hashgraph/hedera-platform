@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.network.unidirectional;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.NetworkProtocolException;
 
 import java.io.IOException;
@@ -39,6 +39,6 @@ public interface NetworkProtocolResponder {
 	 * @throws InterruptedException
 	 * 		if the thread is interrupted
 	 */
-	void protocolInitiated(final byte initialByte, final SyncConnection connection)
+	void protocolInitiated(final byte initialByte, final Connection connection)
 			throws IOException, NetworkProtocolException, InterruptedException;
 }

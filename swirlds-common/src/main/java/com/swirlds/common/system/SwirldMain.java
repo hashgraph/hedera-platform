@@ -89,6 +89,28 @@ public interface SwirldMain extends Runnable {
 	void platformStatusChange(PlatformStatus newStatus);
 
 	/**
+	 * <p>
+	 * Get the current software version.
+	 * </p>
+	 *
+	 * <ul>
+	 * <li>
+	 * This version should not change except when a node is restarted.
+	 * </li>
+	 * <li>
+	 * Every time a node restarts, the supplied version must be greater or equal to the previous version.
+	 * </li>
+	 * <li>
+	 * Every supplied version for a particular app should have the same type. Failure to follow this
+	 * restriction may lead to miscellaneous {@link ClassCastException}s.
+	 * </li>
+	 * </ul>
+	 *
+	 * @return the current version
+	 */
+	SoftwareVersion getSoftwareVersion();
+
+	/**
 	 * Called any time a new {@link SwirldState} is signed by nodes with more than 2/3 of the stake. If this method
 	 * call is still ongoing while a new SwirldState is signed, it will be skipped until it has finished.
 	 *

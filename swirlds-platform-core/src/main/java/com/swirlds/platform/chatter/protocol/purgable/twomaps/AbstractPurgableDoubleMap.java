@@ -300,4 +300,10 @@ public abstract class AbstractPurgableDoubleMap<K, V> implements PurgableMap<K, 
 	public int getSize() {
 		return data.size();
 	}
+
+	@Override
+	public void clear() {
+		data.clear();
+		generationMap.clear();
+	}
 }

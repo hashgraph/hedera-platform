@@ -16,10 +16,11 @@
 
 package com.swirlds.fcqueue;
 
+import com.swirlds.common.metrics.RunningAverageMetric;
 import com.swirlds.common.system.Platform;
-import com.swirlds.common.statistics.StatEntry;
-import com.swirlds.common.statistics.StatsRunningAverage;
 import com.swirlds.common.system.SwirldMain;
+
+import static com.swirlds.common.metrics.FloatFormats.FORMAT_9_6;
 
 /**
  * Singleton factory for loading and registering {@link FCQueue} statistics. This is the primary entry point for all
@@ -27,32 +28,42 @@ import com.swirlds.common.system.SwirldMain;
  */
 public class FCQueueStatistics {
 
+	private static final String FCQUEUE_CATEGORY = "FCQueue";
+
 	/**
 	 * true if these statistics have been registered by the application; otherwise false
 	 */
 	private static volatile boolean registered;
 
 	/**
-	 * default half-life for statistics
-	 */
-	private static final double DEFAULT_HALF_LIFE = 10;
-
-	/**
 	 * avg time taken to execute the FCQueue add method, including locks (in microseconds)
 	 */
-	protected static final StatsRunningAverage fcqAddExecutionMicros = new StatsRunningAverage(DEFAULT_HALF_LIFE);
+	protected static final RunningAverageMetric fcqAddExecutionMicros = new RunningAverageMetric(
+			FCQUEUE_CATEGORY,
+			"fcqAddExecMicroSec",
+			"avg time taken to execute the FCQueue add method, not including locks (in microseconds)",
+			FORMAT_9_6
+	);
 
 	/**
 	 * avg time taken to execute the FCQueue remove method, including locks (in microseconds)
 	 */
-	protected static final StatsRunningAverage fcqRemoveExecutionMicros = new StatsRunningAverage(DEFAULT_HALF_LIFE);
+	protected static final RunningAverageMetric fcqRemoveExecutionMicros = new RunningAverageMetric(
+			FCQUEUE_CATEGORY,
+			"fcqRemoveExecMicroSec",
+			"avg time taken to execute the FCQueue remove method, not including locks (in microseconds)",
+			FORMAT_9_6
+	);
 
 	/**
 	 * avg time taken to execute the FCQueue getHash method, including locks (in microseconds)
 	 */
-	protected static final StatsRunningAverage fcqHashExecutionMicros = new StatsRunningAverage(DEFAULT_HALF_LIFE);
-
-	private static final String FCQUEUE_CATEGORY = "FCQueue";
+	protected static final RunningAverageMetric fcqHashExecutionMicros = new RunningAverageMetric(
+			FCQUEUE_CATEGORY,
+			"fcqHashExecMicroSec",
+			"avg time taken to execute the FCQueue remove method, not including locks (in microseconds)",
+			FORMAT_9_6
+	);
 
 	/**
 	 * Default private constructor to ensure that this may not be instantiated.
@@ -91,47 +102,11 @@ public class FCQueueStatistics {
 	 * 		true if lock acquisition timings should be reported; otherwise false if no lock timings should be reported
 	 */
 	public static void register(final Platform platform, final boolean includeLocks) {
-		platform.addAppStatEntry(new StatEntry(
-				FCQUEUE_CATEGORY,
-				"fcqAddExecMicroSec",
-				"avg time taken to execute the FCQueue add method, not including locks (in microseconds)",
-				"%,9.6f",
+		platform.addAppMetrics(
 				fcqAddExecutionMicros,
-				(h) -> {
-					fcqAddExecutionMicros.reset(h);
-					return fcqAddExecutionMicros;
-				},
-				null,
-				fcqAddExecutionMicros::getWeightedMean
-		));
-
-		platform.addAppStatEntry(new StatEntry(
-				FCQUEUE_CATEGORY,
-				"fcqRemoveExecMicroSec",
-				"avg time taken to execute the FCQueue remove method, not including locks (in microseconds)",
-				"%,9.6f",
 				fcqRemoveExecutionMicros,
-				(h) -> {
-					fcqRemoveExecutionMicros.reset(h);
-					return fcqRemoveExecutionMicros;
-				},
-				null,
-				fcqRemoveExecutionMicros::getWeightedMean
-		));
-
-		platform.addAppStatEntry(new StatEntry(
-				FCQUEUE_CATEGORY,
-				"fcqHashExecMicroSec",
-				"avg time taken to execute the FCQueue remove method, not including locks (in microseconds)",
-				"%,9.6f",
-				fcqHashExecutionMicros,
-				(h) -> {
-					fcqHashExecutionMicros.reset(h);
-					return fcqHashExecutionMicros;
-				},
-				null,
-				fcqHashExecutionMicros::getWeightedMean
-		));
+				fcqHashExecutionMicros
+		);
 
 		registered = true;
 	}

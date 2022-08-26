@@ -16,10 +16,11 @@
 
 package com.swirlds.merkle.map;
 
+import com.swirlds.common.metrics.RunningAverageMetric;
 import com.swirlds.common.system.Platform;
-import com.swirlds.common.statistics.StatEntry;
-import com.swirlds.common.statistics.StatsRunningAverage;
 import com.swirlds.common.system.SwirldMain;
+
+import static com.swirlds.common.metrics.FloatFormats.FORMAT_11_3;
 
 /**
  * Singleton factory for loading and registering {@link MerkleMap} statistics. This is the primary entry point for all
@@ -27,38 +28,52 @@ import com.swirlds.common.system.SwirldMain;
  */
 public final class MerkleMapStatistics {
 
+	private static final String MM_CATEGORY = "MM";
+
 	/**
 	 * true if these statistics have been registered by the application; otherwise false
 	 */
 	private static volatile boolean registered;
 
 	/**
-	 * default half-life for statistics
-	 */
-	private static final double DEFAULT_HALF_LIFE = 10;
-
-	/**
 	 * avg time taken to execute the MerkleMap get method (in microseconds)
 	 */
-	protected static final StatsRunningAverage mmmGetMicroSec = new StatsRunningAverage(DEFAULT_HALF_LIFE);
+	static final RunningAverageMetric mmmGetMicroSec = new RunningAverageMetric(
+			MM_CATEGORY,
+			"mmGetMicroSec",
+			"avg time taken to execute the MerkleMap get method (in microseconds)",
+			FORMAT_11_3
+	);
 
 	/**
 	 * avg time taken to execute the MerkleMap getForModify method (in microseconds)
 	 */
-	protected static final StatsRunningAverage mmGfmMicroSec = new StatsRunningAverage(DEFAULT_HALF_LIFE);
+	static final RunningAverageMetric mmGfmMicroSec = new RunningAverageMetric(
+			MM_CATEGORY,
+			"mmGfmMicroSec",
+			"avg time taken to execute the MerkleMap getForModify method (in microseconds)",
+			FORMAT_11_3
+	);
 
 	/**
 	 * avg time taken to execute the MerkleMap replace method (in microseconds)
 	 */
-	protected static final StatsRunningAverage mmReplaceMicroSec = new StatsRunningAverage(DEFAULT_HALF_LIFE);
+	static final RunningAverageMetric mmReplaceMicroSec = new RunningAverageMetric(
+			MM_CATEGORY,
+			"mmReplaceMicroSec",
+			"avg time taken to execute the MerkleMap replace method (in microseconds)",
+			FORMAT_11_3
+	);
 
 	/**
 	 * avg time taken to execute the MerkleMap put method (in microseconds)
 	 */
-	protected static final StatsRunningAverage mmPutMicroSec = new StatsRunningAverage(DEFAULT_HALF_LIFE);
-
-	private static final String MM_CATEGORY = "MM";
-	private static final String FORMAT_FLOAT_3SIGFIG = "%,11.3f";
+	static final RunningAverageMetric mmPutMicroSec = new RunningAverageMetric(
+			MM_CATEGORY,
+			"mmPutMicroSec",
+			"avg time taken to execute the MerkleMap put method (in microseconds)",
+			FORMAT_11_3
+	);
 
 	/**
 	 * Default private constructor to ensure that this may not be instantiated.
@@ -83,61 +98,12 @@ public final class MerkleMapStatistics {
 	 * 		the platform instance
 	 */
 	public static void register(final Platform platform) {
-		platform.addAppStatEntry(new StatEntry(
-				MM_CATEGORY,
-				"mmGetMicroSec",
-				"avg time taken to execute the MerkleMap get method (in microseconds)",
-				FORMAT_FLOAT_3SIGFIG,
+		platform.addAppMetrics(
 				mmmGetMicroSec,
-				h -> {
-					mmmGetMicroSec.reset(h);
-					return mmmGetMicroSec;
-				},
-				null,
-				mmmGetMicroSec::getWeightedMean
-		));
-
-		platform.addAppStatEntry(new StatEntry(
-				MM_CATEGORY,
-				"mmGfmMicroSec",
-				"avg time taken to execute the MerkleMap getForModify method (in microseconds)",
-				FORMAT_FLOAT_3SIGFIG,
 				mmGfmMicroSec,
-				h -> {
-					mmGfmMicroSec.reset(h);
-					return mmGfmMicroSec;
-				},
-				null,
-				mmGfmMicroSec::getWeightedMean
-		));
-
-		platform.addAppStatEntry(new StatEntry(
-				MM_CATEGORY,
-				"mmReplaceMicroSec",
-				"avg time taken to execute the MerkleMap replace method (in microseconds)",
-				FORMAT_FLOAT_3SIGFIG,
 				mmReplaceMicroSec,
-				h -> {
-					mmReplaceMicroSec.reset(h);
-					return mmReplaceMicroSec;
-				},
-				null,
-				mmReplaceMicroSec::getWeightedMean
-		));
-
-		platform.addAppStatEntry(new StatEntry(
-				MM_CATEGORY,
-				"mmPutMicroSec",
-				"avg time taken to execute the MerkleMap put method (in microseconds)",
-				FORMAT_FLOAT_3SIGFIG,
-				mmPutMicroSec,
-				h -> {
-					mmPutMicroSec.reset(h);
-					return mmPutMicroSec;
-				},
-				null,
-				mmPutMicroSec::getWeightedMean
-		));
+				mmPutMicroSec
+		);
 
 		registered = true;
 	}

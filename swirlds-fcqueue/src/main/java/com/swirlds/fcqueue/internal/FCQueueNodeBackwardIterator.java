@@ -16,8 +16,9 @@
 
 package com.swirlds.fcqueue.internal;
 
+import com.swirlds.common.FastCopyable;
+import com.swirlds.common.crypto.SerializableHashable;
 import com.swirlds.fcqueue.FCQueue;
-import com.swirlds.fcqueue.FCQueueElement;
 
 /**
  * An iterator for FCQueue, starts at the tail of the given queue, ends at the head of the given queue
@@ -25,7 +26,8 @@ import com.swirlds.fcqueue.FCQueueElement;
  * @param <E>
  * 		the type of elements in the FCQueue
  */
-public final class FCQueueNodeBackwardIterator<E extends FCQueueElement> extends FCQueueNodeIterator<E> {
+public final class FCQueueNodeBackwardIterator<E extends FastCopyable & SerializableHashable>
+		extends FCQueueNodeIterator<E> {
 
 	/**
 	 * start this iterator at the tail of the given queue

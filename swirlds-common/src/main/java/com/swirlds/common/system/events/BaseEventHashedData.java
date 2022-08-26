@@ -22,14 +22,15 @@ import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.OptionalSelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.system.transaction.Transaction;
-import com.swirlds.common.system.transaction.internal.LegacyTransaction;
+import com.swirlds.common.system.transaction.ConsensusTransaction;
+import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 import com.swirlds.common.utility.CommonUtils;
-import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Objects;
 
 import static com.swirlds.common.io.streams.SerializableDataOutputStream.getSerializedLength;
 
@@ -49,7 +50,7 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 	private static class ClassVersion {
 		/**
 		 * In this version, the transactions contained by this event are encoded using
-		 * {@link com.swirlds.common.system.transaction.internal.LegacyTransaction} class.
+		 * LegacyTransaction class. No longer supported.
 		 */
 		public static final int ORIGINAL = 1;
 		/**
@@ -76,7 +77,7 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 	/** creation time, as claimed by its creator */
 	private Instant timeCreated;
 	/** the payload: an array of transactions */
-	private Transaction[] transactions;
+	private ConsensusTransactionImpl[] transactions;
 
 	/** are any of the transactions user transactions */
 	private boolean hasUserTransactions;
@@ -102,8 +103,9 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 	 * @param transactions
 	 * 		the payload: an array of transactions included in this event instance
 	 */
-	public BaseEventHashedData(long creatorId, long selfParentGen, long otherParentGen,
-			Hash selfParentHash, Hash otherParentHash, Instant timeCreated, Transaction[] transactions) {
+	public BaseEventHashedData(final long creatorId, final long selfParentGen, final long otherParentGen,
+			final Hash selfParentHash, final Hash otherParentHash, final Instant timeCreated,
+			final ConsensusTransactionImpl[] transactions) {
 		this.creatorId = creatorId;
 		this.selfParentGen = selfParentGen;
 		this.otherParentGen = otherParentGen;
@@ -132,8 +134,9 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 	 * @param transactions
 	 * 		the payload: an array of transactions included in this event instance
 	 */
-	public BaseEventHashedData(long creatorId, long selfParentGen, long otherParentGen,
-			byte[] selfParentHash, byte[] otherParentHash, Instant timeCreated, Transaction[] transactions) {
+	public BaseEventHashedData(final long creatorId, final long selfParentGen, final long otherParentGen,
+			final byte[] selfParentHash, final byte[] otherParentHash, final Instant timeCreated,
+			final ConsensusTransactionImpl[] transactions) {
 		this(
 				creatorId,
 				selfParentGen,
@@ -146,7 +149,13 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 	}
 
 	@Override
-	public void serialize(SerializableDataOutputStream out, EventSerializationOptions option) throws IOException {
+	public int getMinimumSupportedVersion() {
+		return ClassVersion.TRANSACTION_SUBCLASSES;
+	}
+
+	@Override
+	public void serialize(final SerializableDataOutputStream out,
+			final EventSerializationOptions option) throws IOException {
 		out.writeLong(creatorId);
 		out.writeLong(selfParentGen);
 		out.writeLong(otherParentGen);
@@ -168,16 +177,17 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 	}
 
 	@Override
-	public void serialize(SerializableDataOutputStream out) throws IOException {
+	public void serialize(final SerializableDataOutputStream out) throws IOException {
 		serialize(out, EventSerializationOptions.FULL);
 	}
 
 	@Override
-	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
+	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
 		deserialize(in, version, SettingsCommon.maxTransactionCountPerEvent);
 	}
 
-	public void deserialize(SerializableDataInputStream in, int version, int maxTransactionCount) throws IOException {
+	public void deserialize(final SerializableDataInputStream in, final int version,
+			final int maxTransactionCount) throws IOException {
 		creatorId = in.readLong();
 		selfParentGen = in.readLong();
 		otherParentGen = in.readLong();
@@ -187,18 +197,12 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 		if (version == ClassVersion.TRANSACTION_SUBCLASSES) {
 			in.readInt(); //read serialized length
 			transactions = in.readSerializableArray(
-					Transaction[]::new,
+					ConsensusTransactionImpl[]::new,
 					maxTransactionCount,
 					true);
-		} else if (version == ClassVersion.ORIGINAL) {
-			// read legacy version of transaction then convert to swirldTransaction
-			transactions = in.readSerializableArray(
-					LegacyTransaction[]::new,
-					maxTransactionCount,
-					false,
-					LegacyTransaction::new);
 		} else {
-			throw new UnsupportedOperationException("Unsupported version " + version);
+			throw new UnsupportedOperationException(
+					"Unsupported version " + version + ". Minimum supported version is " + getMinimumSupportedVersion());
 		}
 		checkUserTransactions();
 	}
@@ -209,7 +213,7 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 	 */
 	private void checkUserTransactions() {
 		if (transactions != null) {
-			for (Transaction t : getTransactions()) {
+			for (final ConsensusTransaction t : getTransactions()) {
 				if (!t.isSystem()) {
 					hasUserTransactions = true;
 					break;
@@ -234,15 +238,13 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 
 		final BaseEventHashedData that = (BaseEventHashedData) o;
 
-		return new EqualsBuilder()
-				.append(creatorId, that.creatorId)
-				.append(selfParentGen, that.selfParentGen)
-				.append(otherParentGen, that.otherParentGen)
-				.append(selfParentHash, that.selfParentHash)
-				.append(otherParentHash, that.otherParentHash)
-				.append(timeCreated, that.timeCreated)
-				.append(transactions, that.transactions)
-				.isEquals();
+		return (creatorId == that.creatorId)
+				&& (selfParentGen == that.selfParentGen)
+				&& (otherParentGen == that.otherParentGen)
+				&& Objects.equals(selfParentHash, that.selfParentHash)
+				&& Objects.equals(otherParentHash, that.otherParentHash)
+				&& Objects.equals(timeCreated, that.timeCreated)
+				&& Arrays.equals(transactions, that.transactions);
 	}
 
 	@Override
@@ -272,7 +274,7 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 				'}';
 	}
 
-	private byte[] valueOrNull(Hash hash) {
+	private byte[] valueOrNull(final Hash hash) {
 		return hash == null ? null : hash.getValue();
 	}
 
@@ -306,7 +308,7 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 		return otherParentHash;
 	}
 
-	public boolean hasSelfParent(){
+	public boolean hasSelfParent() {
 		return selfParentHash != null;
 	}
 
@@ -329,7 +331,7 @@ public class BaseEventHashedData extends AbstractSerializableHashable
 	/**
 	 * @return array of transactions inside this event instance
 	 */
-	public Transaction[] getTransactions() {
+	public ConsensusTransactionImpl[] getTransactions() {
 		return transactions;
 	}
 

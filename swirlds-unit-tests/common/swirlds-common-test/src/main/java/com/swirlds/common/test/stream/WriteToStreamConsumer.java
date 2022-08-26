@@ -1,0 +1,116 @@
+/*
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.swirlds.common.test.stream;
+
+import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.crypto.RunningHash;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.stream.LinkedObjectStream;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Marker;
+import org.apache.logging.log4j.MarkerManager;
+
+import java.io.IOException;
+
+/**
+ * Is used for testing {@link com.swirlds.common.stream.SingleStreamIterator}
+ *
+ * writes Hash and objects to a stream;
+ */
+class WriteToStreamConsumer implements LinkedObjectStream<ObjectForTestStream> {
+	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
+	private static final Logger log = LogManager.getLogger();
+	private static final Marker LOGM_OBJECT_STREAM = MarkerManager.getMarker("OBJECT_STREAM");
+	private static final Marker LOGM_EXCEPTION = MarkerManager.getMarker("EXCEPTION");
+	/**
+	 * the stream to which we write RunningHash and serialize objects
+	 */
+	private SerializableDataOutputStream outputStream;
+
+	/**
+	 * current runningHash
+	 */
+	private RunningHash runningHash;
+
+	boolean isClosed = false;
+
+	int consumedCount = 0;
+
+	public WriteToStreamConsumer(SerializableDataOutputStream stream, Hash startRunningHash) throws IOException {
+		this.outputStream = stream;
+		try {
+			this.outputStream.writeSerializable(startRunningHash, true);
+		} catch (IOException ex) {
+			throw new IOException(
+					String.format("fail to write startRunningHash: %s. IOException: %s",
+							startRunningHash, ex.getMessage()), ex.getCause());
+		}
+
+		log.info(LOGM_OBJECT_STREAM, "write startRunningHash: {}", startRunningHash);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void addObject(ObjectForTestStream object) {
+		try {
+			outputStream.writeSerializable(object, true);
+			log.info(LOGM_OBJECT_STREAM, "write object: {}", object);
+			// update runningHash
+			this.runningHash = object.getRunningHash();
+			consumedCount++;
+		} catch (IOException ex) {
+			log.error(LOGM_EXCEPTION, "", ex);
+		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void close() {
+		try {
+			outputStream.writeSerializable(this.runningHash.getFutureHash().getAndRethrow(), true);
+			log.info(LOGM_OBJECT_STREAM, "write endRunningHash: {}", this.runningHash);
+			outputStream.close();
+			isClosed = true;
+		} catch (IOException ex) {
+			log.error(LOGM_EXCEPTION, "got IOException", ex);
+		} catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void clear() {
+		try {
+			outputStream.close();
+		} catch (IOException ex) {
+			log.error(LOGM_EXCEPTION, "got IOException", ex);
+		}
+	}
+
+	@Override
+	public void setRunningHash(final Hash hash) {
+		this.runningHash = new RunningHash(hash);
+	}
+}

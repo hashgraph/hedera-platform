@@ -21,6 +21,7 @@ import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -36,16 +37,13 @@ import static com.swirlds.common.io.streams.AugmentedDataOutputStream.getArraySe
 import static com.swirlds.common.system.transaction.TransactionType.APPLICATION;
 
 /**
- * A hashgraph transaction that consists of an array of bytes and a list of immutable {@link TransactionSignature}
- * objects. The contents of the transaction is completely immutable; however, the list of signatures features controlled
- * mutability with a thread-safe and atomic implementation. The transaction internally uses a {@link ReadWriteLock} to
- * provide atomic reads and writes to the underlying list of signatures.
+ * A container for an application transaction that contains extra information.
  * <p>
- * Selectively combining controlled mutability for certain aspects while using immutability for the rest grants a
- * significant performance improvement over a completely mutable or completely immutable object.
- * </p>
+ * Even though this class implements {@link ConsensusTransaction}, there will be some time during which this
+ * transaction has not reached consensus. It must implement {@link ConsensusTransaction} so it can be provided to the
+ * application as one after it does reach consensus.
  */
-public class SwirldTransaction implements Comparable<SwirldTransaction>, Transaction {
+public class SwirldTransaction extends ConsensusTransactionImpl implements Comparable<SwirldTransaction> {
 	/** class identifier for the purposes of serialization */
 	private static final long CLASS_ID = 0x9ff79186f4c4db97L;
 	/** current class version */
@@ -62,6 +60,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 
 	/** The list of optional signatures attached to this transaction */
 	private List<TransactionSignature> signatures;
+
+	/** An optional metadata object set by the application */
+	private Object metadata;
 
 	public SwirldTransaction() {
 		this.readWriteLock = new ReentrantReadWriteLock(false);
@@ -100,34 +101,17 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	}
 
 	/**
-	 * Returns the transaction content (payload). This method returns a copy of the original content.
-	 *
-	 * This method is thread-safe and guaranteed to be atomic in nature.
-	 *
-	 * @return the transaction content/payload
+	 * {@inheritDoc}
 	 */
+	@Override
 	public byte[] getContents() {
-		if (contents == null || contents.length == 0) {
-			throw new IllegalArgumentException(CONTENT_ERROR);
-		}
-
-		return contents.clone();
+		return contents;
 	}
 
 	/**
-	 * Returns the byte located at {@code index} position from the transaction content/payload.
-	 *
-	 * This method is thread-safe and guaranteed to be atomic in nature.
-	 *
-	 * @param index
-	 * 		the index of the byte to be returned
-	 * @return the byte located at {@code index} position
-	 * @throws IllegalArgumentException
-	 * 		if the underlying transaction content is null or a zero-length array
-	 * @throws ArrayIndexOutOfBoundsException
-	 * 		if the {@code index} parameter is less than zero or greater than the
-	 * 		maximum length of the contents
+	 * {@inheritDoc}
 	 */
+	@Override
 	public byte getContents(final int index) {
 		if (contents == null || contents.length == 0) {
 			throw new IllegalArgumentException(CONTENT_ERROR);
@@ -138,19 +122,6 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 		}
 
 		return contents[index];
-	}
-
-	/**
-	 * Internal use accessor that returns a direct (mutable) reference to the transaction contents/payload. Care must be
-	 * taken to never modify the array returned by this accessor. Modifying the array will result in undefined behaviors
-	 * and will result in a violation of the immutability contract provided by the {@link SwirldTransaction} object.
-	 *
-	 * This method exists solely to allow direct access by the platform for performance reasons.
-	 *
-	 * @return a direct reference to the transaction content/payload
-	 */
-	public byte[] getContentsDirect() {
-		return contents;
 	}
 
 	/**
@@ -176,13 +147,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	}
 
 	/**
-	 * Returns a {@link List} of {@link TransactionSignature} objects associated with this transaction. This method
-	 * returns a shallow copy of the original list. This method can return an unmodifiable list.
-	 *
-	 * This method is thread-safe and guaranteed to be atomic in nature.
-	 *
-	 * @return a shallow copy of the original signature list
+	 * {@inheritDoc}
 	 */
+	@Override
 	public List<TransactionSignature> getSignatures() {
 		final Lock readLock = readWriteLock.readLock();
 
@@ -195,26 +162,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	}
 
 	/**
-	 * Efficiently extracts and adds a new signature to this transaction bypassing the need to make copies of the
-	 * underlying byte arrays.
-	 *
-	 * @param signatureOffset
-	 * 		the offset in the transaction payload where the signature begins
-	 * @param signatureLength
-	 * 		the length in bytes of the signature
-	 * @param publicKeyOffset
-	 * 		the offset in the transaction payload where the public key begins
-	 * @param publicKeyLength
-	 * 		the length in bytes of the public key
-	 * @param messageOffset
-	 * 		the offset in the transaction payload where the message begins
-	 * @param messageLength
-	 * 		the length of the message in bytes
-	 * @throws IllegalArgumentException
-	 * 		if any of the provided offsets or lengths falls outside the array bounds
-	 * @throws IllegalArgumentException
-	 * 		if the internal payload of this transaction is null or a zero length array
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void extractSignature(final int signatureOffset, final int signatureLength, final int publicKeyOffset,
 			final int publicKeyLength, final int messageOffset, final int messageLength) {
 		add(new TransactionSignature(contents, signatureOffset, signatureLength, publicKeyOffset, publicKeyLength,
@@ -222,29 +172,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	}
 
 	/**
-	 * Efficiently extracts and adds a new signature of given signature type to this transaction bypassing the need to
-	 * make copies of the
-	 * underlying byte arrays.
-	 *
-	 * @param signatureOffset
-	 * 		the offset in the transaction payload where the signature begins
-	 * @param signatureLength
-	 * 		the length in bytes of the signature
-	 * @param publicKeyOffset
-	 * 		the offset in the transaction payload where the public key begins
-	 * @param publicKeyLength
-	 * 		the length in bytes of the public key
-	 * @param messageOffset
-	 * 		the offset in the transaction payload where the message begins
-	 * @param messageLength
-	 * 		the length of the message in bytes
-	 * @param sigType
-	 * 		signature type
-	 * @throws IllegalArgumentException
-	 * 		if any of the provided offsets or lengths falls outside the array bounds
-	 * @throws IllegalArgumentException
-	 * 		if the internal payload of this transaction is null or a zero length array
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void extractSignature(final int signatureOffset, final int signatureLength, final int publicKeyOffset,
 			final int publicKeyLength, final int messageOffset, final int messageLength, final SignatureType sigType) {
 		add(new TransactionSignature(contents, signatureOffset, signatureLength, publicKeyOffset, publicKeyLength,
@@ -252,29 +182,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	}
 
 	/**
-	 * Efficiently extracts and adds a new signature to this transaction bypassing the need to make copies of the
-	 * underlying byte arrays. If the optional expanded public key is provided then the public key offset and length are
-	 * indices into this array instead of the transaction payload.
-	 *
-	 * @param signatureOffset
-	 * 		the offset in the transaction payload where the signature begins
-	 * @param signatureLength
-	 * 		the length in bytes of the signature
-	 * @param expandedPublicKey
-	 * 		an optional expanded form of the public key
-	 * @param publicKeyOffset
-	 * 		the offset where the public key begins
-	 * @param publicKeyLength
-	 * 		the length in bytes of the public key
-	 * @param messageOffset
-	 * 		the offset in the transaction payload where the message begins
-	 * @param messageLength
-	 * 		the length of the message in bytes
-	 * @throws IllegalArgumentException
-	 * 		if any of the provided offsets or lengths falls outside the array bounds
-	 * @throws IllegalArgumentException
-	 * 		if the internal payload of this transaction is null or a zero length array
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void extractSignature(final int signatureOffset, final int signatureLength, final byte[] expandedPublicKey,
 			final int publicKeyOffset, final int publicKeyLength, final int messageOffset, final int messageLength) {
 		add(new TransactionSignature(contents, signatureOffset, signatureLength, expandedPublicKey, publicKeyOffset,
@@ -282,15 +192,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	}
 
 	/**
-	 * Adds a new {@link TransactionSignature} to this transaction.
-	 *
-	 * This method is thread-safe and guaranteed to be atomic in nature.
-	 *
-	 * @param signature
-	 * 		the signature to be added
-	 * @throws IllegalArgumentException
-	 * 		if the {@code signature} parameter is null
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void add(final TransactionSignature signature) {
 		if (signature == null) {
 			throw new IllegalArgumentException("signature");
@@ -312,13 +216,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	}
 
 	/**
-	 * Adds a list of new {@link TransactionSignature} objects to this transaction.
-	 *
-	 * This method is thread-safe and guaranteed to be atomic in nature.
-	 *
-	 * @param signatures
-	 * 		the list of signatures to be added
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void addAll(final TransactionSignature... signatures) {
 		if (signatures == null || signatures.length == 0) {
 			return;
@@ -339,14 +239,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	}
 
 	/**
-	 * Removes a {@link TransactionSignature} from this transaction.
-	 *
-	 * This method is thread-safe and guaranteed to be atomic in nature.
-	 *
-	 * @param signature
-	 * 		the signature to be removed
-	 * @return {@code true} if the underlying list was modified; {@code false} otherwise
+	 * {@inheritDoc}
 	 */
+	@Override
 	public boolean remove(final TransactionSignature signature) {
 		if (signature == null) {
 			return false;
@@ -367,14 +262,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	}
 
 	/**
-	 * Removes a list of {@link TransactionSignature} objects from this transaction.
-	 *
-	 * This method is thread-safe and guaranteed to be atomic in nature.
-	 *
-	 * @param signatures
-	 * 		the list of signatures to be removed
-	 * @return {@code true} if the underlying list was modified; {@code false} otherwise
+	 * {@inheritDoc}
 	 */
+	@Override
 	public boolean removeAll(final TransactionSignature... signatures) {
 		if (signatures == null || signatures.length == 0) {
 			return false;
@@ -395,10 +285,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	}
 
 	/**
-	 * Removes all signatures from this transaction.
-	 *
-	 * This method is thread-safe and guaranteed to be atomic in nature.
+	 * {@inheritDoc}
 	 */
+	@Override
 	public void clearSignatures() {
 		final Lock writeLock = readWriteLock.writeLock();
 
@@ -571,6 +460,9 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 		return CLASS_VERSION;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public int getSerializedLength() {
 		return getArraySerializedLength(contents);
@@ -588,7 +480,30 @@ public class SwirldTransaction implements Comparable<SwirldTransaction>, Transac
 	 * {@inheritDoc}
 	 */
 	@Override
+	public <T> T getMetadata() {
+		return (T) metadata;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public <T> void setMetadata(final T metadata) {
+		this.metadata = metadata;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
 	public TransactionType getTransactionType() {
 		return APPLICATION;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isSystem() {
+		return false;
 	}
 }

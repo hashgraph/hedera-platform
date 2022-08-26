@@ -15,7 +15,7 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.EventCreationRuleResponse;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.platform.components.CriticalQuorum;
@@ -31,14 +31,9 @@ import com.swirlds.platform.sync.SyncResult;
 import com.swirlds.platform.sync.SyncUtils;
 import org.apache.logging.log4j.LogManager;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
@@ -50,62 +45,38 @@ import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResp
  */
 class SyncManagerImpl implements SyncManager, FallenBehindManager {
 
-	/** the event intake queue */
-	private final BlockingQueue<EventIntakeTask> intakeQueue;
-
-	/** This object holds data on how nodes are connected to each other. */
-	private final RandomGraph connectionGraph;
-
-	/** The id of this node */
-	private final NodeId selfId;
-
-	/** This object is used for checking whether this node should create an event or not */
-	private final EventCreationRules eventCreationRules;
-
-	/** This object is used for checking whether should initiate a sync and create an event for that sync or not */
-	private final TransThrottleSyncAndCreateRules transThrottleSyncAndCreateRules;
-
-	/** A list of rules for checking if this not should sync with other nodes */
-	private final List<TransThrottleSyncRule> transThrottleSyncRules;
-
-	/** Returns the round number of the latest round saved to disk. */
-	private final Supplier<Long> lastRoundSavedToDisk;
-
-	/** Returns the round number of the latest round where we have a super-majority. */
-	private final Supplier<Long> lastCompletedRound;
-
-	/** Notifies the platform that its status may have changed. */
-	private final Runnable notifyPlatform;
-
-	/** Tracks user transactions in the hashgraph */
-	private final TransactionTracker transactionTracker;
-
-	/** Tracks recent events */
-	private final CriticalQuorum criticalQuorum;
-
-	/** The initial address book */
-	private final AddressBook addressBook;
-
-	/** a set of all neighbors of this node */
-	private final HashSet<Long> allNeighbors;
-	/** the number of neighbors we have */
-	private final int numNeighbors;
-
-	/** number of neighbors who think this node has fallen behind */
-	volatile int numReportFallenBehind = 0;
-	/** set of neighbors who report that this node has fallen behind */
-	private final HashSet<Long> reportFallenBehind;
-	/**
-	 * set of neighbors that have not yet reported that we have fallen behind, only exists if someone reports we have
-	 * fallen behind. This Set is made from a ConcurrentHashMap, so it needs no synchronization
-	 */
-	private final Set<Long> notYetReportFallenBehind;
-
 	/**
 	 * initial value of transThrottleInitialCalls
 	 */
 	private static final int TRANS_THROTTLE_INITIAL_CALLS_NUM = 10;
-
+	/**
+	 * When looking for a neighbor to call, this is the maximum number of neighbors we query before just selecting
+	 * one if a suitable neighbor is not found yet.
+	 */
+	private static final int MAXIMUM_NEIGHBORS_TO_QUERY = 10;
+	/** the event intake queue */
+	private final BlockingQueue<EventIntakeTask> intakeQueue;
+	/** This object holds data on how nodes are connected to each other. */
+	private final RandomGraph connectionGraph;
+	/** The id of this node */
+	private final NodeId selfId;
+	/** This object is used for checking whether this node should create an event or not */
+	private final EventCreationRules eventCreationRules;
+	/** This object is used for checking whether should initiate a sync and create an event for that sync or not */
+	private final TransThrottleSyncAndCreateRules transThrottleSyncAndCreateRules;
+	/** A list of rules for checking if this not should sync with other nodes */
+	private final List<TransThrottleSyncRule> transThrottleSyncRules;
+	/** Returns the round number of the latest round saved to disk. */
+	private final Supplier<Long> lastRoundSavedToDisk;
+	/** Returns the round number of the latest round where we have a super-majority. */
+	private final Supplier<Long> lastCompletedRound;
+	/** Tracks user transactions in the hashgraph */
+	private final TransactionTracker transactionTracker;
+	/** Tracks recent events */
+	private final CriticalQuorum criticalQuorum;
+	/** The initial address book */
+	private final AddressBook addressBook;
+	private final FallenBehindManager fallenBehindManager;
 	/** a counter that turns off transThrottle initially until it reaches 0 */
 	private final AtomicInteger transThrottleInitialCalls = new AtomicInteger(TRANS_THROTTLE_INITIAL_CALLS_NUM);
 	/**
@@ -113,12 +84,6 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 	 * transferred
 	 */
 	private final AtomicInteger transThrottleSyncsWithNoEvents = new AtomicInteger(0);
-
-	/**
-	 * When looking for a neighbor to call, this is the maximum number of neighbors we query before just selecting
-	 * one if a suitable neighbor is not found yet.
-	 */
-	private static final int MAXIMUM_NEIGHBORS_TO_QUERY = 10;
 
 	/**
 	 * Creates a new SyncManager
@@ -152,10 +117,10 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 			final TransThrottleSyncAndCreateRules transThrottleSyncAndCreateRules,
 			final Supplier<Long> lastRoundSavedToDisk,
 			final Supplier<Long> lastCompletedRound,
-			final Runnable notifyPlatform,
 			final TransactionTracker transactionTracker,
 			final CriticalQuorum criticalQuorum,
-			final AddressBook addressBook) {
+			final AddressBook addressBook,
+			final FallenBehindManager fallenBehindManager) {
 		super();
 
 		this.intakeQueue = intakeQueue;
@@ -168,20 +133,11 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 
 		this.lastRoundSavedToDisk = lastRoundSavedToDisk;
 		this.lastCompletedRound = lastCompletedRound;
-		this.notifyPlatform = notifyPlatform;
 		this.transactionTracker = transactionTracker;
 		this.criticalQuorum = criticalQuorum;
 		this.addressBook = addressBook;
 
-		notYetReportFallenBehind = ConcurrentHashMap.newKeySet();
-		reportFallenBehind = new HashSet<>();
-		allNeighbors = new HashSet<>();
-		/* an array with all the neighbor ids */
-		int[] neighbors = this.connectionGraph.getNeighbors(this.selfId.getIdAsInt());
-		numNeighbors = neighbors.length;
-		for (final int neighbor : neighbors) {
-			allNeighbors.add((long) neighbor);
-		}
+		this.fallenBehindManager = fallenBehindManager;
 	}
 
 	/**
@@ -404,46 +360,22 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized void reportFallenBehind(final NodeId id) {
-		if (reportFallenBehind.add(id.getId())) {
-			if (numReportFallenBehind == 0) {
-				// we have received the first indication that we have fallen behind, so we need to check with other
-				// nodes to confirm
-				notYetReportFallenBehind.addAll(allNeighbors);
-			}
-			// we don't need to check with this node
-			notYetReportFallenBehind.remove(id.getId());
-			numReportFallenBehind++;
-			if (hasFallenBehind()) {
-				notifyPlatform.run();
-			}
-		}
+	public void reportFallenBehind(final NodeId id) {
+		fallenBehindManager.reportFallenBehind(id);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized void resetFallenBehind() {
-		numReportFallenBehind = 0;
-		reportFallenBehind.clear();
-		notYetReportFallenBehind.clear();
+	public void resetFallenBehind() {
+		fallenBehindManager.resetFallenBehind();
 		transThrottleInitialCalls.set(TRANS_THROTTLE_INITIAL_CALLS_NUM);
-		notifyPlatform.run();
 	}
 
-	/**
-	 * Returns a list of node IDs which need to be contacted to establish if we have fallen behind.
-	 *
-	 * @return a list of node IDs, or null if there is no indication we have fallen behind
-	 */
-	protected List<Long> getNeededForFallenBehind() {
-		if (notYetReportFallenBehind.size() == 0) {
-			return null;
-		}
-		final List<Long> ret = new ArrayList<>(notYetReportFallenBehind);
-		Collections.shuffle(ret);
-		return ret;
+	@Override
+	public List<Long> getNeededForFallenBehind() {
+		return fallenBehindManager.getNeededForFallenBehind();
 	}
 
 	/**
@@ -451,16 +383,19 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 	 */
 	@Override
 	public boolean hasFallenBehind() {
-		return numNeighbors * Settings.reconnect.getFallenBehindThreshold() < numReportFallenBehind;
+		return fallenBehindManager.hasFallenBehind();
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized List<Long> getNeighborsForReconnect() {
-		final List<Long> ret = new ArrayList<>(reportFallenBehind);
-		Collections.shuffle(ret);
-		return ret;
+	public List<Long> getNeighborsForReconnect() {
+		return fallenBehindManager.getNeighborsForReconnect();
+	}
+
+	@Override
+	public int numReportedFallenBehind() {
+		return fallenBehindManager.numReportedFallenBehind();
 	}
 }

@@ -17,8 +17,8 @@
 package com.swirlds.platform.crypto;
 
 import com.swirlds.common.crypto.CryptographyException;
-import com.swirlds.common.system.Address;
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.Address;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
@@ -71,11 +71,8 @@ public final class CryptoStatic {
 	private static final int BITS_IN_BYTE = 8;
 
 	static {
-		// add provider only if it's not in the JVM
-		if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
-			// used to generate certificates
-			Security.addProvider(new BouncyCastleProvider());
-		}
+		// used to generate certificates
+		Security.addProvider(new BouncyCastleProvider());
 	}
 
 	private CryptoStatic() {
@@ -466,11 +463,10 @@ public final class CryptoStatic {
 			PublicKey sigKey = publicStores.getPublicKey(KeyCertPurpose.SIGNING, name);
 			PublicKey agrKey = publicStores.getPublicKey(KeyCertPurpose.AGREEMENT, name);
 			PublicKey encKey = publicStores.getPublicKey(KeyCertPurpose.ENCRYPTION, name);
-			addressBook.setAddress(i,
-					addressBook.getAddress(i)
-							.copySetSigPublicKey(sigKey)
-							.copySetAgreePublicKey(agrKey)
-							.copySetEncPublicKey(encKey)
+			addressBook.add(addressBook.getAddress(i)
+					.copySetSigPublicKey(sigKey)
+					.copySetAgreePublicKey(agrKey)
+					.copySetEncPublicKey(encKey)
 			);
 		}
 	}

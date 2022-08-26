@@ -25,11 +25,14 @@ import com.swirlds.common.merkle.iterators.internal.PostOrderedDepthFirstAlgorit
 import com.swirlds.common.merkle.iterators.internal.PostOrderedDepthFirstRandomAlgorithm;
 import com.swirlds.common.merkle.iterators.internal.PreOrderedDepthFirstAlgorithm;
 import com.swirlds.common.merkle.route.MerkleRoute;
+import com.swirlds.common.threading.interrupt.InterruptableConsumer;
 
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -389,5 +392,36 @@ public class MerkleIterator<T extends MerkleNode> implements Iterator<T> {
 				return converter.apply(node, route);
 			}
 		};
+	}
+
+	/**
+	 * Similar to {@link Iterator#forEachRemaining(Consumer)}, except that the action is allowed
+	 * to throw an {@link IOException}.
+	 *
+	 * @param action
+	 * 		the action to perform
+	 * @throws IOException
+	 * 		if the action throws an IO exception
+	 */
+	public void forEachRemainingWithIO(final IOConsumer<? super T> action) throws IOException {
+		while (hasNext()) {
+			action.accept(next());
+		}
+	}
+
+	/**
+	 * Similar to {@link Iterator#forEachRemaining(Consumer)}, except that the action is allowed
+	 * to throw an {@link InterruptedException}.
+	 *
+	 * @param action
+	 * 		the action to perform
+	 * @throws InterruptedException
+	 * 		if the action throws an interrupted exception
+	 */
+	public void forEachRemainingWithInterrupt(final InterruptableConsumer<? super T> action)
+			throws InterruptedException {
+		while (hasNext()) {
+			action.accept(next());
+		}
 	}
 }

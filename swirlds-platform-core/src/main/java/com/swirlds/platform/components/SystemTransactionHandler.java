@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.internal.SystemTransaction;
 
 import java.time.Instant;
 
@@ -45,12 +45,9 @@ public interface SystemTransactionHandler {
 	 * @param timeCreated
 	 * 		the time when this transaction was first created and sent to the network, as claimed by
 	 * 		the member that created it (which might be dishonest or mistaken)
-	 * @param timestamp
-	 * 		the consensus timestamp for when this transaction happened (or an estimate of it, if it
-	 * 		hasn't reached consensus yet)
 	 * @param trans
 	 * 		the transaction to handle, encoded any way the swirld app author chooses
 	 */
 	void handleSystemTransaction(final long creator, final boolean isConsensus,
-			final Instant timeCreated, final Instant timestamp, final Transaction trans);
+			final Instant timeCreated, final SystemTransaction trans);
 }

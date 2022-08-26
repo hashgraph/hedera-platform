@@ -27,15 +27,14 @@ public enum TransactionType {
 	APPLICATION((byte) 0),
 	/** first byte of a system transaction giving a signed state's (round number, signature) */
 	SYS_TRANS_STATE_SIG((byte) 1),
-	/** same as SYS_TRANS_STATE_SIG but freeze event creation after this system transaction is put in an event */
-	SYS_TRANS_STATE_SIG_FREEZE((byte) 2),
+	/** 2 was used for a now deleted value */
 	/** first byte of a system transaction giving all avgPingMilliseconds stats (sent as ping time in microseconds) */
 	SYS_TRANS_PING_MICROSECONDS((byte) 3),
 	/** first byte of a system transaction giving all avgBytePerSecSent stats (sent as bits per second) */
 	SYS_TRANS_BITS_PER_SECOND((byte) 4);
 
-	private byte value;
-	private static Map<Byte, TransactionType> map = new HashMap<>();
+	private final byte value;
+	private static final Map<Byte, TransactionType> map = new HashMap<>();
 
 	/**
 	 * Create a TransactionType enum instance based on byte value
@@ -48,7 +47,7 @@ public enum TransactionType {
 	}
 
 	static {
-		for (TransactionType type : TransactionType.values()) {
+		for (final TransactionType type : TransactionType.values()) {
 			map.put(type.value, type);
 		}
 	}

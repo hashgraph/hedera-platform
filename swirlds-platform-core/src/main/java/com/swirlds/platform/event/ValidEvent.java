@@ -16,10 +16,8 @@
 
 package com.swirlds.platform.event;
 
-import com.swirlds.platform.EventImpl;
-
 /**
  * An event in the intake queue that does not need to be validated
  */
-public record ValidEvent(EventImpl event) implements EventIntakeTask {
+public record ValidEvent(GossipEvent event) implements EventIntakeTask {
 }

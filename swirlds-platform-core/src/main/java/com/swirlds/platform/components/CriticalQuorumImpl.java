@@ -16,9 +16,12 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.EventCreationRuleResponse;
+import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.system.events.BaseEvent;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.Utilities;
+import com.swirlds.platform.event.EventUtils;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -114,7 +117,7 @@ public class CriticalQuorumImpl implements CriticalQuorum {
 
 		// Update threshold map
 		final long originalStakeAtThreshold = stakeNotExceedingThreshold.getOrDefault(originalEventCount, totalState);
-		final long newStakeAtThreshold = originalStakeAtThreshold - addressBook.getStake(nodeId);
+		final long newStakeAtThreshold = originalStakeAtThreshold - addressBook.getAddress(nodeId).getStake();
 		stakeNotExceedingThreshold.put(originalEventCount, newStakeAtThreshold);
 
 		// Make sure threshold allows at least 1/3 of the stake to be part of the critical quorum
@@ -122,5 +125,15 @@ public class CriticalQuorumImpl implements CriticalQuorum {
 				totalState)) {
 			threshold.incrementAndGet();
 		}
+	}
+
+	@Override
+	public EventCreationRuleResponse shouldCreateEvent(final BaseEvent selfParent, final BaseEvent otherParent) {
+		// if neither node is part of the superMinority in the latest round, don't create an event
+		if (!isInCriticalQuorum(EventUtils.getCreatorId(selfParent)) &&
+				!isInCriticalQuorum(EventUtils.getCreatorId(otherParent))) {
+			return EventCreationRuleResponse.DONT_CREATE;
+		}
+		return EventCreationRuleResponse.PASS;
 	}
 }

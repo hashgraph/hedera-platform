@@ -16,6 +16,7 @@
 
 package com.swirlds.common.threading.framework.internal;
 
+import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.ThreadSeed;
 import com.swirlds.common.threading.framework.TypedStoppableThread;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
@@ -54,13 +55,14 @@ public class StoppableThreadImpl<T extends InterruptableRunnable> implements Typ
 	private final AtomicReference<Status> status = new AtomicReference<>(Status.NOT_STARTED);
 
 	/**
-	 * If true then interrupt the thread when it is closed.
+	 * Determines the default behavior of the thread when closed
 	 */
-	private final boolean interruptable;
+	private final Stoppable.StopBehavior stopBehavior;
 
 	/**
 	 * The amount of time in milliseconds to wait after setting the thread status to {@link Status#DYING}
-	 * before interrupting the thread if {@link #interruptable} is true.
+	 * before interrupting the thread if {@link #stopBehavior} is
+	 * {@link com.swirlds.common.threading.framework.Stoppable.StopBehavior#INTERRUPTABLE INTERRUPTABLE}.
 	 */
 	private final int joinWaitMs;
 
@@ -139,7 +141,7 @@ public class StoppableThreadImpl<T extends InterruptableRunnable> implements Typ
 	public StoppableThreadImpl(final AbstractStoppableThreadConfiguration<?, T> configuration) {
 		this.configuration = configuration;
 
-		interruptable = configuration.isInterruptable();
+		stopBehavior = configuration.getStopBehavior();
 		joinWaitMs = configuration.getJoinWaitMs();
 		hangingThreadDuration = configuration.getHangingThreadPeriod();
 
@@ -423,7 +425,16 @@ public class StoppableThreadImpl<T extends InterruptableRunnable> implements Typ
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized boolean stop() {
+	public boolean stop() {
+		// Use the default stop behavior
+		return stop(stopBehavior);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public synchronized boolean stop(final StopBehavior behavior) {
 		final Status originalStatus = status.get();
 
 		if (originalStatus != Status.ALIVE && originalStatus != Status.PAUSED) {
@@ -449,11 +460,7 @@ public class StoppableThreadImpl<T extends InterruptableRunnable> implements Typ
 		}
 
 		try {
-			if (interruptable) {
-				interruptClose();
-			} else {
-				blockingClose();
-			}
+			close(behavior);
 		} catch (final InterruptedException ex) {
 			Thread.currentThread().interrupt();
 		}
@@ -504,6 +511,22 @@ public class StoppableThreadImpl<T extends InterruptableRunnable> implements Typ
 	}
 
 	/**
+	 * Closes the thread with a certain behavior
+	 *
+	 * @param stopBehavior
+	 * 		the type of behavior to use when closing the thread
+	 */
+	private void close(final StopBehavior stopBehavior) throws InterruptedException {
+		if (stopBehavior == StopBehavior.BLOCKING) {
+			blockingClose();
+		} else if (stopBehavior == StopBehavior.INTERRUPTABLE) {
+			interruptClose();
+		} else {
+			throw new IllegalArgumentException();
+		}
+	}
+
+	/**
 	 * An implementation of close that will interrupt the work thread if it doesn't terminate quickly enough.
 	 */
 	private void interruptClose() throws InterruptedException {
@@ -549,7 +572,8 @@ public class StoppableThreadImpl<T extends InterruptableRunnable> implements Typ
 	}
 
 	/**
-	 * Perform the last cycle of work. Only called if {@link #interruptable} is false.
+	 * Perform the last cycle of work. Only called if {@link #stopBehavior} is
+	 * {@link com.swirlds.common.threading.framework.Stoppable.StopBehavior#BLOCKING BLOCKING}.
 	 *
 	 * @throws InterruptedException
 	 * 		if the thread running the work is interrupted
@@ -571,7 +595,7 @@ public class StoppableThreadImpl<T extends InterruptableRunnable> implements Typ
 				.append(getName())
 				.append(" was requested to stop but is still alive after ")
 				.append(hangingThreadDuration)
-				.append("ms. Interrupt enabled = ").append(interruptable);
+				.append("ms. Stop behavior = ").append(stopBehavior.toString());
 		LOG.error(EXCEPTION.getMarker(), sb);
 
 

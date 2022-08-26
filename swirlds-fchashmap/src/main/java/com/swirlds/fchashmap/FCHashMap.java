@@ -158,7 +158,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	@Override
 	public FCHashMap<K, V> copy() {
 		throwIfImmutable();
-		throwIfReleased();
+		throwIfDestroyed();
 		return new FCHashMap<>(this);
 	}
 
@@ -200,7 +200,7 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 * Check to see if this copy has been deleted.
 	 */
 	@Override
-	public boolean isReleased() {
+	public boolean isDestroyed() {
 		return released.get();
 	}
 
@@ -219,8 +219,8 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 
 			while (iterator.hasNext()) {
 				final FCHashMap<K, V> copy = iterator.next();
-				if (!copy.isReleased()) {
-					// Stop when the first unreleased copy is discovered.
+				if (!copy.isDestroyed()) {
+					// Stop when the first un-destroyed copy is discovered.
 					return;
 				}
 

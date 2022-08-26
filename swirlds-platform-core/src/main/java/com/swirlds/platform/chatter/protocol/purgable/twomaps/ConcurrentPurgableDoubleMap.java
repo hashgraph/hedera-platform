@@ -101,4 +101,10 @@ public class ConcurrentPurgableDoubleMap<K, V> extends AbstractPurgableDoubleMap
 		return new ConcurrentHashMap<>();
 	}
 
+	@Override
+	public void clear() {
+		super.clear();
+		smallestAllowedGeneration.set(0);
+	}
+
 }

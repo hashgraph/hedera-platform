@@ -16,8 +16,8 @@
 
 package com.swirlds.common.internal;
 
-import com.swirlds.common.system.Address;
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.Address;
+import com.swirlds.common.system.address.AddressBook;
 
 import java.io.File;
 import java.util.List;

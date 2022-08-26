@@ -106,7 +106,7 @@ final class HashJob<K extends VirtualKey<? super K>, V extends VirtualValue> imp
 					: VirtualInternalNode.CLASS_ID;
 
 			final int serId = path == ROOT_PATH
-					? VirtualRootNode.ClassVersion.ORIGINAL
+					? VirtualRootNode.ClassVersion.CURRENT_VERSION
 					: VirtualInternalNode.SERIALIZATION_VERSION;
 
 			final Hash leftHash = left == null ? NULL_HASH : left;

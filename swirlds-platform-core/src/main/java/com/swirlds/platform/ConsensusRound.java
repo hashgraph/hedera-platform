@@ -16,19 +16,24 @@
 
 package com.swirlds.platform;
 
+import com.swirlds.common.system.Round;
+import com.swirlds.common.system.events.ConsensusEvent;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.EventUtils;
+import com.swirlds.platform.util.iterator.TypedIterator;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 
 /**
  * A consensus round with all its events.
  */
-public class ConsensusRound {
+public class ConsensusRound implements Round {
 
-	/** the consensus events in this round, in consensus order */
+	/** an unmodifiable list of consensus events in this round, in consensus order */
 	private final List<EventImpl> consensusEvents;
 
 	/** the consensus generations when this round reached consensus */
@@ -52,7 +57,7 @@ public class ConsensusRound {
 	 * 		the consensus generations for this round
 	 */
 	public ConsensusRound(final List<EventImpl> consensusEvents, final GraphGenerations generations) {
-		this.consensusEvents = consensusEvents;
+		this.consensusEvents = Collections.unmodifiableList(consensusEvents);
 		this.generations = generations;
 
 		for (final EventImpl e : consensusEvents) {
@@ -77,6 +82,8 @@ public class ConsensusRound {
 	}
 
 	/**
+	 * Provides an unmodifiable list of the consensus event in this round.
+	 *
 	 * @return the list of events in this round
 	 */
 	public List<EventImpl> getConsensusEvents() {
@@ -98,8 +105,17 @@ public class ConsensusRound {
 	}
 
 	/**
-	 * @return this round's number
+	 * {@inheritDoc}
 	 */
+	@Override
+	public Iterator<ConsensusEvent> eventIterator() {
+		return new TypedIterator<>(consensusEvents.iterator());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
 	public long getRoundNum() {
 		return roundNum;
 	}

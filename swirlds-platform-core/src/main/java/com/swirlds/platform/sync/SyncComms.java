@@ -18,7 +18,7 @@ package com.swirlds.platform.sync;
 
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.EventImpl;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.network.ByteConstants;
 import com.swirlds.platform.stats.SyncStats;
@@ -56,7 +56,7 @@ public final class SyncComms {
 	private SyncComms() {
 	}
 
-	public static void writeFirstByte(final SyncConnection conn) throws IOException {
+	public static void writeFirstByte(final Connection conn) throws IOException {
 		if (conn.isOutbound()) { // caller WRITE sync request
 			// try to initiate a sync
 			conn.getDos().requestSync();
@@ -67,7 +67,7 @@ public final class SyncComms {
 	}
 
 
-	public static void rejectSync(final SyncConnection conn, final int numberOfNodes) throws IOException {
+	public static void rejectSync(final Connection conn, final int numberOfNodes) throws IOException {
 		// respond with a nack
 		conn.getDos().rejectSync();
 		conn.getDos().flush();
@@ -78,8 +78,8 @@ public final class SyncComms {
 	}
 
 	public static Callable<Void> phase1Write(
-			final SyncConnection conn,
-			final SyncGenerations generations,
+			final Connection conn,
+			final Generations generations,
 			final List<ShadowEvent> tips) {
 		return () -> {
 			final List<Hash> tipHashes = tips.stream().map(ShadowEvent::getEventBaseHash).collect(Collectors.toList());
@@ -95,17 +95,18 @@ public final class SyncComms {
 	}
 
 	public static Callable<Phase1Response> phase1Read(
-			final SyncConnection conn,
-			final int numberOfNodes) {
+			final Connection conn,
+			final int numberOfNodes,
+			final boolean readInitByte) {
 		return () -> {
 			// Caller thread requested a sync, so now caller thread reads if its request was accepted.
-			if (conn.isOutbound()) {
+			if (conn.isOutbound() && readInitByte) {
 				try {
 					if (!conn.getDis().readSyncRequestResponse()) {
 						// sync rejected
 						return Phase1Response.syncRejected();
 					}
-				} catch (SyncException | IOException e) {
+				} catch (final SyncException | IOException e) {
 					final Instant sentTime = conn.getDos().getRequestSentTime();
 					final long inMs = sentTime == null ? -1 : sentTime.until(Instant.now(), ChronoUnit.MILLIS);
 					throw new SyncException(conn,
@@ -114,7 +115,7 @@ public final class SyncComms {
 				}
 			}
 
-			final SyncGenerations generations = conn.getDis().readGenerations();
+			final Generations generations = conn.getDis().readGenerations();
 			final List<Hash> tips = conn.getDis().readTipHashes(numberOfNodes);
 
 			LOG.info(SYNC_INFO.getMarker(), "{} received generations: {}",
@@ -130,7 +131,7 @@ public final class SyncComms {
 	 * @return the Callable to run
 	 */
 	public static Callable<Void> phase2Write(
-			final SyncConnection conn,
+			final Connection conn,
 			final List<Boolean> booleans) {
 		return () -> {
 			conn.getDos().writeBooleanList(booleans);
@@ -145,7 +146,7 @@ public final class SyncComms {
 	 * @return the Callable to run
 	 */
 	public static Callable<List<Boolean>> phase2Read(
-			final SyncConnection conn,
+			final Connection conn,
 			final int numberOfTips) {
 		return () -> {
 			final List<Boolean> booleans = conn.getDis().readBooleanList(numberOfTips);
@@ -161,7 +162,7 @@ public final class SyncComms {
 	}
 
 	public static Callable<Void> phase3Write(
-			final SyncConnection conn,
+			final Connection conn,
 			final List<EventImpl> events,
 			final CountDownLatch eventReadingDone) {
 		return () -> {
@@ -197,7 +198,7 @@ public final class SyncComms {
 	}
 
 	public static Callable<Integer> phase3Read(
-			final SyncConnection conn,
+			final Connection conn,
 			final Consumer<GossipEvent> eventHandler,
 			final SyncStats stats,
 			final CountDownLatch eventReadingDone) {

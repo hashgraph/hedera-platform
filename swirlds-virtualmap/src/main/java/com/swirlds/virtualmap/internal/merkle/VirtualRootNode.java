@@ -20,17 +20,18 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.ExternalSelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
+import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
+import com.swirlds.common.merkle.impl.internal.AbstractMerkleInternal;
 import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
 import com.swirlds.common.merkle.synchronization.views.CustomReconnectRoot;
 import com.swirlds.common.merkle.synchronization.views.LearnerTreeView;
 import com.swirlds.common.merkle.synchronization.views.TeacherTreeView;
-import com.swirlds.common.merkle.utility.AbstractMerkleInternal;
 import com.swirlds.common.merkle.utility.DebugIterationEndpoint;
-import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualMap;
@@ -63,7 +64,6 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -71,8 +71,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
+import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.logging.LogMarker.VIRTUAL_MERKLE_STATS;
 import static com.swirlds.virtualmap.internal.Path.FIRST_LEFT_PATH;
 import static com.swirlds.virtualmap.internal.Path.INVALID_PATH;
@@ -120,8 +120,8 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  */
 @DebugIterationEndpoint
 public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends VirtualValue>
-		extends AbstractMerkleInternal
-		implements CustomReconnectRoot<Long, Long>, ExternalSelfSerializable, VirtualRoot {
+		extends PartialBinaryMerkleInternal
+		implements CustomReconnectRoot<Long, Long>, ExternalSelfSerializable, VirtualRoot, MerkleInternal {
 
 	private static final String NO_NULL_KEYS_ALLOWED_MESSAGE = "Null keys are not allowed";
 
@@ -134,19 +134,15 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * This version number should be used to handle compatibility issues that may arise from any future changes
 	 */
 	public static class ClassVersion {
-		public static final int ORIGINAL = 1;
+		public static final int VERSION_1_ORIGINAL = 1;
+
+		public static final int CURRENT_VERSION = VERSION_1_ORIGINAL;
 	}
 
 	/**
 	 * Use this for all logging, as controlled by the optional data/log4j2.xml file
 	 */
 	private static final Logger LOG = LogManager.getLogger(VirtualRootNode.class);
-
-	/**
-	 * A static set of supported serialization strategies. This is static just to cut down on garbage
-	 * generation at runtime and a little overhead.
-	 */
-	private static final Set<MerkleSerializationStrategy> STRATEGIES = Set.of(EXTERNAL_SELF_SERIALIZATION);
 
 	/**
 	 * The number of elements to have in the buffer used during reconnect on a learner when passing
@@ -269,7 +265,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 
 	/**
 	 * Created at the beginning of reconnect as a <strong>learner</strong>, this iterator allows
-	 * for other threads to feed it leaf records to be used during hashing.
+	 * for other threads to feed its leaf records to be used during hashing.
 	 */
 	private ConcurrentBlockingIterator<VirtualLeafRecord<K, V>> reconnectIterator = null;
 
@@ -278,6 +274,11 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * reconnect hashing process.
 	 */
 	private CompletableFuture<Hash> reconnectHashingFuture;
+
+	/**
+	 * Set to true once the reconnect hashing thread has been started.
+	 */
+	private AtomicBoolean reconnectHashingStarted;
 
 	/**
 	 * The {@link RecordAccessor} for the state, cache, and data source needed during reconnect.
@@ -318,7 +319,6 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * 		Whether to enforce the data source and state being non-null.
 	 */
 	private VirtualRootNode(final VirtualDataSourceBuilder<K, V> dataSourceBuilder, final boolean enforce) {
-		super(false);
 		this.fastCopyVersion = 0;
 		this.cache = new VirtualNodeCache<>();
 		this.hasher = new VirtualHasher<>();
@@ -340,6 +340,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 		this.cache = source.cache.copy();
 		this.hasher = source.hasher;
 		this.reconnectHashingFuture = null;
+		this.reconnectHashingStarted = null;
 		this.reconnectIterator = null;
 		this.reconnectRecords = null;
 		this.fullyReconnectedState = null;
@@ -427,7 +428,6 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	}
 
 	// Exposed for tests only.
-	@SuppressWarnings("ClassEscapesDefinedScope")
 	public VirtualPipeline getPipeline() {
 		return pipeline;
 	}
@@ -435,7 +435,6 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	/**
 	 * {@inheritDoc}
 	 */
-	@SuppressWarnings("ClassEscapesDefinedScope")
 	@Override
 	public boolean isRegisteredToPipeline(final VirtualPipeline pipeline) {
 		return pipeline == this.pipeline;
@@ -458,7 +457,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 */
 	@Override
 	public int getVersion() {
-		return ClassVersion.ORIGINAL;
+		return ClassVersion.CURRENT_VERSION;
 	}
 
 	/**
@@ -466,7 +465,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 */
 	@Override
 	public <T extends MerkleNode> T getChild(final int index) {
-		if (isReleased() || dataSource == null || learnerTreeView != null
+		if (isDestroyed() || dataSource == null || learnerTreeView != null
 				|| state.getFirstLeafPath() == INVALID_PATH || index > 1) {
 			return null;
 		}
@@ -488,7 +487,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 						", last leaf path = " + state.getLastLeafPath() + ".");
 			}
 			//noinspection unchecked
-			node = (T) (new VirtualLeafNode<>(this, leafRecord));
+			node = (T) (new VirtualLeafNode<>(leafRecord));
 		} else {
 			// The index is out of bounds. Maybe we have a root node with one leaf and somebody has asked
 			// for the second leaf, in which case it would be null.
@@ -506,7 +505,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	@Override
 	public VirtualRootNode<K, V> copy() {
 		throwIfImmutable();
-		throwIfReleased();
+		throwIfDestroyed();
 
 		// After creating the copy, mark it as immutable and then register it with the pipeline.
 		// We're careful about this ordering because the pipeline runs background threads, and
@@ -530,9 +529,9 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * {@inheritDoc}
 	 */
 	@Override
-	protected void onRelease() {
+	protected void destroyNode() {
 		if (pipeline != null) {
-			pipeline.releaseCopy();
+			pipeline.destroyCopy();
 		}
 	}
 
@@ -596,8 +595,8 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 */
 	public boolean containsKey(final K key) {
 		Objects.requireNonNull(key, NO_NULL_KEYS_ALLOWED_MESSAGE);
-		final VirtualLeafRecord<K, V> rec = records.findLeafRecord(key, false);
-		return rec != null;
+		final long path = records.findKey(key);
+		return path != INVALID_PATH;
 	}
 
 	/**
@@ -650,13 +649,16 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 		throwIfImmutable();
 		Objects.requireNonNull(key, NO_NULL_KEYS_ALLOWED_MESSAGE);
 
-		// Attempt to replace the existing leaf
-		final boolean success = replaceImpl(key, value);
-
-		// We failed to find an existing leaf (dirty or clean). So add a new entry and return.
-		if (!success) {
+		final long path = records.findKey(key);
+		if (path == INVALID_PATH) {
+			// The key is not stored. So add a new entry and return.
 			add(key, value);
+			return;
 		}
+
+		final VirtualLeafRecord<K, V> rec = new VirtualLeafRecord<>(path, null, key, value);
+		markDirty(rec);
+		super.setHash(null);
 	}
 
 	/**
@@ -782,7 +784,8 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 			try {
 				dataSource.close();
 			} catch (final IOException e) {
-				LOG.error(EXCEPTION.getMarker(), "Could not close the dataSource after all copies were released", e);
+				LOG.error(EXCEPTION.getMarker(),
+						"Could not close the dataSource after all copies were destroyed", e);
 			}
 		}
 	}
@@ -797,8 +800,8 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	@Override
 	public void merge() {
 		final long start = System.currentTimeMillis();
-		if (!(isReleased() || isDetached())) {
-			throw new IllegalStateException("merge is legal only after this node is released or detached");
+		if (!(isDestroyed() || isDetached())) {
+			throw new IllegalStateException("merge is legal only after this node is destroyed or detached");
 		}
 		if (!isImmutable()) {
 			throw new IllegalStateException("merge is only allowed on immutable copies");
@@ -933,15 +936,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
-		return STRATEGIES;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void serializeExternal(
+	public void serialize(
 			final SerializableDataOutputStream out,
 			final File outputDirectory) throws IOException {
 
@@ -958,10 +953,9 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void deserializeExternal(
+	public void deserialize(
 			final SerializableDataInputStream in,
 			final File inputDirectory,
-			final Hash hash,
 			final int version) throws IOException {
 
 		final String name = in.readNormalisedString(MAX_LABEL_LENGTH);
@@ -1082,8 +1076,8 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 */
 	@Override
 	public <T> T detach(final String label, final Path destination, boolean reopen, boolean withDbCompactionEnabled) {
-		if (isReleased()) {
-			throw new IllegalStateException("detach is illegal on already released copies");
+		if (isDestroyed()) {
+			throw new IllegalStateException("detach is illegal on already destroyed copies");
 		}
 		if (!isImmutable()) {
 			throw new IllegalStateException("detach is only allowed on immutable copies");
@@ -1188,6 +1182,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 		reconnectIterator = new ConcurrentBlockingIterator<>(
 				MAX_RECONNECT_HASHING_BUFFER_SIZE, Integer.MAX_VALUE, MILLISECONDS);
 		reconnectHashingFuture = new CompletableFuture<>();
+		reconnectHashingStarted = new AtomicBoolean(false);
 
 		final StateAccessor reconnectState = new ReconnectState(-1, -1);
 		reconnectRecords = new RecordAccessorImpl<>(reconnectState, snapshotCache, dataSource);
@@ -1228,7 +1223,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	 * @param registry
 	 * 		an object that manages statistics
 	 */
-	public void registerStatistics(final Consumer<StatEntry> registry) {
+	public void registerStatistics(final Consumer<Metric> registry) {
 		statistics.registerStatistics(registry);
 		dataSource.registerStatistics(registry);
 	}
@@ -1293,12 +1288,19 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 				})
 				.build()
 				.start();
+
+		reconnectHashingStarted.set(true);
 	}
 
 	public void endLearnerReconnect() {
 		try {
 			reconnectIterator.close();
-			super.setHash(reconnectHashingFuture.get());
+			if (reconnectHashingStarted.get()) {
+				// Only block on future if the hashing thread is known to have been started.
+				super.setHash(reconnectHashingFuture.get());
+			} else {
+				LOG.warn(RECONNECT.getMarker(), "virtual map hashing thread was never started");
+			}
 			learnerTreeView = null;
 			postInit(fullyReconnectedState);
 			// Start up data source compaction now

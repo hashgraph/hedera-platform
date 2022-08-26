@@ -34,8 +34,6 @@ public class WaitForAcceptReject implements NegotiationState {
 	private final ProtocolNegotiated negotiated;
 	private final NegotiationState sleep;
 
-	private int protocolInitiated = NegotiatorBytes.UNINITIALIZED;
-
 	/**
 	 * @param protocols
 	 * 		protocols being negotiated
@@ -58,18 +56,6 @@ public class WaitForAcceptReject implements NegotiationState {
 	}
 
 	/**
-	 * Set the protocol ID that was initiated by us
-	 *
-	 * @param protocolId
-	 * 		the ID of the protocol initiated
-	 * @return this state
-	 */
-	public NegotiationState initiatedProtocol(final int protocolId) {
-		protocolInitiated = protocolId;
-		return this;
-	}
-
-	/**
 	 * {@inheritDoc}
 	 */
 	@Override
@@ -78,8 +64,12 @@ public class WaitForAcceptReject implements NegotiationState {
 		final int b = byteInput.read();
 		NegotiatorBytes.checkByte(b);
 		return switch (b) {
-			case NegotiatorBytes.ACCEPT -> negotiated.runProtocol(protocols.getProtocol(protocolInitiated));
-			case NegotiatorBytes.REJECT -> sleep;
+			case NegotiatorBytes.ACCEPT -> negotiated.runProtocol(protocols.initiateAccepted());
+			case NegotiatorBytes.REJECT -> {
+				// peer declined, so initiate failed
+				protocols.initiateFailed();
+				yield sleep;
+			}
 			default -> throw new NegotiationException(String.format(
 					"Unexpected byte %d, expected ACCEPT or REJECT", b
 			));

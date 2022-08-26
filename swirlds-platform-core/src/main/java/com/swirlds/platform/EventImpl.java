@@ -31,21 +31,30 @@ import com.swirlds.common.system.events.BaseEvent;
 import com.swirlds.common.system.events.BaseEventHashedData;
 import com.swirlds.common.system.events.BaseEventUnhashedData;
 import com.swirlds.common.system.events.ConsensusData;
-import com.swirlds.common.system.events.ConsensusEvent;
-import com.swirlds.common.system.events.Event;
+import com.swirlds.common.system.events.DetailedConsensusEvent;
 import com.swirlds.common.system.events.EventSerializationOptions;
+import com.swirlds.common.system.events.PlatformEvent;
+import com.swirlds.common.system.transaction.ConsensusTransaction;
 import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
+import com.swirlds.common.system.transaction.internal.SystemTransaction;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.platform.event.EventCounter;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.event.InternalEventData;
-import org.apache.commons.lang3.builder.EqualsBuilder;
+import com.swirlds.platform.util.iterator.SkippingIterator;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * An internal platform event. It holds all the event data relevant to the platform. It implements the Event interface
@@ -54,8 +63,16 @@ import java.util.ArrayList;
 @ConstructableIgnored
 public class EventImpl
 		extends AbstractSerializableHashable
-		implements BaseEvent, Comparable<EventImpl>, Event, OptionalSelfSerializable<EventSerializationOptions>,
+		implements BaseEvent, Comparable<EventImpl>, PlatformEvent,
+		OptionalSelfSerializable<EventSerializationOptions>,
 		RunningHashable, StreamAligned, Timestamped {
+
+	/**
+	 * the consensus timestamp of a transaction is guaranteed to be at least this many nanoseconds
+	 * later than that of the transaction immediately before it in consensus order,
+	 * and to be a multiple of this (must be positive and a multiple of 10)
+	 */
+	public static final long MIN_TRANS_TIMESTAMP_INCR_NANOS = 1_000;
 
 	/** The base event information, including some gossip specific information */
 	private GossipEvent baseEvent;
@@ -70,6 +87,12 @@ public class EventImpl
 	 * Tracks if this event was read out of a signed state.
 	 */
 	private boolean fromSignedState;
+
+	/** An unmodifiable ordered set of system transaction indices, from lowest to highest. */
+	private Set<Integer> systemTransactionIndices;
+
+	/** A list of references to the system transactions in the array of all transactions */
+	private List<SystemTransaction> systemTransactions;
 
 	public EventImpl() {
 	}
@@ -108,7 +131,7 @@ public class EventImpl
 	 *
 	 * @param consensusEvent
 	 */
-	EventImpl(final ConsensusEvent consensusEvent) {
+	EventImpl(final DetailedConsensusEvent consensusEvent) {
 		buildFromConsensusEvent(consensusEvent);
 	}
 
@@ -138,6 +161,8 @@ public class EventImpl
 		EventCounter.eventCreated();
 
 		setDefaultValues();
+
+		findSystemTransactions();
 	}
 
 	/**
@@ -169,7 +194,8 @@ public class EventImpl
 
 	/**
 	 * Set the consensusTimestamp to an estimate of what it will be when consensus is reached even if it has already
-	 * reached consensus. Callers are responsible for checking the consensus status of this event and using the
+	 * reached consensus. Callers are responsible for checking the consensus systemIndicesStatus of this event and using
+	 * the
 	 * consensus time or estimated time appropriately.
 	 *
 	 * Estimated consensus times are predicted only here and in Platform.estimateTime().
@@ -184,7 +210,7 @@ public class EventImpl
 	public synchronized void estimateTime(final NodeId selfId, final double avgSelfCreatedTimestamp,
 			final double avgOtherReceivedTimestamp) {
 		/* a base time */
-		Instant t;
+		final Instant t;
 		/* number of seconds to add to the base time */
 		double sec;
 
@@ -230,7 +256,7 @@ public class EventImpl
 	 * 		index of the transaction in this event
 	 * @return timestamp of the given index transaction
 	 */
-	public Instant getTransactionTime(int transactionIndex) {
+	public Instant getTransactionTime(final int transactionIndex) {
 		if (getConsensusTimestamp() == null || getTransactions() == null) {
 			return null;
 		}
@@ -251,10 +277,8 @@ public class EventImpl
 
 		final EventImpl event = (EventImpl) o;
 
-		return new EqualsBuilder()
-				.append(baseEvent, event.baseEvent)
-				.append(consensusData, event.consensusData)
-				.isEquals();
+		return Objects.equals(baseEvent, event.baseEvent)
+				&& Objects.equals(consensusData, event.consensusData);
 	}
 
 	/**
@@ -277,7 +301,7 @@ public class EventImpl
 	 * @return {@inheritDoc}
 	 */
 	@Override
-	public synchronized int compareTo(EventImpl other) {
+	public synchronized int compareTo(final EventImpl other) {
 		return Long.compare(getGeneration(), other.getGeneration());
 	}
 
@@ -287,10 +311,10 @@ public class EventImpl
 	//////////////////////////////////////////
 
 	/**
-	 * This class serializes itself as a {@link ConsensusEvent} object
+	 * This class serializes itself as a {@link DetailedConsensusEvent} object
 	 */
 	@Override
-	public void serialize(SerializableDataOutputStream out) throws IOException {
+	public void serialize(final SerializableDataOutputStream out) throws IOException {
 		serialize(out, EventSerializationOptions.FULL);
 	}
 
@@ -298,19 +322,20 @@ public class EventImpl
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void serialize(SerializableDataOutputStream out, EventSerializationOptions option) throws IOException {
-		ConsensusEvent.serialize(out, baseEvent.getHashedData(), baseEvent.getUnhashedData(), consensusData, option);
+	public void serialize(final SerializableDataOutputStream out,
+			final EventSerializationOptions option) throws IOException {
+		DetailedConsensusEvent.serialize(out, baseEvent.getHashedData(), baseEvent.getUnhashedData(), consensusData,
+				option);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
-		ConsensusEvent consensusEvent = new ConsensusEvent();
+	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
+		final DetailedConsensusEvent consensusEvent = new DetailedConsensusEvent();
 		consensusEvent.deserialize(in, version);
 		buildFromConsensusEvent(consensusEvent);
-
 	}
 
 	/**
@@ -318,7 +343,7 @@ public class EventImpl
 	 *
 	 * @param consensusEvent
 	 */
-	void buildFromConsensusEvent(final ConsensusEvent consensusEvent) {
+	void buildFromConsensusEvent(final DetailedConsensusEvent consensusEvent) {
 		baseEvent = new GossipEvent(
 				consensusEvent.getBaseEventHashedData(),
 				consensusEvent.getBaseEventUnhashedData()
@@ -327,6 +352,7 @@ public class EventImpl
 		internalEventData = new InternalEventData();
 
 		setDefaultValues();
+		findSystemTransactions();
 	}
 
 	/**
@@ -334,7 +360,7 @@ public class EventImpl
 	 */
 	@Override
 	public long getClassId() {
-		return ConsensusEvent.CLASS_ID;
+		return DetailedConsensusEvent.CLASS_ID;
 	}
 
 	/**
@@ -342,7 +368,78 @@ public class EventImpl
 	 */
 	@Override
 	public int getVersion() {
-		return ConsensusEvent.CLASS_VERSION;
+		return DetailedConsensusEvent.CLASS_VERSION;
+	}
+
+	/**
+	 * Iterates through all the transactions and stores the indices of the system transactions.
+	 */
+	private void findSystemTransactions() {
+		final ConsensusTransactionImpl[] transactions = getTransactions();
+		if (transactions == null || transactions.length == 0) {
+			systemTransactionIndices = Collections.emptySet();
+			systemTransactions = Collections.emptyList();
+			return;
+		}
+
+		final Set<Integer> indices = new TreeSet<>();
+		final List<SystemTransaction> sysTrans = new ArrayList<>();
+		for (int i = 0; i < transactions.length; i++) {
+			if (transactions[i].isSystem()) {
+				indices.add(i);
+				sysTrans.add((SystemTransaction) getTransactions()[i]);
+			}
+		}
+		systemTransactionIndices = Collections.unmodifiableSet(indices);
+		systemTransactions = Collections.unmodifiableList(sysTrans);
+	}
+
+	/**
+	 * Returns an iterator of the system transactions in this event, if any.
+	 *
+	 * @return an iterator of system transactions
+	 */
+	public Iterator<SystemTransaction> systemTransactionIterator() {
+		return systemTransactions.iterator();
+	}
+
+	/**
+	 * Propagates consensus data to all transactions. Invoked when this event has reached consensus and all consensus
+	 * data is set.
+	 */
+	public void consensusReached() {
+		final ConsensusTransactionImpl[] transactions = getTransactions();
+		if (transactions == null) {
+			return;
+		}
+
+		for (int i = 0; i < transactions.length; i++) {
+			final Instant transConsTime = getConsensusTimestamp().plusNanos(i * MIN_TRANS_TIMESTAMP_INCR_NANOS);
+			transactions[i].setConsensusTimestamp(transConsTime);
+			transactions[i].setConsensusOrder(getConsensusOrder());
+		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Iterator<Transaction> transactionIterator() {
+		if (getTransactions() == null) {
+			return Collections.emptyIterator();
+		}
+		return new SkippingIterator<>(getTransactions(), systemTransactionIndices);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Iterator<ConsensusTransaction> consensusTransactionIterator() {
+		if (getTransactions() == null) {
+			return Collections.emptyIterator();
+		}
+		return new SkippingIterator<>(getTransactions(), systemTransactionIndices);
 	}
 
 
@@ -403,6 +500,7 @@ public class EventImpl
 	// BaseEventHashedData
 	//////////////////////////////////////////
 
+
 	public Instant getTimeCreated() {
 		return baseEvent.getHashedData().getTimeCreated();
 	}
@@ -430,7 +528,7 @@ public class EventImpl
 	/**
 	 * @return array of transactions inside this event instance
 	 */
-	public Transaction[] getTransactions() {
+	public ConsensusTransactionImpl[] getTransactions() {
 		return baseEvent.getHashedData().getTransactions();
 	}
 
@@ -442,11 +540,11 @@ public class EventImpl
 		}
 	}
 
-	public boolean isCreatedBy(NodeId id) {
+	public boolean isCreatedBy(final NodeId id) {
 		return getCreatorId() == id.getId();
 	}
 
-	public boolean isCreatedBy(long id) {
+	public boolean isCreatedBy(final long id) {
 		return getCreatorId() == id;
 	}
 
@@ -466,15 +564,15 @@ public class EventImpl
 	// ConsensusData
 	//////////////////////////////////////////
 
-	public void setRoundCreated(long roundCreated) {
+	public void setRoundCreated(final long roundCreated) {
 		consensusData.setRoundCreated(roundCreated);
 	}
 
-	public void setWitness(boolean witness) {
+	public void setWitness(final boolean witness) {
 		internalEventData.setWitness(witness);
 	}
 
-	public void setFamous(boolean famous) {
+	public void setFamous(final boolean famous) {
 		internalEventData.setFamous(famous);
 	}
 
@@ -482,19 +580,19 @@ public class EventImpl
 		return consensusData.isStale();
 	}
 
-	public void setStale(boolean stale) {
+	public void setStale(final boolean stale) {
 		consensusData.setStale(stale);
 	}
 
-	public void setConsensusTimestamp(Instant consensusTimestamp) {
+	public void setConsensusTimestamp(final Instant consensusTimestamp) {
 		consensusData.setConsensusTimestamp(consensusTimestamp);
 	}
 
-	public void setRoundReceived(long roundReceived) {
+	public void setRoundReceived(final long roundReceived) {
 		consensusData.setRoundReceived(roundReceived);
 	}
 
-	public void setConsensusOrder(long consensusOrder) {
+	public void setConsensusOrder(final long consensusOrder) {
 		consensusData.setConsensusOrder(consensusOrder);
 	}
 
@@ -507,7 +605,7 @@ public class EventImpl
 		return consensusData.isLastInRoundReceived();
 	}
 
-	public void setLastInRoundReceived(boolean lastInRoundReceived) {
+	public void setLastInRoundReceived(final boolean lastInRoundReceived) {
 		consensusData.setLastInRoundReceived(lastInRoundReceived);
 	}
 
@@ -519,7 +617,7 @@ public class EventImpl
 	 * @param selfParent
 	 * 		the self parent of this
 	 */
-	public void setSelfParent(EventImpl selfParent) {
+	public void setSelfParent(final EventImpl selfParent) {
 		internalEventData.setSelfParent(selfParent);
 	}
 
@@ -527,7 +625,7 @@ public class EventImpl
 	 * @param otherParent
 	 * 		the other parent of this
 	 */
-	public void setOtherParent(EventImpl otherParent) {
+	public void setOtherParent(final EventImpl otherParent) {
 		internalEventData.setOtherParent(otherParent);
 	}
 
@@ -535,7 +633,7 @@ public class EventImpl
 	 * @param fameDecided
 	 * 		is this both a witness and the fame election is over?
 	 */
-	public void setFameDecided(boolean fameDecided) {
+	public void setFameDecided(final boolean fameDecided) {
 		internalEventData.setFameDecided(fameDecided);
 	}
 
@@ -543,7 +641,7 @@ public class EventImpl
 	 * @param consensus
 	 * 		is this part of the consensus order yet?
 	 */
-	public void setConsensus(boolean consensus) {
+	public void setConsensus(final boolean consensus) {
 		internalEventData.setConsensus(consensus);
 	}
 
@@ -558,14 +656,19 @@ public class EventImpl
 	 * @param timeReceived
 	 * 		the time this event was first received locally
 	 */
-	public void setTimeReceived(Instant timeReceived) {
+	public void setTimeReceived(final Instant timeReceived) {
 		internalEventData.setTimeReceived(timeReceived);
 	}
 
 	/**
-	 * @return an estimate of what the consensus timestamp will be (could be a very bad guess)
+	 * {@inheritDoc}
 	 */
+	@Override
 	public Instant getEstimatedTime() {
+		// Return the real thing if we have it
+		if (getConsensusTimestamp() != null) {
+			return getConsensusTimestamp();
+		}
 		return internalEventData.getEstimatedTime();
 	}
 
@@ -573,7 +676,7 @@ public class EventImpl
 	 * @param estimatedTime
 	 * 		an estimate of what the consensus timestamp will be (could be a very bad guess)
 	 */
-	public void setEstimatedTime(Instant estimatedTime) {
+	public void setEstimatedTime(final Instant estimatedTime) {
 		internalEventData.setEstimatedTime(estimatedTime);
 	}
 
@@ -602,7 +705,7 @@ public class EventImpl
 	 * @param firstElection
 	 * 		the Election associated with the earliest round involved in the election for this event's fame
 	 */
-	public void setFirstElection(RoundInfo.ElectionRound firstElection) {
+	public void setFirstElection(final RoundInfo.ElectionRound firstElection) {
 		internalEventData.setFirstElection(firstElection);
 	}
 
@@ -617,7 +720,7 @@ public class EventImpl
 	 * @param mark
 	 * 		temporarily used during any graph algorithm that needs to mark vertices (events) already visited
 	 */
-	public void setMark(int mark) {
+	public void setMark(final int mark) {
 		internalEventData.setMark(mark);
 	}
 
@@ -632,7 +735,7 @@ public class EventImpl
 	 * @param recTimes
 	 * 		the time at which each unique famous witness in the received round first received this event
 	 */
-	public void setRecTimes(ArrayList<Instant> recTimes) {
+	public void setRecTimes(final ArrayList<Instant> recTimes) {
 		internalEventData.setRecTimes(recTimes);
 	}
 
@@ -648,7 +751,7 @@ public class EventImpl
 	 * @param frozen
 	 * 		is roundCreated frozen (won't change with address book changes)? True if an ancestor of a famous witness
 	 */
-	public void setFrozen(boolean frozen) {
+	public void setFrozen(final boolean frozen) {
 		internalEventData.setFrozen(frozen);
 	}
 
@@ -656,7 +759,7 @@ public class EventImpl
 	 * @param reachedConsTimestamp
 	 * 		the local time (not consensus time) at which the event reached consensus
 	 */
-	public void setReachedConsTimestamp(Instant reachedConsTimestamp) {
+	public void setReachedConsTimestamp(final Instant reachedConsTimestamp) {
 		internalEventData.setReachedConsTimestamp(reachedConsTimestamp);
 	}
 
@@ -665,7 +768,7 @@ public class EventImpl
 	 * 		the member ID
 	 * @return last ancestor created by m (memoizes lastSee function from Swirlds-TR-2020-01)
 	 */
-	public EventImpl getLastSee(int m) {
+	public EventImpl getLastSee(final int m) {
 		return internalEventData.getLastSee(m);
 	}
 
@@ -677,7 +780,7 @@ public class EventImpl
 	 * @param event
 	 * 		the last seen {@link EventImpl} object created by m
 	 */
-	public void setLastSee(int m, EventImpl event) {
+	public void setLastSee(final int m, final EventImpl event) {
 		internalEventData.setLastSee(m, event);
 	}
 
@@ -688,7 +791,7 @@ public class EventImpl
 	 * @param n
 	 * 		number of members in AddressBook
 	 */
-	public void initLastSee(int n) {
+	public void initLastSee(final int n) {
 		internalEventData.initLastSee(n);
 	}
 
@@ -704,7 +807,7 @@ public class EventImpl
 	 * 		the member ID
 	 * @return strongly-seen witness in parent round by m (memoizes stronglySeeP function from Swirlds-TR-2020-01)
 	 */
-	public EventImpl getStronglySeeP(int m) {
+	public EventImpl getStronglySeeP(final int m) {
 		return internalEventData.getStronglySeeP(m);
 	}
 
@@ -717,7 +820,7 @@ public class EventImpl
 	 * @param event
 	 * 		the strongly-seen witness in parent round created by m
 	 */
-	public void setStronglySeeP(int m, EventImpl event) {
+	public void setStronglySeeP(final int m, final EventImpl event) {
 		internalEventData.setStronglySeeP(m, event);
 	}
 
@@ -728,7 +831,7 @@ public class EventImpl
 	 * @param n
 	 * 		number of members in AddressBook
 	 */
-	public void initStronglySeeP(int n) {
+	public void initStronglySeeP(final int n) {
 		internalEventData.initStronglySeeP(n);
 	}
 
@@ -751,7 +854,7 @@ public class EventImpl
 	 * @param firstSelfWitnessS
 	 * 		The first witness that's a self-ancestor in the self round (memoizes function from Swirlds-TR-2020-01)
 	 */
-	public void setFirstSelfWitnessS(EventImpl firstSelfWitnessS) {
+	public void setFirstSelfWitnessS(final EventImpl firstSelfWitnessS) {
 		internalEventData.setFirstSelfWitnessS(firstSelfWitnessS);
 	}
 
@@ -767,7 +870,7 @@ public class EventImpl
 	 * @param firstWitnessS
 	 * 		the first witness that's an ancestor in the the self round (memoizes function from Swirlds-TR-2020-01)
 	 */
-	public void setFirstWitnessS(EventImpl firstWitnessS) {
+	public void setFirstWitnessS(final EventImpl firstWitnessS) {
 		internalEventData.setFirstWitnessS(firstWitnessS);
 	}
 
@@ -782,7 +885,7 @@ public class EventImpl
 	 * @param isLastEventBeforeShutdown
 	 * 		whether this event is the last event to be written to event stream before shut down
 	 */
-	public void setLastOneBeforeShutdown(boolean isLastEventBeforeShutdown) {
+	public void setLastOneBeforeShutdown(final boolean isLastEventBeforeShutdown) {
 		internalEventData.setLastEventBeforeShutdown(isLastEventBeforeShutdown);
 	}
 
@@ -871,9 +974,9 @@ public class EventImpl
 	}
 
 	public long getMaxRoundCreated() {
-		long selfParentRound = this.getSelfParent() == null ? 0
+		final long selfParentRound = this.getSelfParent() == null ? 0
 				: this.getSelfParent().getRoundCreated();
-		long otherParentRound = this.getOtherParent() == null ? 0
+		final long otherParentRound = this.getOtherParent() == null ? 0
 				: this.getOtherParent().getRoundCreated();
 		return Math.max(selfParentRound, otherParentRound);
 	}

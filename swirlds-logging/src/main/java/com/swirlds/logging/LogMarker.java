@@ -141,6 +141,9 @@ public enum LogMarker {
 	 */
 	EXPIRE_EVENT(LogMarkerType.INFO),
 
+	/** logs which throttles are preventing event creation */
+	EVENT_CREATION_THROTTLE(LogMarkerType.INFO),
+
 	/**
 	 * log when events enter and leave the various event queues managed by the Event Handlers and
 	 * SwirldStateManagerSingle

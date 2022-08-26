@@ -16,9 +16,10 @@
 
 package com.swirlds.common.threading.framework.internal;
 
-import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.ThreadSeed;
 import com.swirlds.common.threading.framework.TypedStoppableThread;
+import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 
 import java.time.Duration;
 
@@ -37,14 +38,14 @@ public abstract class AbstractStoppableThreadConfiguration<
 		C extends AbstractStoppableThreadConfiguration<C, T>, T extends InterruptableRunnable>
 		extends AbstractThreadConfiguration<C> {
 
-	public static final boolean DEFAULT_INTERRUPTABLE = true;
+	public static final Stoppable.StopBehavior DEFAULT_STOP_BEHAVIOR = Stoppable.StopBehavior.INTERRUPTABLE;
 	public static final int DEFAULT_JOIN_WAIT_MS = 50;
 	public static final Duration DEFAULT_HANGING_PERIOD = Duration.ofMinutes(1);
 
 	/**
-	 * Can this thread be interrupted?
+	 * The stop behavior of threads created by this object
 	 */
-	private boolean interruptable = DEFAULT_INTERRUPTABLE;
+	private Stoppable.StopBehavior stopBehavior = DEFAULT_STOP_BEHAVIOR;
 
 	/**
 	 * If this thread can be interrupted, how long should be waited after a close request before interrupting?
@@ -86,7 +87,7 @@ public abstract class AbstractStoppableThreadConfiguration<
 	protected AbstractStoppableThreadConfiguration(final AbstractStoppableThreadConfiguration<C, T> that) {
 		super(that);
 
-		this.interruptable = that.interruptable;
+		this.stopBehavior = that.stopBehavior;
 		this.joinWaitMs = that.joinWaitMs;
 		this.work = that.work;
 		this.finalCycleWork = that.finalCycleWork;
@@ -133,14 +134,16 @@ public abstract class AbstractStoppableThreadConfiguration<
 	}
 
 	/**
-	 * Get the method that will be run after the thread is stopped. Ignored if {@link #isInterruptable()} is true.
+	 * Get the method that will be run after the thread is stopped. Ignored if {@link #stopBehavior} is
+	 * {@link com.swirlds.common.threading.framework.Stoppable.StopBehavior#INTERRUPTABLE INTERRUPTABLE}.
 	 */
 	protected InterruptableRunnable getFinalCycleWork() {
 		return finalCycleWork;
 	}
 
 	/**
-	 * Set the method that will be run after the thread is stopped. Ignored if {@link #isInterruptable()} is true.
+	 * Set the method that will be run after the thread is stopped. Ignored if {@link #stopBehavior} is
+	 * {@link com.swirlds.common.threading.framework.Stoppable.StopBehavior#INTERRUPTABLE INTERRUPTABLE}.
 	 *
 	 * @return this object
 	 */
@@ -171,21 +174,23 @@ public abstract class AbstractStoppableThreadConfiguration<
 	}
 
 	/**
-	 * Should threads created by this object interrupt if close takes too long?
+	 * Gets the stop behavior of threads created by this object
+	 *
+	 * @return the value of {@link #stopBehavior}
 	 */
-	public boolean isInterruptable() {
-		return interruptable;
+	public Stoppable.StopBehavior getStopBehavior() {
+		return stopBehavior;
 	}
 
 	/**
-	 * Set if threads created by this object interrupt if close takes too long.
+	 * Sets the stop behavior of threads created by this object
 	 *
 	 * @return this object
 	 */
 	@SuppressWarnings("unchecked")
-	public C setInterruptable(final boolean interruptable) {
+	public C setStopBehavior(final Stoppable.StopBehavior stopBehavior) {
 		throwIfImmutable();
-		this.interruptable = interruptable;
+		this.stopBehavior = stopBehavior;
 		return (C) this;
 	}
 

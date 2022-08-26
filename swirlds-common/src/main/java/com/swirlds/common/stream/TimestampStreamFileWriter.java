@@ -245,7 +245,7 @@ public class TimestampStreamFileWriter<T extends StreamAligned & RunningHashable
 			LOG.info(OBJECT_STREAM_FILE.getMarker(),
 					"begin :: write OBJECT_STREAM_VERSION {}", OBJECT_STREAM_VERSION);
 			// write startRunningHash
-			Hash startRunningHash = runningHash.getFutureHash().get();
+			Hash startRunningHash = runningHash.getFutureHash().getAndRethrow();
 			out.writeSerializable(startRunningHash, true);
 			metadataOut.writeSerializable(startRunningHash, true);
 			LOG.info(OBJECT_STREAM_FILE.getMarker(), "begin :: write startRunningHash {}", startRunningHash);
@@ -267,7 +267,7 @@ public class TimestampStreamFileWriter<T extends StreamAligned & RunningHashable
 	public void closeCurrentAndSign() {
 		if (fileStream != null) {
 			try {
-				final Hash finalRunningHash = runningHash.getFutureHash().get();
+				final Hash finalRunningHash = runningHash.getFutureHash().getAndRethrow();
 				out.writeSerializable(finalRunningHash, true);
 				metadataOut.writeSerializable(finalRunningHash, true);
 				LOG.info(OBJECT_STREAM_FILE.getMarker(), "closeCurrentAndSign {} :: write endRunningHash {}",

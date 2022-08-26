@@ -17,11 +17,11 @@
 package com.swirlds.common.io.streams;
 
 import com.swirlds.common.constructable.ConstructableRegistry;
-import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.SerializableDet;
 import com.swirlds.common.io.exceptions.ClassNotFoundException;
 import com.swirlds.common.io.exceptions.InvalidVersionException;
+import com.swirlds.common.utility.CommonUtils;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -184,8 +184,32 @@ public class SerializableDataInputStream extends AugmentedDataInputStream {
 
 		int size = readInt();
 		checkLengthLimit(size, maxSize);
-		readSerializableIterableWithSize(size, true,
+		readSerializableIterableWithSizeInternal(size, true,
 				SerializableDataInputStream::registryConstructor, callback);
+	}
+
+	/**
+	 * Read a sequence of serializable objects and pass them to a callback method.
+	 *
+	 * @param maxSize
+	 * 		the maximum number of objects to read
+	 * @param readClassId
+	 * 		if true then the class ID needs to be read
+	 * @param serializableConstructor
+	 * 		a method that takes a class ID and provides a constructor
+	 * @param callback
+	 * 		the callback method where each object is passed when it is deserialized
+	 * @param <T>
+	 * 		the type of the objects being deserialized
+	 */
+	public <T extends SelfSerializable> void readSerializableIterableWithSize(
+			final int maxSize,
+			final boolean readClassId,
+			final Supplier<T> serializableConstructor,
+			final Consumer<T> callback) throws IOException {
+		final int size = readInt();
+		checkLengthLimit(size, maxSize);
+		readSerializableIterableWithSizeInternal(size, readClassId, id -> serializableConstructor.get(), callback);
 	}
 
 	/**
@@ -202,7 +226,7 @@ public class SerializableDataInputStream extends AugmentedDataInputStream {
 	 * @param <T>
 	 * 		the type of the objects being deserialized
 	 */
-	private <T extends SelfSerializable> void readSerializableIterableWithSize(
+	private <T extends SelfSerializable> void readSerializableIterableWithSizeInternal(
 			final int size,
 			final boolean readClassId,
 			final Function<Long, T> serializableConstructor,
@@ -283,6 +307,7 @@ public class SerializableDataInputStream extends AugmentedDataInputStream {
 		}
 
 		final T serializable = serializableConstructor.apply(classId);
+		recordClassId(serializable.getClassId());
 		serializable.deserialize(this, version);
 		return serializable;
 	}
@@ -356,7 +381,7 @@ public class SerializableDataInputStream extends AugmentedDataInputStream {
 		if (length == 0) {
 			return list;
 		}
-		readSerializableIterableWithSize(length, readClassId, serializableConstructor, list::add);
+		readSerializableIterableWithSizeInternal(length, readClassId, serializableConstructor, list::add);
 		return list;
 	}
 

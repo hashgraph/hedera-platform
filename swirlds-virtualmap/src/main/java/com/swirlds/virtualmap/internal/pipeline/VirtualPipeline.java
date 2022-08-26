@@ -56,7 +56,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * 	<li>all copies must be <strong>flushed</strong> or <strong>merged</strong> prior to eviction from memory</li>
  * 	<li>a copy can only be <strong>flushed</strong> or <strong>merged</strong>, not both</li>
  * 	<li>no <strong>flushes</strong> or <strong>merges</strong> are processed during copy detachment</li>
- * 	<li>pipelines can be terminated even when not all copies are released or detached (e.g. during reconnect
+ * 	<li>pipelines can be terminated even when not all copies are destroyed or detached (e.g. during reconnect
  * 		or node shutdown). A terminated pipeline is not required to <strong>flush</strong> or <strong>merge</strong>
  * 		copies before those copies are collected by the java garbage collector.</li>
  * </ul>
@@ -68,14 +68,14 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * only immutable copies can be <strong>flushed</strong>
  * </li>
  * <li>
- * only the oldest unreleased copy can be <strong>flushed</strong>
+ * only the oldest un-destroyed copy can be <strong>flushed</strong>
  * </li>
  * </ul>
  *
  * <hr>
  * <p><strong>Merging</strong></p>
  * <ul>
- * 	<li>only released or detached copies can be <strong>merged</strong>
+ * 	<li>only destroyed or detached copies can be <strong>merged</strong>
  * 	<li>copies can ony be <strong>merged</strong> into immutable copies</li>
  * </ul>
  *
@@ -121,12 +121,12 @@ public class VirtualPipeline {
 	 * </p>
 	 *
 	 * <p>
-	 * Copies are removed from this list when released and (flushed or merged).
+	 * Copies are removed from this list when destroyed and (flushed or merged).
 	 * </p>
 	 */
 	private final PipelineList<VirtualRoot> copies;
 
-	private final AtomicInteger unreleasedCopies = new AtomicInteger();
+	private final AtomicInteger undestroyedCopies = new AtomicInteger();
 
 	/**
 	 * A list of copies that have not yet been hashed. We guarantee that each copy
@@ -144,7 +144,7 @@ public class VirtualPipeline {
 
 	/**
 	 * True if the pipeline is alive and running. When set to false, any already scheduled work
-	 * will still complete. A pipeline is either terminated because the last copy has been released
+	 * will still complete. A pipeline is either terminated because the last copy has been destroyed
 	 * or because of an explicit call to {@link #terminate()}.
 	 */
 	private volatile boolean alive;
@@ -173,6 +173,8 @@ public class VirtualPipeline {
 		executorService = Executors.newSingleThreadExecutor(new ThreadConfiguration()
 				.setComponent(PIPELINE_COMPONENT)
 				.setThreadName(PIPELINE_THREAD_NAME)
+				.setExceptionHandler((t, ex) ->
+						LOG.error(EXCEPTION.getMarker(), "Uncaught exception ", ex))
 				.buildFactory());
 	}
 
@@ -242,7 +244,7 @@ public class VirtualPipeline {
 			flushBacklog.getAndIncrement();
 		}
 
-		unreleasedCopies.getAndIncrement();
+		undestroyedCopies.getAndIncrement();
 		copies.add(copy);
 		unhashedCopies.add(copy);
 		mostRecentCopy.set(copy);
@@ -271,20 +273,20 @@ public class VirtualPipeline {
 	}
 
 	/**
-	 * Release a copy of the map. The pipeline may still perform operations on the copy
+	 * Destroy a copy of the map. The pipeline may still perform operations on the copy
 	 * at a later time (i.e. merge and flush), and so this method only gives the guarantee
-	 * that the resources held by the copy will be eventually released.
+	 * that the resources held by the copy will be eventually destroyed.
 	 */
-	public synchronized void releaseCopy() {
+	public synchronized void destroyCopy() {
 		if (!alive) {
-			// Copy released after the pipeline was manually shut down.
+			// Copy destroyed after the pipeline was manually shut down.
 			return;
 		}
 
-		final int remainingCopies = unreleasedCopies.decrementAndGet();
+		final int remainingCopies = undestroyedCopies.decrementAndGet();
 
 		if (remainingCopies < 0) {
-			throw new IllegalStateException("copies released too many times");
+			throw new IllegalStateException("copies destroyed too many times");
 		} else if (remainingCopies == 0) {
 			shutdown(true);
 		} else {
@@ -426,7 +428,7 @@ public class VirtualPipeline {
 		final PipelineListNode<VirtualRoot> mergeTarget = mergeCandidate.getNext();
 
 		return copy.shouldBeMerged() &&                             // not all copies need to be merged
-				(copy.isReleased() || copy.isDetached()) &&         // copy must be released or detached
+				(copy.isDestroyed() || copy.isDetached()) &&        // copy must be destroyed or detached
 				!copy.isMerged() &&                                 // don't merge twice
 				mergeTarget != null &&                              // target must exist
 				mergeTarget.getValue().isImmutable();               // target must be immutable
@@ -463,14 +465,14 @@ public class VirtualPipeline {
 	 * the end of their lifecycle.
 	 */
 	private static boolean shouldBeRemovedFromPipeline(final VirtualRoot copy) {
-		return copy.isReleased() && (copy.isFlushed() || copy.isMerged());
+		return copy.isDestroyed() && (copy.isFlushed() || copy.isMerged());
 	}
 
 	/**
 	 * Check if a copy should prevent newer copies from being flushed.
 	 */
 	private static boolean shouldBlockFlushes(final VirtualRoot copy) {
-		return !(copy.isReleased() || copy.isDetached()) ||
+		return !(copy.isDestroyed() || copy.isDetached()) ||
 				(copy.shouldBeMerged() && !copy.isMerged()) ||
 				(copy.shouldBeFlushed() && !copy.isFlushed());
 	}
@@ -482,7 +484,7 @@ public class VirtualPipeline {
 		PipelineListNode<VirtualRoot> next = copies.getFirst();
 
 		// We can only flush a copy if there exists no older copy that is not
-		// either released or detached. Once we encounter the first that is neither,
+		// either destroyed or detached. Once we encounter the first that is neither,
 		// all newer copies will be prevented from flushing.
 		boolean flushBlocked = false;
 
@@ -511,7 +513,7 @@ public class VirtualPipeline {
 	private void doWork() {
 		try {
 			hashFlushMerge();
-		} catch (final Exception e) {
+		} catch (final Throwable e) {  // NOSONAR: Must cleanup and log if an error occurred since this is on a thread.
 			LOG.error(EXCEPTION.getMarker(), "exception on virtual pipeline thread", e);
 			shutdown(true);
 		}
@@ -624,7 +626,7 @@ public class VirtualPipeline {
 			sb.append(", ready to be flushed = ").append(uppercaseBoolean(shouldFlush(copy)));
 			sb.append(", ready to be merged = ").append(uppercaseBoolean(shouldMerge(next)));
 			sb.append(", flushed = ").append(uppercaseBoolean(copy.isFlushed()));
-			sb.append(", released = ").append(uppercaseBoolean(copy.isReleased()));
+			sb.append(", destroyed = ").append(uppercaseBoolean(copy.isDestroyed()));
 			sb.append(", hashed = ").append(uppercaseBoolean(copy.isHashed()));
 			sb.append(", detached = ").append(uppercaseBoolean(copy.isDetached()));
 			sb.append("\n");

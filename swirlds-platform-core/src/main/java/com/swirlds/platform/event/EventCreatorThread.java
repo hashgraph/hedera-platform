@@ -17,38 +17,39 @@
 package com.swirlds.platform.event;
 
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.framework.StoppableThread;
 import com.swirlds.common.threading.framework.config.StoppableThreadConfiguration;
+import com.swirlds.common.utility.BooleanFunction;
+import com.swirlds.common.utility.Clearable;
 import com.swirlds.platform.crypto.CryptoStatic;
-import com.swirlds.platform.network.topology.NetworkTopology;
-import com.swirlds.platform.sync.SyncResult;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.function.LongPredicate;
-import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 /**
  * An independent thread that creates new events periodically
  */
-public class EventCreatorThread {
+public class EventCreatorThread implements Clearable {
 	private final StoppableThread creatorThread;
-	private final List<NodeId> allNeighbors;
+	private final List<NodeId> otherNodes;
 	private final Random random;
-	private final Predicate<SyncResult> creationCheck;
-	private final LongPredicate eventCreator;
+	private final BooleanFunction<Long> eventCreator;
 
 	public EventCreatorThread(
 			final NodeId selfId,
 			final int attemptedChatterEventPerSecond,
-			final NetworkTopology topology,
-			final Predicate<SyncResult> creationCheck,
-			final LongPredicate eventCreator) {
-		this.creationCheck = creationCheck;
+			final AddressBook addressBook,
+			final BooleanFunction<Long> eventCreator) {
 		this.eventCreator = eventCreator;
-		this.allNeighbors = new ArrayList<>(topology.getNeighbors());
+		this.otherNodes = StreamSupport.stream(addressBook.spliterator(), false)
+				// don't create events with self as other parent
+				.filter(a -> !selfId.equalsMain(a.getId()))
+				.map(a -> NodeId.createMain(a.getId()))
+				.collect(Collectors.toList());
 		this.random = CryptoStatic.getNonDetRandom();
 
 		creatorThread = new StoppableThreadConfiguration<>()
@@ -62,15 +63,9 @@ public class EventCreatorThread {
 	}
 
 	private void createEvent() {
-		Collections.shuffle(allNeighbors, random);
-		for (final NodeId neighbor : allNeighbors) {
-			final SyncResult syncResult = new SyncResult(
-					false, // not relevant with Chatter
-					neighbor,
-					0, // not relevant with Chatter
-					0 // not relevant with Chatter
-			);
-			if (this.creationCheck.test(syncResult) && this.eventCreator.test(neighbor.getId())) {
+		Collections.shuffle(otherNodes, random);
+		for (final NodeId neighbor : otherNodes) {
+			if (this.eventCreator.apply(neighbor.getId())) {
 				// try all neighbors until we create an event
 				break;
 			}
@@ -79,5 +74,15 @@ public class EventCreatorThread {
 
 	public void start() {
 		creatorThread.start();
+	}
+
+	/**
+	 * Pauses the thread and unpauses it again. This ensures that any event that was in the process of being created is
+	 * now done.
+	 */
+	@Override
+	public void clear() {
+		creatorThread.pause();
+		creatorThread.resume();
 	}
 }

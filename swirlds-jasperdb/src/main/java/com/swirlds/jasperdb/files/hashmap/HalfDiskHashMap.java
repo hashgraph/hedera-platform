@@ -41,7 +41,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.LongSummaryStatistics;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.Semaphore;
 import java.util.function.Function;
 
 import static com.swirlds.jasperdb.files.DataFileCommon.formatSizeBytes;
@@ -217,14 +217,14 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>> implements AutoClo
 	 * @param filterForFilesToMerge
 	 * 		filter to choose which subset of files to merge
 	 * @param mergingPaused
-	 * 		AtomicBoolean to monitor if we should pause merging
+	 * 		Semaphore to monitor if we should pause merging
 	 * @throws IOException
 	 * 		if there was a problem merging
 	 * @throws InterruptedException
 	 * 		If the merge thread was interupted
 	 */
 	public void merge(final Function<List<DataFileReader<Bucket<K>>>,
-			List<DataFileReader<Bucket<K>>>> filterForFilesToMerge, final AtomicBoolean mergingPaused,
+			List<DataFileReader<Bucket<K>>>> filterForFilesToMerge, final Semaphore mergingPaused,
 			final int minNumberOfFilesToMerge) throws IOException, InterruptedException {
 		final long START = System.currentTimeMillis();
 		final List<DataFileReader<Bucket<K>>> allFilesBefore = fileCollection.getAllFilesAvailableForMerge();

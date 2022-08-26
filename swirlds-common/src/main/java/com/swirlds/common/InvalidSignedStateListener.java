@@ -16,11 +16,11 @@
 
 package com.swirlds.common;
 
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.Platform;
 import com.swirlds.common.system.SwirldState;
-import com.swirlds.common.system.events.Event;
+import com.swirlds.common.system.events.PlatformEvent;
 
 import java.time.Instant;
 
@@ -60,7 +60,7 @@ public interface InvalidSignedStateListener {
 	 * 		the hash of the Swirlds application state object in the local signed state instance
 	 */
 	void notifyError(final Platform platform, final AddressBook addressBook, final SwirldState state,
-			final Event[] events, final NodeId selfId, final NodeId otherId, final long round,
+			final PlatformEvent[] events, final NodeId selfId, final NodeId otherId, final long round,
 			final Instant consensusTimestamp, final long numEventsCons, final byte[] signature, final byte[] stateHash);
 
 }

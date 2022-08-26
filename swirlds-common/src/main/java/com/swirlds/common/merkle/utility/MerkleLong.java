@@ -18,6 +18,8 @@ package com.swirlds.common.merkle.utility;
 
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.merkle.MerkleLeaf;
+import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
 import java.io.IOException;
@@ -26,7 +28,7 @@ import java.util.Objects;
 /**
  * A utility node that contains a long value.
  */
-public class MerkleLong extends AbstractMerkleLeaf {
+public class MerkleLong extends PartialMerkleLeaf implements MerkleLeaf {
 
 	public static final long CLASS_ID = 0x46cd791173861c4cL;
 

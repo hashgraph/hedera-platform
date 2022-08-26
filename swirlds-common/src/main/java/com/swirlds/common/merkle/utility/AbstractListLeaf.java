@@ -20,6 +20,8 @@ import com.swirlds.common.FastCopyable;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.merkle.MerkleLeaf;
+import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -35,8 +37,8 @@ import java.util.ListIterator;
  * 		The type contained by the list.
  */
 public abstract class AbstractListLeaf<T extends FastCopyable & SelfSerializable>
-		extends AbstractMerkleLeaf
-		implements List<T> {
+		extends PartialMerkleLeaf
+		implements List<T>, MerkleLeaf {
 
 	/**
 	 * Version information for AbstractEmbeddedListLeaf.
@@ -79,7 +81,7 @@ public abstract class AbstractListLeaf<T extends FastCopyable & SelfSerializable
 		super(that);
 
 		this.elements = new ArrayList<>(that.elements.size());
-		for (final T element: that.elements) {
+		for (final T element : that.elements) {
 			this.elements.add((T) element.copy());
 		}
 	}

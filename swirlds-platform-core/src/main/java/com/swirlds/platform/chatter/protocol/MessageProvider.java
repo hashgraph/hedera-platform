@@ -17,11 +17,12 @@
 package com.swirlds.platform.chatter.protocol;
 
 import com.swirlds.common.io.SelfSerializable;
+import com.swirlds.common.utility.Clearable;
 
 /**
  * Provides chatter messages on request
  */
-public interface MessageProvider {
+public interface MessageProvider extends Clearable {
 	/**
 	 * Provide a message to send over the network.
 	 *

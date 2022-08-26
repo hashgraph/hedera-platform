@@ -22,10 +22,9 @@ import com.swirlds.common.merkle.synchronization.TeachingSynchronizer;
 import com.swirlds.logging.payloads.ReconnectFinishPayload;
 import com.swirlds.logging.payloads.ReconnectStartPayload;
 import com.swirlds.platform.ReconnectStatistics;
-import com.swirlds.platform.SyncConnection;
-import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.Connection;
+import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.state.StateSettings;
-import com.swirlds.platform.network.ByteConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -34,7 +33,6 @@ import java.net.SocketException;
 
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.RECONNECT;
-import static com.swirlds.platform.state.PlatformState.getInfoString;
 
 /**
  * This class encapsulates reconnect logic for the up to date node which is
@@ -45,15 +43,13 @@ public class ReconnectTeacher {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger LOG = LogManager.getLogger(ReconnectTeacher.class);
 
-	private final SyncConnection connection;
+	private final Connection connection;
 	private final SignedState signedState;
 	private final int reconnectSocketTimeout;
 
 	private final long selfId;
 	private final long otherId;
 	private final long lastRoundReceived;
-
-	private final ReconnectThrottle reconnectThrottle;
 
 	private final ReconnectStatistics statistics;
 
@@ -65,10 +61,9 @@ public class ReconnectTeacher {
 	private boolean stateIsReleased;
 
 	public ReconnectTeacher(
-			final SyncConnection connection,
+			final Connection connection,
 			final SignedState signedState,
 			final int reconnectSocketTimeout,
-			final ReconnectThrottle reconnectThrottle,
 			final long selfId,
 			final long otherId,
 			final long lastRoundReceived,
@@ -77,7 +72,6 @@ public class ReconnectTeacher {
 		this.connection = connection;
 		this.signedState = signedState;
 		this.reconnectSocketTimeout = reconnectSocketTimeout;
-		this.reconnectThrottle = reconnectThrottle;
 
 		this.selfId = selfId;
 		this.otherId = otherId;
@@ -148,53 +142,21 @@ public class ReconnectTeacher {
 					connection.getSelfId(), connection.getOtherId());
 			return;
 		}
-		if (reconnectThrottle.initiateReconnect(otherId)) {
-			logReconnectStart();
-			increaseSocketTimeout();
+		logReconnectStart();
+		increaseSocketTimeout();
 
-			try {
-				confirmReconnect();
-				reconnect();
-				sendSignatures();
-			} catch (final InterruptedException e) {
-				Thread.currentThread().interrupt();
-				throw new ReconnectException(e);
-			} catch (final IOException e) {
-				throw new ReconnectException(e);
-			} finally {
-				resetSocketTimeout();
-				reconnectThrottle.markReconnectFinished();
-			}
-			logReconnectFinish();
-		} else {
-			try {
-				denyReconnect();
-			} catch (final IOException e) {
-				throw new ReconnectException(e);
-			}
+		try {
+			reconnect();
+			sendSignatures();
+		} catch (final InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new ReconnectException(e);
+		} catch (final IOException e) {
+			throw new ReconnectException(e);
+		} finally {
+			resetSocketTimeout();
 		}
-	}
-
-	/**
-	 * Write a flag to the stream. Informs the receiver that reconnect will proceed.
-	 *
-	 * @throws IOException
-	 * 		thrown when any I/O related errors occur
-	 */
-	private void confirmReconnect() throws IOException {
-		connection.getDos().write(ByteConstants.COMM_STATE_ACK);
-		connection.getDos().flush();
-	}
-
-	/**
-	 * Write a flag to the stream. Informs the receiver that reconnect will not proceed.
-	 *
-	 * @throws IOException
-	 * 		thrown when any I/O related errors occur
-	 */
-	private void denyReconnect() throws IOException {
-		connection.getDos().write(ByteConstants.COMM_STATE_NACK);
-		connection.getDos().flush();
+		logReconnectFinish();
 	}
 
 	private void logReconnectStart() {
@@ -205,7 +167,7 @@ public class ReconnectTeacher {
 				otherId,
 				lastRoundReceived));
 		LOG.info(RECONNECT.getMarker(), "The following state will be sent to the learner:\n{}\n{}",
-				() -> getInfoString(signedState.getState().getPlatformState()),
+				() -> signedState.getState().getPlatformState().getInfoString(),
 				() -> generateHashDebugString(signedState.getState(), StateSettings.getDebugHashDepth()));
 	}
 
@@ -233,7 +195,7 @@ public class ReconnectTeacher {
 
 		final TeachingSynchronizer synchronizer = new TeachingSynchronizer(
 				new MerkleDataInputStream(connection.getDis()),
-				new MerkleDataOutputStream(connection.getDos()).setExternal(false),
+				new MerkleDataOutputStream(connection.getDos()),
 				signedState.getState(),
 				connection::disconnect);
 

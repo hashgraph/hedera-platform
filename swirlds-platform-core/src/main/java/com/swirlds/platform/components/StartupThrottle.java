@@ -16,10 +16,10 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.system.AddressBook;
 import com.swirlds.common.system.EventCreationRule;
 import com.swirlds.common.system.EventCreationRuleResponse;
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.observers.EventAddedObserver;
 import org.apache.logging.log4j.LogManager;
@@ -73,7 +73,7 @@ public class StartupThrottle implements EventAddedObserver, EventCreationRule, T
 			// only count nodes with non-zero stake, excluding self from the count if the local node has stake
 			int numStakedNodes = addressBook.getNumberWithStake();
 
-			if (!addressBook.isZeroStakeNode(selfId.getId())) {
+			if (!addressBook.getAddress(selfId.getId()).isZeroStake()) {
 				numStakedNodes--;
 			}
 

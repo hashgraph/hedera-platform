@@ -120,7 +120,7 @@ public final class MerkleCopy {
 		// Hold reference to tree being copied. This prevents it from being released if we are copying to
 		// an ancestor that causes the original subtree to be de-referenced.
 		if (child != null) {
-			child.incrementReferenceCount();
+			child.reserve();
 		}
 
 		final Queue<NodeToCopy> nodesToCopy = new LinkedList<>();
@@ -155,7 +155,7 @@ public final class MerkleCopy {
 
 		// Release hold on original tree.
 		if (child != null) {
-			child.decrementReferenceCount();
+			child.release();
 		}
 
 		return rootOfSubtree;

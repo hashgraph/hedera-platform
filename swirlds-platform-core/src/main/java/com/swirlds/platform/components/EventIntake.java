@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.platform.Consensus;
 import com.swirlds.platform.ConsensusRound;
@@ -26,7 +26,7 @@ import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.event.linking.EventLinker;
 import com.swirlds.platform.event.validation.StaticValidators;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
-import com.swirlds.platform.intake.IntakeStats;
+import com.swirlds.platform.intake.IntakeCycleStats;
 import com.swirlds.platform.observers.EventObserverDispatcher;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,7 +57,7 @@ public class EventIntake {
 	/** An {@link EventObserverDispatcher} instance */
 	private final EventObserverDispatcher dispatcher;
 	/** Collects statistics */
-	private final IntakeStats stats;
+	private final IntakeCycleStats stats;
 
 	/**
 	 * Constructor
@@ -77,7 +77,7 @@ public class EventIntake {
 			final Supplier<Consensus> consensusSupplier,
 			final AddressBook addressBook,
 			final EventObserverDispatcher dispatcher,
-			final IntakeStats stats) {
+			final IntakeCycleStats stats) {
 		this.selfId = selfId;
 		this.eventLinker = eventLinker;
 		this.consensusSupplier = consensusSupplier;
@@ -103,7 +103,6 @@ public class EventIntake {
 		while (eventLinker.hasLinkedEvents()) {
 			addEvent(eventLinker.pollLinkedEvent());
 		}
-		stats.doneAdding();
 	}
 
 	/**

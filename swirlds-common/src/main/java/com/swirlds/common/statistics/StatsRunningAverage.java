@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.statistics;
 
+import com.swirlds.common.metrics.Clock;
 import com.swirlds.common.statistics.internal.StatsBuffer;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
@@ -24,10 +25,15 @@ import org.apache.logging.log4j.Logger;
  * This class maintains a running average of some numeric value. It is exponentially weighted in time, with
  * a given half life. If it is always given the same value, then that value will be the average, regardless
  * of the timing.
+ *
+ * @deprecated Use {@link com.swirlds.common.metrics.RunningAverageMetric} instead of this class with {@link StatEntry}
  */
+@Deprecated(forRemoval = true)
 public class StatsRunningAverage implements StatsBuffered {
 
 	private static final Logger LOG = LogManager.getLogger();
+
+	private final Clock clock;
 
 	/**
 	 * the estimated running average
@@ -37,11 +43,13 @@ public class StatsRunningAverage implements StatsBuffered {
 	/**
 	 * each recordValue(X) counts as X calls to values.cycle()
 	 */
+	@SuppressWarnings("removal")
 	private StatsSpeedometer values;
 
 	/**
 	 * each recordValue(X) counts as 1 call to times.cycle()
 	 */
+	@SuppressWarnings("removal")
 	private StatsSpeedometer times;
 
 	/**
@@ -92,7 +100,24 @@ public class StatsRunningAverage implements StatsBuffered {
 	 * @param halfLife
 	 * 		half of the exponential weighting comes from the last halfLife seconds
 	 */
+	@SuppressWarnings("removal")
 	public StatsRunningAverage(final double halfLife) {
+		this(halfLife, Clock.DEFAULT);
+	}
+
+	/**
+	 * This constructor behaves exactly as the regular one, but permits to inject a {@link Clock}.
+	 * It should only be used internally.
+	 *
+	 * @param halfLife
+	 * 		half of the exponential weighting comes from the last halfLife seconds
+	 * @param clock
+	 * 		the {@code Clock} implementation, typically a mock when testing
+	 * @deprecated this constructor should only be used internally and will become non-public at some point
+	 */
+	@Deprecated(forRemoval = true)
+	public StatsRunningAverage(final double halfLife, final Clock clock) {
+		this.clock = clock;
 		reset(halfLife);
 	}
 
@@ -104,14 +129,15 @@ public class StatsRunningAverage implements StatsBuffered {
 	 * @param halfLife
 	 * 		half of the exponential weighting comes from the last halfLife seconds
 	 */
+	@SuppressWarnings("removal")
 	@Override
 	public void reset(final double halfLife) {
 
 		final StatSettings settings = StatSettingsFactory.get();
 
 		firstRecord = true;
-		values = new StatsSpeedometer(halfLife, false);
-		times = new StatsSpeedometer(halfLife, false);
+		values = new StatsSpeedometer(halfLife, false, clock);
+		times = new StatsSpeedometer(halfLife, false, clock);
 		allHistory = new StatsBuffer(settings.getBufferSize(), 0, settings.getSkipSeconds());
 		recentHistory = new StatsBuffer(settings.getBufferSize(), settings.getRecentSeconds(), 0);
 	}

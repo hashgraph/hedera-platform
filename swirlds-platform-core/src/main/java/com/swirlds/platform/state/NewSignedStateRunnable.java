@@ -17,6 +17,7 @@
 package com.swirlds.platform.state;
 
 import com.swirlds.common.system.SwirldMain;
+import com.swirlds.platform.state.signed.SignedState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

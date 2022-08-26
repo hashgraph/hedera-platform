@@ -16,6 +16,8 @@
 
 package com.swirlds.platform.network.protocol;
 
+import com.swirlds.platform.Connection;
+
 /**
  * A network protocol that run over a provided connection. The decision to run the protocol is made outside it, it can
  * only communicate its willingness to run through the provided interface. An instance of this class must be created per
@@ -23,12 +25,27 @@ package com.swirlds.platform.network.protocol;
  */
 public interface Protocol extends ProtocolRunnable {
 	/**
+	 * Used to ask the protocol if we should initiate it. If this method returns true, one of two things will
+	 * always subsequently happen:
+	 * <ul>
+	 *     <li>The initiate will be successful and {@link #runProtocol(Connection)} will be called</li>
+	 *     <li>The initiate will fail and {@link #initiateFailed()} will be called</li>
+	 * </ul>
+	 *
 	 * @return true iff we should we try and initiate this protocol with our peer
 	 */
 	boolean shouldInitiate();
 
 	/**
-	 * Our peer initiated this protocol, should we accept?
+	 * Notifies the protocol that initiating it failed
+	 */
+	default void initiateFailed() {
+
+	}
+
+	/**
+	 * Our peer initiated this protocol, should we accept? If this method returns true,
+	 * {@link #runProtocol(Connection)} will be called immediately after
 	 *
 	 * @return true if we should accept, false if we should reject
 	 */

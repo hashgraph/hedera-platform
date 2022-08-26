@@ -17,11 +17,12 @@
 package com.swirlds.merkle.map;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.merkle.Archivable;
+import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.ArchivedException;
+import com.swirlds.common.merkle.interfaces.Archivable;
 import com.swirlds.common.merkle.route.MerkleRoute;
-import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
+import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
 import com.swirlds.common.merkle.utility.DebugIterationEndpoint;
 import com.swirlds.common.merkle.utility.Keyed;
 import com.swirlds.fchashmap.FCHashMap;
@@ -33,7 +34,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
@@ -79,8 +79,8 @@ import static com.swirlds.logging.LogMarker.RECONNECT;
  */
 @DebugIterationEndpoint
 public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
-		extends AbstractBinaryMerkleInternal
-		implements Archivable, Map<K, V> {
+		extends PartialBinaryMerkleInternal
+		implements Archivable, Map<K, V>, MerkleInternal {
 
 	public static final long CLASS_ID = 0x941550bf023ad8f6L;
 
@@ -195,7 +195,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean childHasExpectedType(final int index, final long childClassId, final int version) {
+	public boolean childHasExpectedType(final int index, final long childClassId) {
 		if (index == ChildIndices.TREE) {
 			return childClassId == MerkleBinaryTree.CLASS_ID;
 		}
@@ -281,7 +281,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 	@Override
 	public MerkleMap<K, V> copy() {
 		throwIfImmutable();
-		throwIfReleased();
+		throwIfDestroyed();
 		final long stamp = readLock();
 		try {
 			return new MerkleMap<>(this);
@@ -305,7 +305,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 	 * {@inheritDoc}
 	 */
 	@Override
-	protected synchronized void onRelease() {
+	protected synchronized void destroyNode() {
 		if (!isArchived()) {
 			index.release();
 		}
@@ -469,7 +469,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 		final long stamp = readLock();
 		try {
 			final V entry;
-			if (index.isReleased()) {
+			if (index.isDestroyed()) {
 				entry = getTree().findValue((final V v) -> Objects.equals(key, v.getKey()));
 			} else {
 				entry = index.get(key);
@@ -586,7 +586,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 				return replaceInternal(key, value);
 			} else {
 
-				if (value.getReferenceCount() != 0) {
+				if (value.getReservationCount() != 0) {
 					throw new IllegalArgumentException("Value is in another tree, can not insert");
 				}
 
@@ -653,7 +653,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 			return value;
 		}
 
-		if (value.getReferenceCount() != 0) {
+		if (value.getReservationCount() != 0) {
 			throw new IllegalArgumentException("Value is already in a tree, can not insert into map");
 		}
 
@@ -788,12 +788,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 		final long stamp = readLock();
 		try {
-			return index.entrySet()
-					.stream()
-					.collect(HashMap<K, V>::new,
-							(m, v) -> m.put(v.getKey(), v.getValue()),
-							HashMap::putAll)
-					.entrySet();
+			return new MerkleMapEntrySet<>(this);
 
 		} finally {
 			releaseReadLock(stamp);
@@ -912,7 +907,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void initialize() {
+	public void rebuild() {
 		final Iterator<V> entryIterator = getTree().iterator();
 		while (entryIterator.hasNext()) {
 			final V nextEntry = entryIterator.next();

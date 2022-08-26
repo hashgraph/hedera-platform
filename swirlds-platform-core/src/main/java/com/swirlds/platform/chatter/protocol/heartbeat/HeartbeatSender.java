@@ -1,0 +1,113 @@
+/*
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.swirlds.platform.chatter.protocol.heartbeat;
+
+import com.swirlds.common.io.SelfSerializable;
+import com.swirlds.common.metrics.Clock;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.platform.chatter.protocol.MessageHandler;
+import com.swirlds.platform.chatter.protocol.MessageProvider;
+
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
+
+/**
+ * Sends heartbeats, waits for a response, tracks the time between the request and the response
+ */
+public class HeartbeatSender implements MessageProvider, MessageHandler<HeartbeatMessage> {
+	public static final Duration HEARTBEAT_TIMEOUT = Duration.ofSeconds(30);
+	private final NodeId peerId;
+	private final BiConsumer<NodeId, Long> pingConsumer;
+	private final Duration heartbeatInterval;
+	private final Clock clock;
+	private final AtomicReference<HeartbeatSent> outbound = new AtomicReference<>();
+
+	/**
+	 * @param peerId
+	 * 		the ID of the peer we are pinging
+	 * @param pingConsumer
+	 * 		consumes the ping time the heartbeat measures. accepts the ID of the peer and the number of
+	 * 		nanoseconds it took for the peer to respond
+	 * @param heartbeatInterval
+	 * 		the interval at which to send heartbeats
+	 * @param clock
+	 * 		provides a point in time in nanoseconds, should only be used to measure relative time (from one point to
+	 * 		another), not absolute time (wall clock time)
+	 */
+	public HeartbeatSender(
+			final long peerId,
+			final BiConsumer<NodeId, Long> pingConsumer,
+			final Duration heartbeatInterval,
+			final Clock clock) {
+		this.peerId = NodeId.createMain(peerId);
+		this.pingConsumer = pingConsumer;
+		this.heartbeatInterval = heartbeatInterval;
+		this.clock = clock;
+		clear();
+	}
+
+	@Override
+	public SelfSerializable getMessage() {
+		final long now = clock.now();
+		final HeartbeatSent lastHeartBeatSent = outbound.get();
+		if (!lastHeartBeatSent.responded()) {
+			// we are still waiting for a response
+			if (now - lastHeartBeatSent.time() > HEARTBEAT_TIMEOUT.toNanos()) {
+				// the request timed out, send a new one
+				return nextHeartbeat(lastHeartBeatSent, now);
+			}
+		} else {
+			// we have received the last response
+			if (now - lastHeartBeatSent.time() > heartbeatInterval.toNanos()) {
+				// time to send a new heartbeat
+				return nextHeartbeat(lastHeartBeatSent, now);
+			}
+		}
+		return null;
+	}
+
+	private HeartbeatMessage nextHeartbeat(final HeartbeatSent lastHeartBeatSent, final long now) {
+		final long nextId = lastHeartBeatSent.id() + 1;
+		outbound.set(new HeartbeatSent(nextId, now, false));
+		return HeartbeatMessage.request(nextId);
+	}
+
+	@Override
+	public void handleMessage(final HeartbeatMessage message) {
+		final HeartbeatSent lastSent = outbound.get();
+		if (lastSent.id() != message.getHeartbeatId()) {
+			// this is not the last sequence we sent, we can ignore this response
+			return;
+		}
+		// they are responding to our ping, so we capture the time difference
+		pingConsumer.accept(
+				peerId,
+				clock.now() - lastSent.time());
+		final HeartbeatSent respondedTrue = new HeartbeatSent(
+				message.getHeartbeatId(),
+				lastSent.time(),
+				true
+		);
+		outbound.compareAndExchange(lastSent, respondedTrue);
+	}
+
+	@Override
+	public void clear() {
+		outbound.set(new HeartbeatSent(0, clock.now(), true));
+	}
+}

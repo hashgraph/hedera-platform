@@ -15,7 +15,9 @@
  */
 package com.swirlds.platform.eventhandling;
 
-import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.EventCreationRuleResponse;
+import com.swirlds.common.system.transaction.ConsensusTransaction;
+import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRule;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
@@ -25,10 +27,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.LinkedList;
+import java.util.function.BooleanSupplier;
 
-import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG_FREEZE;
+import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
-import static com.swirlds.logging.LogMarker.FREEZE;
 import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.PASS;
 import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.SYNC_AND_CREATE;
 
@@ -41,39 +43,55 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 	private static final Logger LOG = LogManager.getLogger();
 
 	/** list of transactions by self waiting to be put into an event */
-	protected final LinkedList<Transaction> transEvent = new LinkedList<>();
+	protected final LinkedList<ConsensusTransactionImpl> transEvent = new LinkedList<>();
 
 	/** the number of user transactions in the transEvent list */
 	protected volatile int numUserTransEvent = 0;
-	protected volatile int numFreezeTransEvent = 0;
+
+	/** the number of signature system transactions in the transEvent list */
+	protected volatile int numSignatureTransEvent = 0;
+
+	/** Indicates if the system is currently in a freeze. */
+	private final BooleanSupplier inFreeze;
 
 	protected final SettingsProvider settings;
 
 	// Used for creating spy objects for unit tests
 	public EventTransactionPool() {
 		settings = null;
+		inFreeze = null;
 	}
 
-	public EventTransactionPool(final SettingsProvider settings) {
+	/**
+	 * Creates a new transaction pool for transactions waiting to be put in an event.
+	 *
+	 * @param settings
+	 * 		settings to use
+	 * @param inFreeze
+	 * 		Indicates if the system is currently in a freeze
+	 */
+	public EventTransactionPool(final SettingsProvider settings, final BooleanSupplier inFreeze) {
 		this.settings = settings;
+		this.inFreeze = inFreeze;
 	}
 
 	/**
 	 * Removes as many transactions from the list waiting to be in an event that can fit (FIFO ordering), and returns
-	 * them as an array.
+	 * them as an array, along with a boolean indicating if the array of transactions returned contains a freeze state
+	 * signature transaction.
 	 */
 	@Override
-	public synchronized Transaction[] getTransactions() {
+	public synchronized ConsensusTransactionImpl[] getTransactions() {
 		// Early return due to no transactions waiting
 		if (transEvent.isEmpty()) {
-			return new Transaction[0];
+			return new ConsensusTransactionImpl[0];
 		}
 
-		final LinkedList<Transaction> selectedTrans = new LinkedList<>();
+		final LinkedList<ConsensusTransactionImpl> selectedTrans = new LinkedList<>();
 		int currEventSize = 0;
 
 		while (currEventSize < settings.getMaxTransactionBytesPerEvent() && !transEvent.isEmpty()) {
-			final Transaction trans = transEvent.peek();
+			final ConsensusTransaction trans = transEvent.peek();
 
 			if (trans != null) {
 				// This event already contains transactions
@@ -87,31 +105,41 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 				if (!trans.isSystem()) {
 					numUserTransEvent--;
 				} else {
-					if (trans.getTransactionType() == SYS_TRANS_STATE_SIG_FREEZE) {
-						numFreezeTransEvent--;
-						LOG.info(FREEZE.getMarker(),
-								"A Freeze system transaction has been put into selectedTrans. numFreezeTransEvent: {}",
-								numFreezeTransEvent);
+					if (trans.getTransactionType() == SYS_TRANS_STATE_SIG) {
+						numSignatureTransEvent--;
 					}
 				}
 			}
 		}
 
-		return selectedTrans.toArray(new Transaction[0]);
+		return selectedTrans.toArray(new ConsensusTransactionImpl[0]);
 	}
 
 	/**
-	 * @return the number of user transactions waiting to be put in an event
+	 * @return the number of transactions waiting to be put in an event, both user and state signature system
+	 * 		transactions
 	 */
-	public int numUserTransForEvent() {
-		return numUserTransEvent + numFreezeTransEvent;
+	public int numTransForEvent() {
+		return numUserTransEvent + numSignatureTransEvent;
 	}
 
 	/**
-	 * @return the number of freeze transactions waiting to be put in an event.
+	 * @return the number of signature transactions waiting to be put in an event.
 	 */
-	public int numFreezeTransEvent() {
-		return numFreezeTransEvent;
+	public int numSignatureTransEvent() {
+		return numSignatureTransEvent;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public EventCreationRuleResponse shouldCreateEvent() {
+		if (numSignatureTransEvent() > 0 && inFreeze.getAsBoolean()) {
+			return EventCreationRuleResponse.CREATE;
+		} else {
+			return EventCreationRuleResponse.PASS;
+		}
 	}
 
 	/**
@@ -119,7 +147,7 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 	 */
 	public TransThrottleSyncAndCreateRuleResponse shouldSyncAndCreate() {
 		// if we have transactions waiting to be put into an event, initiate a sync
-		if (numUserTransForEvent() > 0) {
+		if (numTransForEvent() > 0) {
 			return SYNC_AND_CREATE;
 		} else {
 			return PASS;
@@ -133,7 +161,7 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 	 * 		The transaction. It must have been created by self.
 	 * @return true if successful
 	 */
-	public synchronized boolean submitTransaction(final Transaction trans) {
+	public synchronized boolean submitTransaction(final ConsensusTransactionImpl trans) {
 		// Always submit system transactions
 		if (!trans.isSystem() && transEvent.size() > settings.getThrottleTransactionQueueSize()) {
 			return false;
@@ -151,17 +179,14 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 	 * 		the transaction to add
 	 * @return true if the transaction was added to the queue
 	 */
-	protected synchronized boolean offerToEventQueue(final Transaction trans) {
+	protected synchronized boolean offerToEventQueue(final ConsensusTransactionImpl trans) {
 		final boolean ans = transEvent.offer(trans);
 		if (ans) {
 			if (!trans.isSystem()) {
 				numUserTransEvent++;
 			} else {
-				if (trans.getTransactionType() == SYS_TRANS_STATE_SIG_FREEZE) {
-					numFreezeTransEvent++;
-					LOG.info(FREEZE.getMarker(),
-							"Freeze system transaction has been put into transEvent. numFreezeTransEvent: {}",
-							numFreezeTransEvent);
+				if (trans.getTransactionType() == SYS_TRANS_STATE_SIG) {
+					numSignatureTransEvent++;
 				}
 			}
 		} else {
@@ -191,6 +216,6 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 	public synchronized void clear() {
 		transEvent.clear();
 		numUserTransEvent = 0;
-		numFreezeTransEvent = 0;
+		numSignatureTransEvent = 0;
 	}
 }

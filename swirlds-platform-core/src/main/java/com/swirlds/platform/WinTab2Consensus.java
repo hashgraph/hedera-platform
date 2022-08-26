@@ -16,7 +16,7 @@
 package com.swirlds.platform;
 
 import com.swirlds.platform.StateHierarchy.InfoMember;
-import com.swirlds.platform.state.SignedStateInfo;
+import com.swirlds.platform.state.signed.SignedStateInfo;
 
 import javax.swing.JTextArea;
 import java.awt.Font;

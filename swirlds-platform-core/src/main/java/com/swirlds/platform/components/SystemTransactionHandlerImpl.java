@@ -17,10 +17,8 @@
 package com.swirlds.platform.components;
 
 import com.swirlds.common.system.NodeId;
-import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
-import com.swirlds.platform.EventImpl;
-import com.swirlds.platform.observers.PreConsensusEventObserver;
+import com.swirlds.common.system.transaction.internal.SystemTransaction;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,7 +28,7 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STATE_SIG_DIST;
 
 /** Handles all system transactions */
-public class SystemTransactionHandlerImpl implements SystemTransactionHandler, PreConsensusEventObserver {
+public class SystemTransactionHandlerImpl implements SystemTransactionHandler {
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger LOG = LogManager.getLogger();
 
@@ -62,11 +60,10 @@ public class SystemTransactionHandlerImpl implements SystemTransactionHandler, P
 	 */
 	@Override
 	public void handleSystemTransaction(final long creator, final boolean isConsensus,
-			final Instant timeCreated, final Instant timestamp, final Transaction trans) {
+			final Instant timeCreated, final SystemTransaction trans) {
 		try {
 			switch (trans.getTransactionType()) {
 				case SYS_TRANS_STATE_SIG: // a signature on a signed state
-				case SYS_TRANS_STATE_SIG_FREEZE: // the same thing on the receiving side
 					// self-signature was recorded when it was created, so only record other-sigs here
 					if (!selfId.equalsMain(creator)) {
 						final StateSignatureTransaction signatureTransaction = (StateSignatureTransaction) trans;
@@ -75,8 +72,7 @@ public class SystemTransactionHandlerImpl implements SystemTransactionHandler, P
 						LOG.debug(STATE_SIG_DIST.getMarker(),
 								"platform {} got sig from {} for round {} at handleSystemTransaction",
 								selfId, creator, lastRoundReceived);
-						recorder.recordStateSig(lastRoundReceived,
-								creator, null, sig);
+						recorder.recordStateSig(lastRoundReceived, creator, null, sig);
 					}
 					break;
 				case SYS_TRANS_PING_MICROSECONDS: // latency between members
@@ -95,29 +91,6 @@ public class SystemTransactionHandlerImpl implements SystemTransactionHandler, P
 					trans.getTransactionType(),
 					creator, isConsensus, trans, e);
 
-		}
-	}
-
-	/**
-	 * handles system transactions in this event
-	 *
-	 * @param event
-	 * 		the event to be added to the hashgraph
-	 */
-	@Override
-	public void preConsensusEvent(final EventImpl event) {
-		final Transaction[] trans = event.getTransactions();
-		final int numTrans = (trans == null ? 0 : trans.length);
-		for (int i = 0; i < numTrans; i++) {
-			if (trans[i].isSystem()) {
-				// All system transactions are handled twice, once with consensus false, and once with true.
-				// This is the first time a system transaction is handled while its consensus is not yet
-				// known. The second time it will be handled is in TransactionHandler by the thread-cons thread (lives
-				// in ConsensusRoundHandler)
-				handleSystemTransaction(event.getCreatorId(), false,
-						event.getTimeCreated(),
-						event.getTimeCreated().plusNanos(i), trans[i]);
-			}
 		}
 	}
 }

@@ -15,12 +15,14 @@
  */
 package com.swirlds.platform.eventhandling;
 
-import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.ConsensusTransaction;
+import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 import com.swirlds.platform.SettingsProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.LinkedList;
+import java.util.function.BooleanSupplier;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
@@ -33,18 +35,27 @@ public class SwirldStateSingleTransactionPool extends EventTransactionPool {
 	private static final Logger LOG = LogManager.getLogger();
 
 	/** list of transactions by self waiting to be handled by doCurr */
-	private volatile LinkedList<Transaction> transCurr = new LinkedList<>();
+	private volatile LinkedList<ConsensusTransaction> transCurr = new LinkedList<>();
 	/** list of transactions by self waiting to be handled by doWork */
-	private volatile LinkedList<Transaction> transWork = new LinkedList<>();
+	private volatile LinkedList<ConsensusTransaction> transWork = new LinkedList<>();
 	/** list of transactions by self waiting to be handled by doCons (which just passes them on) */
-	private final LinkedList<Transaction> transCons = new LinkedList<>();
+	private final LinkedList<ConsensusTransaction> transCons = new LinkedList<>();
 
-	public SwirldStateSingleTransactionPool(final SettingsProvider settings) {
-		super(settings);
+	/**
+	 * Creates a new transaction pool for tracking all transactions waiting to be put into an event or to be applied
+	 * to a state.
+	 *
+	 * @param settings
+	 * 		settings to use
+	 * @param inFreeze
+	 * 		Indicates if the system is currently in a freeze
+	 */
+	public SwirldStateSingleTransactionPool(final SettingsProvider settings, final BooleanSupplier inFreeze) {
+		super(settings, inFreeze);
 	}
 
 	@Override
-	public synchronized boolean submitTransaction(final Transaction trans) {
+	public synchronized boolean submitTransaction(final ConsensusTransactionImpl trans) {
 		final int t = settings.getThrottleTransactionQueueSize();
 
 		// In order to be submitted, the transaction must be a system transaction, or all the queues must have room.
@@ -71,17 +82,17 @@ public class SwirldStateSingleTransactionPool extends EventTransactionPool {
 	}
 
 	/** remove and return the earliest-added event in transCurr, or null if none */
-	public synchronized Transaction pollCurr() {
+	public synchronized ConsensusTransaction pollCurr() {
 		return transCurr.poll();
 	}
 
 	/** remove and return the earliest-added event in transWork, or null if none */
-	public synchronized Transaction pollWork() {
+	public synchronized ConsensusTransaction pollWork() {
 		return transWork.poll();
 	}
 
 	/** remove and return the earliest-added event in transCons, or null if none */
-	public synchronized Transaction pollCons() {
+	public synchronized ConsensusTransaction pollCons() {
 		return transCons.poll();
 	}
 
@@ -116,7 +127,7 @@ public class SwirldStateSingleTransactionPool extends EventTransactionPool {
 	@SuppressWarnings("unchecked") // needed because stupid Java type erasure gives no alternative
 	public synchronized void shuffle() {
 		transCurr = transWork;
-		transWork = (LinkedList<Transaction>) transCons.clone();
+		transWork = (LinkedList<ConsensusTransaction>) transCons.clone();
 	}
 
 	/**

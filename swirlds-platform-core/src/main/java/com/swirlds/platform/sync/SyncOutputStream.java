@@ -111,7 +111,7 @@ public class SyncOutputStream extends SerializableDataOutputStream {
 	 * @throws IOException
 	 * 		if a stream exception occurs
 	 */
-	public void writeGenerations(final SyncGenerations generations) throws IOException {
+	public void writeGenerations(final Generations generations) throws IOException {
 		writeSerializable(generations, false);
 	}
 

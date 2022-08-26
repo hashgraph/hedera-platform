@@ -16,6 +16,8 @@
 
 package com.swirlds.jasperdb.files;
 
+import com.swirlds.jasperdb.utilities.FileUtils;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
@@ -111,7 +113,7 @@ public final class DataFileMetadata {
 			// read footer from end of file
 			final ByteBuffer buf = ByteBuffer.allocate(FOOTER_SIZE);
 			channel.position(channel.size() - FOOTER_SIZE);
-			channel.read(buf);
+			FileUtils.completelyRead(channel, buf);
 			buf.rewind();
 			// parse content
 			this.fileFormatVersion = buf.getInt();

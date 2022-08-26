@@ -42,7 +42,11 @@ public enum PlatformStatus implements UniqueId {
 	/**
 	 * The Platform is undergoing maintenance
 	 */
-	MAINTENANCE(5);
+	MAINTENANCE(5),
+	/**
+	 * The Platform has stopped handling consensus transactions in preparation for a freeze
+	 */
+	FREEZE_COMPLETE(6);
 
 	/** unique ID */
 	private final int id;

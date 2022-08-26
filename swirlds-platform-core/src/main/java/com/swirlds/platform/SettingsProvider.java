@@ -146,4 +146,5 @@ public interface SettingsProvider {
 	 * @see Settings#sleepHeartbeat
 	 */
 	int sleepHeartbeatMillis();
+
 }

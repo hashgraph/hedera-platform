@@ -16,11 +16,11 @@
 
 package com.swirlds.platform.reconnect;
 
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.Crypto;
 import com.swirlds.platform.Utilities;
-import com.swirlds.platform.state.SigInfo;
-import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.signed.SigInfo;
+import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.state.StateSettings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,7 +31,6 @@ import java.util.concurrent.Future;
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
-import static com.swirlds.platform.state.PlatformState.getInfoString;
 
 /**
  * Validates a signed state by summing the amount of stake held by the valid signatures on the state.
@@ -74,7 +73,7 @@ public class SignedStateValidator {
 			try {
 				if (validFutures[i].get()) {
 					validCount++;
-					validStake += signedState.getAddressBook().getStake(i);
+					validStake += signedState.getAddressBook().getAddress(i).getStake();
 				}
 			} catch (final InterruptedException e) {
 				Thread.currentThread().interrupt();
@@ -91,7 +90,7 @@ public class SignedStateValidator {
 		LOG.info(RECONNECT.getMarker(), "StrongMinority status: {}", isStrongMinority);
 		if (!isStrongMinority) {
 			LOG.error(RECONNECT.getMarker(), "Information for failed reconnect state:\n{}\n{}",
-					() -> getInfoString(signedState.getState().getPlatformState()),
+					() -> signedState.getState().getPlatformState().getInfoString(),
 					() -> generateHashDebugString(signedState.getState(), StateSettings.getDebugHashDepth()));
 			throw new ReconnectException(String.format(
 					"Error: Received signed state does not have enough valid signatures! validCount:%d, addressBook " +

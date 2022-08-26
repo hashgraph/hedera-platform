@@ -17,10 +17,10 @@
 package com.swirlds.platform;
 
 import com.swirlds.common.system.PlatformStatus;
-import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.utility.BooleanFunction;
 import com.swirlds.platform.stats.TransactionStatistics;
 
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static com.swirlds.common.utility.Units.NANOSECONDS_TO_MICROSECONDS;
@@ -33,7 +33,7 @@ public class TransactionSubmitter {
 	private final Supplier<PlatformStatus> platformStatusSupplier;
 	private final boolean isZeroStakeNode;
 	private final SettingsProvider settings;
-	private final Predicate<Transaction> transactionConsumer;
+	private final BooleanFunction<SwirldTransaction> addToTransactionPool;
 	private final TransactionStatistics stats;
 
 	/**
@@ -45,8 +45,8 @@ public class TransactionSubmitter {
 	 * 		provider of static settings
 	 * @param isZeroStakeNode
 	 * 		true is this node is a zero-stake node
-	 * @param transactionConsumer
-	 * 		a consumer of valid transactions
+	 * @param addToTransactionPool
+	 * 		a function that adds the transaction to the transaction pool, if room is available
 	 * @param stats
 	 * 		stats relevant to transactions
 	 */
@@ -54,13 +54,13 @@ public class TransactionSubmitter {
 			final Supplier<PlatformStatus> platformStatusSupplier,
 			final SettingsProvider settings,
 			final boolean isZeroStakeNode,
-			final Predicate<Transaction> transactionConsumer,
+			final BooleanFunction<SwirldTransaction> addToTransactionPool,
 			final TransactionStatistics stats) {
 
 		this.platformStatusSupplier = platformStatusSupplier;
 		this.settings = settings;
 		this.isZeroStakeNode = isZeroStakeNode;
-		this.transactionConsumer = transactionConsumer;
+		this.addToTransactionPool = addToTransactionPool;
 		this.stats = stats;
 	}
 
@@ -71,7 +71,7 @@ public class TransactionSubmitter {
 	 * 		the transaction to submit
 	 * @return true if the transaction passed all validity checks and was accepted by the consumer
 	 */
-	public boolean submitTransaction(final Transaction trans) {
+	public boolean submitTransaction(final SwirldTransaction trans) {
 		// no new transaction allowed during recover mode
 		if (settings.isEnableStateRecovery()) {
 			return false;
@@ -98,8 +98,8 @@ public class TransactionSubmitter {
 			return false;
 		}
 
-		long start = System.nanoTime();
-		boolean success = transactionConsumer.test(trans);
+		final long start = System.nanoTime();
+		final boolean success = addToTransactionPool.apply(trans);
 		stats.updateTransSubmitMicros((long) ((System.nanoTime() - start) * NANOSECONDS_TO_MICROSECONDS));
 
 		return success;

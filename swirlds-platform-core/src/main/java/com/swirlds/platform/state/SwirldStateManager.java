@@ -19,20 +19,24 @@ package com.swirlds.platform.state;
 import com.swirlds.common.system.SwirldDualState;
 import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.system.transaction.SwirldTransaction;
-import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
+import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.utility.Clearable;
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.FreezePeriodChecker;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRule;
 import com.swirlds.platform.eventhandling.EventTransactionPool;
+import com.swirlds.platform.state.signed.LoadableFromSignedState;
 
 import java.time.Instant;
 
 /**
  * The methods used to interact with instances of {@link SwirldState}.
  */
-public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSyncAndCreateRule {
+public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSyncAndCreateRule, Clearable,
+		LoadableFromSignedState {
 
 	/**
 	 * Passes all non-system transactions to {@link SwirldState#expandSignatures(SwirldTransaction)} for signature
@@ -73,7 +77,8 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 	}
 
 	/**
-	 * Determines if a pre-consensus event should be discarded or added to the pre-consensus queue (q1) for processing.
+	 * Determines if a pre-consensus event should be discarded or added to the pre-consensus queue (q1) for
+	 * processing.
 	 *
 	 * @param event
 	 * 		the event to discard or not
@@ -103,8 +108,8 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 	/**
 	 * <p>Updates the state to a fast copy of itself and returns a reference to the previous state to be used for
 	 * signing. The reference count of the previous state returned by this is incremented to prevent it from being
-	 * garbage collected until it is put in a signed state, so callers are responsible for decrementing the reference
-	 * count when it is no longer needed.</p>
+	 * garbage collected until it is put in a signed state, so callers are responsible for decrementing the
+	 * reference count when it is no longer needed.</p>
 	 *
 	 * <p>Consensus event handling will block until this method returns. Pre-consensus
 	 * event handling may or may not be blocked depending on the implementation.</p>
@@ -117,31 +122,23 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 	/**
 	 * Invoked when a signed state is about to be created for the current freeze period.
 	 * <p>
-	 * Invoked only by the consensus handling thread, so there is no chance of the state being modified by a concurrent
-	 * thread.
+	 * Invoked only by the consensus handling thread, so there is no chance of the state being modified by a
+	 * concurrent thread.
 	 * </p>
 	 */
 	void savedStateInFreezePeriod();
 
 	/**
-	 * Sets the state. Should be called after a state is received via reconnect.
-	 *
-	 * @param state
-	 * 		the new state to use
-	 */
-	void setState(final State state);
-
-	/**
-	 * Return the current state of the app. It changes frequently, so this needs to be called frequently. This method
-	 * also guarantees that the state will not be deleted until {@link #releaseCurrentSwirldState()} is invoked.
+	 * Return the current state of the app. It changes frequently, so this needs to be called frequently. This
+	 * method also guarantees that the state will not be deleted until {@link #releaseCurrentSwirldState()} is invoked.
 	 *
 	 * @return the current app state
 	 */
 	SwirldState getCurrentSwirldState();
 
 	/**
-	 * Returns the consensus state. The consensus state could become immutable at any time. Modifications must not be
-	 * made to the returned state.
+	 * Returns the consensus state. The consensus state could become immutable at any time. Modifications must
+	 * not be made to the returned state.
 	 */
 	State getConsensusState();
 
@@ -154,15 +151,6 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 	}
 
 	/**
-	 * Performs any actions necessary to prepare for reconnect. This may include stopping threads, clearing queues,
-	 * releasing references to state, etc.
-	 *
-	 * @throws InterruptedException
-	 * 		if this thread is interrupted
-	 */
-	void prepareForReconnect() throws InterruptedException;
-
-	/**
 	 * <p>Submits a self transaction for any necessary processing separate from the transaction's propagation to the
 	 * network. A transaction must only be submitted here if it is also submitted for network propagation in {@link
 	 * EventTransactionPool}.</p>
@@ -170,21 +158,20 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 	 * @param transaction
 	 * 		the transaction to submit
 	 */
-	boolean submitTransaction(final Transaction transaction);
-
+	boolean submitTransaction(final ConsensusTransactionImpl transaction);
 
 	/**
-	 * Called during recovery. Updates the dual state status to clear any possible inconsistency between freezeTime and
-	 * lastFrozenTime.
+	 * Called during recovery. Updates the dual state status to clear any possible inconsistency between freezeTime
+	 * and lastFrozenTime.
 	 */
 	void clearFreezeTimes();
 
 	/**
-	 * Indicates is the threads applying transactions to the state can be interrupted.
+	 * Gets the stop behavior of the threads applying transactions to the state
 	 *
-	 * @return true if the threads can be interrupted
+	 * @return the type of stop behavior of the threads applying transactions to the state
 	 */
-	default boolean isInterruptable() {
-		return false;
+	default Stoppable.StopBehavior getStopBehavior() {
+		return Stoppable.StopBehavior.BLOCKING;
 	}
 }

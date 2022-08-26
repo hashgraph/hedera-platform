@@ -21,7 +21,7 @@ import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
 import com.swirlds.common.merkle.iterators.MerkleIterator;
-import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
+import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
 import com.swirlds.common.merkle.utility.MerkleLong;
 import com.swirlds.merkle.tree.internal.BitUtil;
 
@@ -43,7 +43,9 @@ import static com.swirlds.common.merkle.utility.MerkleUtils.findChildPositionInP
  * @param <T>
  * 		Type for leaves
  */
-public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkleInternal implements Iterable<T> {
+public class MerkleBinaryTree<T extends MerkleNode>
+		extends PartialBinaryMerkleInternal
+		implements Iterable<T>, MerkleInternal {
 
 	public static final long CLASS_ID = 0x84bec080aa5cfeecL;
 
@@ -77,15 +79,14 @@ public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkle
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean childHasExpectedType(int index, long childClassId, int version) {
+	public boolean childHasExpectedType(final int index, final long childClassId) {
 		switch (index) {
 			case ChildIndices.SIZE:
 				return childClassId == MerkleLong.CLASS_ID;
 			case ChildIndices.ROOT:
 				return childClassId == MerkleTreeInternalNode.CLASS_ID;
 			default:
-				throw new IllegalChildIndexException(getMinimumChildCount(getVersion()),
-						getMaximumChildCount(getVersion()), version);
+				throw new IllegalChildIndexException(getMinimumChildCount(), getMaximumChildCount(), index);
 		}
 	}
 
@@ -144,7 +145,7 @@ public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkle
 	@Override
 	public MerkleBinaryTree<T> copy() {
 		throwIfImmutable();
-		throwIfReleased();
+		throwIfDestroyed();
 		return new MerkleBinaryTree<>(this);
 	}
 
@@ -409,8 +410,8 @@ public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkle
 					getSize().getValue(),
 					getRoot());
 
-			// Take an artificial reference to the node to push down to prevent it from being released too soon.
-			nodeToPush.incrementReferenceCount();
+			// Take an artificial reference to the node to push down to prevent it from being destroyed too soon.
+			nodeToPush.reserve();
 
 			// Replace path down to the parent of the node to push down.
 			final MerkleNode[] path = replacePath(getRoot(), nodeToPush.getRoute(), 1);
@@ -427,7 +428,7 @@ public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkle
 			updateCache.accept(copy);
 
 			// Release the artificial reference now that the copy has been made
-			nodeToPush.decrementReferenceCount();
+			nodeToPush.release();
 
 			newParent.setRight(entry);
 			rightMostLeaf = entry;
@@ -600,7 +601,7 @@ public class MerkleBinaryTree<T extends MerkleNode> extends AbstractBinaryMerkle
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void initialize() {
+	public void rebuild() {
 		this.setRightMostLeaf();
 	}
 }

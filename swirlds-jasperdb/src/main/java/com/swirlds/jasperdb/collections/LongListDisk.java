@@ -16,6 +16,8 @@
 
 package com.swirlds.jasperdb.collections;
 
+import com.swirlds.jasperdb.utilities.FileUtils;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -69,7 +71,7 @@ public class LongListDisk extends LongList implements Closeable {
 			// write new value to file
 			buf.putLong(0, value);
 			buf.position(0);
-			fileChannel.write(buf, offset);
+			FileUtils.completelyWrite(fileChannel, buf, offset);
 			// update size
 			size.getAndUpdate(oldSize -> index >= oldSize ? (index + 1) : oldSize);
 		} catch (IOException e) {
@@ -100,13 +102,13 @@ public class LongListDisk extends LongList implements Closeable {
 			long offset = FILE_HEADER_SIZE + (index * Long.BYTES);
 			// first read old value
 			buf.clear();
-			fileChannel.read(buf, offset);
+			FileUtils.completelyRead(fileChannel, buf, offset);
 			final long filesOldValue = buf.getLong(0);
 			if (filesOldValue == oldValue) {
 				// write new value to file
 				buf.putLong(0, newValue);
 				buf.position(0);
-				fileChannel.write(buf, offset);
+				FileUtils.completelyWrite(fileChannel, buf, offset);
 				// update size
 				size.getAndUpdate(oldSize -> index >= oldSize ? (index + 1) : oldSize);
 				return true;
@@ -139,7 +141,7 @@ public class LongListDisk extends LongList implements Closeable {
 			try (final FileChannel fc = FileChannel.open(newFile, StandardOpenOption.CREATE,
 					StandardOpenOption.WRITE)) {
 				fileChannel.position(0);
-				fc.transferFrom(fileChannel, 0, fileChannel.size());
+				FileUtils.completelyTransferFrom(fc, fileChannel, 0, fileChannel.size());
 			}
 		}
 	}
@@ -166,7 +168,7 @@ public class LongListDisk extends LongList implements Closeable {
 			final ByteBuffer buf = TEMP_LONG_BUFFER_THREAD_LOCAL.get();
 			long offset = FILE_HEADER_SIZE + (((chunkIndex * numLongsPerChunk) + subIndex) * Long.BYTES);
 			buf.clear();
-			fileChannel.read(buf, offset);
+			FileUtils.completelyRead(fileChannel, buf, offset);
 			return buf.getLong(0);
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
@@ -181,10 +183,8 @@ public class LongListDisk extends LongList implements Closeable {
 	 */
 	@Override
 	public void close() throws IOException {
-        // flush
-        if (fileChannel.isOpen()) {
-            fileChannel.force(false);
-		}
+		// flush
+		fileChannel.force(false);
 		// now close
 		fileChannel.close();
 	}

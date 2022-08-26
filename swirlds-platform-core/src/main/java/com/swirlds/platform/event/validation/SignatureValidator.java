@@ -16,8 +16,8 @@
 
 package com.swirlds.platform.event.validation;
 
-import com.swirlds.common.system.Address;
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.Address;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.events.BaseEvent;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.platform.EventStrings;

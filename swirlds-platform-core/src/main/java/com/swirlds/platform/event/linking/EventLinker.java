@@ -16,14 +16,17 @@
 
 package com.swirlds.platform.event.linking;
 
+import com.swirlds.common.utility.Clearable;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.GossipEvent;
+import com.swirlds.platform.state.signed.LoadableFromSignedState;
+import com.swirlds.platform.state.signed.SignedState;
 
 /**
  * Responsible for linking {@link GossipEvent}s to their parents and creating an {@link EventImpl}
  */
-public interface EventLinker {
+public interface EventLinker extends Clearable, LoadableFromSignedState {
 	/**
 	 * Submit an event that needs to be linked
 	 *
@@ -52,4 +55,14 @@ public interface EventLinker {
 	 * @return a linked event
 	 */
 	EventImpl pollLinkedEvent();
+
+	@Override
+	default void clear() {
+
+	}
+
+	@Override
+	default void loadFromSignedState(final SignedState signedState) {
+
+	}
 }

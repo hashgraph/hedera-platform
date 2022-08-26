@@ -18,7 +18,7 @@ package com.swirlds.platform.components;
 
 import com.swirlds.common.system.EventCreationRule;
 import com.swirlds.common.system.EventCreationRuleResponse;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.common.system.events.BaseEvent;
 import com.swirlds.platform.event.creation.ParentBasedCreationRule;
 
 import java.util.List;
@@ -32,16 +32,16 @@ import static com.swirlds.common.system.EventCreationRuleResponse.PASS;
  * next rule.
  */
 public class EventCreationRules implements EventCreationRule, ParentBasedCreationRule {
-	private final List<EventCreationRule> basicRules;
-	private final List<ParentBasedCreationRule> parentRules;
+	private final List<? extends EventCreationRule> basicRules;
+	private final List<? extends ParentBasedCreationRule> parentRules;
 
 	public EventCreationRules(final List<EventCreationRule> rules) {
 		this(rules, null);
 	}
 
 	public EventCreationRules(
-			final List<EventCreationRule> basicRules,
-			final List<ParentBasedCreationRule> parentRules) {
+			final List<? extends EventCreationRule> basicRules,
+			final List<? extends ParentBasedCreationRule> parentRules) {
 		this.basicRules = basicRules;
 		this.parentRules = parentRules;
 	}
@@ -66,7 +66,7 @@ public class EventCreationRules implements EventCreationRule, ParentBasedCreatio
 	 * {@inheritDoc}
 	 */
 	@Override
-	public EventCreationRuleResponse shouldCreateEvent(final EventImpl selfParent, final EventImpl otherParent) {
+	public EventCreationRuleResponse shouldCreateEvent(final BaseEvent selfParent, final BaseEvent otherParent) {
 		if (parentRules == null) {
 			return PASS;
 		}

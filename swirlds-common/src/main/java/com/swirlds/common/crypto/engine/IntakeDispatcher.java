@@ -149,9 +149,8 @@ public class IntakeDispatcher<Element, Provider extends OperationProvider, Handl
 	private void execute() {
 		while (running) {
 			try {
-				final List<Element> workItems = backingQueue.poll(10, TimeUnit.MILLISECONDS);
-
-				if (workItems != null && workItems.size() > 0) {
+				final List<Element> workItems = backingQueue.take();
+				if (!workItems.isEmpty()) {
 					executorService.submit(handlerSupplier.apply(provider, workItems));
 				}
 			} catch (InterruptedException ex) {

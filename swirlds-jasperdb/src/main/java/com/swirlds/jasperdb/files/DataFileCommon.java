@@ -39,7 +39,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.Semaphore;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -406,17 +406,15 @@ public final class DataFileCommon {
 	}
 
 	/**
-	 * Does a thread sleep busy wait while mergingPaused is true
+	 * Blocks until mergingLock is released.
 	 *
-	 * @param mergingPaused
-	 * 		AtomicBoolean to check if merging should be paused.
-	 * @throws InterruptedException when the thread is interrupted while waiting here
+	 * @param mergingPaused semaphore to check if merging should be paused.
+	 *
+	 * @throws InterruptedException when the thread is interrupted while waiting here.
 	 */
-	@SuppressWarnings("BusyWait")
-	public static void waitIfMergingPaused(AtomicBoolean mergingPaused) throws InterruptedException {
-		while (mergingPaused.get()) {
-			Thread.sleep(100);
-		}
+	public static void waitIfMergingPaused(final Semaphore mergingPaused) throws InterruptedException {
+		mergingPaused.acquire();
+		mergingPaused.release();
 	}
 
 	/**

@@ -22,6 +22,9 @@ open module com.swirlds.virtualmap {
 	// Currently, exported only for tests.
 	exports com.swirlds.virtualmap.internal.merkle;
 
+	// Benchmark tests need access to internals
+	exports com.swirlds.virtualmap.internal.pipeline to com.swirlds.benchmarks;
+
 	requires com.swirlds.common;
 	requires com.swirlds.logging;
 

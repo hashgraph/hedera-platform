@@ -46,16 +46,6 @@ public final class SerializableStreamConstants {
 	 */
 	public static final int SERIALIZATION_PROTOCOL_VERSION = 1;
 
-	public static class MerkleSerializationProtocolVersion {
-
-		/**
-		 * The serialization protocol used for merkle trees.
-		 */
-		public static final int ORIGINAL = 1;
-		public static final int ADDED_OPTIONS = 2;
-		public static final int CURRENT = ADDED_OPTIONS;
-	}
-
 	/**
 	 * Should stream methods that use checksums use checksums by default?
 	 */

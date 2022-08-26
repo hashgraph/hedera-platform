@@ -24,15 +24,15 @@ import java.util.Objects;
 public final class Phase1Response {
 	private static final Phase1Response SYNC_REJECTED_RESPONSE = new Phase1Response(null, null);
 
-	private final SyncGenerations generations;
+	private final Generations generations;
 	private final List<Hash> tips;
 
-	private Phase1Response(final SyncGenerations generations, final List<Hash> tips) {
+	private Phase1Response(final Generations generations, final List<Hash> tips) {
 		this.generations = generations;
 		this.tips = tips;
 	}
 
-	public static Phase1Response create(final SyncGenerations generations, final List<Hash> tips) {
+	public static Phase1Response create(final Generations generations, final List<Hash> tips) {
 		Objects.requireNonNull(generations, "generations cannot be null");
 		Objects.requireNonNull(tips, "tips cannot be null");
 		return new Phase1Response(generations, tips);
@@ -42,7 +42,7 @@ public final class Phase1Response {
 		return SYNC_REJECTED_RESPONSE;
 	}
 
-	public SyncGenerations getGenerations() {
+	public Generations getGenerations() {
 		return generations;
 	}
 

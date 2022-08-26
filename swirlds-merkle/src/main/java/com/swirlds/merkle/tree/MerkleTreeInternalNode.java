@@ -16,10 +16,10 @@
 
 package com.swirlds.merkle.tree;
 
-import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
+import com.swirlds.common.merkle.MerkleInternal;
+import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
 
-public final class MerkleTreeInternalNode
-		extends AbstractBinaryMerkleInternal {
+public final class MerkleTreeInternalNode extends PartialBinaryMerkleInternal implements MerkleInternal {
 
 	private static class ClassVersion {
 		public static final int ORIGINAL = 1;
@@ -43,7 +43,7 @@ public final class MerkleTreeInternalNode
 	@Override
 	public MerkleTreeInternalNode copy() {
 		throwIfImmutable();
-		throwIfReleased();
+		throwIfDestroyed();
 		return new MerkleTreeInternalNode(this);
 	}
 

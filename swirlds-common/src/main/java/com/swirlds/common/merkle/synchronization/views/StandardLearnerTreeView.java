@@ -220,7 +220,7 @@ public class StandardLearnerTreeView implements LearnerTreeView<MerkleNode> {
 		final Iterator<MerkleInternal> iterator = nodesToInitialize.descendingIterator();
 
 		while (iterator.hasNext()) {
-			iterator.next().initialize();
+			iterator.next().rebuild();
 		}
 	}
 

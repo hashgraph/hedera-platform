@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.network;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.Utilities;
 import com.swirlds.platform.sync.SyncTimeoutException;
 import org.apache.logging.log4j.LogManager;
@@ -65,7 +65,7 @@ public final class NetworkUtils {
 	 * 		if the provided exception is an {@link InterruptedException}, it will be rethrown once the connection is
 	 * 		closed
 	 */
-	public static void handleNetworkException(final Exception e, final SyncConnection connection)
+	public static void handleNetworkException(final Exception e, final Connection connection)
 			throws InterruptedException {
 		final String description;
 		// always disconnect when an exception gets thrown

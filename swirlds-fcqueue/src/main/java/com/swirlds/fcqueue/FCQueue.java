@@ -16,16 +16,19 @@
 
 package com.swirlds.fcqueue;
 
+import com.swirlds.common.FastCopyable;
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
+import com.swirlds.common.crypto.SerializableHashable;
 import com.swirlds.common.exceptions.ListDigestException;
 import com.swirlds.common.io.exceptions.InvalidStreamPosition;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
+import com.swirlds.common.merkle.MerkleLeaf;
+import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
 import com.swirlds.fcqueue.internal.FCQHashAlgorithm;
 import com.swirlds.fcqueue.internal.FCQueueNode;
 import com.swirlds.fcqueue.internal.FCQueueNodeBackwardIterator;
@@ -63,7 +66,9 @@ import static com.swirlds.common.utility.CommonUtils.hex;
  * any thread group. An iterator for a queue will throw an exception if it is used after a write to that queue,
  * but it is unaffected by writes to other queues in that queue group.
  */
-public class FCQueue<E extends FCQueueElement> extends AbstractMerkleLeaf implements Queue<E> {
+public class FCQueue<E extends FastCopyable & SerializableHashable>
+		extends PartialMerkleLeaf
+		implements Queue<E>, MerkleLeaf {
 
 	private static class ClassVersion {
 		/**
@@ -73,7 +78,7 @@ public class FCQueue<E extends FCQueueElement> extends AbstractMerkleLeaf implem
 		 */
 		public static final int ORIGINAL = 1;
 		/**
-		 * FCQ implements MerkleLeaf, element implements FCQueueElement
+		 * FCQ implements MerkleLeaf, element implements FastCopyable & SerializableHashable
 		 */
 		public static final int MIGRATE_TO_SERIALIZABLE = 2;
 	}
@@ -243,11 +248,7 @@ public class FCQueue<E extends FCQueueElement> extends AbstractMerkleLeaf implem
 		}
 
 		watch.stop();
-		synchronized (this) {
-			// we need to guard this line with lock
-			// because FCQueue#getHash might be called by multiple threads, and StatsBuffer is not thread-safe
-			FCQueueStatistics.fcqHashExecutionMicros.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
-		}
+		FCQueueStatistics.fcqHashExecutionMicros.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
 
 		return new ImmutableHash(hash);
 	}
@@ -505,9 +506,8 @@ public class FCQueue<E extends FCQueueElement> extends AbstractMerkleLeaf implem
 	//////////////////////////////////////////////////////////////////////////////////////////////////
 
 	@Override
-	protected synchronized void onRelease() {
+	protected synchronized void destroyNode() {
 		clearInternal();
-		super.onRelease();
 	}
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////

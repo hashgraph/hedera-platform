@@ -16,11 +16,13 @@
 
 package com.swirlds.virtualmap.internal.merkle;
 
+import com.swirlds.common.constructable.ConstructableIgnored;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
+import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
 import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.virtualmap.VirtualKey;
+import com.swirlds.virtualmap.VirtualMap;
 import com.swirlds.virtualmap.VirtualValue;
 import com.swirlds.virtualmap.datasource.VirtualInternalRecord;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
@@ -29,7 +31,7 @@ import com.swirlds.virtualmap.internal.Path;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Set;
+import java.util.Objects;
 
 import static com.swirlds.virtualmap.internal.Path.INVALID_PATH;
 import static com.swirlds.virtualmap.internal.Path.ROOT_PATH;
@@ -39,23 +41,33 @@ import static com.swirlds.virtualmap.internal.Path.getRightChildPath;
 /**
  * Represents a virtual internal merkle node.
  */
+@ConstructableIgnored
 public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extends VirtualValue>
-		extends VirtualNode<K, V, VirtualInternalRecord>
-		implements MerkleInternal {
+		extends PartialBinaryMerkleInternal
+		implements MerkleInternal, VirtualNode {
 
 	private static final int NUMBER_OF_CHILDREN = 2;
 
 	public static final long CLASS_ID = 0xaf2482557cfdb6bfL;
 	public static final int SERIALIZATION_VERSION = 1;
 
-	private static final Set<MerkleSerializationStrategy> STRATEGIES = Set.of();
+	/**
+	 * The {@link VirtualMap} associated with this node. Nodes cannot be moved from one map
+	 * to another.
+	 */
+	private final VirtualRootNode<K, V> root;
 
-	public VirtualInternalNode() {
-
-	}
+	/**
+	 * The {@link VirtualRecord} is the backing data for this node. There are different types
+	 * of records, {@link VirtualInternalRecord} for internal nodes and
+	 * {@link com.swirlds.virtualmap.datasource.VirtualLeafRecord} for leaf nodes.
+	 */
+	private final VirtualRecord virtualRecord;
 
 	public VirtualInternalNode(final VirtualRootNode<K, V> root, final VirtualInternalRecord virtualRecord) {
-		super(root, virtualRecord);
+		this.root = Objects.requireNonNull(root);
+		this.virtualRecord = Objects.requireNonNull(virtualRecord);
+		setHash(virtualRecord.getHash());
 	}
 
 	/**
@@ -72,7 +84,7 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
 	@SuppressWarnings("unchecked")
 	@Override
 	public <T extends MerkleNode> T getChild(final int i) {
-		final VirtualNode<K, V, ? extends VirtualRecord> node;
+		final VirtualNode node;
 		if (i == 0) {
 			node = getLeft();
 		} else if (i == 1) {
@@ -85,12 +97,12 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
 			return null;
 		}
 
-		final long targetPath = node.virtualRecord.getPath();
+		final long targetPath = node.getVirtualRecord().getPath();
 		// 0 is VirtualMapState and 1 is the root of the VirtualTree
 		final List<Integer> routePath = Path.getRouteStepsFromRoot(targetPath);
 		final MerkleRoute nodeRoute = this.root.getRoute().extendRoute(routePath);
 		node.setRoute(nodeRoute);
- 		return (T) node;
+		return (T) node;
 	}
 
 	/**
@@ -114,20 +126,32 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
 	}
 
 	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	protected void updateChildRoutes(final MerkleRoute route) {
+		// Don't actually update child routes
+	}
+
+	/**
 	 * Always returns an ephemeral node, or one we already know about.
- 	 */
-	private VirtualNode<K, V, ? extends VirtualRecord> getLeft() {
+	 */
+	@SuppressWarnings("unchecked")
+	@Override
+	public VirtualNode getLeft() {
 		return getChild(getLeftChildPath(virtualRecord.getPath()));
 	}
 
 	/**
 	 * Always returns an ephemeral node, or one we already know about.
 	 */
-	private VirtualNode<K, V, ? extends VirtualRecord> getRight() {
+	@SuppressWarnings("unchecked")
+	@Override
+	public VirtualNode getRight() {
 		return getChild(getRightChildPath(virtualRecord.getPath()));
 	}
 
-	private VirtualNode<K, V, ? extends VirtualRecord> getChild(final long childPath) {
+	private VirtualNode getChild(final long childPath) {
 		if (childPath < root.getState().getFirstLeafPath()) {
 			return getInternalNode(childPath);
 		} else {
@@ -199,15 +223,7 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
 			}
 		}
 
-		return new VirtualLeafNode<>(root, rec);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
-		return STRATEGIES;
+		return new VirtualLeafNode<>(rec);
 	}
 
 	/**
@@ -240,5 +256,37 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
 	@Override
 	public String toString() {
 		return "VirtualInternalNode{" + virtualRecord + "}";
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean equals(final Object o) {
+		if (this == o) {
+			return true;
+		}
+
+		if (!(o instanceof final VirtualNode that)) {
+			return false;
+		}
+
+		return virtualRecord.equals(that.getVirtualRecord());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int hashCode() {
+		return Objects.hash(virtualRecord);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public VirtualRecord getVirtualRecord() {
+		return virtualRecord;
 	}
 }

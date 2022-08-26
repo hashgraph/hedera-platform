@@ -18,8 +18,9 @@ package com.swirlds.merkle.map;
 
 import com.swirlds.common.FastCopyable;
 import com.swirlds.common.io.SelfSerializable;
+import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.utility.AbstractBinaryMerkleInternal;
+import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
 import com.swirlds.common.merkle.utility.Keyed;
 
 import java.util.Objects;
@@ -35,8 +36,8 @@ import java.util.Objects;
  * 		an arbitrary merkle type that is being stored in the MerkleMap
  */
 public class MerkleMapEntry<K extends FastCopyable & SelfSerializable, V extends MerkleNode>
-		extends AbstractBinaryMerkleInternal
-		implements Keyed<K> {
+		extends PartialBinaryMerkleInternal
+		implements Keyed<K>, MerkleInternal {
 
 	private static class ClassVersion {
 		public static final int ORIGINAL = 1;
@@ -126,7 +127,7 @@ public class MerkleMapEntry<K extends FastCopyable & SelfSerializable, V extends
 	@Override
 	public MerkleMapEntry<K, V> copy() {
 		throwIfImmutable();
-		throwIfReleased();
+		throwIfDestroyed();
 		return new MerkleMapEntry<>(this);
 	}
 

@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.sync.ShadowGraph;
 import com.swirlds.platform.sync.ShadowGraphSynchronizer;
@@ -62,7 +62,7 @@ public interface SyncStats {
 	 * @param conn
 	 * 		the sync connections
 	 */
-	void recordSyncTiming(final SyncTiming syncTiming, final SyncConnection conn);
+	void recordSyncTiming(final SyncTiming syncTiming, final Connection conn);
 
 	/**
 	 * Records the size of the known set during a sync. This is the most compute intensive part of the sync, so this is

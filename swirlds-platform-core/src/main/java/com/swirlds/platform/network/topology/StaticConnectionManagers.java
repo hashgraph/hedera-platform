@@ -17,7 +17,7 @@
 package com.swirlds.platform.network.topology;
 
 import com.swirlds.common.system.NodeId;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.ConnectionManager;
 import com.swirlds.platform.network.InboundConnectionManager;
 import com.swirlds.platform.network.OutboundConnectionManager;
@@ -73,7 +73,7 @@ public class StaticConnectionManagers {
 	 * @param newConn
 	 * 		a new connection that has been established
 	 */
-	public void newConnection(final SyncConnection newConn) throws InterruptedException {
+	public void newConnection(final Connection newConn) throws InterruptedException {
 		if (!topology.shouldConnectToMe(newConn.getOtherId())) {
 			LOG.error(EXCEPTION.getMarker(), "Unexpected new connection {}", newConn.getDescription());
 			newConn.disconnect();

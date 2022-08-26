@@ -51,7 +51,7 @@ public final class TeacherSubtree implements AutoCloseable {
 		this.view = view;
 
 		if (root != null) {
-			root.incrementReferenceCount();
+			root.reserve();
 		}
 	}
 
@@ -80,7 +80,7 @@ public final class TeacherSubtree implements AutoCloseable {
 	public void close() {
 		view.close();
 		if (root != null) {
-			root.decrementReferenceCount();
+			root.release();
 		}
 	}
 }

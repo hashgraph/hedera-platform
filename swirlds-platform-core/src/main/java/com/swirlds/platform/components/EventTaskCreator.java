@@ -15,14 +15,15 @@
  */
 package com.swirlds.platform.components;
 
-import com.swirlds.common.system.AddressBook;
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.event.CreateEventTask;
 import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.event.GossipEvent;
+import com.swirlds.platform.event.ValidEvent;
 import com.swirlds.platform.stats.EventIntakeStats;
 import com.swirlds.platform.sync.SyncManager;
 import com.swirlds.platform.sync.SyncResult;
@@ -102,7 +103,8 @@ public class EventTaskCreator {
 		this.eventMapper = eventMapper;
 		this.stats = stats;
 		this.selfId = selfId;
-		this.addressBook = addressBook.immutableCopy();
+		this.addressBook = addressBook.copy();
+		this.addressBook.seal();
 		this.eventIntakeQueue = eventIntakeQueue;
 		this.settings = settings;
 		this.syncManager = syncManager;
@@ -197,7 +199,8 @@ public class EventTaskCreator {
 		// If beta mirror node logic is enabled and this node is a zero stake node then we should not
 		// create this event
 		if (settings.isEnableBetaMirror() &&
-				(addressBook.isZeroStakeNode(selfId.getId()) || addressBook.isZeroStakeNode(otherId))) {
+				(addressBook.getAddress(selfId.getId()).isZeroStake()
+						|| addressBook.getAddress(otherId).isZeroStake())) {
 			return;
 		}
 		addEvent(new CreateEventTask(otherId));
@@ -219,5 +222,15 @@ public class EventTaskCreator {
 					"CRITICAL ERROR, adding intakeTask to the event intake queue failed", e);
 			Thread.currentThread().interrupt();
 		}
+	}
+
+	/**
+	 * Add a newly created event to the intake queue
+	 *
+	 * @param event
+	 * 		the newly created event
+	 */
+	public void createdEvent(final GossipEvent event) {
+		addEvent(new ValidEvent(event));
 	}
 }

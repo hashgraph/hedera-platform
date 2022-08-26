@@ -38,7 +38,7 @@ public interface LearnerInitializer<T> {
 	/**
 	 * <p>
 	 * Initialize each internal node that was reconstructed via this algorithm by calling
-	 * {@link MerkleInternal#initialize()}. No action is required for node types that are known
+	 * {@link MerkleInternal#rebuild()}. No action is required for node types that are known
 	 * to not require initialization.
 	 * </p>
 	 *

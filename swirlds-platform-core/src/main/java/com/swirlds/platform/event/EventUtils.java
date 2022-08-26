@@ -16,7 +16,9 @@
 
 package com.swirlds.platform.event;
 
-import com.swirlds.common.system.events.Event;
+import com.swirlds.common.system.events.BaseEvent;
+import com.swirlds.common.system.events.PlatformEvent;
+import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.EventStrings;
@@ -33,26 +35,6 @@ import java.util.stream.StreamSupport;
 
 public abstract class EventUtils {
 	private static final Logger LOG = LogManager.getLogger();
-
-	/**
-	 * A method that does a XOR on all the event hashes in an array
-	 *
-	 * @param events
-	 * 		the events whose hashes are to be XORed
-	 * @return XOR of the event hashes, or null if there are no events
-	 */
-	public static byte[] xorEventHashes(final EventImpl[] events) {
-		if (events == null || events.length == 0) {
-			return null;
-		}
-		final byte[] xor = new byte[events[0].getBaseHash().getValue().length];
-		for (final EventImpl event : events) {
-			for (int j = 0; j < xor.length; j++) {
-				xor[j] = (byte) (xor[j] ^ event.getBaseHash().getValue()[j]);
-			}
-		}
-		return xor;
-	}
 
 	/**
 	 * Converts the event to a short string. Should be replaced by {@link EventStrings#toShortString(EventImpl)}
@@ -89,7 +71,7 @@ public abstract class EventUtils {
 				.collect(Collectors.joining(","));
 	}
 
-	public static int generationComparator(final Event e1, final Event e2) {
+	public static int generationComparator(final PlatformEvent e1, final PlatformEvent e2) {
 		return Long.compare(e1.getGeneration(), e2.getGeneration());
 	}
 
@@ -168,4 +150,95 @@ public abstract class EventUtils {
 		return xTime.compareTo(yTime);
 	}
 
+	/**
+	 * Get the creator ID of the event. If null return {@link EventConstants#CREATOR_ID_UNDEFINED}.
+	 *
+	 * @param event
+	 * 		the event
+	 * @return the creator ID as {@code long} of the given event, or the self-ID
+	 * 		if the given event is {@code null}
+	 */
+	public static long getCreatorId(final BaseEvent event) {
+		if (event == null) {
+			return EventConstants.CREATOR_ID_UNDEFINED;
+		} else {
+			return event.getHashedData().getCreatorId();
+		}
+	}
+
+	/**
+	 * Compute the creation time of a new event.
+	 *
+	 * @param now
+	 * 		a time {@code Instant}
+	 * @param selfParent
+	 * 		the self-parent of the event to be created
+	 * @return a time {@code Instant} which defines the creation time of an event
+	 */
+	public static Instant getChildTimeCreated(final Instant now, final BaseEvent selfParent) {
+		Instant timeCreated = now;
+
+		if (selfParent != null) {
+			// Ensure that events created by self have a monotonically increasing creation time.
+			// This is true when the computer's clock is running normally.
+			// If the computer's clock is reset to an earlier time, then the Instant.now() call
+			// above may be earlier than the self-parent's creation time. In that case, it
+			// advances to several nanoseconds later than the parent. If the clock is only set back
+			// a short amount, then the timestamps will only slow down their advancement for a
+			// little while, then go back to advancing one second per second. If the clock is set
+			// far in the future, then the parent is created, then the clock is set to the correct
+			// time, then the advance will slow down for a long time. One solution for that is to
+			// generate no events for enough rounds that the parent will not exist (will be null
+			// at this point), and then the correct clock time can be used again. (Assuming this
+			// code has implemented nulling out parents from extremely old rounds).
+			// If event x is followed by y, then y should be at least n nanoseconds later than x,
+			// where n is the number of transactions in x (so each can have a different time),
+			// or n=1 if there are no transactions (so each event is a different time).
+
+			final Transaction[] transactions = selfParent.getHashedData().getTransactions();
+			long minimumTimeIncrement = 1;
+			if (transactions != null && transactions.length > 0) {
+				minimumTimeIncrement = transactions.length;
+			}
+
+			final Instant minimumNextEventTime = selfParent.getHashedData().getTimeCreated()
+					.plusNanos(minimumTimeIncrement);
+
+			if (timeCreated.isBefore(minimumNextEventTime)) {
+				timeCreated = minimumNextEventTime;
+			}
+		}
+
+		return timeCreated;
+	}
+
+	/**
+	 * Get the generation of an event. Returns {@value EventConstants#GENERATION_UNDEFINED} for null events.
+	 *
+	 * @param event
+	 * 		an event
+	 * @return the generation number of the given event,
+	 * 		or {@value EventConstants#GENERATION_UNDEFINED} is the event is {@code null}
+	 */
+	public static long getEventGeneration(final BaseEvent event) {
+		if (event == null) {
+			return EventConstants.GENERATION_UNDEFINED;
+		}
+		return event.getHashedData().getGeneration();
+	}
+
+	/**
+	 * Get the base hash of an event. Returns null for null events.
+	 *
+	 * @param event
+	 * 		an event
+	 * @return a {@code byte[]} which contains the hash bytes of the given event, or {@code null}
+	 * 		if the given event is {@code null}
+	 */
+	public static byte[] getEventHash(final BaseEvent event) {
+		if (event == null) {
+			return null;
+		}
+		return event.getHashedData().getHash().getValue();
+	}
 }

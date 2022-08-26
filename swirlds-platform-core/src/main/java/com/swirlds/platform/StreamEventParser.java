@@ -22,7 +22,7 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.stream.EventStreamManager;
-import com.swirlds.common.system.events.ConsensusEvent;
+import com.swirlds.common.system.events.DetailedConsensusEvent;
 import com.swirlds.logging.payloads.StreamParseErrorPayload;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -297,7 +297,7 @@ public class StreamEventParser extends Thread {
 						file::getName,
 						() -> object);
 			} else {
-				EventImpl event = new EventImpl((ConsensusEvent) object);
+				EventImpl event = new EventImpl((DetailedConsensusEvent) object);
 				// set event's baseHash
 				CryptoFactory.getInstance().digestSync(event.getBaseEventHashedData());
 				eventHandler.consume(event);
@@ -367,7 +367,8 @@ public class StreamEventParser extends Thread {
 			// for event not playing back in swirldsState, insert to event stream manager to get
 			// the same event stream file as the original one.
 			// skip being played back by handleTransaction function
-			LOGGER.info(EVENT_PARSER.getMarker(), "Adding event {} to stream writer directly", event.getConsensusTimestamp());
+			LOGGER.info(EVENT_PARSER.getMarker(), "Adding event {} to stream writer directly",
+					event.getConsensusTimestamp());
 			shouldContinue = true;
 			trySetInitialRunningHash();
 			eventStreamManager.addEvent(event);

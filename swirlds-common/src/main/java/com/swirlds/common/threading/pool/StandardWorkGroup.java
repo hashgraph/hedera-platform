@@ -72,7 +72,10 @@ public class StandardWorkGroup {
 		this.onException = abortAction;
 
 		final ThreadConfiguration configuration = new ThreadConfiguration()
-				.setComponent("work group " + groupName).setThreadName(DEFAULT_TASK_NAME);
+				.setComponent("work group " + groupName)
+				.setExceptionHandler((t, ex) ->
+						LOG.error(EXCEPTION.getMarker(), "Uncaught exception ", ex))
+				.setThreadName(DEFAULT_TASK_NAME);
 
 		this.executorService = Executors.newCachedThreadPool(configuration.buildFactory());
 	}

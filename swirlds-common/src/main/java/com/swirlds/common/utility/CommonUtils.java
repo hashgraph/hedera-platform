@@ -19,6 +19,7 @@ package com.swirlds.common.utility;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.Conversion;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.sound.midi.MidiChannel;
 import javax.sound.midi.MidiSystem;
@@ -47,6 +48,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -261,7 +263,7 @@ public class CommonUtils {
 	 * @param argName
 	 * 		the name of the argument
 	 */
-	public static void throwArgNull(Object arg, String argName) {
+	public static <T> T throwArgNull(final T arg, final String argName) {
 		if (arg == null) {
 			throw new IllegalArgumentException(
 					String.format(
@@ -270,6 +272,7 @@ public class CommonUtils {
 					)
 			);
 		}
+		return arg;
 	}
 
 	/**
@@ -474,5 +477,34 @@ public class CommonUtils {
 	@SafeVarargs
 	public static <T> List<T> joinLists(final List<T>... lists) {
 		return Arrays.stream(lists).flatMap(Collection::stream).collect(Collectors.toList());
+	}
+
+	/**
+	 * Converts a {@code null} string reference to an empty string.
+	 *
+	 * @param value
+	 * 		a possibly {@code null} string reference.
+	 * @return the original value if not null or an empty string if null.
+	 */
+	public static String nullToBlank(final String value) {
+		return (value == null) ? StringUtils.EMPTY : value;
+	}
+
+	/**
+	 * Combine a list of consumers into a single consumer that calls all of them
+	 *
+	 * @param consumers
+	 * 		the consumers to combine
+	 * @param <T>
+	 * 		the type being consumed
+	 * @return the combined consumer
+	 */
+	@SafeVarargs
+	public static <T> Consumer<T> combineConsumers(final Consumer<T>... consumers) {
+		return t -> {
+			for (final Consumer<T> consumer : consumers) {
+				consumer.accept(t);
+			}
+		};
 	}
 }

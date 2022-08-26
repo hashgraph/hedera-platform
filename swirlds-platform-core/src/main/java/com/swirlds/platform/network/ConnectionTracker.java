@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.network;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 
 /**
  * Tracks all connections that have been opened and closed by the platform
@@ -27,7 +27,7 @@ public interface ConnectionTracker {
 	 *
 	 * @param connection the connection that was just established
 	 */
-	void newConnectionOpened(final SyncConnection connection);
+	void newConnectionOpened(final Connection connection);
 
 	/**
 	 * Notifies the tracker that a connection has been closed

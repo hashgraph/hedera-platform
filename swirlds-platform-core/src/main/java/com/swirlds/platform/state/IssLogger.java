@@ -19,6 +19,7 @@ package com.swirlds.platform.state;
 import com.swirlds.logging.payloads.IssPayload;
 import com.swirlds.logging.payloads.IssResolvedPayload;
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.stats.IssStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,7 +30,6 @@ import java.util.Map;
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STARTUP;
-import static com.swirlds.platform.state.PlatformState.getInfoString;
 
 /**
  * This class is responsible for producing log output about ISS events.
@@ -92,7 +92,7 @@ public class IssLogger {
 	 */
 	public void reportSignature(final SignedState signedState, final long signerId, final boolean isValid) {
 		final long previousRound = highestRoundSigned.getOrDefault(signerId, -1L);
-		final long signedRound = signedState.getState().getPlatformState().getRound();
+		final long signedRound = signedState.getState().getPlatformState().getPlatformData().getRound();
 
 		if (signedRound <= previousRound) {
 			// Don't log information for a round that was initially skipped
@@ -125,11 +125,11 @@ public class IssLogger {
 	 */
 	private void logIss(final SignedState signedState, final long signerId) {
 		final String message = "Received an invalid state signature! (┛ಠ_ಠ)┛彡┻━┻\n" +
-				getInfoString(signedState.getState().getPlatformState()) + "\n" +
+				signedState.getState().getPlatformState().getInfoString() + "\n" +
 				generateHashDebugString(signedState.getState(), StateSettings.getDebugHashDepth());
 
 		LOG.error(EXCEPTION.getMarker(), new IssPayload(
-				message, signedState.getState().getPlatformState().getRound(), selfId, signerId));
+				message, signedState.getState().getPlatformState().getPlatformData().getRound(), selfId, signerId));
 
 		if (!firstISSLogged) {
 			firstISSLogged = true;
@@ -158,6 +158,6 @@ public class IssLogger {
 		final String message = "Now receiving valid state signatures. ┳━┳ ヽ(ಠل͜ಠ)ﾉ";
 
 		LOG.info(STARTUP.getMarker(), new IssResolvedPayload(
-				message, signedState.getState().getPlatformState().getRound(), selfId, signerId));
+				message, signedState.getState().getPlatformState().getPlatformData().getRound(), selfId, signerId));
 	}
 }

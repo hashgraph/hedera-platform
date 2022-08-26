@@ -58,7 +58,7 @@ public class InitialState implements NegotiationState {
 	 */
 	@Override
 	public NegotiationState transition() throws IOException {
-		final byte protocolByte = protocols.getProtocolToInitiate();
+		final byte protocolByte = protocols.initiateProtocol();
 
 		if (protocolByte >= 0) {
 			byteOutput.write(protocolByte);

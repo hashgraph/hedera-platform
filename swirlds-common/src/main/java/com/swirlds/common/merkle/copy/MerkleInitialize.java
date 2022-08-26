@@ -16,13 +16,13 @@
 
 package com.swirlds.common.merkle.copy;
 
+import com.swirlds.common.io.ExternalSelfSerializable;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 
+import java.util.Map;
+import java.util.Objects;
 import java.util.function.Predicate;
-
-import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
-import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.SELF_SERIALIZATION;
 
 /**
  * This class provides utility methods for initializing trees.
@@ -34,50 +34,60 @@ public final class MerkleInitialize {
 	}
 
 	/**
-	 * This filter is used when iterating over a tree to do initialization after a deserialization.
-	 */
-	private static boolean deserializationFilter(final MerkleNode node) {
-		// Leaf nodes are never initialized.
-		// Internal nodes that are self serializing don't require initialization.
-		return !node.isLeaf() && !node.supportedSerialization(node.getVersion()).contains(SELF_SERIALIZATION);
-	}
-
-	/**
-	 * This filter is used when iterating over a tree to do initialization after an external deserialization.
-	 */
-	private static boolean externalDeserializationFilter(final MerkleNode node) {
-		// Leaf nodes are never initialized.
-		// Internal nodes that are self serializing don't require initialization.
-		return !node.isLeaf() && !node.supportedSerialization(node.getVersion()).contains(SELF_SERIALIZATION) &&
-				!node.supportedSerialization(node.getVersion()).contains(EXTERNAL_SELF_SERIALIZATION);
-	}
-
-	/**
-	 * This filter is used when iterating over a tree to do initialization after a copy.
-	 */
-	private static boolean copyFilter(final MerkleNode node) {
-		// Leaf nodes are never initialized.
-		return !node.isLeaf();
-	}
-
-	/**
 	 * Initialize the tree after deserialization.
 	 *
 	 * @param root
 	 * 		the tree (or subtree) to initialize
+	 * @param deserializationVersions
+	 * 		the versions of classes at deserialization
+	 * @return the root of the tree, possibly different than original root if the root has been migrated
 	 */
-	public static void initializeTreeAfterDeserialization(final MerkleNode root) {
-		initializeWithFilter(root, MerkleInitialize::deserializationFilter);
-	}
+	public static MerkleNode initializeAndMigrateTreeAfterDeserialization(
+			final MerkleNode root,
+			final Map<Long /* class ID */, Integer /* version */> deserializationVersions) {
 
-	/**
-	 * Initialize the tree after external deserialization.
-	 *
-	 * @param root
-	 * 		the tree (or subtree) to initialize
-	 */
-	public static void initializeTreeAfterExternalDeserialization(final MerkleNode root) {
-		initializeWithFilter(root, MerkleInitialize::externalDeserializationFilter);
+		if (root == null) {
+			return null;
+		}
+
+		// Leaf nodes don't require initialization and implement ExternalSelfSerializable,
+		// and any internal node that implements ExternalSelfSerializable must handle its own
+		// serialization and migration
+		final Predicate<MerkleNode> filter = node -> !(node instanceof ExternalSelfSerializable);
+
+		// If a node should not be initialized, then neither should any of its descendants be initialized.
+		final Predicate<MerkleInternal> descendantFilter = filter::test;
+
+		root.treeIterator()
+				.setFilter(filter)
+				.setDescendantFilter(descendantFilter)
+				.forEachRemaining((final MerkleNode node) -> {
+					final MerkleInternal internal = node.asInternal();
+
+					for (int childIndex = 0; childIndex < internal.getNumberOfChildren(); childIndex++) {
+						final MerkleNode child = internal.getChild(childIndex);
+						if (child == null) {
+							continue;
+						}
+
+						final int deserializationVersion = Objects.requireNonNull(
+								deserializationVersions.get(child.getClassId()),
+								"class not discovered during deserialization");
+
+						final MerkleNode migratedChild = child.migrate(deserializationVersion);
+						if (migratedChild != child) {
+							internal.setChild(childIndex, migratedChild);
+						}
+					}
+
+					node.asInternal().rebuild();
+				});
+
+		final int deserializationVersion = Objects.requireNonNull(
+				deserializationVersions.get(root.getClassId()),
+				"class not discovered during deserialization");
+
+		return root.migrate(deserializationVersion);
 	}
 
 	/**
@@ -87,21 +97,14 @@ public final class MerkleInitialize {
 	 * 		the tree (or subtree) to initialize
 	 */
 	public static void initializeTreeAfterCopy(final MerkleNode root) {
-		initializeWithFilter(root, MerkleInitialize::copyFilter);
-	}
-
-	private static void initializeWithFilter(final MerkleNode root, final Predicate<MerkleNode> filter) {
-
 		if (root == null) {
 			return;
 		}
 
-		// If a node should not be initialized, then neither should any of its descendants be initialized.
-		final Predicate<MerkleInternal> descendantFilter = filter::test;
+		final Predicate<MerkleNode> filter = node -> !node.isLeaf();
 
 		root.treeIterator()
 				.setFilter(filter)
-				.setDescendantFilter(descendantFilter)
-				.forEachRemaining(node -> ((MerkleInternal) node).initialize());
+				.forEachRemaining(node -> ((MerkleInternal) node).rebuild());
 	}
 }

@@ -16,6 +16,7 @@
 
 package com.swirlds.platform.chatter.protocol.purgable;
 
+import com.swirlds.common.utility.Clearable;
 import com.swirlds.platform.chatter.protocol.Purgable;
 
 import java.util.function.BiConsumer;
@@ -30,7 +31,7 @@ import java.util.function.Function;
  * @param <V>
  * 		the type of value
  */
-public interface PurgableMap<K, V> extends Purgable {
+public interface PurgableMap<K, V> extends Purgable, Clearable {
 	/**
 	 * Get the purged generation. All smaller generations are have been removed.
 	 *

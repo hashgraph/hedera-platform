@@ -22,17 +22,18 @@ import com.swirlds.platform.EventImpl;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
 
-/** hold a SwirldState along with some information about it */
+/**
+ * Holds a {@link State} and the last consensus event applied to it.
+ */
 public class StateInfo implements Releasable {
 	/** the SwirldState root that this object describes */
 	private final AtomicReference<State> state = new AtomicReference<>();
+
 	/**
 	 * lastCons is a consensus event whose transactions have already been handled by state, as have all
 	 * consensus events before it in the consensus order.
 	 */
 	private volatile EventImpl lastCons;
-	/** have we called "freeze" on the SwirldState, promising it there will be no more transactions? */
-	private volatile boolean frozen = false;
 
 	/**
 	 * pass in everything that is stored in the StateInfo
@@ -41,19 +42,15 @@ public class StateInfo implements Releasable {
 	 * 		the state to feed transactions to
 	 * @param lastCons
 	 * 		the last consensus event, in consensus order
-	 * @param frozen
-	 * 		has state.freeze() been called yet, to promise never to send another transaction?
 	 */
-	public StateInfo(final State state, final EventImpl lastCons, final boolean frozen) {
+	public StateInfo(final State state, final EventImpl lastCons) {
 		this.initializeState(state);
 		this.setLastCons(lastCons);
-		this.setFrozen(frozen);
 	}
 
 	private StateInfo(final StateInfo stateToCopy) {
 		this.initializeState(stateToCopy.getState().copy());
 		this.setLastCons(stateToCopy.getLastCons());
-		this.setFrozen(stateToCopy.isFrozen());
 	}
 
 	/**
@@ -65,11 +62,17 @@ public class StateInfo implements Releasable {
 		return new StateInfo(this);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
 	public void release() {
-		state.get().decrementReferenceCount();
+		state.get().release();
 	}
 
+	/**
+	 * Returns the current state.
+	 */
 	public State getState() {
 		return state.get();
 	}
@@ -77,16 +80,25 @@ public class StateInfo implements Releasable {
 	private void initializeState(final State newState) {
 		final State currState = state.get();
 		if (currState != null) {
-			currState.decrementReferenceCount();
+			currState.release();
 		}
-		newState.incrementReferenceCount();
+		newState.reserve();
 		this.state.set(newState);
 	}
 
-	public void setState(final State state) {
+	/**
+	 * Sets the current state. Should only be invoked after a fast copy has been made.
+	 *
+	 * @param state
+	 * 		the new state
+	 */
+	protected void setState(final State state) {
 		this.state.set(state);
 	}
 
+	/**
+	 * Returns the last consensus event applied to this state.
+	 */
 	public EventImpl getLastCons() {
 		return lastCons;
 	}
@@ -105,13 +117,5 @@ public class StateInfo implements Releasable {
 	 */
 	protected void updateState(final UnaryOperator<State> updateFunction) {
 		state.getAndUpdate(updateFunction);
-	}
-
-	public boolean isFrozen() {
-		return frozen;
-	}
-
-	public void setFrozen(final boolean frozen) {
-		this.frozen = frozen;
 	}
 }

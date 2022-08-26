@@ -17,12 +17,14 @@
 package com.swirlds.platform.network.communication;
 
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.ConnectionManager;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.NetworkUtils;
+import com.swirlds.platform.network.protocol.ProtocolRunnable;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * Continuously runs protocol negotiation and protocols over connections supplied by the connection manager
@@ -30,35 +32,45 @@ import java.io.IOException;
 public class NegotiatorThread implements InterruptableRunnable {
 	private static final int SLEEP_MS = 100;
 	private final ConnectionManager connectionManager;
+	private final List<ProtocolRunnable> handshakeProtocols;
 	private final NegotiationProtocols protocols;
 
 	/**
 	 * @param connectionManager
 	 * 		supplies network connections
+	 * @param handshakeProtocols
+	 * 		the list of protocols to execute when a new connection is established
 	 * @param protocols
 	 * 		the protocols to negotiate and run
 	 */
 	public NegotiatorThread(
 			final ConnectionManager connectionManager,
+			final List<ProtocolRunnable> handshakeProtocols,
 			final NegotiationProtocols protocols) {
 		this.connectionManager = connectionManager;
+		this.handshakeProtocols = handshakeProtocols;
 		this.protocols = protocols;
 	}
 
 	@Override
 	public void run() throws InterruptedException {
-		final SyncConnection currentConn = connectionManager.waitForConnection();
+		final Connection currentConn = connectionManager.waitForConnection();
 		final Negotiator negotiator = new Negotiator(
 				protocols,
 				currentConn,
 				SLEEP_MS
 		);
-		while (currentConn.connected()) {
-			try {
-				negotiator.execute();
-			} catch (final RuntimeException | IOException | NetworkProtocolException | NegotiationException e) {
-				NetworkUtils.handleNetworkException(e, currentConn);
+		try {
+			// run the handshake protocols on every new connection
+			for (final ProtocolRunnable handshakeProtocol : handshakeProtocols) {
+				handshakeProtocol.runProtocol(currentConn);
 			}
+
+			while (currentConn.connected()) {
+				negotiator.execute();
+			}
+		} catch (final RuntimeException | IOException | NetworkProtocolException | NegotiationException e) {
+			NetworkUtils.handleNetworkException(e, currentConn);
 		}
 	}
 }

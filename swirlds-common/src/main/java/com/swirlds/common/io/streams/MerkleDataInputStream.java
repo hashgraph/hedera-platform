@@ -17,11 +17,10 @@
 package com.swirlds.common.io.streams;
 
 import com.swirlds.common.constructable.ConstructableRegistry;
-import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.ExternalSelfSerializable;
-import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.exceptions.ClassNotFoundException;
 import com.swirlds.common.io.exceptions.MerkleSerializationException;
+import com.swirlds.common.io.streams.internal.MerkleSerializationProtocol;
 import com.swirlds.common.io.streams.internal.MerkleTreeSerializationOptions;
 import com.swirlds.common.io.streams.internal.PartiallyConstructedMerkleInternal;
 import com.swirlds.common.merkle.MerkleInternal;
@@ -32,23 +31,22 @@ import com.swirlds.common.merkle.exceptions.IllegalChildCountException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Queue;
 
-import static com.swirlds.common.io.streams.SerializableStreamConstants.MerkleSerializationProtocolVersion.CURRENT;
+import static com.swirlds.common.constructable.ClassIdFormatter.classIdString;
 import static com.swirlds.common.io.streams.SerializableStreamConstants.NULL_CLASS_ID;
-import static com.swirlds.common.merkle.copy.MerkleInitialize.initializeTreeAfterDeserialization;
-import static com.swirlds.common.merkle.copy.MerkleInitialize.initializeTreeAfterExternalDeserialization;
-import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.DEFAULT_MERKLE_INTERNAL;
-import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.EXTERNAL_SELF_SERIALIZATION;
-import static com.swirlds.common.merkle.utility.MerkleSerializationStrategy.SELF_SERIALIZATION;
+import static com.swirlds.common.merkle.copy.MerkleInitialize.initializeAndMigrateTreeAfterDeserialization;
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
 /**
  * A SerializableDataInputStream that can also handle merkle tree.
  */
 public class MerkleDataInputStream extends SerializableDataInputStream {
 
-	private final File externalDirectory;
 	private final Queue<PartiallyConstructedMerkleInternal> internalNodes;
 	private MerkleNode root;
 
@@ -59,23 +57,7 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 	 * 		a stream to wrap
 	 */
 	public MerkleDataInputStream(final InputStream in) {
-		this(in, null);
-	}
-
-	/**
-	 * Create a stream capable of reading merkle trees.
-	 *
-	 * @param in
-	 * 		a stream to wrap
-	 * @param externalDirectory
-	 * 		the location of external data
-	 */
-	public MerkleDataInputStream(final InputStream in, final File externalDirectory) {
 		super(in);
-		if (externalDirectory != null && (!externalDirectory.exists() || !externalDirectory.isDirectory())) {
-			throw new IllegalArgumentException("invalid external directory " + externalDirectory.getAbsolutePath());
-		}
-		this.externalDirectory = externalDirectory;
 		internalNodes = new LinkedList<>();
 	}
 
@@ -102,72 +84,65 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 	/**
 	 * Finish deserializing a leaf node.
 	 *
+	 * @param directory
+	 * 		the directory from which data is being read
 	 * @param node
 	 * 		the leaf node to be read
 	 * @param version
 	 * 		version of this leaf
 	 */
 	private void finishReadingLeaf(
-			final MerkleTreeSerializationOptions options,
+			final File directory,
 			final MerkleLeaf node,
 			final int version) throws IOException {
-
-		if (options.isExternal() && node.supportedSerialization(version).contains(EXTERNAL_SELF_SERIALIZATION)) {
-			final Hash hash = readSerializable();
-			((ExternalSelfSerializable) node).deserializeExternal(this, externalDirectory, hash, version);
-		} else if (node.supportedSerialization(version).contains(SELF_SERIALIZATION)) {
-			node.deserialize(this, version);
-		} else {
-			throw new MerkleSerializationException("Illegal deserialization strategy requested", node);
-		}
+		((ExternalSelfSerializable) node).deserialize(this, directory, version);
 		addToParent(node);
 	}
 
 	/**
 	 * Finish deserializing an internal node.
 	 *
+	 * @param directory
+	 * 		the directory from which data is being read
 	 * @param node
 	 * 		the internal node to be read
 	 * @param version
 	 * 		version of this internal node
 	 */
 	private void finishReadingInternal(
-			final MerkleTreeSerializationOptions options,
+			final File directory,
 			final MerkleInternal node,
 			final int version) throws IOException {
 
-		if (options.isExternal() && node.supportedSerialization(version).contains(EXTERNAL_SELF_SERIALIZATION)) {
-			final Hash hash = readSerializable();
-			((ExternalSelfSerializable) node).deserializeExternal(this, externalDirectory, hash, version);
+		if (node instanceof ExternalSelfSerializable) {
+			((ExternalSelfSerializable) node).deserialize(this, directory, version);
 			addToParent(node);
-		} else if (node.supportedSerialization(version).contains(SELF_SERIALIZATION)) {
-			((SelfSerializable) node).deserialize(this, version);
-			addToParent(node);
-		} else if (node.supportedSerialization(version).contains(DEFAULT_MERKLE_INTERNAL)) {
+		} else {
 			final int childCount = readInt();
 
-			if (childCount < node.getMinimumChildCount(version) || childCount > node.getMaximumChildCount(version)) {
-				throw new IllegalChildCountException(node.getClassId(), version, node.getMinimumChildCount(version),
-						node.getMaximumChildCount(version), childCount);
+			if (childCount < node.getMinimumChildCount() || childCount > node.getMaximumChildCount()) {
+				throw new IllegalChildCountException(node.getClassId(), version, node.getMinimumChildCount(),
+						node.getMaximumChildCount(), childCount);
 			}
 
 			addToParent(node);
 			if (childCount > 0) {
 				internalNodes.add(new PartiallyConstructedMerkleInternal(node, version, childCount));
 			}
-		} else {
-			throw new MerkleSerializationException("Illegal deserialization strategy requested", node);
 		}
 	}
 
 	/**
 	 * Read the node from the stream.
 	 *
-	 * @param options
-	 * 		the options we used when reading the node
+	 * @param directory
+	 * 		the directory from which data is being read
+	 * @param deserializedVersions
+	 * 		versions of deserialized nodes
 	 */
 	protected void readNextNode(
-			final MerkleTreeSerializationOptions options) throws IOException {
+			final File directory,
+			final Map<Long /* class ID */, Integer /* version */> deserializedVersions) throws IOException {
 		final long classId = readLong();
 		recordClassId(classId);
 		if (classId == NULL_CLASS_ID) {
@@ -184,24 +159,41 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 		final int classVersion = readInt();
 
 		validateVersion(node, classVersion);
-
-		if (node.isLeaf()) {
-			finishReadingLeaf(options, node.asLeaf(), classVersion);
-		} else {
-			finishReadingInternal(options, node.asInternal(), classVersion);
+		final Integer previous = deserializedVersions.put(classId, classVersion);
+		if (previous != null && previous != classVersion) {
+			throw new IllegalStateException("Class with class ID " + classIdString(classId) +
+					" has different versions within the same stream");
 		}
 
-		if (options.getWriteHashes()) {
-			final Hash hash = readSerializable(false, Hash::new);
-			if (!node.isSelfHashing()) {
-				node.setHash(hash);
-			}
+		if (node.isLeaf()) {
+			finishReadingLeaf(directory, node.asLeaf(), classVersion);
+		} else {
+			finishReadingInternal(directory, node.asInternal(), classVersion);
+		}
+	}
+
+	/**
+	 * Perform basic sanity checks on the output directory.
+	 */
+	@SuppressWarnings("DuplicatedCode")
+	private static void validateDirectory(final File directory) {
+		throwArgNull(directory, "directory");
+		if (!directory.exists()) {
+			throw new IllegalArgumentException("directory " + directory + " does not exist");
+		}
+		if (!directory.isDirectory()) {
+			throw new IllegalArgumentException("'directory' " + directory + " is not a directory");
+		}
+		if (!Files.isReadable(directory.toPath())) {
+			throw new IllegalArgumentException("invalid read permissions for directory " + directory);
 		}
 	}
 
 	/**
 	 * Read a merkle tree from a stream.
 	 *
+	 * @param directory
+	 * 		the directory from which data is being read
 	 * @param maxNumberOfNodes
 	 * 		maximum number of nodes to read
 	 * @param <T>
@@ -210,18 +202,26 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 	 * @throws IOException
 	 * 		thrown when version or the options or nodes count are invalid
 	 */
-	public <T extends MerkleNode> T readMerkleTree(final int maxNumberOfNodes) throws IOException {
+	public <T extends MerkleNode> T readMerkleTree(
+			final File directory,
+			final int maxNumberOfNodes) throws IOException {
+
+		validateDirectory(directory);
+
 		final int merkleVersion = readInt();
-		if (merkleVersion != CURRENT) {
-			throw new MerkleSerializationException("Unhandled merkle version " + merkleVersion);
+
+		if (merkleVersion == MerkleSerializationProtocol.VERSION_1_ORIGINAL) {
+			throw new MerkleSerializationException("Unhandled merkle serialization version " + merkleVersion);
+		} else if (merkleVersion == MerkleSerializationProtocol.VERSION_2_ADDED_OPTIONS) {
+			readSerializable(false, MerkleTreeSerializationOptions::new);
 		}
-		final MerkleTreeSerializationOptions options =
-				readSerializable(false, MerkleTreeSerializationOptions::new);
 
 		final boolean rootIsNull = readBoolean();
 		if (rootIsNull) {
 			return null;
 		}
+
+		final Map<Long /* class ID */, Integer /* version */> deserializedVersions = new HashMap<>();
 
 		int nodeCount = 0;
 		while (!internalNodes.isEmpty() || root == null) {
@@ -229,15 +229,15 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 			if (nodeCount > maxNumberOfNodes) {
 				throw new MerkleSerializationException("Node count exceeds maximum value of " + maxNumberOfNodes + ".");
 			}
-			readNextNode(options);
+			readNextNode(directory, deserializedVersions);
 		}
 
-		if (options.isExternal()) {
-			initializeTreeAfterExternalDeserialization(root);
-		} else {
-			initializeTreeAfterDeserialization(root);
-		}
+		final MerkleNode migratedRoot =
+				initializeAndMigrateTreeAfterDeserialization(root, deserializedVersions);
 
-		return root.cast();
+		if (migratedRoot == null) {
+			return null;
+		}
+		return migratedRoot.cast();
 	}
 }

@@ -16,12 +16,12 @@
 
 package com.swirlds.platform.network.connectivity;
 
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.interrupt.InterruptableConsumer;
 import com.swirlds.platform.SettingsProvider;
-import com.swirlds.platform.SocketSyncConnection;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.SocketConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.ByteConstants;
 import com.swirlds.platform.network.ConnectionTracker;
 import com.swirlds.platform.network.NetworkUtils;
@@ -48,14 +48,14 @@ public class InboundConnectionHandler {
 	private final ConnectionTracker connectionTracker;
 	private final NodeId selfId;
 	private final AddressBook addressBook;
-	private final InterruptableConsumer<SyncConnection> newConnectionConsumer;
+	private final InterruptableConsumer<Connection> newConnectionConsumer;
 	private final SettingsProvider settings;
 
 	public InboundConnectionHandler(
 			final ConnectionTracker connectionTracker,
 			final NodeId selfId,
 			final AddressBook addressBook,
-			final InterruptableConsumer<SyncConnection> newConnectionConsumer,
+			final InterruptableConsumer<Connection> newConnectionConsumer,
 			final SettingsProvider settings) {
 		this.connectionTracker = connectionTracker;
 		this.selfId = selfId;
@@ -65,7 +65,7 @@ public class InboundConnectionHandler {
 	}
 
 	/**
-	 * Authenticate the peer that has just established a new connection and create a {@link SyncConnection}
+	 * Authenticate the peer that has just established a new connection and create a {@link Connection}
 	 *
 	 * @param clientSocket
 	 * 		the newly created socket
@@ -95,7 +95,7 @@ public class InboundConnectionHandler {
 			final SyncOutputStream sos = SyncOutputStream.createSyncOutputStream(
 					clientSocket.getOutputStream(), settings.connectionStreamBufferSize());
 
-			final SocketSyncConnection sc = SocketSyncConnection.create(
+			final SocketConnection sc = SocketConnection.create(
 					selfId,
 					NodeId.createMain(otherId),
 					connectionTracker,

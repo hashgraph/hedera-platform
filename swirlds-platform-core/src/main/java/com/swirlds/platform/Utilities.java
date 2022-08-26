@@ -20,6 +20,7 @@ import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.platform.internal.Deserializer;
 import com.swirlds.platform.internal.Serializer;
+import com.swirlds.platform.state.signed.SignedState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -479,7 +480,7 @@ public final class Utilities {
 	 * @return return true if it is a SocketException or is caused by SocketException;
 	 * 		return false otherwise
 	 */
-	static boolean isOrCausedBySocketException(final Throwable ex) {
+	public static boolean isOrCausedBySocketException(final Throwable ex) {
 		return isRootCauseSuppliedType(ex, SocketException.class);
 	}
 
@@ -511,6 +512,20 @@ public final class Utilities {
 			cause = cause.getCause();
 		}
 		return type.isInstance(cause);
+	}
+
+	/**
+	 * Returns the minimum generation below which all events are ancient for the round of the signed state
+	 *
+	 * @param signedState
+	 * 		the signed state that holds the minumum generation information
+	 * @return minimum non-ancient generation
+	 */
+	public static long getMinGenNonAncient(final SignedState signedState) {
+		return Settings.state.getMinGenNonAncient(
+				signedState.getLastRoundReceived(),
+				signedState::getMinGen
+		);
 	}
 }
 

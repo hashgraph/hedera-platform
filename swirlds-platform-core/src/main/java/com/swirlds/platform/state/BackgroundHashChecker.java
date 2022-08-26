@@ -19,6 +19,7 @@ package com.swirlds.platform.state;
 import com.swirlds.common.threading.framework.StoppableThread;
 import com.swirlds.common.threading.framework.config.StoppableThreadConfiguration;
 import com.swirlds.common.utility.AutoCloseableWrapper;
+import com.swirlds.platform.state.signed.SignedState;
 
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -125,7 +126,7 @@ public class BackgroundHashChecker {
 			final State state = wrapper.get().getState();
 			final boolean passed = checkHashAndLog(
 					state,
-					"background state hash check, round = " + state.getPlatformState().getRound(),
+					"background state hash check, round = " + state.getPlatformState().getPlatformData().getRound(),
 					10);
 
 			if (passed) {

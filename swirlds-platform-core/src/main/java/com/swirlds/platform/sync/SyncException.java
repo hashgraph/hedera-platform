@@ -16,17 +16,17 @@
 
 package com.swirlds.platform.sync;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 
 /**
  * Thrown if any issue occurs during a sync that is not connection related
  */
 public class SyncException extends Exception {
-	public SyncException(final SyncConnection connection, final String message, final Throwable cause) {
+	public SyncException(final Connection connection, final String message, final Throwable cause) {
 		super(connection.getDescription() + " " + message, cause);
 	}
 
-	public SyncException(final SyncConnection connection, final String message) {
+	public SyncException(final Connection connection, final String message) {
 		this(connection, message, null);
 	}
 

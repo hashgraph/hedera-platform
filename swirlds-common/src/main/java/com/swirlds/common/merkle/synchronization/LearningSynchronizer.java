@@ -271,7 +271,7 @@ public class LearningSynchronizer implements ReconnectNodeCount {
 			in.abort();
 
 			final MerkleNode merkleRoot = view.getMerkleRoot(reconstructedRoot.get());
-			if (merkleRoot != null && merkleRoot.getReferenceCount() == 0) {
+			if (merkleRoot != null && merkleRoot.getReservationCount() == 0) {
 				// If the root has a reference count of 0 then it is not underneath any other tree,
 				// and this thread holds the implicit reference to the root.
 				// This is the last chance to release that tree in this scenario.

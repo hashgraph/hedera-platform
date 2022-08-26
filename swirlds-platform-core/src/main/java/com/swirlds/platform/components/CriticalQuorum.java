@@ -17,6 +17,7 @@
 package com.swirlds.platform.components;
 
 import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.event.creation.ParentBasedCreationRule;
 import com.swirlds.platform.observers.EventAddedObserver;
 
 /**
@@ -57,7 +58,7 @@ import com.swirlds.platform.observers.EventAddedObserver;
  * <li> If the stake counted is below 1/3 then increase the threshold by 1 and go to step 2. </li>
  * </ol>
  */
-public interface CriticalQuorum extends EventAddedObserver {
+public interface CriticalQuorum extends EventAddedObserver, ParentBasedCreationRule {
 
 	/**
 	 * Checks whether the node with the supplied id is in critical quorum based on the number of events

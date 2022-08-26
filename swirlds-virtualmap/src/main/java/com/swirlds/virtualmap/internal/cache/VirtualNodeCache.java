@@ -24,7 +24,7 @@ import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
-import com.swirlds.common.threading.futures.WaitingFuture;
+import com.swirlds.common.threading.futures.StandardFuture;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualMap;
 import com.swirlds.virtualmap.VirtualMapSettingsFactory;
@@ -383,7 +383,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 	 */
 	@Override
 	public void release() {
-		throwIfReleased();
+		throwIfDestroyed();
 
 		// Under normal conditions "seal()" would have been called already, but it is at least possible to
 		// release something that hasn't been sealed. So we call "seal()", just to tidy things up.
@@ -428,7 +428,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 	}
 
 	@Override
-	public boolean isReleased() {
+	public boolean isDestroyed() {
 		return this.released.get();
 	}
 
@@ -645,8 +645,9 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 		// create a new value and a new mutation and return the new mutation.
 		if (forModify && mutation.version < fastCopyVersion.get()) {
 			assert !leafIndexesAreImmutable.get() : "You cannot create leaf records at this time!";
+			@SuppressWarnings("unchecked")
 			final VirtualLeafRecord<K, V> leaf = new VirtualLeafRecord<>(
-					mutation.value.getPath(), null, mutation.value.getKey(), mutation.value.getValue());
+					mutation.value.getPath(), null, mutation.value.getKey(), (V) mutation.value.getValue().copy());
 			updatePaths(key, leaf.getPath(), pathToDirtyLeafIndex, dirtyLeafPaths);
 			keyToDirtyLeafIndex.compute(key, (k, m) -> mutate(leaf, m));
 			return leaf;
@@ -754,7 +755,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 		}
 
 		final Map<K, VirtualLeafRecord<K, V>> leaves = new ConcurrentHashMap<>();
-		final WaitingFuture<Void> result = dirtyLeaves.parallelTraverse(CLEANING_POOL, element -> {
+		final StandardFuture<Void> result = dirtyLeaves.parallelTraverse(CLEANING_POOL, element -> {
 			if (element.deleted) {
 				K key = (K) element.key;
 				Mutation<VirtualLeafRecord<K, V>> mutation = lookup(keyToDirtyLeafIndex.get(key));
@@ -764,7 +765,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 			}
 		});
 		try {
-			result.get();
+			result.getAndRethrow();
 		} catch (InterruptedException ex) {
 			Thread.currentThread().interrupt();
 			throw new PlatformException("VirtualNodeCache.deletedLeaves() interrupted", ex, EXCEPTION);

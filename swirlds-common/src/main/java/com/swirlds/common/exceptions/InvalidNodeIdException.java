@@ -16,7 +16,7 @@
 
 package com.swirlds.common.exceptions;
 
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.logging.LogMarker;
 

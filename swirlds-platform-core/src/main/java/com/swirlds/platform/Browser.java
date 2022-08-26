@@ -28,10 +28,10 @@ import com.swirlds.common.merkle.synchronization.settings.ReconnectSettingsFacto
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskCompleteListener;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskNotification;
-import com.swirlds.common.system.Address;
-import com.swirlds.common.system.AddressBook;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.Platform;
+import com.swirlds.common.system.address.Address;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.fchashmap.FCHashMapSettingsFactory;
@@ -50,6 +50,8 @@ import com.swirlds.platform.crypto.KeyLoadingException;
 import com.swirlds.platform.crypto.KeysAndCerts;
 import com.swirlds.platform.internal.PlatformThreadFactory;
 import com.swirlds.platform.internal.SignedStateLoadingException;
+import com.swirlds.platform.state.StateRegistry;
+import com.swirlds.platform.state.address.AddressBookSettingsFactory;
 import com.swirlds.platform.swirldapp.AppLoaderException;
 import com.swirlds.platform.swirldapp.SwirldAppLoader;
 import com.swirlds.platform.system.SystemExitReason;
@@ -102,6 +104,7 @@ import static com.swirlds.logging.LogMarker.JVM_PAUSE_WARN;
 import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.platform.Settings.JVMPauseDetectorSleepMs;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
+import static com.swirlds.platform.state.address.AddressBookUtils.getOwnHostCount;
 import static com.swirlds.platform.system.SystemExitReason.NODE_ADDRESS_MISMATCH;
 import static com.swirlds.platform.system.SystemUtils.exitSystem;
 
@@ -695,6 +698,7 @@ public abstract class Browser {
 				platform.setInfoMember(infoMember);
 
 				platformRunThreads[ownHostIndex] = new ThreadConfiguration()
+						.setDaemon(false)
 						.setPriority(Settings.threadPriorityNonSync)
 						.setNodeId((long) ownHostIndex)
 						.setComponent(PLATFORM_THREAD_POOL_NAME)
@@ -741,8 +745,11 @@ public abstract class Browser {
 			return;
 		}
 
+		final int ownHostCount = getOwnHostCount(addressBook);
+		log.info(STARTUP.getMarker(), "there are {} nodes with local IP addresses", ownHostCount);
+
 		// if the local machine did not match any address in the address book then we should log an error and exit
-		if (addressBook.getOwnHostCount() < 1) {
+		if (ownHostCount < 1) {
 			final String externalIpAddress = (Network.getExternalIpAddress() != null) ?
 					Network.getExternalIpAddress().getIpAddress() : null;
 			log.error(EXCEPTION.getMarker(),
@@ -753,7 +760,7 @@ public abstract class Browser {
 		// the thread for each Platform.run
 		// will create a new thread with a new Platform for each local address
 		// general address number addIndex is local address number i
-		platformRunThreads = new Thread[addressBook.getOwnHostCount()];
+		platformRunThreads = new Thread[ownHostCount];
 		appDefinition.setMasterKey(new byte[CryptoConstants.SYM_KEY_SIZE_BYTES]);
 		appDefinition.setSwirldId(new byte[CryptoConstants.HASH_SIZE_BYTES]);
 
@@ -802,6 +809,8 @@ public abstract class Browser {
 		for (SwirldsPlatform platform : platforms) {
 			platform.initializeFirstStep();
 		}
+
+		StateRegistry.setLocalNodeCount(platforms.size());
 
 		// Notify listeners that loading state from disk has been completed successfully
 		// The notification should come after appMain.init() so that the app has a chance to register a listener
@@ -885,7 +894,9 @@ public abstract class Browser {
 		ReconnectSettingsFactory.configure(Settings.reconnect);
 		FCHashMapSettingsFactory.configure(Settings.fcHashMap);
 		VirtualMapSettingsFactory.configure(Settings.virtualMap);
+		AddressBookSettingsFactory.configure(Settings.addressBook);
 		JasperDbSettingsFactory.configure(Settings.jasperDb);
+		StateRegistry.configureSettings(Settings.state);
 	}
 
 	static Crypto[] initNodeSecurity(final AddressBook addressBook) {
@@ -911,8 +922,8 @@ public abstract class Browser {
 				log.debug(STARTUP.getMarker(), "Done generating keys");
 			}
 		} catch (InterruptedException | ExecutionException
-				| KeyStoreException | KeyLoadingException
-				| UnrecoverableKeyException | NoSuchAlgorithmException e) {
+				 | KeyStoreException | KeyLoadingException
+				 | UnrecoverableKeyException | NoSuchAlgorithmException e) {
 			log.error(EXCEPTION.getMarker(), "Exception while loading/generating keys", e);
 			if (Utilities.isRootCauseSuppliedType(e, NoSuchAlgorithmException.class)
 					|| Utilities.isRootCauseSuppliedType(e, NoSuchProviderException.class)) {

@@ -21,11 +21,9 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleLeaf;
-import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
 import com.swirlds.common.merkle.route.MerkleRoute;
 
 import java.io.IOException;
-import java.util.Set;
 
 /**
  * This object is used by {@link com.swirlds.common.merkle.iterators.MerkleIterator MerkleIterator}
@@ -50,7 +48,39 @@ public class NullNode implements MerkleLeaf {
 	 * {@inheritDoc}
 	 */
 	@Override
+	public void reserve() {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean tryReserve() {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
 	public void release() {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isDestroyed() {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int getReservationCount() {
 		throw new UnsupportedOperationException();
 	}
 
@@ -106,14 +136,6 @@ public class NullNode implements MerkleLeaf {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
-		throw new UnsupportedOperationException();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public MerkleRoute getRoute() {
 		return route;
 	}
@@ -130,31 +152,15 @@ public class NullNode implements MerkleLeaf {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void incrementReferenceCount() {
-		throw new UnsupportedOperationException();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void decrementReferenceCount() {
-		throw new UnsupportedOperationException();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getReferenceCount() {
-		throw new UnsupportedOperationException();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public MerkleLeaf copy() {
 		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isLeaf() {
+		return true;
 	}
 }

@@ -16,14 +16,12 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.notification.Notification;
-import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
-import com.swirlds.common.notification.listeners.ReconnectCompleteNotification;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.SwirldState;
-import com.swirlds.common.system.transaction.Transaction;
-import com.swirlds.common.threading.ThreadUtils;
+import com.swirlds.common.system.transaction.ConsensusTransaction;
+import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 import com.swirlds.common.threading.framework.QueueThread;
+import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 import com.swirlds.platform.ConsensusRound;
@@ -34,6 +32,7 @@ import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.eventhandling.SwirldStateSingleTransactionPool;
+import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.stats.SwirldStateStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,6 +45,7 @@ import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.Semaphore;
+import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
@@ -55,6 +55,7 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.QUEUES;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.logging.LogMarker.STARTUP;
+import static com.swirlds.platform.state.SwirldStateManagerUtils.fastCopy;
 
 /**
  * <p>Manages all interactions with the 3 state objects required by {@link SwirldState}.</p>
@@ -65,7 +66,7 @@ import static com.swirlds.logging.LogMarker.STARTUP;
  * check if there is an active freeze period. Careful attention must be paid to changes in this class regarding locking
  * and synchronization in this class and its utility classes.</p>
  */
-public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCompleteListener {
+public class SwirldStateManagerSingle implements SwirldStateManager {
 
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger LOG = LogManager.getLogger();
@@ -152,10 +153,10 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	private final IntSupplier workSizeSupplier;
 
 	/** Removes and returns a single transaction from the queue of transactions to be applied to stateCurr. */
-	private final Supplier<Transaction> pollCurr;
+	private final Supplier<ConsensusTransaction> pollCurr;
 
 	/** Removes and returns a single transaction from the queue of transactions to be applied to stateWork. */
-	private final Supplier<Transaction> pollWork;
+	private final Supplier<ConsensusTransaction> pollWork;
 
 	// Used of creating mock instances in unit testing
 	public SwirldStateManagerSingle() {
@@ -187,6 +188,10 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 * 		a static settings provider
 	 * @param consEstimateSupplier
 	 * 		an estimator of consensus time for self transactions
+	 * @param inFreeze
+	 * 		indicates if the system is currently in a freeze
+	 * @param signatureExpander
+	 * 		expands signatures on transactions
 	 * @param initialState
 	 * 		the initial state of this application
 	 */
@@ -196,6 +201,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 			final SwirldStateStats stats,
 			final SettingsProvider settings,
 			final Supplier<Instant> consEstimateSupplier,
+			final BooleanSupplier inFreeze,
 			final SignatureExpander signatureExpander,
 			final State initialState) {
 		this.selfId = selfId;
@@ -204,7 +210,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 		this.consEstimateSupplier = consEstimateSupplier;
 		this.signatureExpander = signatureExpander;
 
-		this.transactionPool = new SwirldStateSingleTransactionPool(settings);
+		this.transactionPool = new SwirldStateSingleTransactionPool(settings, inFreeze);
 		this.transactionHandler = new TransactionHandler(selfId, systemTransactionHandler, stats);
 		setState(initialState);
 
@@ -226,7 +232,19 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 			}
 		});
 
-		start();
+		threadWork = new QueueThreadConfiguration<EventImpl>()
+				.setNodeId(selfId.getId())
+				.setComponent(COMPONENT_NAME)
+				.setThreadName("thread-work")
+				.setStopBehavior(Stoppable.StopBehavior.INTERRUPTABLE)
+				.setMaxBufferSize(THREAD_WORK_MAX_BUFFER_SIZE)
+				.setQueue(newQueue())
+				.setHandler(this::doWork)
+				.setWaitForItemRunnable(this::forWorkWaitForItem)
+				.build();
+
+		lastShuffle = Instant.now();
+		threadWork.start();
 	}
 
 	/**
@@ -246,6 +264,8 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * Self events should not be passed here.
 	 */
 	@Override
 	public void handlePreConsensusEvent(final EventImpl event) {
@@ -270,7 +290,17 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 
 		final Instant consensusTime = getConsensusTime(isConsensus, event);
 
-		transactionHandler.handleEventTransactions(event, consensusTime, isConsensus, stateCurr.getState());
+		// The pre-consensus handler thread is the only thread that handles system transactions pre-consensus.
+		// The consensus handler thread is the only thread that handles system transactions post-consensus.
+		// The thread-work thread should NOT handle system transactions at all.
+		transactionHandler.handleEventTransactions(
+				event,
+				consensusTime,
+				isConsensus,
+				stateCurr.getState(),
+				true,
+				null
+		);
 
 		// Add this event to the threadWork queue it to handle
 		if (!threadWork.offer(event)) {
@@ -350,7 +380,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 * Applies self transactions to the current state.
 	 */
 	private void handleSelfTransactions() {
-		transactionHandler.handleTransactions(currSizeSupplier, pollCurr, consEstimateSupplier,
+		transactionHandler.handleTransactions(currSizeSupplier, pollCurr, consEstimateSupplier, true,
 				stateCurr.getState());
 	}
 
@@ -358,7 +388,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 * Applies self transactions to the work state.
 	 */
 	private void handleWorkTransactions() {
-		transactionHandler.handleTransactions(workSizeSupplier, pollWork, consEstimateSupplier,
+		transactionHandler.handleTransactions(workSizeSupplier, pollWork, consEstimateSupplier, false,
 				stateWork.getState());
 	}
 
@@ -443,7 +473,17 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 
 		final Instant consensusTime = getConsensusTime(isConsensus, event);
 
-		transactionHandler.handleEventTransactions(event, consensusTime, isConsensus, stateWork.getState());
+		// The pre-consensus handler thread is the only thread that handles system transactions pre-consensus.
+		// The consensus handler thread is the only thread that handles system transactions post-consensus.
+		// The thread-work thread should NOT handle system transactions at all.
+		transactionHandler.handleEventTransactions(
+				event,
+				consensusTime,
+				isConsensus,
+				stateWork.getState(),
+				false,
+				null
+		);
 
 		// Add this event to the forNext queue so that it can be 
 		// applied to the new forWork state after the next shuffle
@@ -458,32 +498,25 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 */
 	@Override
 	public void handleConsensusRound(final ConsensusRound round) {
-		for (final EventImpl event : round.getConsensusEvents()) {
+		// Shuffle, if it is time to do so
+		shuffleIfTimeToShuffle(stateCons);
 
-			// Shuffle, if it is time to do so
-			shuffleIfTimeToShuffle(stateCons);
-
-			// Discard events with no transactions.
-			if (event.isEmpty()) {
-				continue;
-			}
-
-			// Discard events that have already been applied to stateCons
-			if (!shouldConsEventBeHandled(event, stateCons)) {
-				LOG.error(ERROR.getMarker(),
-						"Encountered out of order consensus event! Event Order = {}, stateCons lastCons = {}",
-						event.getConsensusOrder(), stateCons.getLastCons());
-				continue;
-			}
-
-			// if this is a self event, then remove each self transaction from the
-			// list of transactions that will be sent to the new stateWork to handle
-			// after the next shuffle.
-			final Runnable postHandle = selfId.equalsMain(event.getCreatorId()) ? transactionPool::pollCons : null;
-
-			transactionHandler.handleEventTransactions(event, event.getConsensusTimestamp(), true,
-					stateCons.getState(), postHandle);
+		// Discard events that have already been applied to stateCons
+		if (round.isComplete() && !shouldConsEventBeHandled(round.getLastEvent(), stateCons)) {
+			LOG.error(ERROR.getMarker(),
+					"Encountered out of order consensus event! Event Order = {}, stateCons lastCons = {}",
+					round.getLastEvent().getConsensusOrder(), stateCons.getLastCons());
+			return;
 		}
+
+		// if the handled transaction is a self transaction, then remove it from the
+		// list of transactions that will be sent to the new stateWork to handle
+		// after the next shuffle.
+		transactionHandler.handleConsensusRound(round, stateCons.getState(), id -> {
+			if (selfId.equalsMain(id)) {
+				transactionPool.pollCons();
+			}
+		});
 	}
 
 	/**
@@ -517,7 +550,10 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 */
 	@Override
 	public State getStateForSigning() {
-		return SwirldStateManagerUtils.getStateForSigning(stateCons, stats);
+		final State state = stateCons.getState();
+		final State newState = fastCopy(state, stats);
+		stateCons.setState(newState);
+		return state;
 	}
 
 	/**
@@ -533,35 +569,53 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void setState(final State state) {
-		state.throwIfReleased("state must not be released");
+	public void loadFromSignedState(final SignedState signedState) {
+		setState(signedState.getState());
+	}
+
+	private void setState(final State state) {
+		state.throwIfDestroyed("state must not be destroyed");
 		state.throwIfImmutable("state must be mutable");
 
 		if (stateCons != null) {
 			stateCons.release();
 		}
-		stateCons = new StateInfo(state, null, false);
+		stateCons = new StateInfo(state, null);
 
 		if (stateCurr != null) {
 			stateCurr.release();
 		}
-		stateCurr = new StateInfo(state.copy(), null, false);
+		stateCurr = new StateInfo(state.copy(), null);
 
 		if (stateWork != null) {
 			stateWork.release();
 		}
-		stateWork = new StateInfo(state.copy(), null, false);
+		stateWork = new StateInfo(state.copy(), null);
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * <p>Clears the work event queue, the transaction pool and releases the working and current states.</p>
+	 * <p>NOTE: This will only clear current data, it will not prevent new data from being added while clear is being
+	 * called</p>
+	 * <p>This method also pauses thread work, for this instance to continue working, this thread needs to be
+	 * un-paused</p>
 	 */
 	@Override
-	public synchronized void prepareForReconnect() throws InterruptedException {
-		// When reconnecting, we need the consensus state to do the reconnect so it will not be cleared.
-		ThreadUtils.stopThreads(threadWork);
+	public void clear() {
+		LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: pausing threadWork");
+		threadWork.pause();
 
-		LOG.info(RECONNECT.getMarker(), "prepareForReconnect: releasing states");
+		LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: clearing forWork");
+		threadWork.clear();
+
+		LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: clearing forNext");
+		forNext.clear();
+
+		// clear the transactions
+		LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: clearing transactionPool");
+		transactionPool.clear();
+
+		LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: releasing states");
 
 		// delete the states
 		releaseState(stateWork);
@@ -569,17 +623,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 
 		stateWork = null;
 
-		LOG.info(RECONNECT.getMarker(), "prepareForReconnect: clearing forWork");
-		threadWork.clear();
-
-		LOG.info(RECONNECT.getMarker(), "prepareForReconnect: clearing forNext");
-		forNext.clear();
-
-		// clear the transactions
-		LOG.info(RECONNECT.getMarker(), "prepareForReconnect: clearing transactionPool");
-		transactionPool.clear();
-
-		LOG.info(RECONNECT.getMarker(), "prepareForReconnect: {} is now cleared", CLASS_NAME);
+		LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: {} is now cleared", CLASS_NAME);
 	}
 
 	private static void releaseState(final StateInfo stateInfo) {
@@ -587,7 +631,6 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 			if (stateInfo != null) {
 				// There should be no threads modifying the state at this point,
 				// so these operations are safe to do serially
-				stateInfo.getState().getSwirldState().noMoreTransactions();
 				stateInfo.getState().release();
 			}
 		} catch (final Exception e) {
@@ -600,7 +643,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean submitTransaction(final Transaction transaction) {
+	public boolean submitTransaction(final ConsensusTransactionImpl transaction) {
 		return transactionPool.submitTransaction(transaction);
 	}
 
@@ -617,41 +660,6 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 			s.getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
 			return s;
 		});
-	}
-
-	/**
-	 * Called for each {@link Notification} that this listener should handle.
-	 *
-	 * @param data
-	 * 		the notification to be handled
-	 */
-	@Override
-	public void notify(final ReconnectCompleteNotification data) {
-		start();
-		LOG.info(STARTUP.getMarker(), "SwirldStateManagerSingle received ReconnectCompleteNotification, " +
-						"forNext.size: {}, forWork.size: {}",
-				forNext.size(),
-				threadWork.size());
-	}
-
-	/**
-	 * Starts the threadWork thread. Should only be invoked when this class is first created or after {@link
-	 * #prepareForReconnect()} has been invoked.
-	 */
-	private void start() {
-		threadWork = new QueueThreadConfiguration<EventImpl>()
-				.setNodeId(selfId.getId())
-				.setComponent(COMPONENT_NAME)
-				.setThreadName("thread-work")
-				.setInterruptable(true)
-				.setMaxBufferSize(THREAD_WORK_MAX_BUFFER_SIZE)
-				.setQueue(newQueue())
-				.setHandler(this::doWork)
-				.setWaitForItemRunnable(this::forWorkWaitForItem)
-				.build();
-
-		lastShuffle = Instant.now();
-		threadWork.start();
 	}
 
 	private static BlockingQueue<EventImpl> newQueue() {
@@ -699,9 +707,10 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean isInterruptable() {
-		// This should be changed to false (or this method removed entirely) with ticket swirlds/swirlds-platform#4876
-		return true;
+	public Stoppable.StopBehavior getStopBehavior() {
+		// This should be changed to BLOCKING (or this method removed entirely) with ticket
+		// swirlds/swirlds-platform#4876
+		return Stoppable.StopBehavior.INTERRUPTABLE;
 	}
 
 	/**
@@ -755,14 +764,6 @@ public class SwirldStateManagerSingle implements SwirldStateManager, ReconnectCo
 			// that won't hurt us because they will never get a chance to be handled by the old stateCurr, and
 			// they'll go into transactionPool queues for both forCurr and forWork). All 3 threads are waiting now,
 			// so they won't interfere.
-			try {
-				// freeze stateCurr, then discard it so that it will be garbage collected
-				stateCurr.setFrozen(true);
-				stateCurr.getState().getSwirldState().noMoreTransactions();
-			} catch (final Exception e) {
-				// defensive: catch exceptions from a bad app
-				LOG.error(EXCEPTION.getMarker(), "exception in app during noMoreTransactions:", e);
-			}
 
 			// this method will delete stateCurr if needed and replace it with stateWork.
 			deleteCurrStateAndReplaceWithWork();

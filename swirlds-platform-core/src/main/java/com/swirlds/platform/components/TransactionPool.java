@@ -17,27 +17,16 @@
 package com.swirlds.platform.components;
 
 import com.swirlds.common.system.EventCreationRule;
-import com.swirlds.common.system.EventCreationRuleResponse;
 
 public interface TransactionPool extends EventCreationRule {
 	/**
 	 * @return the number of user transactions in the pool
 	 */
-	int numUserTransForEvent();
+	int numTransForEvent();
 
 	/**
-	 * @return the number of freeze transactions in the pool
+	 * @return the number of state signature transactions in the pool
 	 */
-	int numFreezeTransEvent();
+	int numSignatureTransEvent();
 
-	/**
-	 * {@inheritDoc}
-	 */
-	default EventCreationRuleResponse shouldCreateEvent() {
-		if (numFreezeTransEvent() > 0) {
-			return EventCreationRuleResponse.CREATE;
-		} else {
-			return EventCreationRuleResponse.PASS;
-		}
-	}
 }

@@ -37,6 +37,13 @@ public interface FallenBehindManager {
 	void resetFallenBehind();
 
 	/**
+	 * Returns a list of node IDs which need to be contacted to establish if we have fallen behind.
+	 *
+	 * @return a list of node IDs, or null if there is no indication we have fallen behind
+	 */
+	List<Long> getNeededForFallenBehind();
+
+	/**
 	 * Have enough nodes reported that they don't have events we need, and that we have fallen behind?
 	 *
 	 * @return true if we have fallen behind, false otherwise
@@ -49,4 +56,9 @@ public interface FallenBehindManager {
 	 * @return a list of neighbor IDs
 	 */
 	List<Long> getNeighborsForReconnect();
+
+	/**
+	 * @return the number of nodes that have told us we have fallen behind
+	 */
+	int numReportedFallenBehind();
 }

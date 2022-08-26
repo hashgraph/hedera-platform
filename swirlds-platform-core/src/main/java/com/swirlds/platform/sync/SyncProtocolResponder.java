@@ -18,7 +18,7 @@ package com.swirlds.platform.sync;
 
 import com.swirlds.common.threading.locks.MaybeLocked;
 import com.swirlds.common.threading.pool.ParallelExecutionException;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.unidirectional.NetworkProtocolResponder;
 import com.swirlds.platform.stats.SyncStats;
@@ -55,8 +55,8 @@ public class SyncProtocolResponder implements NetworkProtocolResponder {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void protocolInitiated(final byte initialByte, final SyncConnection connection)
-			throws IOException, NetworkProtocolException {
+	public void protocolInitiated(final byte initialByte, final Connection connection)
+			throws IOException, NetworkProtocolException, InterruptedException {
 		if (fallenBehindManager.hasFallenBehind() || Boolean.FALSE.equals(otherSyncThrottle.getAsBoolean())) {
 			// if we have fallen behind, dont accept any syncs
 			// or if the other throttle says so
@@ -77,7 +77,7 @@ public class SyncProtocolResponder implements NetworkProtocolResponder {
 		}
 	}
 
-	private void rejectSync(final SyncConnection connection) throws IOException {
+	private void rejectSync(final Connection connection) throws IOException {
 		stats.updateRejectedSyncRatio(true);
 		synchronizer.rejectSync(connection);
 	}

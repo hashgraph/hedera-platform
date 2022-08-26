@@ -17,7 +17,7 @@
 package com.swirlds.platform.event.creation;
 
 import com.swirlds.common.system.EventCreationRuleResponse;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.common.system.events.BaseEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,7 +42,7 @@ public final class StaticCreationRules {
 	 * @return DONT_CREATE if the otherParent is null, PASS otherwise
 	 */
 	@SuppressWarnings("unused") // selfParent is needed to conform to the ParentBasedCreationRule interface
-	public static EventCreationRuleResponse nullOtherParent(final EventImpl selfParent, final EventImpl otherParent) {
+	public static EventCreationRuleResponse nullOtherParent(final BaseEvent selfParent, final BaseEvent otherParent) {
 		if (otherParent == null) {
 			// we only have a null other-parent when creating a genesis event
 			LOG.debug(CREATE_EVENT.getMarker(), "Not creating event because otherParent is null");

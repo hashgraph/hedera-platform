@@ -16,9 +16,11 @@
 
 package com.swirlds.common.system;
 
+import com.swirlds.common.Releasable;
 import com.swirlds.common.crypto.TransactionSignature;
-import com.swirlds.common.merkle.Archivable;
 import com.swirlds.common.merkle.MerkleNode;
+import com.swirlds.common.merkle.interfaces.Archivable;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.transaction.SwirldTransaction;
 
 import java.time.Instant;
@@ -41,28 +43,8 @@ import java.time.Instant;
 public interface SwirldState extends Archivable, MerkleNode {
 
 	/**
-	 * Initialize everything to reflect the consensus state at the start of history, before any transactions
-	 * have happened. Called exactly once for all time on each node.
-	 *
-	 * The application should save a copy of the address book to the state. It may be convenient for the application
-	 * to initialize the state and/or internal metadata with default values at this time as well.
-	 *
-	 * When the Platform first instantiates an object of an app's class implementing SwirldState,
-	 * it will call the method {@link #genesisInit(Platform, AddressBook, SwirldDualState) init}, then
-	 * call copy() zero or one times, then call handleTransaction for the first time.
-	 *
-	 * @param platform
-	 * 		the Platform that instantiated this state
-	 * @param addressBook
-	 * 		the members and info about them
-	 * @param swirldDualState
-	 * 		the dual state instance used by the initialization function
-	 */
-	void genesisInit(final Platform platform, final AddressBook addressBook, final SwirldDualState swirldDualState);
-
-	/**
-	 * Initialize a state at a later time than genesis. Called exactly once each time a node recreates
-	 * a state (e.g. restart / reconnect).
+	 * Initialize a state. Called exactly once each time a node creates/recreates a state
+	 * (e.g. restart, reconnect, genesis).
 	 *
 	 * The application should check to see if the address book has changed, and if so those
 	 * changes should be handled (in the future the address book will not be changed in this method).
@@ -74,15 +56,19 @@ public interface SwirldState extends Archivable, MerkleNode {
 	 * 		the members and info about them
 	 * @param swirldDualState
 	 * 		the dual state instance used by the initialization function
+	 * @param trigger
+	 * 		describes the reason why the state was created/recreated
+	 * @param previousSoftwareVersion
+	 * 		the previous version of the software, {@link SoftwareVersion#NO_VERSION} if this is genesis or if
+	 * 		migrating from code from before the concept of an application software version
 	 */
-	void init(final Platform platform, final AddressBook addressBook, final SwirldDualState swirldDualState);
-
-	/**
-	 * Migrate the state from a previous format, if needed. It is the responsibility of the state
-	 * to determine if a migration is required and to perform that migration here when it is required.
-	 */
-	default void migrate() {
-
+	default void init(
+			final Platform platform,
+			final AddressBook addressBook,
+			final SwirldDualState swirldDualState,
+			final InitTrigger trigger,
+			final SoftwareVersion previousSoftwareVersion) {
+		// Override if needed
 	}
 
 	/**
@@ -121,8 +107,10 @@ public interface SwirldState extends Archivable, MerkleNode {
 	 * long as it ensures that those threads have finished all their changes before it returns. But it is an
 	 * error for handleTransaction to spawn a thread that will make changes after handleTransaction returns
 	 * and before the next time handleTransaction is called. If handleTransaction does create threads that
-	 * continue to exist after it returns (in a legal way), then it can stop those threads in the
-	 * noMoreTransactions method.
+	 * continue to exist after it returns (in a legal way), then it should clean up those resources when the object has
+	 * been fully released (see documentation in {@link Releasable}). If the SwirldState extends one of the partial
+	 * merkle implementations (e.g. PartialMerkleLeaf or PartialNaryMerkleInternal) then it can put that cleanup in the
+	 * onDestroy() method, which is called when the object becomes fully released.
 	 *
 	 * @param id
 	 * 		the ID number of the member who created this transaction
@@ -141,16 +129,6 @@ public interface SwirldState extends Archivable, MerkleNode {
 	 */
 	void handleTransaction(long id, boolean isConsensus,
 			Instant timeCreated, Instant timestamp, SwirldTransaction trans, SwirldDualState swirldDualState);
-
-	/**
-	 * For a given SwirldState object, the Platform will call handleTransaction multiple times, then call
-	 * noMoreTransactions() once, then never call handleTransaction again. After that point, all future
-	 * handleTransaction calls will go to a different SwirldState object. So the current one is obsolete. In
-	 * most cases, this method should be implemented as doing nothing. But if there are any threads spawned
-	 * by the SwirldState, then this would be a good place to shut them down. See the documentation for
-	 * SwirldState.handleTransaction for a discussion of when it might have threads that need to be stopped.
-	 */
-	void noMoreTransactions();
 
 	/**
 	 * Called against a given {@link SwirldTransaction} only once and immediately before the event is added to the
@@ -215,9 +193,10 @@ public interface SwirldState extends Archivable, MerkleNode {
 	 * true followed by all false. When using SwirldState2, the Platform does not have to make frequent fast
 	 * copies of the state (though it will still make some fast copies, for other reasons). An app
 	 * implementing SwirldState2 must either completely ignore the transactions with consensus=false, or
-	 * handle them specially so that they don't affect the shared state. If there is a need to actually show
-	 * their effect on the state, then it will be easier to implement SwirldState. But if it is acceptable
-	 * to delay the effect until consensus, then SwirldState2 may be more efficient.
+	 * handle them specially so that they don't affect the shared state. The SwirldState2 instance is always immutable
+	 * when consensus=false. If there is a need to actually show their effect on the state, then it will be easier to
+	 * implement SwirldState. But if it is acceptable to delay the effect until consensus, then SwirldState2 may be
+	 * more efficient.
 	 */
 	interface SwirldState2 extends SwirldState {
 	}

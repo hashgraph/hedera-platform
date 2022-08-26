@@ -17,6 +17,7 @@
 package com.swirlds.jasperdb.collections;
 
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.jasperdb.utilities.FileUtils;
 import com.swirlds.jasperdb.utilities.HashTools;
 
 import java.io.IOException;
@@ -136,7 +137,7 @@ public final class HashListByteBuffer implements HashList {
 		try (FileChannel fc = FileChannel.open(file, StandardOpenOption.READ)) {
 			// read header
 			ByteBuffer headerBuffer = ByteBuffer.allocate(FILE_HEADER_SIZE);
-			fc.read(headerBuffer);
+			FileUtils.completelyRead(fc, headerBuffer);
 			headerBuffer.rewind();
 			final int formatVersion = headerBuffer.getInt();
 			if (formatVersion != FILE_FORMAT_VERSION) {
@@ -153,7 +154,7 @@ public final class HashListByteBuffer implements HashList {
 			// read data
 			for (int i = 0; i < numOfBuffers; i++) {
 				ByteBuffer buffer = offHeap ? allocateDirect(memoryBufferSize) : allocate(memoryBufferSize);
-				int readBytes = fc.read(buffer);
+				FileUtils.completelyRead(fc, buffer);
 				buffer.position(0);
 				data.add(buffer);
 			}
@@ -293,7 +294,7 @@ public final class HashListByteBuffer implements HashList {
 			headerBuffer.putLong(numberOfHashesStored.get());
 			headerBuffer.putInt(numOfBuffers);
 			headerBuffer.flip();
-			fc.write(headerBuffer);
+			FileUtils.completelyWrite(fc, headerBuffer);
 			// write data
 			for (int i = 0; i < numOfBuffers; i++) {
 				ByteBuffer buf = data.get(i).slice(); // slice so we don't mess with state of stored buffer
@@ -306,7 +307,7 @@ public final class HashListByteBuffer implements HashList {
 				} else {
 					buf.limit(buf.capacity());
 				}
-				fc.write(buf);
+				FileUtils.completelyWrite(fc, buf);
 			}
 		}
 	}

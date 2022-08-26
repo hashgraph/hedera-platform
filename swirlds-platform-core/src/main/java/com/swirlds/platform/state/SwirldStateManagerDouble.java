@@ -18,7 +18,7 @@ package com.swirlds.platform.state;
 
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.SwirldState;
-import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SettingsProvider;
@@ -26,13 +26,17 @@ import com.swirlds.platform.components.SignatureExpander;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
 import com.swirlds.platform.eventhandling.EventTransactionPool;
+import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.stats.SwirldStateStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 import static com.swirlds.logging.LogMarker.RECONNECT;
+import static com.swirlds.platform.state.SwirldStateManagerUtils.fastCopy;
 
 /**
  * <p>Manages all interactions with the 3 state objects required by {@link SwirldState.SwirldState2}.</p>
@@ -51,14 +55,17 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	/** Stats relevant to SwirldState operations. */
 	private final SwirldStateStats stats;
 
-	/** reflects all known, pre-consensus and consensus transactions */
-	private volatile StateInfo stateCurrAndCons;
+	/** reference to the state that reflects all known consensus transactions */
+	private final AtomicReference<State> stateRef = new AtomicReference<>();
+
+	/** The most recent immutable state. No value until the first fast copy is created. */
+	private final AtomicReference<State> latestImmutableState = new AtomicReference<>();
 
 	/** Contains self transactions to be included in the next event. */
 	private final EventTransactionPool transactionPool;
 
 	/** Handle transactions by applying them to a state */
-	private final TransactionHandler eventHandler;
+	private final TransactionHandler transactionHandler;
 
 	/** Expands signatures on pre-consensus transactions. */
 	private final SignatureExpander signatureExpander;
@@ -67,7 +74,7 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	public SwirldStateManagerDouble() {
 		stats = null;
 		transactionPool = null;
-		eventHandler = null;
+		transactionHandler = null;
 		signatureExpander = null;
 	}
 
@@ -80,28 +87,35 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 * 		the handler for system transactions
 	 * @param stats
 	 * 		statistics relevant to this class
-	 * @param initialState
-	 * 		the initial state of this application
+	 * @param settings
+	 * 		a static settings provider
+	 * @param inFreeze
+	 * 		indicates if the system is currently in a freeze
+	 * @param signatureExpander
+	 * 		expands signatures on transactions
+	 * @param state
+	 * 		the genesis state
 	 */
 	public SwirldStateManagerDouble(
 			final NodeId selfId,
 			final SystemTransactionHandler systemTransactionHandler,
 			final SwirldStateStats stats,
 			final SettingsProvider settings,
+			final BooleanSupplier inFreeze,
 			final SignatureExpander signatureExpander,
-			final State initialState) {
+			final State state) {
 		this.stats = stats;
 		this.signatureExpander = signatureExpander;
-		this.transactionPool = new EventTransactionPool(settings);
-		this.eventHandler = new TransactionHandler(selfId, systemTransactionHandler, stats);
-		setState(initialState);
+		this.transactionPool = new EventTransactionPool(settings, inFreeze);
+		this.transactionHandler = new TransactionHandler(selfId, systemTransactionHandler, stats);
+		initialState(state);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean submitTransaction(final Transaction transaction) {
+	public boolean submitTransaction(final ConsensusTransactionImpl transaction) {
 		return transactionPool.submitTransaction(transaction);
 	}
 
@@ -119,9 +133,25 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 			consensusTime = event.getEstimatedTime();
 		}
 
+		// The consensus thread updates the latestImmutableState reference when a fast copy is made and releases the
+		// old state. This could cause the old state to be destroyed before or during pre-consensus handling. So
+		// we must continue to get the reference until we get one we can reserve.
+		State immutableState = latestImmutableState.get();
+		while (!immutableState.tryReserve()) {
+			immutableState = latestImmutableState.get();
+		}
+
 		// Say that this event is not consensus, even if it is, to keep the contract that every
 		// transaction is handled twice, once with isConsensus = false and once with isConsensus = true
-		eventHandler.handleEventTransactions(event, consensusTime, false, stateCurrAndCons.getState());
+		transactionHandler.handleEventTransactions(
+				event,
+				consensusTime,
+				false,
+				immutableState,
+				true,
+				null
+		);
+		immutableState.release();
 
 		stats.preConsensusHandleTime(startTime, System.nanoTime());
 	}
@@ -131,10 +161,8 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 */
 	@Override
 	public void handleConsensusRound(final ConsensusRound round) {
-		final State state = stateCurrAndCons.getState();
-		for (final EventImpl event : round.getConsensusEvents()) {
-			eventHandler.handleEventTransactions(event, event.getConsensusTimestamp(), true, state);
-		}
+		final State state = stateRef.get();
+		transactionHandler.handleConsensusRound(round, state, null);
 	}
 
 	/**
@@ -144,7 +172,19 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 * @return the current app state
 	 */
 	public SwirldState getCurrentSwirldState() {
-		return stateCurrAndCons.getState().getSwirldState();
+		return stateRef.get().getSwirldState();
+	}
+
+	/**
+	 * IMPORTANT: this method is for unit testing purposes only. The returned state may be deleted at any time while the
+	 * caller is using it.
+	 * <p>
+	 * Returns the most recent immutable state.
+	 *
+	 * @return latest immutable state
+	 */
+	public State getLatestImmutableState() {
+		return latestImmutableState.get();
 	}
 
 	/**
@@ -152,20 +192,19 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 */
 	@Override
 	public State getConsensusState() {
-		return stateCurrAndCons.getState();
+		return stateRef.get();
 	}
 
 	/**
-	 * Performs any actions necessary to prepare for reconnect. This may include stopping threads, clearing queues,
-	 * releasing references to state, etc.
-	 *
-	 * @throws InterruptedException
-	 * 		if this thread is interrupted
+	 * Clears the transaction pool
+	 * <p>
+	 * NOTE: This will only clear current transactions, it will not prevent new transactions from being added while
+	 * clear is being called
 	 */
 	@Override
-	public void prepareForReconnect() throws InterruptedException {
+	public void clear() {
 		// clear the transactions
-		LOG.info(RECONNECT.getMarker(), "prepareForReconnect: clearing transactionPool");
+		LOG.info(RECONNECT.getMarker(), "SwirldStateManagerDouble: clearing transactionPool");
 		transactionPool.clear();
 	}
 
@@ -175,23 +214,67 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	@Override
 	public void savedStateInFreezePeriod() {
 		// set current DualState's lastFrozenTime to be current freezeTime
-		stateCurrAndCons.getState().getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
+		stateRef.get().getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
 	}
 
 	/**
 	 * {@inheritDoc}
-	 *
-	 * Called only on startup and after reconnect. In both cases, the pre-consensus and consensus handling threads are
-	 * stopped, so it is safe to perform multiple operations on {@code stateCurrAndCons} without synchronization.
 	 */
 	@Override
-	public void setState(final State state) {
-		state.throwIfReleased("state must not be released");
+	public void loadFromSignedState(final SignedState signedState) {
+		final State state = signedState.getState();
+
+		state.throwIfDestroyed("state must not be destroyed");
 		state.throwIfImmutable("state must be mutable");
-		if (stateCurrAndCons != null) {
-			stateCurrAndCons.release();
+
+		fastCopyAndUpdateRefs(state);
+	}
+
+	private void initialState(final State state) {
+		state.throwIfDestroyed("state must not be destroyed");
+		state.throwIfImmutable("state must be mutable");
+
+		if (stateRef.get() != null) {
+			throw new IllegalStateException("Attempt to set initial state when there is already a state reference.");
 		}
-		stateCurrAndCons = new StateInfo(state, null, false);
+
+		// Create a fast copy so there is always an immutable state to
+		// invoke handleTransaction on for pre-consensus transactions
+		fastCopyAndUpdateRefs(state);
+	}
+
+	private void fastCopyAndUpdateRefs(final State state) {
+		final State consState = fastCopy(state, stats);
+
+		// Set latest immutable first to prevent the newly immutable state from being deleted between setting the
+		// stateRef and the latestImmutableState
+		setLatestImmutableState(state);
+		setState(consState);
+	}
+
+	/**
+	 * Sets the consensus state to the state provided. Must be mutable and have a reference count of at least 1.
+	 *
+	 * @param state
+	 * 		the new mutable state
+	 */
+	private void setState(final State state) {
+		final State currVal = stateRef.get();
+		if (currVal != null) {
+			currVal.release();
+		}
+		// Do not increment the reference count because the state provided already has a reference count of at least
+		// one to represent this reference and to prevent it from being deleted before this reference is set.
+		stateRef.set(state);
+	}
+
+	private void setLatestImmutableState(final State immutableState) {
+		final State currVal = latestImmutableState.get();
+		if (currVal != null) {
+			currVal.release();
+		}
+		immutableState.reserve();
+		latestImmutableState.set(immutableState);
 	}
 
 	/**
@@ -204,7 +287,7 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 		// It is possible, though unlikely, that this operation is executed multiple times. Each failed attempt will
 		// leak a state, but since this is only called during recovery after which the node shuts down, it is
 		// acceptable. This leak will be eliminated with ticket swirlds/swirlds-platform/issues/5256.
-		stateCurrAndCons.updateState(s -> {
+		stateRef.getAndUpdate(s -> {
 			s.getPlatformDualState().setFreezeTime(null);
 			s.getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
 			return s;
@@ -234,7 +317,8 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 */
 	@Override
 	public State getStateForSigning() {
-		return SwirldStateManagerUtils.getStateForSigning(stateCurrAndCons, stats);
+		fastCopyAndUpdateRefs(stateRef.get());
+		return latestImmutableState.get();
 	}
 
 	/**

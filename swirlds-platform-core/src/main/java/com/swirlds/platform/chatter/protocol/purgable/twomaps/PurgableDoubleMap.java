@@ -74,4 +74,10 @@ public class PurgableDoubleMap<K, V> extends AbstractPurgableDoubleMap<K, V> {
 	protected Map<Long, Set<K>> buildGenerationMap() {
 		return new HashMap<>();
 	}
+
+	@Override
+	public void clear() {
+		super.clear();
+		smallestAllowedGeneration = 0;
+	}
 }

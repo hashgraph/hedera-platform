@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.eventhandling;
 
-import org.apache.commons.lang3.tuple.Pair;
+import com.swirlds.platform.state.MinGenInfo;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -30,7 +30,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  */
 public class MinGenQueue {
 	/** A deque used by doCons to store the minimum generation of famous witnesses per round */
-	private final Deque<Pair<Long, Long>> queue = new ConcurrentLinkedDeque<>();
+	private final Deque<MinGenInfo> queue = new ConcurrentLinkedDeque<>();
 
 	/**
 	 * Add round generation information
@@ -41,7 +41,7 @@ public class MinGenQueue {
 	 * 		the minimum generation of all famous witnesses for that round
 	 */
 	public void add(final long round, final long minGeneration) {
-		add(Pair.of(round, minGeneration));
+		add(new MinGenInfo(round, minGeneration));
 	}
 
 	/**
@@ -50,7 +50,7 @@ public class MinGenQueue {
 	 * @param pair
 	 * 		a round/generation pair
 	 */
-	public void add(final Pair<Long, Long> pair) {
+	public void add(final MinGenInfo pair) {
 		queue.add(pair);
 	}
 
@@ -61,10 +61,10 @@ public class MinGenQueue {
 	 * 		the maximum round included in the list
 	 * @return round/generation pairs
 	 */
-	public List<Pair<Long, Long>> getList(final long maxRound) {
-		final List<Pair<Long, Long>> list = new ArrayList<>();
-		for (final Pair<Long, Long> next : queue) {
-			if (next.getKey() <= maxRound) {
+	public List<MinGenInfo> getList(final long maxRound) {
+		final List<MinGenInfo> list = new ArrayList<>();
+		for (final MinGenInfo next : queue) {
+			if (next.round() <= maxRound) {
 				list.add(next);
 			} else {
 				break;
@@ -83,9 +83,9 @@ public class MinGenQueue {
 	 * 		if the round is not in the queue
 	 */
 	public long getRoundGeneration(final long round) {
-		for (Pair<Long, Long> pair : queue) {
-			if (pair.getKey() == round) {
-				return pair.getValue();
+		for (final MinGenInfo minGenInfo : queue) {
+			if (minGenInfo.round() == round) {
+				return minGenInfo.minimumGeneration();
 			}
 		}
 		throw new NoSuchElementException("Missing generation for round " + round);
@@ -98,22 +98,22 @@ public class MinGenQueue {
 	 * 		the highest round to keep
 	 */
 	public void expire(final long round) {
-		Pair<Long, Long> minGenInfo = queue.peekFirst();
+		MinGenInfo minGenInfo = queue.peekFirst();
 
 		// remove old min gen info we no longer need
-		while (!queue.isEmpty() && minGenInfo.getKey() < round) {
+		while (!queue.isEmpty() && minGenInfo.round() < round) {
 			queue.pollFirst();
 			minGenInfo = queue.peekFirst();
 		}
 	}
 
 	/**
-	 * Same as {@link #add(Pair)} but for a whole collection
+	 * Same as {@link #add(MinGenInfo)} but for a whole collection
 	 *
 	 * @param collection
 	 * 		the collection to add
 	 */
-	public void addAll(final Collection<Pair<Long, Long>> collection) {
+	public void addAll(final Collection<MinGenInfo> collection) {
 		queue.addAll(collection);
 	}
 

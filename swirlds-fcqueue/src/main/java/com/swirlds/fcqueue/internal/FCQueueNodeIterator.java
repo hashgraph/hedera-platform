@@ -16,8 +16,9 @@
 
 package com.swirlds.fcqueue.internal;
 
+import com.swirlds.common.FastCopyable;
+import com.swirlds.common.crypto.SerializableHashable;
 import com.swirlds.fcqueue.FCQueue;
-import com.swirlds.fcqueue.FCQueueElement;
 
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
@@ -29,7 +30,7 @@ import java.util.NoSuchElementException;
  * @param <E>
  * 		the type of elements in the FCQueue
  */
-public class FCQueueNodeIterator<E extends FCQueueElement> implements Iterator<FCQueueNode<E>> {
+public class FCQueueNodeIterator<E extends FastCopyable & SerializableHashable> implements Iterator<FCQueueNode<E>> {
 	/** the node whose element should be returned the next time this.next() is called */
 	protected FCQueueNode<E> current;
 

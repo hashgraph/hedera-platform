@@ -17,23 +17,23 @@
 package com.swirlds.platform.network.connection;
 
 import com.swirlds.common.system.NodeId;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.sync.SyncInputStream;
 import com.swirlds.platform.sync.SyncOutputStream;
 
 import java.net.SocketException;
 
 /**
- * An implementation of {@link SyncConnection} that is used to avoid returning null if there is no connection.
+ * An implementation of {@link Connection} that is used to avoid returning null if there is no connection.
  * This connection will never be connected and will do nothing on disconnect. All other methods will throw an
  * exception.
  */
-public class NotConnectedConnection implements SyncConnection {
-	private static final SyncConnection SINGLETON = new NotConnectedConnection();
+public class NotConnectedConnection implements Connection {
+	private static final Connection SINGLETON = new NotConnectedConnection();
 	private static final UnsupportedOperationException NOT_IMPLEMENTED =
 			new UnsupportedOperationException("Not implemented");
 
-	public static SyncConnection getSingleton() {
+	public static Connection getSingleton() {
 		return SINGLETON;
 	}
 

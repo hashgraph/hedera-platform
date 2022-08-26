@@ -26,7 +26,7 @@
 	<parent>
 		<groupId>com.swirlds</groupId>
 		<artifactId>swirlds-platform</artifactId>
-		<version>0.26.4-orvw.2</version>
+		<version>0.28.1-orvw.1</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -41,8 +41,6 @@
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
 
-		<!--var app.repo is supplied by inheritors. mvn has dynamic var binding not lexical.-->
-		<app.repo>${project.baseUri}../sdk/data/repos/app/</app.repo>
 		<sonar.coverage.jacoco.xmlReportPaths>${sonar.jacoco.path},${sonar.jacoco.alt.path}
 		</sonar.coverage.jacoco.xmlReportPaths>
 	</properties>
@@ -53,7 +51,7 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-common</artifactId>
-			<version>0.26.4-orvw.2</version>
+			<version>0.28.1-orvw.1</version>
 		</dependency>
 
 		<!-- Log4j -->
@@ -66,7 +64,38 @@
 			<artifactId>log4j-core</artifactId>
 		</dependency>
 
-		
+		<!-- JUnit 5.x -->
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-params</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-api</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.swirlds</groupId>
+			<artifactId>swirlds-common-test</artifactId>
+			<version>0.28.1-orvw.1</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- REMOVE BEFORE MERGING INTO DEVELOP -->
+		<dependency>
+			<groupId>org.mockito</groupId>
+			<artifactId>mockito-core</artifactId>
+			<scope>test</scope>
+		</dependency>
 
 	</dependencies>
 
@@ -74,7 +103,7 @@
 	<profiles>
 		<!-- Automatic Profile (not for manual use) -->
 		<profile>
-			<id>maven_opts_defaults</id>
+			<id>default-variable-maven-opts</id>
 			<activation>
 				<property>
 					<name>!env.MAVEN_OPTS</name>
@@ -84,7 +113,43 @@
 				<env.MAVEN_OPTS/>
 			</properties>
 		</profile>
+
+		<!-- Automatic Profile (not for manual use) -->
+		<profile>
+			<id>default-variable-argLine</id>
+			<activation>
+				<property>
+					<name>!argLine</name>
+				</property>
+			</activation>
+			<properties>
+				<argLine/>
+			</properties>
+		</profile>
 	</profiles>
 
-	
+	<!-- $$BEGIN_OPEN_REVIEW_REMOVE_1$$ -->
+	<!-- Build Configuration -->
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>@{argLine} ${env.MAVEN_OPTS}
+						--add-opens com.swirlds.virtualmap/com.swirlds.virtualmap=ALL-UNNAMED
+						--add-opens com.swirlds.virtualmap/com.swirlds.virtualmap.cache=ALL-UNNAMED
+					</argLine>
+					<failIfNoTests>true</failIfNoTests>
+					<forkCount>1</forkCount>
+					<reuseForks>true</reuseForks>
+					<useSystemClassLoader>true</useSystemClassLoader>
+					<excludes>
+						<exclude>**/VirtualHasherHugeTest.java</exclude>
+						<exclude>**/LargeReconnectTest.java</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
 </project>

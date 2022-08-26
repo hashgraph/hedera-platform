@@ -20,7 +20,7 @@ import java.security.PublicKey;
 
 public enum KeyType {
 	EC(1, "SunEC"),
-	RSA(2, "SunRsaSign");
+	RSA(2, "BC");
 
 	private final int algorithmIdentifier;
 	private final String provider;

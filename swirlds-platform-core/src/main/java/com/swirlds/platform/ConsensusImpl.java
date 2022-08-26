@@ -16,10 +16,10 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.system.AddressBook;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.event.EventUtils;
-import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.stats.ConsensusStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -561,7 +561,7 @@ public class ConsensusImpl implements Consensus {
 				long noStake = 0; //total stake of all members voting yes
 				for (EventImpl w : stronglySeen) {
 					int id = (int) w.getCreatorId();
-					long stake = addressBook.getStake(id);
+					long stake = addressBook.getAddress(id).getStake();
 					if (election.prevRound.vote[id]) {
 						yesStake += stake;
 					} else {
@@ -1350,7 +1350,7 @@ public class ConsensusImpl implements Consensus {
 						long stake = 0;
 						for (long m3 = 0; m3 < numMembers; m3++) {
 							if (seeThru(x, mm, m3) == st) {  //only count intermediates that see the canonical witness
-								stake += addressBook.getStake(m3);
+								stake += addressBook.getAddress(m3).getStake();
 							}
 						}
 						if (Utilities.isSupermajority(stake, totalStake)) { //strongly see supermajority of
@@ -1481,7 +1481,7 @@ public class ConsensusImpl implements Consensus {
 		stake = 0;
 		for (long m = 0; m < numMembers; m++) {
 			if (stronglySeeP(x, m) != null) {
-				stake += addressBook.getStake(m);
+				stake += addressBook.getAddress(m).getStake();
 			}
 		}
 		if (Utilities.isSupermajority(stake, addressBook.getTotalStake())) {

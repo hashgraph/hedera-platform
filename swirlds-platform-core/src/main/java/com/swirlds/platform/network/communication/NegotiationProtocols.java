@@ -25,6 +25,8 @@ import java.util.List;
  */
 public class NegotiationProtocols {
 	private final Protocol[] allProtocols;
+	/** the protocol initiated, if any */
+	private Protocol initiatedProtocol = null;
 
 	/**
 	 * @param protocols
@@ -34,7 +36,7 @@ public class NegotiationProtocols {
 		if (protocols == null || protocols.isEmpty() || protocols.size() > NegotiatorBytes.MAX_NUMBER_OF_PROTOCOLS) {
 			throw new IllegalArgumentException(
 					"the list of protocols supplied should be: non-null, non-empty and have a size lower than "
-					+ NegotiatorBytes.MAX_NUMBER_OF_PROTOCOLS
+							+ NegotiatorBytes.MAX_NUMBER_OF_PROTOCOLS
 			);
 		}
 		this.allProtocols = protocols.toArray(new Protocol[0]);
@@ -57,16 +59,67 @@ public class NegotiationProtocols {
 	}
 
 	/**
+	 * The protocol initiated has been accepted
+	 *
+	 * @return the protocol initiated
+	 * @throws IllegalStateException
+	 * 		if no protocol was previously initiated
+	 */
+	public Protocol initiateAccepted() {
+		throwIfNoneInitiated();
+		final Protocol ret = initiatedProtocol;
+		initiatedProtocol = null;
+		return ret;
+	}
+
+	/**
+	 * The protocol initated has not been accepted
+	 *
+	 * @throws IllegalStateException
+	 * 		if no protocol was previously initiated
+	 */
+	public void initiateFailed() {
+		throwIfNoneInitiated();
+		initiatedProtocol.initiateFailed();
+		initiatedProtocol = null;
+	}
+
+	/**
+	 * If a negotiation exception occurred, we must notify any initiated protocol that the initiate failed
+	 */
+	public void negotiationExceptionOccurred() {
+		if (initiatedProtocol != null) {
+			initiatedProtocol.initiateFailed();
+		}
+	}
+
+	/**
+	 * @return the protocol that was initiated by self
+	 * @throws IllegalStateException
+	 * 		if no protocol was previously initiated
+	 */
+	public Protocol getInitiatedProtocol() {
+		throwIfNoneInitiated();
+		return initiatedProtocol;
+	}
+
+	/**
 	 * @return the ID of the protocol that should be initiated, or -1 if none
 	 */
-	public byte getProtocolToInitiate() {
+	public byte initiateProtocol() {
 		// check each protocol in order of priority until we find one we should initiate
 		for (byte i = 0; i < allProtocols.length; i++) {
 			if (allProtocols[i].shouldInitiate()) {
+				initiatedProtocol = allProtocols[i];
 				return i;
 			}
 		}
 		return -1;
 	}
 
+	private void throwIfNoneInitiated() {
+		if (initiatedProtocol == null) {
+			throw new IllegalStateException("no protocol initiated");
+		}
+	}
 }

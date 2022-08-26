@@ -60,4 +60,28 @@ public class FCHashMapEntrySet<K, V> extends AbstractSet<Map.Entry<K, V>> {
 	public int size() {
 		return map.size();
 	}
+
+	/**
+	 * Equals isn't implemented, because it would be extremely inefficient
+	 *
+	 * @param o
+	 * 		object to be compared for equality with this set
+	 * @throws UnsupportedOperationException
+	 * 		if called
+	 */
+	@Override
+	public boolean equals(final Object o) {
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * HashCode isn't implemented, because it would be extremely inefficient
+	 *
+	 * @throws UnsupportedOperationException
+	 * 		if called
+	 */
+	@Override
+	public int hashCode() {
+		throw new UnsupportedOperationException();
+	}
 }

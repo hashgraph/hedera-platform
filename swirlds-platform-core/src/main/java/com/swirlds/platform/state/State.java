@@ -16,11 +16,12 @@
 
 package com.swirlds.platform.state;
 
+import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.merkle.MerkleInternal;
+import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
+import com.swirlds.common.merkle.impl.PartialNaryMerkleInternal;
 import com.swirlds.common.system.SwirldDualState;
 import com.swirlds.common.system.SwirldState;
-import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
-import com.swirlds.common.merkle.utility.AbstractNaryMerkleInternal;
 import com.swirlds.platform.EventImpl;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
@@ -36,7 +37,7 @@ import java.util.HashMap;
  * the state used by the platform;
  * and the state used by both application and platform.
  */
-public class State extends AbstractNaryMerkleInternal {
+public class State extends PartialNaryMerkleInternal implements MerkleInternal {
 
 	private static final long CLASS_ID = 0x2971b4ba7dd84402L;
 
@@ -66,12 +67,20 @@ public class State extends AbstractNaryMerkleInternal {
 		public static final int CHILD_COUNT = 3;
 	}
 
-	public State() {
+	/**
+	 * Used to track the lifespan of this state.
+	 */
+	private final StateRecord record;
 
+	public State() {
+		record = StateRegistry.createStateRecord();
 	}
 
 	private State(final State that) {
 		super(that);
+
+		record = StateRegistry.createStateRecord();
+
 		if (that.getSwirldState() != null) {
 			this.setSwirldState(that.getSwirldState().copy());
 		}
@@ -87,17 +96,16 @@ public class State extends AbstractNaryMerkleInternal {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean childHasExpectedType(int index, long childClassId, int version) {
+	public boolean childHasExpectedType(final int index, final long childClassId) {
 		switch (index) {
 			case ChildIndices.SWIRLD_STATE:
 				return true;
 			case ChildIndices.PLATFORM_STATE:
-				return childClassId == PlatformState.CLASS_ID;
+				return childClassId == PlatformState.CLASS_ID || childClassId == LegacyPlatformState.CLASS_ID;
 			case ChildIndices.DUAL_STATE:
 				return childClassId == DualStateImpl.CLASS_ID;
 			default:
-				throw new IllegalChildIndexException(getMinimumChildCount(getVersion()),
-						getMaximumChildCount(getVersion()), index);
+				throw new IllegalChildIndexException(getMinimumChildCount(), getMaximumChildCount(), index);
 		}
 	}
 
@@ -124,7 +132,7 @@ public class State extends AbstractNaryMerkleInternal {
 	 * @param state
 	 * 		the application state
 	 */
-	public void setSwirldState(SwirldState state) {
+	public void setSwirldState(final SwirldState state) {
 		setChild(ChildIndices.SWIRLD_STATE, state);
 	}
 
@@ -143,7 +151,7 @@ public class State extends AbstractNaryMerkleInternal {
 	 * @param platformState
 	 * 		the platform state
 	 */
-	public void setPlatformState(PlatformState platformState) {
+	public void setPlatformState(final PlatformState platformState) {
 		setChild(ChildIndices.PLATFORM_STATE, platformState);
 	}
 
@@ -181,7 +189,7 @@ public class State extends AbstractNaryMerkleInternal {
 	 * @param dualState
 	 * 		the dual state
 	 */
-	public void setDualState(DualStateImpl dualState) {
+	public void setDualState(final DualStateImpl dualState) {
 		setChild(ChildIndices.DUAL_STATE, dualState);
 	}
 
@@ -207,7 +215,7 @@ public class State extends AbstractNaryMerkleInternal {
 	@Override
 	public State copy() {
 		throwIfImmutable();
-		throwIfReleased();
+		throwIfDestroyed();
 		return new State(this);
 	}
 
@@ -229,7 +237,15 @@ public class State extends AbstractNaryMerkleInternal {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean equals(Object o) {
+	protected void destroyNode() {
+		record.release();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean equals(final Object o) {
 		if (this == o) {
 			return true;
 		}
@@ -238,7 +254,7 @@ public class State extends AbstractNaryMerkleInternal {
 			return false;
 		}
 
-		State that = (State) o;
+		final State that = (State) o;
 
 		return new EqualsBuilder()
 				.append(getPlatformState(), that.getPlatformState())

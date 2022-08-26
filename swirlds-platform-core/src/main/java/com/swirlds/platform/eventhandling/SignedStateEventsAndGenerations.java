@@ -17,9 +17,9 @@
 package com.swirlds.platform.eventhandling;
 
 import com.swirlds.platform.EventImpl;
-import com.swirlds.platform.state.SignedState;
+import com.swirlds.platform.state.MinGenInfo;
+import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.state.StateSettings;
-import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
 
@@ -86,7 +86,7 @@ public class SignedStateEventsAndGenerations {
 		return events.getEventsForLatestRound();
 	}
 
-	public List<Pair<Long, Long>> getMinGenForSignedState() {
+	public List<MinGenInfo> getMinGenForSignedState() {
 		return generations.getList(getLastRoundReceived());
 	}
 

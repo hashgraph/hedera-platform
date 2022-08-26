@@ -19,68 +19,32 @@ package com.swirlds.common.io.streams.internal;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import org.apache.commons.lang3.builder.ToStringBuilder;
 
 import java.io.IOException;
-import java.util.BitSet;
 
+/**
+ * @deprecated this class fragment is present for migration purposes only
+ */
+@Deprecated(forRemoval = true)
 public class MerkleTreeSerializationOptions implements SelfSerializable {
 	private static final long CLASS_ID = 0x76a4b529cfba0bccL;
 	private static final int CLASS_VERSION = 1;
 
 	public static final int MAX_LENGTH_BYTES = 128;
 
-	private static final int WRITE_HASHES_BIT = 0;
-	private static final int EXTERNAL_BIT = 1;
-
-	private BitSet options;
-
 	public MerkleTreeSerializationOptions() {
-		options = new BitSet();
-	}
 
-	public static MerkleTreeSerializationOptions builder() {
-		return new MerkleTreeSerializationOptions();
-	}
-
-	public static MerkleTreeSerializationOptions defaults() {
-		return builder();
 	}
 
 	@Override
 	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
-		this.options = BitSet.valueOf(in.readByteArray(MAX_LENGTH_BYTES));
+		// Read and discard the data for this class
+		in.readByteArray(MAX_LENGTH_BYTES);
 	}
 
 	@Override
 	public void serialize(SerializableDataOutputStream out) throws IOException {
-		out.writeByteArray(options.toByteArray());
-	}
-
-	public MerkleTreeSerializationOptions setWriteHashes(boolean writeHashes) {
-		options.set(WRITE_HASHES_BIT, writeHashes);
-		return this;
-	}
-
-	public boolean getWriteHashes() {
-		return options.get(WRITE_HASHES_BIT);
-	}
-
-	public MerkleTreeSerializationOptions setExternal(final boolean external) {
-		options.set(EXTERNAL_BIT, external);
-		return this;
-	}
-
-	public boolean isExternal() {
-		return options.get(EXTERNAL_BIT);
-	}
-
-	@Override
-	public String toString() {
-		return new ToStringBuilder(this)
-				.append("external", isExternal())
-				.append("writeHashes", getWriteHashes())
-				.toString();
+		throw new UnsupportedOperationException("this class is deprecated and should not be used");
 	}
 
 	@Override

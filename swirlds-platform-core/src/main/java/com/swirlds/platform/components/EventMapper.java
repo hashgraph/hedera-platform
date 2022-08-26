@@ -17,6 +17,7 @@
 package com.swirlds.platform.components;
 
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.utility.Clearable;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.event.SelfEventStorage;
@@ -32,7 +33,7 @@ import java.util.stream.Collectors;
  * recent event added and will not check the ordering of these events. If a fork exists, it will track whichever fork is
  * added last.
  */
-public class EventMapper implements EventAddedObserver, SelfEventStorage {
+public class EventMapper implements EventAddedObserver, SelfEventStorage, Clearable {
 	private static final EventMapping DEFAULT_RETURN = new EventMapping(null);
 	/**
 	 * Contains the most recent event added from each node, with information about its descendants
@@ -87,6 +88,7 @@ public class EventMapper implements EventAddedObserver, SelfEventStorage {
 	/**
 	 * Reset this instance to its constructed state
 	 */
+	@Override
 	public synchronized void clear() {
 		mappings.clear();
 	}

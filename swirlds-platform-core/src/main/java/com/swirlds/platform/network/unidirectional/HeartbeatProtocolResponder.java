@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.network.unidirectional;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.ByteConstants;
 
 import java.io.IOException;
@@ -32,7 +32,7 @@ public final class HeartbeatProtocolResponder {
 	/**
 	 * A static heartbeat implementation of {@link NetworkProtocolResponder} since the protocol is stateless
 	 */
-	public static void heartbeatProtocol(final byte ignored, final SyncConnection connection)
+	public static void heartbeatProtocol(final byte ignored, final Connection connection)
 			throws IOException {
 		connection.getDos().writeByte(ByteConstants.HEARTBEAT_ACK);
 		connection.getDos().flush();

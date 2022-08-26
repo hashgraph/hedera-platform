@@ -16,10 +16,11 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.system.SwirldDualState;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
+import com.swirlds.common.merkle.MerkleLeaf;
+import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
+import com.swirlds.common.system.SwirldDualState;
 import com.swirlds.logging.payloads.SetFreezeTimePayload;
 import com.swirlds.logging.payloads.SetLastFrozenTimePayload;
 import org.apache.commons.lang3.builder.EqualsBuilder;
@@ -37,7 +38,7 @@ import static com.swirlds.logging.LogMarker.FREEZE;
 /**
  * Contains any data that is either read or written by the platform and the application
  */
-public class DualStateImpl extends AbstractMerkleLeaf implements PlatformDualState, SwirldDualState {
+public class DualStateImpl extends PartialMerkleLeaf implements PlatformDualState, SwirldDualState, MerkleLeaf {
 	private static final Logger LOGGER = LogManager.getLogger();
 
 	public static final long CLASS_ID = 0x565e2e04ce3782b8L;

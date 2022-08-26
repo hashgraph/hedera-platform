@@ -15,8 +15,8 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.common.system.AddressBook;
-import com.swirlds.common.system.events.Event;
+import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.system.events.PlatformEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -84,7 +84,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 	Picture picturePanel;
 
 	/** paintComponent will draw this copy of the set of events */
-	private Event[] eventsCache;
+	private PlatformEvent[] eventsCache;
 	/**
 	 * the number of members in the addressBook
 	 */
@@ -148,9 +148,9 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 
 		/////////////////// create each component for checkboxesPanel ///////////////////
 
-		String[] pars = new String[] { "0", "0", "0", "0", "0", "0", "0", "0",
+		final String[] pars = new String[] { "0", "0", "0", "0", "0", "0", "0", "0",
 				"0", "0", "0", "all" };
-		BiFunction<Integer, String, Checkbox> cb = (n, s) -> new Checkbox(s,
+		final BiFunction<Integer, String, Checkbox> cb = (n, s) -> new Checkbox(s,
 				null, pars.length <= n ? false : pars[n].trim().equals("1"));
 
 		int p = 0; // which parameter to use
@@ -173,7 +173,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 		p++;
 
 		freezeCheckbox.addItemListener(new ItemListener() {
-			public void itemStateChanged(ItemEvent e) {
+			public void itemStateChanged(final ItemEvent e) {
 				if (e.getStateChange() == ItemEvent.SELECTED) {
 					try {// capture a bitmap of "picture" from the screen
 						image = (new Robot()).createScreenCapture(new Rectangle(
@@ -181,7 +181,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 								picturePanel.getVisibleRect().getSize()));
 						// to write the image to disk:
 						// ImageIO.write(image, "jpg", new File("image.jpg"));
-					} catch (AWTException err) {
+					} catch (final AWTException err) {
 					}
 				} else if (e.getStateChange() == ItemEvent.DESELECTED) {
 					image = null; // erase the saved image, stop freezing
@@ -189,7 +189,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 			}
 		});
 
-		Component[] comps = new Component[] { freezeCheckbox,
+		final Component[] comps = new Component[] { freezeCheckbox,
 				simpleColorsCheckbox, expandCheckbox, labelRoundCheckbox,
 				labelRoundRecCheckbox, labelConsOrderCheckbox,
 				labelConsTimestampCheckbox, labelGenerationCheckbox,
@@ -201,7 +201,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 		checkboxesPanel.setLayout(new GridBagLayout());
 		checkboxesPanel.setBackground(Color.WHITE);
 		checkboxesPanel.setVisible(true);
-		GridBagConstraints constr = new GridBagConstraints();
+		final GridBagConstraints constr = new GridBagConstraints();
 		constr.fill = GridBagConstraints.NONE; // don't stretch components
 		constr.anchor = GridBagConstraints.FIRST_LINE_START; // left align each component in its cell
 		constr.weightx = 0; // don't put extra space in the middle
@@ -211,7 +211,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 		constr.insets = new Insets(0, 10, -4, 0); // add external padding on left, remove from bottom
 		constr.gridheight = 1;
 		constr.gridwidth = GridBagConstraints.RELATIVE; // first component is only second-to-last-on-row
-		for (Component c : comps) {
+		for (final Component c : comps) {
 			checkboxesPanel.add(c, constr);
 			constr.gridwidth = GridBagConstraints.REMAINDER; // all but the first are last-on-row
 			constr.gridy++;
@@ -250,11 +250,11 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 
 		/////////////////// create pairPanel (contains checkboxesPanel, picturePnel) ///////////////////
 
-		JPanel pairPanel = new JPanel();
+		final JPanel pairPanel = new JPanel();
 		pairPanel.setLayout(new GridBagLayout());
 		pairPanel.setBackground(Color.WHITE);
 		pairPanel.setVisible(true);
-		GridBagConstraints c3 = new GridBagConstraints();
+		final GridBagConstraints c3 = new GridBagConstraints();
 		c3.fill = GridBagConstraints.NONE; // don't stretch components
 		c3.anchor = GridBagConstraints.FIRST_LINE_START; // left align each component in its cell
 		c3.gridx = 0;
@@ -277,14 +277,14 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 
 		/////////////////// create spacer ///////////////////
 
-		JPanel spacer = new JPanel();
+		final JPanel spacer = new JPanel();
 		spacer.setBackground(Color.YELLOW);
 		spacer.setVisible(true);
 
 		/////////////////// add everything to this ///////////////////
 
 		setLayout(new GridBagLayout());// put panel at top, then spacer below it
-		GridBagConstraints c4 = new GridBagConstraints();
+		final GridBagConstraints c4 = new GridBagConstraints();
 		c4.anchor = GridBagConstraints.FIRST_LINE_START;
 		c4.gridx = 0;
 		c4.gridy = 0;
@@ -295,7 +295,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 		add(pairPanel, c4);
 		picturePanel.setVisible(true);
 
-		Dimension ps = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
+		final Dimension ps = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
 		ps.width -= 150;
 		ps.height -= 200;
 		pairPanel.setPreferredSize(ps);
@@ -315,7 +315,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 	 * 		the event to color
 	 * @return its color
 	 */
-	private Color eventColor(Event event) {
+	private Color eventColor(final PlatformEvent event) {
 		if (simpleColorsCheckbox.getState()) { // if checkbox checked
 			return event.isConsensus() ? LIGHT_BLUE : LIGHT_GREEN;
 		}
@@ -362,7 +362,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 		private int textLineHeight;
 
 		/** find x position on the screen for event e2 which has an other-parent of e1 (or null if none) */
-		private int xpos(Event e1, Event e2) {
+		private int xpos(final PlatformEvent e1, final PlatformEvent e2) {
 			// the gap between left side of screen and leftmost column
 			// is marginFraction times the gap between columns (and similarly for right side)
 			final double marginFraction = 0.5;
@@ -383,14 +383,14 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 		}
 
 		// find y position on the screen for an event
-		private int ypos(Event event) {
+		private int ypos(final PlatformEvent event) {
 			return (event == null) ? -100
 					: (int) (ymax
 					- r * (1 + 2 * (event.getGeneration() - minGen)));
 		}
 
 		@Override
-		public void paintComponent(Graphics g) {
+		public void paintComponent(final Graphics g) {
 			super.paintComponent(g);
 			try {
 				if (image != null) {
@@ -402,24 +402,24 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 					return;
 				}
 				g.setFont(new Font(Font.MONOSPACED, 12, 12));
-				FontMetrics fm = g.getFontMetrics();
-				int fa = fm.getMaxAscent();
-				int fd = fm.getMaxDescent();
+				final FontMetrics fm = g.getFontMetrics();
+				final int fa = fm.getMaxAscent();
+				final int fd = fm.getMaxDescent();
 				textLineHeight = fa + fd;
-				int numMem = platform.getNumMembers();
+				final int numMem = platform.getNumMembers();
 				calcMemsColNames();
 				width = getWidth();
 
 				row = 1;
 
-				int height1 = (row - 1) * textLineHeight;    // text area at the top
-				int height2 = getHeight() - height1; // the main display, below the text
+				final int height1 = (row - 1) * textLineHeight;    // text area at the top
+				final int height2 = getHeight() - height1; // the main display, below the text
 				g.setColor(Color.BLACK);
 				ymin = (int) Math.round(height1 + 0.025 * height2);
 				ymax = (int) Math.round(height1 + 0.975 * height2)
 						- textLineHeight;
 				for (int i = 0; i < numColumns; i++) {
-					String name;
+					final String name;
 					if (col2mems[i][1] == -1) {
 						name = "" + names[col2mems[i][0]];
 					} else {
@@ -434,24 +434,24 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 							/ (numColumns - 1 + 2 * marginFraction));
 					// gap between leftmost column and left edge (and similar on right)
 					final int sideGap = (int) (betweenGap * marginFraction);
-					int x = sideGap + (i) * betweenGap;
+					final int x = sideGap + (i) * betweenGap;
 					g.drawLine(x, ymin, x, ymax);
-					Rectangle2D rect = fm.getStringBounds(name, g);
+					final Rectangle2D rect = fm.getStringBounds(name, g);
 					g.drawString(name, (int) (x - rect.getWidth() / 2),
 							(int) (ymax + rect.getHeight()));
 				}
 
-				Event[] events = eventsCache;
+				PlatformEvent[] events = eventsCache;
 				if (events == null) { // in case a screen refresh happens before any events
 					return;
 				}
 				// in case the state has events from creators that don't exist, don't show them
-				events = Arrays.stream(events).filter(e -> e.getCreatorId() < numMem).toArray(Event[]::new);
+				events = Arrays.stream(events).filter(e -> e.getCreatorId() < numMem).toArray(PlatformEvent[]::new);
 				int maxEvents;
 				try {
 					maxEvents = Math.max(0,
 							Integer.parseInt(eventLimit.getText()));
-				} catch (NumberFormatException err) {
+				} catch (final NumberFormatException err) {
 					maxEvents = 0;
 				}
 
@@ -463,22 +463,22 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 
 				minGen = Integer.MAX_VALUE;
 				maxGen = Integer.MIN_VALUE;
-				for (Event event : events) {
+				for (final PlatformEvent event : events) {
 					minGen = Math.min(minGen, event.getGeneration());
 					maxGen = Math.max(maxGen, event.getGeneration());
 				}
 				maxGen = Math.max(maxGen, minGen + 2);
 				n = numMem + 1;
-				double gens = maxGen - minGen;
-				double dy = (ymax - ymin) * (gens - 1) / gens;
+				final double gens = maxGen - minGen;
+				final double dy = (ymax - ymin) * (gens - 1) / gens;
 				r = Math.min(width / n / 4, dy / gens / 2);
-				int d = (int) (2 * r);
+				final int d = (int) (2 * r);
 
 				// for each event, draw 2 downward lines to its parents
-				for (Event event : events) {
+				for (final PlatformEvent event : events) {
 					g.setColor(eventColor(event));
-					Event e1 = event.getSelfParent();
-					Event e2 = event.getOtherParent();
+					final PlatformEvent e1 = event.getSelfParent();
+					PlatformEvent e2 = event.getOtherParent();
 					if (e2 != null && e2.getCreatorId() >= numMem) {
 						// if the creator of the other parent has been removed,
 						// treat it as if there is no other parent
@@ -495,9 +495,9 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 				}
 
 				// for each event, draw its circle
-				for (Event event : events) {
-					Event e2 = event.getOtherParent();
-					Color color = eventColor(event);
+				for (final PlatformEvent event : events) {
+					final PlatformEvent e2 = event.getOtherParent();
+					final Color color = eventColor(event);
 					g.setColor(color);
 					g.fillOval(xpos(e2, event) - d / 2, ypos(event) - d / 2, d,
 							d);
@@ -518,7 +518,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 						s += " " + event.getConsensusOrder();
 					}
 					if (labelConsTimestampCheckbox.getState()) {
-						Instant t = event.getConsensusTimestamp();
+						final Instant t = event.getConsensusTimestamp();
 						if (t != null) {
 							s += " " + formatter.format(t);
 						}
@@ -530,10 +530,10 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 						s += " " + event.getCreatorId(); // ID number of member who created it
 					}
 					if (s.isEmpty()) {
-						Rectangle2D rect = fm.getStringBounds(s, g);
-						int x = (int) (xpos(e2, event) - rect.getWidth() / 2.
+						final Rectangle2D rect = fm.getStringBounds(s, g);
+						final int x = (int) (xpos(e2, event) - rect.getWidth() / 2.
 								- fa / 4.);
-						int y = (int) (ypos(event) + rect.getHeight() / 2.
+						final int y = (int) (ypos(event) + rect.getHeight() / 2.
 								- fd / 2);
 						g.setColor(LABEL_OUTLINE);
 						g.drawString(s, x - 1, y - 1);
@@ -544,7 +544,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 						g.drawString(s, x, y);
 					}
 				}
-			} catch (Exception e) {
+			} catch (final Exception e) {
 				log.error(EXCEPTION.getMarker(), "error while painting", e);
 			}
 		}
@@ -638,7 +638,7 @@ class WinTab2Hashgraph extends WinBrowser.PrePaintableJPanel {
 	 * 		the column (from 0 to 1+m*(m-1)/2)
 	 * @return the member number (from 0 to m-1)
 	 */
-	private int col2mem(int m, int x) {
+	private int col2mem(int m, final int x) {
 		m = (m / 2) * 2 + 1; // if m is even, round up to the nearest odd
 		final int i = (x / m) % (m / 2); // the ith Eulerian path on the complete graph of m-1 vertices
 		final int j = x % m;       // position along that ith path

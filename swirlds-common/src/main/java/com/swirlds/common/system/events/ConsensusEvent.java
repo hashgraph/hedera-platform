@@ -16,119 +16,26 @@
 
 package com.swirlds.common.system.events;
 
-import com.swirlds.common.crypto.AbstractSerializableHashable;
-import com.swirlds.common.io.OptionalSelfSerializable;
-import com.swirlds.common.io.streams.SerializableDataInputStream;
-import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import org.apache.commons.lang3.builder.EqualsBuilder;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
+import com.swirlds.common.system.ReachedConsensus;
+import com.swirlds.common.system.transaction.ConsensusTransaction;
 
-import java.io.IOException;
+import java.util.Iterator;
 
-public class ConsensusEvent extends AbstractSerializableHashable
-		implements OptionalSelfSerializable<EventSerializationOptions> {
+/**
+ * An event that has reached consensus.
+ * <p>
+ * IMPORTANT: Although this interface is not sealed, it should only be implemented by internal classes. This
+ * interface may be changed at any time, in any way, without notice or prior deprecation. Third parties should NOT
+ * implement this interface.
+ */
+public interface ConsensusEvent extends Event, ReachedConsensus {
 
-	public static final long CLASS_ID = 0xe250a9fbdcc4b1baL;
-	public static final int CLASS_VERSION = 1;
+	/**
+	 * Returns an iterator over the application events in this transaction, which have all reached consensus. Each
+	 * invocation returns a new iterator over the same transactions. This method is thread safe.
+	 *
+	 * @return a consensus transaction iterator
+	 */
+	Iterator<ConsensusTransaction> consensusTransactionIterator();
 
-	/** The hashed part of a base event */
-	private BaseEventHashedData baseEventHashedData;
-	/** The part of a base event which is not hashed */
-	private BaseEventUnhashedData baseEventUnhashedData;
-	/** Consensus data calculated for an event */
-	private ConsensusData consensusData;
-
-	public ConsensusEvent() {
-	}
-
-	public ConsensusEvent(BaseEventHashedData baseEventHashedData,
-			BaseEventUnhashedData baseEventUnhashedData, ConsensusData consensusData) {
-		this.baseEventHashedData = baseEventHashedData;
-		this.baseEventUnhashedData = baseEventUnhashedData;
-		this.consensusData = consensusData;
-	}
-
-	@Override
-	public void serialize(SerializableDataOutputStream out, EventSerializationOptions option) throws IOException {
-		serialize(out, baseEventHashedData, baseEventUnhashedData, consensusData, option);
-	}
-
-	public static void serialize(SerializableDataOutputStream out,
-			BaseEventHashedData baseEventHashedData,
-			BaseEventUnhashedData baseEventUnhashedData,
-			ConsensusData consensusData,
-			EventSerializationOptions option) throws IOException {
-		out.writeOptionalSerializable(baseEventHashedData, false, option);
-		out.writeSerializable(baseEventUnhashedData, false);
-		out.writeSerializable(consensusData, false);
-	}
-
-	@Override
-	public void serialize(SerializableDataOutputStream out) throws IOException {
-		serialize(out, baseEventHashedData, baseEventUnhashedData, consensusData, EventSerializationOptions.FULL);
-	}
-
-	@Override
-	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
-		baseEventHashedData = in.readSerializable(false, BaseEventHashedData::new);
-		baseEventUnhashedData = in.readSerializable(false, BaseEventUnhashedData::new);
-		consensusData = in.readSerializable(false, ConsensusData::new);
-	}
-
-	public BaseEventHashedData getBaseEventHashedData() {
-		return baseEventHashedData;
-	}
-
-	public BaseEventUnhashedData getBaseEventUnhashedData() {
-		return baseEventUnhashedData;
-	}
-
-	public ConsensusData getConsensusData() {
-		return consensusData;
-	}
-
-	@Override
-	public long getClassId() {
-		return CLASS_ID;
-	}
-
-	@Override
-	public int getVersion() {
-		return CLASS_VERSION;
-	}
-
-	@Override
-	public int hashCode() {
-		return new HashCodeBuilder()
-				.append(baseEventHashedData.hashCode())
-				.append(baseEventUnhashedData.hashCode())
-				.append(consensusData.hashCode()).build();
-	}
-
-	@Override
-	public boolean equals(Object obj) {
-		if (obj == null || obj.getClass() != getClass()) {
-			return false;
-		}
-		if (this == obj) {
-			return true;
-		}
-		ConsensusEvent that = (ConsensusEvent) obj;
-		return new EqualsBuilder()
-				.append(this.baseEventHashedData, that.baseEventHashedData)
-				.append(this.baseEventUnhashedData, that.baseEventUnhashedData)
-				.append(this.consensusData, that.consensusData)
-				.isEquals();
-	}
-
-	@Override
-	public String toString() {
-		return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-				.append("baseEventHashedData", baseEventHashedData)
-				.append("baseEventUnhashedData", baseEventUnhashedData)
-				.append("consensusData", consensusData)
-				.toString();
-	}
 }

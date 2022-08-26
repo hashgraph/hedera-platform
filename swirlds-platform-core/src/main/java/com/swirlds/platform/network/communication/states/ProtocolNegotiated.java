@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.network.communication.states;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.communication.NegotiationException;
 import com.swirlds.platform.network.protocol.Protocol;
@@ -27,14 +27,14 @@ import java.io.IOException;
  * Runs a protocol previously negotiated
  */
 public class ProtocolNegotiated implements NegotiationState {
-	private final SyncConnection connection;
+	private final Connection connection;
 	private Protocol protocol;
 
 	/**
 	 * @param connection
 	 * 		the connection to run the protocol on
 	 */
-	public ProtocolNegotiated(final SyncConnection connection) {
+	public ProtocolNegotiated(final Connection connection) {
 		this.connection = connection;
 	}
 

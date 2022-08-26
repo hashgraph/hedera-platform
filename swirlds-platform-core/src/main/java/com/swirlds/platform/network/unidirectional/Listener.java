@@ -16,7 +16,7 @@
 package com.swirlds.platform.network.unidirectional;
 
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.ConnectionManager;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.NetworkUtils;
@@ -43,7 +43,7 @@ public class Listener implements InterruptableRunnable {
 
 	@Override
 	public void run() throws InterruptedException {
-		final SyncConnection currentConn = connectionManager.waitForConnection();
+		final Connection currentConn = connectionManager.waitForConnection();
 		try {
 			// wait for a request to be received, and pass it on to the handler
 			final byte b = currentConn.getDis().readByte();

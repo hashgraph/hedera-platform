@@ -17,7 +17,8 @@
 package com.swirlds.jasperdb;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.metrics.Counter;
+import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.collections.HashList;
@@ -28,12 +29,13 @@ import com.swirlds.jasperdb.collections.LongListBufferedWrapper;
 import com.swirlds.jasperdb.collections.LongListDisk;
 import com.swirlds.jasperdb.collections.LongListOffHeap;
 import com.swirlds.jasperdb.files.DataFileCollection.LoadedDataCallback;
+import com.swirlds.jasperdb.files.DataFileCommon;
 import com.swirlds.jasperdb.files.DataFileReader;
-import com.swirlds.jasperdb.files.hashmap.KeyIndexType;
 import com.swirlds.jasperdb.files.MemoryIndexDiskKeyValueStore;
 import com.swirlds.jasperdb.files.hashmap.Bucket;
 import com.swirlds.jasperdb.files.hashmap.HalfDiskHashMap;
 import com.swirlds.jasperdb.files.hashmap.HalfDiskVirtualKeySet;
+import com.swirlds.jasperdb.files.hashmap.KeyIndexType;
 import com.swirlds.jasperdb.files.hashmap.KeySerializer;
 import com.swirlds.jasperdb.files.hashmap.VirtualKeySetSerializer;
 import com.swirlds.jasperdb.settings.JasperDbSettings;
@@ -69,6 +71,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -77,11 +80,9 @@ import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
+import static com.swirlds.common.metrics.Counter.CounterMode.INCREASE_AND_DECREASE;
 import static com.swirlds.common.utility.Units.BYTES_TO_BITS;
 import static com.swirlds.jasperdb.KeyRange.INVALID_KEY_RANGE;
-import static com.swirlds.jasperdb.files.DataFileCommon.deleteDirectoryAndContents;
-import static com.swirlds.jasperdb.files.DataFileCommon.newestFilesSmallerThan;
-import static com.swirlds.jasperdb.files.DataFileCommon.waitIfMergingPaused;
 import static com.swirlds.logging.LogMarker.ERROR;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.JASPER_DB;
@@ -140,7 +141,12 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 	private static final String JASPER_DB_COMPONENT = "jasper-db";
 
 	/** Count of open database instances */
-	private static final AtomicLong COUNT_OF_OPEN_DATABASES = new AtomicLong();
+	private static final Counter COUNT_OF_OPEN_DATABASES = new Counter(
+			JasperDbStatistics.STAT_CATEGORY,
+			"jpdb_count",
+			"the number of JPDB instances that have been created but not released",
+			INCREASE_AND_DECREASE
+	);
 
 	/**
 	 * We have an optimized mode when the keys can be represented by a single long
@@ -233,10 +239,10 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 	private volatile KeyRange validLeafPathRange = INVALID_KEY_RANGE;
 
 	/**
-	 * When true this will pause merging at the point it is currently at, that could be waiting for next merge or part
-	 * way though a merge. This is needed for snapshotting so that snapshotting can be as fast as possible.
+	 * When all permits cleared, this will pause merging at the point it is currently at, that could be waiting for next
+	 * merge or part way though a merge. This is needed for snapshotting so that snapshotting can be as fast as possible.
 	 */
-	private final AtomicBoolean mergingPaused = new AtomicBoolean(false);
+	private final Semaphore mergingPaused = new Semaphore(1);
 
 	/**
 	 * Paths to all database files and directories
@@ -317,7 +323,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 
 		this.label = label;
 		// updated count of open databases
-		COUNT_OF_OPEN_DATABASES.incrementAndGet();
+		COUNT_OF_OPEN_DATABASES.increment();
 		// create thread group with label
 		final ThreadGroup threadGroup = new ThreadGroup("JasperDB-" + label);
 		// create scheduledThreadPool for executing merges
@@ -683,6 +689,23 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 		return pathToHashKeyValue.get(path);
 	}
 
+
+	/**
+	 * Find the path of the given key
+	 * @param key
+	 * 		the key for a path
+	 * @return the path or INVALID_PATH if not stored
+	 * @throws IOException
+	 * 		If there was a problem locating the key
+	 */
+	@Override
+	public long findKey(final K key) throws IOException {
+		Objects.requireNonNull(key);
+		return isLongKeyMode
+				? longKeyToPath.get(((VirtualLongKey) key).getKeyAsLong(), INVALID_PATH)
+				: objectKeyToPath.get(key, INVALID_PATH);
+	}
+
 	/**
 	 * Load hash for a leaf node with given path
 	 *
@@ -766,12 +789,12 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 			close();
 			// delete an old backup dir if it existed
 			final Path backupDir = storageDirParent.resolve(storageDirName + "_BACKUP");
-			deleteDirectoryAndContents(backupDir);
+			DataFileCommon.deleteDirectoryAndContents(backupDir);
 			// switch around snapshot and data store directories
 			Files.move(dbPaths.storageDir, backupDir);
 			Files.move(snapshotDir, dbPaths.storageDir);
 			// delete backup dir after successful switch
-			deleteDirectoryAndContents(backupDir);
+			DataFileCommon.deleteDirectoryAndContents(backupDir);
 		}
 		shutdownThreadsAndWait(snapshotExecutor);
 	}
@@ -784,7 +807,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 		try {
 			close();
 		} finally {
-			deleteDirectoryAndContents(dbPaths.storageDir);
+			DataFileCommon.deleteDirectoryAndContents(dbPaths.storageDir);
 		}
 	}
 
@@ -819,7 +842,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 				}
 				pathToHashKeyValue.close();
 				// updated count of open databases
-				COUNT_OF_OPEN_DATABASES.decrementAndGet();
+				COUNT_OF_OPEN_DATABASES.decrement();
 			}
 		}
 	}
@@ -853,7 +876,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 		}
 		try {
 			// pause merging
-			mergingPaused.set(true);
+			mergingPaused.acquireUninterruptibly();
 			// start timing snapshot
 			final long START = System.currentTimeMillis();
 			// create snapshot dir if it doesn't exist
@@ -965,7 +988,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 		} finally {
 			snapshotInProgress.set(false);
 			// unpause merging
-			mergingPaused.set(false);
+			mergingPaused.release();
 		}
 	}
 
@@ -993,23 +1016,13 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void registerStatistics(final Consumer<StatEntry> registry) {
+	public void registerStatistics(final Consumer<Metric> registry) {
 		if (firstStatRegistration) {
 			// register static/global statistics
 
 			firstStatRegistration = false;
 
-			final StatEntry databaseCountStat = new StatEntry(
-					JasperDbStatistics.STAT_CATEGORY,
-					"jpdb_count",
-					"the number of JPDB instances that have been created but not released",
-					"%d",
-					null,
-					null,
-					null,
-					COUNT_OF_OPEN_DATABASES::get);
-
-			registry.accept(databaseCountStat);
+			registry.accept(COUNT_OF_OPEN_DATABASES);
 		}
 
 		// register instance statistics
@@ -1249,18 +1262,18 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 				LOG.info(JASPER_DB.getMarker(), "[{}] Starting Large Merge", label);
 			} else if (isTimeForMediumMerge(now)) {
 				lastMediumMerge = now;
-				filesToMergeFilter = newestFilesSmallerThan(
+				filesToMergeFilter = DataFileCommon.newestFilesSmallerThan(
 						settings.getMediumMergeCutoffMb(), settings.getMaxNumberOfFilesInMerge());
 				isMediumMerge = true;
 				LOG.info(JASPER_DB.getMarker(), "[{}] Starting Medium Merge", label);
 			} else {
-				filesToMergeFilter = newestFilesSmallerThan(
+				filesToMergeFilter = DataFileCommon.newestFilesSmallerThan(
 						settings.getSmallMergeCutoffMb(), settings.getMaxNumberOfFilesInMerge());
 				isSmallMerge = true;
 				LOG.info(JASPER_DB.getMarker(), "[{}] Starting Small Merge", label);
 			}
 
-			waitIfMergingPaused(mergingPaused);
+			DataFileCommon.waitIfMergingPaused(mergingPaused);
 			// we need to merge disk files for internal hashes if they exist and pathToHashKeyValue store
 			if (hasDiskStoreForInternalHashes) {
 				// horrible hack to get around generics because file filters work on any type of DataFileReader
@@ -1272,7 +1285,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 			} else {
 				afterInternalHashStoreDiskMerge = now;    // zero elapsed time
 			}
-			waitIfMergingPaused(mergingPaused);
+			DataFileCommon.waitIfMergingPaused(mergingPaused);
 			// merge objectKeyToPath files
 			if (isLongKeyMode) {
 				// third "now" is replaced by copying second "now"
@@ -1285,7 +1298,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 				// set third "now"
 				afterObjectKeyToPathMerge = Instant.now(clock);
 			}
-			waitIfMergingPaused(mergingPaused);
+			DataFileCommon.waitIfMergingPaused(mergingPaused);
 			// now do main merge of pathToHashKeyValue store
 			// horrible hack to get around generics because file filters work on any type of DataFileReader
 			final UnaryOperator<List<DataFileReader<VirtualLeafRecord<K, V>>>> leafRecordFileFilter =
@@ -1343,7 +1356,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 			LOG.info(JASPER_DB.getMarker(), "Interrupted while merging, this is allowed.");
 			Thread.currentThread().interrupt();
 			return false;
-		} catch (Exception e) {
+		} catch (final Throwable e) {  // NOSONAR: Log and return false if an error occurred since this is on a thread.
 			// It is important that we capture all exceptions here, otherwise a single exception will stop all
 			// future merges from happening.
 			LOG.error(EXCEPTION.getMarker(), "[{}] Merge failed", label, e);
@@ -1361,6 +1374,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 
 	/**
 	 * Used for tests.
+	 *
 	 * @return true if we are in "long key" mode.
 	 */
 	boolean isLongKeyMode() {

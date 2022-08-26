@@ -26,7 +26,7 @@
 	<parent>
 		<groupId>com.swirlds</groupId>
 		<artifactId>swirlds-platform</artifactId>
-		<version>0.26.4-orvw.2</version>
+		<version>0.28.1-orvw.1</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -39,9 +39,6 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
-
-		<!--var app.repo is supplied by inheritors. mvn has dynamic var binding not lexical.-->
-		<app.repo>${project.baseUri}../sdk/data/repos/app/</app.repo>
 	</properties>
 
 
@@ -51,16 +48,20 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-common</artifactId>
-			<version>0.26.4-orvw.2</version>
+			<version>0.28.1-orvw.1</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-logging</artifactId>
-			<version>0.26.4-orvw.2</version>
+			<version>0.28.1-orvw.1</version>
 		</dependency>
 
-		
+		<dependency>
+			<groupId>com.swirlds</groupId>
+			<artifactId>swirlds-common-test</artifactId>
+			<version>0.28.1-orvw.1</version>
+		</dependency>
 
 		<!-- OffByNull PortMapper -->
 		<dependency>
@@ -135,21 +136,34 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-fchashmap</artifactId>
-			<version>0.26.4-orvw.2</version>
+			<version>0.28.1-orvw.1</version>
 			<scope>compile</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-virtualmap</artifactId>
-			<version>0.26.4-orvw.2</version>
+			<version>0.28.1-orvw.1</version>
 			<scope>compile</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-jasperdb</artifactId>
-			<version>0.26.4-orvw.2</version>
+			<version>0.28.1-orvw.1</version>
+			<scope>compile</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.awaitility</groupId>
+			<artifactId>awaitility</artifactId>
+			<version>4.2.0</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.swirlds</groupId>
+			<artifactId>swirlds-fcqueue</artifactId>
+			<version>0.28.1-orvw.1</version>
 			<scope>compile</scope>
 		</dependency>
 	</dependencies>
@@ -182,7 +196,7 @@
 	<profiles>
 		<!-- Automatic Profile (not for manual use) -->
 		<profile>
-			<id>maven_opts_defaults</id>
+			<id>default-variable-maven-opts</id>
 			<activation>
 				<property>
 					<name>!env.MAVEN_OPTS</name>
@@ -193,41 +207,20 @@
 			</properties>
 		</profile>
 
+		<!-- Automatic Profile (not for manual use) -->
 		<profile>
-			<id>nightly_tests</id>
+			<id>default-variable-argLine</id>
 			<activation>
-				<activeByDefault>false</activeByDefault>
+				<property>
+					<name>!argLine</name>
+				</property>
 			</activation>
 			<properties>
-				<jacoco.skip>true</jacoco.skip>
+				<argLine/>
 			</properties>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-surefire-plugin</artifactId>
-						<configuration>
-							<argLine>@{argLine}
-								--add-opens com.swirlds.platform/com.swirlds.platform=ALL-UNNAMED
-								--add-opens com.swirlds.platform/com.swirlds.platform.sync=ALL-UNNAMED
-								--add-opens com.swirlds.platform/com.swirlds.platform.state=ALL-UNNAMED
-							</argLine>
-							<forkCount>1</forkCount>
-							<reuseForks>false</reuseForks>
-							<excludes>
-								<exclude>**/FCFSTimingTests.java</exclude>
-								<exclude>**/SerializerTests.java</exclude>
-								<exclude>**/ChunkManagerTests.java</exclude>
-								<exclude>**/ChunkTest.java</exclude>
-								<exclude>**/FolderEntryTests.java</exclude>
-								<exclude>**/ConsensusV1Test.java</exclude>
-							</excludes>
-							<useSystemClassLoader>true</useSystemClassLoader>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
 		</profile>
+
+		
 	</profiles>
 
 </project>

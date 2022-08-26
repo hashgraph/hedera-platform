@@ -26,46 +26,42 @@ import com.swirlds.common.exceptions.ReferenceCountException;
 public interface Releasable {
 
 	/**
-	 * Called when this object is no longer needed. This method is expected to free
-	 * any external resources formally used by this object that the java garbage
-	 * collector will not free.
-	 *
-	 * This method is expected to be idempotent - that is, calling this method multiple times
-	 * should have the same effect as calling it exactly once. This method should also be thread safe.
+	 * Called when this object is no longer needed.
 	 */
-	void release();
+	default void release() {
+		// override if needed
+	}
 
 	/**
-	 * Determines if an object has been released or not.
+	 * Determines if an object has been fully released and garbage collected.
 	 *
 	 * @return Whether is has been released or not
 	 */
-	default boolean isReleased() {
+	default boolean isDestroyed() {
 		return false;
 	}
 
 	/**
-	 * Throws an exception if {@link #isReleased()}} returns {@code true}
+	 * Throws an exception if {@link #isDestroyed()}} returns {@code true}
 	 *
 	 * @throws ReferenceCountException
-	 * 		if this object is released
+	 * 		if this object is destroyed
 	 */
-	default void throwIfReleased() {
-		throwIfReleased("This operation is not permitted on a released object.");
+	default void throwIfDestroyed() {
+		throwIfDestroyed("This operation is not permitted on a destroyed object.");
 	}
 
 	/**
-	 * Throws an exception if {@link #isReleased()}} returns {@code true}
+	 * Throws an exception if {@link #isDestroyed()}} returns {@code true}
 	 *
 	 * @param errorMessage
 	 * 		an error message for the exception
 	 * @throws ReferenceCountException
-	 * 		if this object is released
+	 * 		if this object is destroyed
 	 */
-	default void throwIfReleased(final String errorMessage) {
-		if (this.isReleased()) {
+	default void throwIfDestroyed(final String errorMessage) {
+		if (this.isDestroyed()) {
 			throw new ReferenceCountException(errorMessage);
 		}
 	}
-
 }

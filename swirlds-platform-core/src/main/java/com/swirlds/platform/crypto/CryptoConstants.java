@@ -16,6 +16,9 @@
 
 package com.swirlds.platform.crypto;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+
+import java.security.Security;
 import java.time.Instant;
 
 public final class CryptoConstants {
@@ -36,7 +39,8 @@ public final class CryptoConstants {
 	public static final String ENC_TYPE = "EC";
 	public static final String ENC_PROVIDER = "SunEC";
 	public static final String SIG_TYPE1 = "RSA"; // or SHA384withRSA
-	public static final String SIG_PROVIDER = "SunRsaSign";
+	public static final String SIG_PROVIDER = getBCProviderName();
+	public static final String SUN_RSA_SIGN_PROVIDER = "SunRsaSign";
 	public static final String SIG_TYPE2 = "SHA384withRSA"; // or RSA
 	/** this is the only TLS protocol we will allow */
 	public static final String TLS_SUITE =  "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384" ;
@@ -52,5 +56,11 @@ public final class CryptoConstants {
 	public static final String PUBLIC_KEYS_FILE = "public.pfx";
 
 	private CryptoConstants() {
+	}
+
+	/* Ensure BouncyCastle provider is added before the name is used */
+	private static String getBCProviderName() {
+		Security.addProvider(new BouncyCastleProvider());
+		return BouncyCastleProvider.PROVIDER_NAME;
 	}
 }

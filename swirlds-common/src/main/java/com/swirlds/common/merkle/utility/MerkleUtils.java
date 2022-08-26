@@ -170,8 +170,8 @@ public final class MerkleUtils {
 		} else {
 			sb.append(node.getClass().getName());
 			sb.append(": route = ").append(node.getRoute());
-			sb.append(", released = ").append(node.isReleased());
-			sb.append(", ref count = ").append(node.getReferenceCount());
+			sb.append(", destroyed = ").append(node.isDestroyed());
+			sb.append(", reservation count = ").append(node.getReservationCount());
 			sb.append(", immutable = ").append(node.isImmutable());
 			if (!node.isLeaf()) {
 				sb.append(", child count = ").append(node.asInternal().getNumberOfChildren());

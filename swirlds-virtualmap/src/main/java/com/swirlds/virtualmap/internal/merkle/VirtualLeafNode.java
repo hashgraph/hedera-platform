@@ -16,37 +16,53 @@
 
 package com.swirlds.virtualmap.internal.merkle;
 
+import com.swirlds.common.constructable.ConstructableIgnored;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleLeaf;
-import com.swirlds.common.merkle.utility.MerkleSerializationStrategy;
+import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
+import com.swirlds.virtualmap.datasource.VirtualInternalRecord;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
+import com.swirlds.virtualmap.datasource.VirtualRecord;
 
 import java.io.IOException;
-import java.util.Set;
+import java.util.Objects;
 
 /**
  * Implementation of a VirtualLeaf
  */
+@ConstructableIgnored
 public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends VirtualValue>
-		extends VirtualNode<K, V, VirtualLeafRecord<K, V>>
-		implements MerkleLeaf {
+		extends PartialMerkleLeaf
+		implements MerkleLeaf, VirtualNode {
 
 	public static final long CLASS_ID = 0x499677a326fb04caL;
 
 	private static class ClassVersion {
+
 		public static final int ORIGINAL = 1;
 	}
 
-	private static final Set<MerkleSerializationStrategy> STRATEGIES = Set.of();
+	/**
+	 * The {@link VirtualRecord} is the backing data for this node. There are different types
+	 * of records, {@link VirtualInternalRecord} for internal nodes and
+	 * {@link com.swirlds.virtualmap.datasource.VirtualLeafRecord} for leaf nodes.
+	 */
+	private final VirtualRecord virtualRecord;
 
-	public VirtualLeafNode() {
+	public VirtualLeafNode(final VirtualLeafRecord<K, V> virtualRecord) {
+		this.virtualRecord = Objects.requireNonNull(virtualRecord);
+		setHash(virtualRecord.getHash());
 	}
 
-	public VirtualLeafNode(final VirtualRootNode<K, V> root, final VirtualLeafRecord<K, V> virtualRecord) {
-		super(root, virtualRecord);
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public VirtualRecord getVirtualRecord() {
+		return virtualRecord;
 	}
 
 	/**
@@ -54,8 +70,9 @@ public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends Vi
 	 *
 	 * @return the key
 	 */
+	@SuppressWarnings("unchecked")
 	public K getKey() {
-		return virtualRecord.getKey();
+		return ((VirtualLeafRecord<K, V>) virtualRecord).getKey();
 	}
 
 	/**
@@ -63,16 +80,9 @@ public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends Vi
 	 *
 	 * @return the value
 	 */
+	@SuppressWarnings("unchecked")
 	public V getValue() {
-		return virtualRecord.getValue();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public Set<MerkleSerializationStrategy> supportedSerialization(final int version) {
-		return STRATEGIES;
+		return ((VirtualLeafRecord<K, V>) virtualRecord).getValue();
 	}
 
 	/**
@@ -112,7 +122,7 @@ public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends Vi
 	 */
 	@Override
 	public void serialize(final SerializableDataOutputStream out) throws IOException {
-		out.writeSerializable(virtualRecord, true);
+		throw new UnsupportedOperationException();
 	}
 
 	/**
@@ -120,6 +130,29 @@ public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends Vi
 	 */
 	@Override
 	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
-		this.virtualRecord = in.readSerializable();
+		throw new UnsupportedOperationException();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean equals(final Object o) {
+		if (this == o) {
+			return true;
+		}
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
+		final VirtualLeafNode<?, ?> that = (VirtualLeafNode<?, ?>) o;
+		return virtualRecord.equals(that.getVirtualRecord());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int hashCode() {
+		return virtualRecord.hashCode();
 	}
 }

@@ -16,11 +16,11 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.consensus.RoundNumberProvider;
-import org.apache.commons.lang3.tuple.Pair;
+import com.swirlds.platform.state.MinGenInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -291,16 +291,16 @@ class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
 	 * @param minGen
 	 * 		a list of round numbers and round generation pairs, in ascending round numbers
 	 */
-	void createRoundsForSignedStateConstructor(final List<Pair<Long, Long>> minGen) {
-		minRound.set(minGen.get(0).getLeft());
-		maxRound.set(minGen.get(minGen.size() - 1).getLeft());
-		for (Pair<Long, Long> roundGenPair : minGen) {
-			long round = roundGenPair.getLeft();
+	void createRoundsForSignedStateConstructor(final List<MinGenInfo> minGen) {
+		minRound.set(minGen.get(0).round());
+		maxRound.set(minGen.get(minGen.size() - 1).round());
+		for (final MinGenInfo roundGenPair : minGen) {
+			long round = roundGenPair.round();
 			RoundInfo roundInfo = new RoundInfo(round, addressBook.getSize());
 			rounds.put(round, roundInfo);
 
 			// set the minGeneration as stored in state
-			long minGeneration = roundGenPair.getRight();
+			long minGeneration = roundGenPair.minimumGeneration();
 			roundInfo.updateMinGeneration(minGeneration);
 			roundInfo.fameDecided = true;
 		}

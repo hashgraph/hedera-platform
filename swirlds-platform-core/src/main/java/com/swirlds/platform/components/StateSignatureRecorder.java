@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.platform.state.SigSet;
+import com.swirlds.platform.state.signed.SigSet;
 
 /**
  * Responsible for recording the state signature

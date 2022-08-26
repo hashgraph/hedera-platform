@@ -16,9 +16,9 @@
 
 package com.swirlds.common.threading.framework.internal;
 
-import com.swirlds.common.threading.framework.ThreadSeed;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.QueueThreadPool;
+import com.swirlds.common.threading.framework.ThreadSeed;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,13 +74,35 @@ public class QueueThreadPoolImpl<T> extends AbstractBlockingQueue<T> implements 
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * <p>Attempts to gracefully stop each thread in the pool</p>
+	 *
+	 * <p>Should not be called before the threads have been started, or in the case of a seed before the seed has been
+	 * built.</p>
 	 */
 	@Override
 	public boolean stop() {
 		boolean success = true;
 		for (final QueueThread<T> thread : threads) {
 			success &= thread.stop();
+		}
+		return success;
+	}
+
+	/**
+	 * <p>Attempts to gracefully stop each thread in the pool</p>
+	 *
+	 * <p>Should not be called before the threads have been started, or in the case of a seed before the seed has been
+	 * built.</p>
+	 *
+	 * @param behavior
+	 * 		the type of {@link StopBehavior} that should be used to stop each thread
+	 * @return
+	 */
+	@Override
+	public boolean stop(final StopBehavior behavior) {
+		boolean success = true;
+		for (final QueueThread<T> thread : threads) {
+			success &= thread.stop(behavior);
 		}
 		return success;
 	}

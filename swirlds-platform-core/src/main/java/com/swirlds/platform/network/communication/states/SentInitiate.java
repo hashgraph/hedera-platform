@@ -93,26 +93,29 @@ public class SentInitiate implements NegotiationState {
 		return next;
 	}
 
-	private NegotiationState transition(final int b) throws NegotiationException {
+	private NegotiationState transition(final int b) {
 		if (b == NegotiatorBytes.KEEPALIVE) {
 			// we wait for ACCEPT or reject
-			return waitForAcceptReject.initiatedProtocol(protocolInitiated);
+			return waitForAcceptReject;
 		}
 		if (b == protocolInitiated) { // both initiated the same protocol at the same time
-			final Protocol protocol = protocols.getProtocol(protocolInitiated);
+			final Protocol protocol = protocols.getInitiatedProtocol();
 			if (protocol.acceptOnSimultaneousInitiate()) {
-				return negotiated.runProtocol(protocols.getProtocol(b));
+				return negotiated.runProtocol(protocols.initiateAccepted());
 			} else {
+				protocols.initiateFailed();
 				return sleep;
 			}
 		}
 		// peer initiated a different protocol
 		if (b < protocolInitiated) { // lower index means higher priority
+			// the one we initiated failed
+			protocols.initiateFailed();
 			// THEIR protocol is higher priority, so we should ACCEPT or REJECT
 			return receivedInitiate.receivedInitiate(b);
 		} else {
 			// OUR protocol is higher priority, so they should ACCEPT or REJECT
-			return waitForAcceptReject.initiatedProtocol(protocolInitiated);
+			return waitForAcceptReject;
 		}
 	}
 }

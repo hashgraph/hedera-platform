@@ -19,7 +19,6 @@ package com.swirlds.common.io.streams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -84,33 +83,9 @@ public final class StreamDebugUtils {
 			final InputStreamBuilder inputStreamBuilder,
 			final Deserializer<T> deserializer,
 			final Runnable failureCallback) throws IOException {
-		return deserializeAndDebugOnFailure(inputStreamBuilder, null, deserializer, failureCallback);
-	}
-
-	/**
-	 * Attempt to perform deserialization. If the deserialization fails then retry with debug enabled, log the
-	 * debug info, and call the failure callback. Rethrows any exceptions encountered internally.
-	 *
-	 * @param inputStreamBuilder
-	 * 		builds the input stream. The stream is closed when finished.
-	 * @param externalDirectory
-	 * 		the location of external data, ignored if null
-	 * @param deserializer
-	 * 		the method that performs the deserialization
-	 * @param failureCallback
-	 * 		a method that is invoked if serialization fails, ignored if null
-	 * @param <T>
-	 * 		the type of object being deserialized
-	 * @return the deserialized objects (if no errors are encountered)
-	 */
-	public static <T> T deserializeAndDebugOnFailure(
-			final InputStreamBuilder inputStreamBuilder,
-			final File externalDirectory,
-			final Deserializer<T> deserializer,
-			final Runnable failureCallback) throws IOException {
 
 		try (final InputStream baseStream = inputStreamBuilder.buildStream()) {
-			final MerkleDataInputStream in = new MerkleDataInputStream(baseStream, externalDirectory);
+			final MerkleDataInputStream in = new MerkleDataInputStream(baseStream);
 			return deserializer.deserialize(in);
 		} catch (final Throwable ex) {
 
@@ -119,7 +94,7 @@ public final class StreamDebugUtils {
 
 			DebuggableMerkleDataInputStream in = null;
 			try (final InputStream baseStream = inputStreamBuilder.buildStream()) {
-				in = new DebuggableMerkleDataInputStream(baseStream, externalDirectory);
+				in = new DebuggableMerkleDataInputStream(baseStream);
 				deserializer.deserialize(in);
 			} catch (final Throwable innerEx) {
 				LOG.error(EXCEPTION.getMarker(),

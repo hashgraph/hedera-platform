@@ -16,8 +16,9 @@
 
 package com.swirlds.platform;
 
+import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.statistics.internal.AbstractStatistics;
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.utility.CommonUtils;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -30,7 +31,7 @@ import java.util.List;
  * User need to call add entries first, then initialize the instance
  */
 public class ApplicationStatistics extends AbstractStatistics {
-	private List<StatEntry> tempList = new LinkedList<>();
+	private List<Metric> tempList = new LinkedList<>();
 
 	/**
 	 * {@inheritDoc}
@@ -44,7 +45,7 @@ public class ApplicationStatistics extends AbstractStatistics {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public StatEntry[] getStatEntriesArray() {
+	public Metric[] getStatEntriesArray() {
 		return statEntries;
 	}
 
@@ -53,20 +54,33 @@ public class ApplicationStatistics extends AbstractStatistics {
 	 *
 	 * @param newEntry
 	 * 		the new entry
+	 * @deprecated use {@link ApplicationStatistics#addMetrics(Metric...)} instead
 	 */
-	void addStatEntry(final StatEntry newEntry) {
+	@Deprecated(forRemoval = true)
+	void addStatEntry(final Metric newEntry) {
 		tempList.add(newEntry);
+	}
+
+	/**
+	 * Add new entry to statistics
+	 *
+	 * @param metrics
+	 * 		the new metrics
+	 * @throws IllegalArgumentException if {@code metrics} is {@code null}
+	 */
+	void addMetrics(final Metric... metrics) {
+		CommonUtils.throwArgNull(metrics, "metrics");
+		tempList.addAll(List.of(metrics));
 	}
 
 	/**
 	 * initialize all StatEntry added.
 	 */
+	@SuppressWarnings("removal")
 	void init() {
-		statEntries = tempList.toArray(new StatEntry[0]);
-		for (StatEntry stat : statEntries) {
-			if (stat.init != null) {
-				stat.buffered = stat.init.apply(Settings.halfLife);
-			}
+		statEntries = tempList.toArray(new Metric[0]);
+		for (Metric metric : statEntries) {
+			metric.init();
 		}
 		initStatEntries(Settings.showInternalStats);
 		if (printStats) {

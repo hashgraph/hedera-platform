@@ -68,11 +68,6 @@ public interface SwirldStateStats {
 	 */
 	double getAvgOtherReceivedTimestamp();
 
-	/**
-	 * The start and end time of {@link SwirldState#noMoreTransactions()} execution
-	 */
-	void noMoreTransactionsMicros(final long start, final long end);
-
 	void stateCopyAdmit(final long start, final long end);
 
 	void preConsensusHandleTime(long start, final long end);

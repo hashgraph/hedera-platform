@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.LongSummaryStatistics;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.Semaphore;
 import java.util.function.Function;
 
 import static com.swirlds.jasperdb.files.DataFileCommon.dataLocationToString;
@@ -131,13 +131,13 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
 	 * Merge all files that match the given filter
 	 *
 	 * @param filterForFilesToMerge filter to choose which subset of files to merge
-	 * @param mergingPaused AtomicBoolean to monitor if we should pause merging
+	 * @param mergingPaused Semaphore to monitor if we should pause merging
 	 * @param minNumberOfFilesToMerge The minimum number of files to consider for a merge
 	 * @throws IOException if there was a problem merging
 	 * @throws InterruptedException if the merge thread was interupted
 	 */
 	public void merge(final Function<List<DataFileReader<D>>, List<DataFileReader<D>>> filterForFilesToMerge,
-			final AtomicBoolean mergingPaused, final int minNumberOfFilesToMerge)
+			final Semaphore mergingPaused, final int minNumberOfFilesToMerge)
 			throws IOException, InterruptedException {
 		final long START = System.currentTimeMillis();
 		final List<DataFileReader<D>> allMergeableFiles = fileCollection.getAllFilesAvailableForMerge();

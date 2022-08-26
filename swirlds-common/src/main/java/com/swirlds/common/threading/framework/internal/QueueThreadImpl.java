@@ -16,11 +16,11 @@
 
 package com.swirlds.common.threading.framework.internal;
 
-import com.swirlds.common.threading.interrupt.InterruptableConsumer;
-import com.swirlds.common.threading.interrupt.InterruptableRunnable;
-import com.swirlds.common.threading.framework.ThreadSeed;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.StoppableThread;
+import com.swirlds.common.threading.framework.ThreadSeed;
+import com.swirlds.common.threading.interrupt.InterruptableConsumer;
+import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,7 +84,7 @@ public class QueueThreadImpl<T> extends AbstractBlockingQueue<T> implements Queu
 
 		stoppableThread = configuration
 				.setWork(this::doWork)
-				.setInterruptable(configuration.isInterruptable())
+				.setStopBehavior(configuration.getStopBehavior())
 				.setFinalCycleWork(this::doFinalCycleWork)
 				.buildStoppableThread(false);
 	}
@@ -177,6 +177,14 @@ public class QueueThreadImpl<T> extends AbstractBlockingQueue<T> implements Queu
 	@Override
 	public boolean stop() {
 		return stoppableThread.stop();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean stop(final StopBehavior behavior) {
+		return stoppableThread.stop(behavior);
 	}
 
 	/**

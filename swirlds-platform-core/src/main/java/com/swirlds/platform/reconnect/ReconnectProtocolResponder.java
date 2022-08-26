@@ -18,11 +18,11 @@ package com.swirlds.platform.reconnect;
 
 import com.swirlds.common.merkle.synchronization.settings.ReconnectSettings;
 import com.swirlds.platform.ReconnectStatistics;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.unidirectional.NetworkProtocolResponder;
-import com.swirlds.platform.state.SignedState;
-import com.swirlds.platform.state.SignedStateManager;
+import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,22 +56,32 @@ public class ReconnectProtocolResponder implements NetworkProtocolResponder {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void protocolInitiated(final byte initialByte, final SyncConnection connection)
+	public void protocolInitiated(final byte initialByte, final Connection connection)
 			throws IOException, NetworkProtocolException {
 		LOG.info(RECONNECT.getMarker(), "{} got COMM_STATE_REQUEST from {}",
 				connection.getSelfId(), connection.getOtherId());
 
-		// the SignedState is later manually released by the ReconnectTeacher
-		final SignedState state = signedStateManager.getLastCompleteSignedState().get();
+		if (!reconnectThrottle.initiateReconnect(connection.getOtherId().getId())) {
+			ReconnectUtils.denyReconnect(connection);
+			return;
+		}
 
-		new ReconnectTeacher(
-				connection,
-				state,
-				settings.getAsyncStreamTimeoutMilliseconds(),
-				reconnectThrottle,
-				connection.getSelfId().getId(),
-				connection.getOtherId().getId(),
-				state.getLastRoundReceived(),
-				stats).execute();
+		try {
+			ReconnectUtils.confirmReconnect(connection);
+
+			// the SignedState is later manually released by the ReconnectTeacher
+			final SignedState state = signedStateManager.getLastCompleteSignedState().get();
+
+			new ReconnectTeacher(
+					connection,
+					state,
+					settings.getAsyncStreamTimeoutMilliseconds(),
+					connection.getSelfId().getId(),
+					connection.getOtherId().getId(),
+					state.getLastRoundReceived(),
+					stats).execute();
+		} finally {
+			reconnectThrottle.markReconnectFinished();
+		}
 	}
 }

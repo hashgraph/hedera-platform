@@ -45,6 +45,7 @@ module com.swirlds.common {
 	exports com.swirlds.common.settings;
 	exports com.swirlds.common.stream;
 	exports com.swirlds.common.system;
+	exports com.swirlds.common.system.address;
 	exports com.swirlds.common.system.events;
 	exports com.swirlds.common.system.transaction;
 	exports com.swirlds.common.threading;
@@ -54,12 +55,11 @@ module com.swirlds.common {
 	exports com.swirlds.common.threading.interrupt;
 	exports com.swirlds.common.threading.locks;
 	exports com.swirlds.common.threading.pool;
+	exports com.swirlds.common.threading.wrappers;
 	exports com.swirlds.common.utility;
 	exports com.swirlds.common.utility.throttle;
 
 	/* Targeted exports */
-	exports com.swirlds.common.system.transaction.internal to com.swirlds.platform, com.swirlds.common.test,
-			com.swirlds.platform.test;
 	exports com.swirlds.common.internal to com.swirlds.platform, com.swirlds.platform.test,
 			com.swirlds.common.test, com.swirlds.jrs, com.swirlds.demo.platform;
 	exports com.swirlds.common.crypto.internal to com.swirlds.platform, com.swirlds.common.test;
@@ -67,9 +67,11 @@ module com.swirlds.common {
 	exports com.swirlds.common.signingtool to com.swirlds.common.test, com.swirlds.demo.platform,
 			com.swirlds.jrs;
 	exports com.swirlds.common.crypto.engine to com.swirlds.common.test;
+	exports com.swirlds.common.threading.framework.internal to com.swirlds.common.test;
 
 	opens com.swirlds.common.crypto to com.fasterxml.jackson.databind;
 	opens com.swirlds.common.merkle.utility to com.fasterxml.jackson.databind;
+	opens com.swirlds.common.utility to com.fasterxml.jackson.databind;
 	opens com.swirlds.common.utility.throttle to com.fasterxml.jackson.databind;
 	opens com.swirlds.common.stream to com.fasterxml.jackson.databind;
 	exports com.swirlds.common.statistics;
@@ -78,6 +80,16 @@ module com.swirlds.common {
 	opens com.swirlds.common.merkle.copy to com.fasterxml.jackson.databind;
 	exports com.swirlds.common.io.streams.internal to com.swirlds.platform.test;
 	exports com.swirlds.common.io.extendable.extensions.internal to com.swirlds.common.test;
+	exports com.swirlds.common.system.transaction.internal to com.swirlds.platform, com.swirlds.platform.test,
+			com.swirlds.common.test;
+	exports com.swirlds.common.merkle.interfaces;
+	exports com.swirlds.common.merkle.impl;
+	opens com.swirlds.common.merkle.impl to com.fasterxml.jackson.databind;
+	exports com.swirlds.common.merkle.impl.internal;
+	opens com.swirlds.common.merkle.impl.internal to com.fasterxml.jackson.databind;
+	exports com.swirlds.common.merkle.impl.destroyable;
+	opens com.swirlds.common.merkle.impl.destroyable to com.fasterxml.jackson.databind;
+	exports com.swirlds.common.metrics;
 
 	requires com.swirlds.logging;
 

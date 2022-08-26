@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.ConsensusTransaction;
 import com.swirlds.platform.state.State;
 
 /**
@@ -33,6 +33,6 @@ public interface SignatureExpander {
 	 * @param state
 	 * 		the state of this application used to expand signatures
 	 */
-	void expandSignatures(final Transaction[] transactions, final State state);
+	void expandSignatures(final ConsensusTransaction[] transactions, final State state);
 
 }

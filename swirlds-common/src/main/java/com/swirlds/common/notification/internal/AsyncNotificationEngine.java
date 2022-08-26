@@ -22,7 +22,7 @@ import com.swirlds.common.notification.Listener;
 import com.swirlds.common.notification.NoListenersAvailableException;
 import com.swirlds.common.notification.Notification;
 import com.swirlds.common.notification.NotificationResult;
-import com.swirlds.common.threading.futures.WaitingFuture;
+import com.swirlds.common.threading.futures.StandardFuture;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -80,20 +80,20 @@ public class AsyncNotificationEngine extends AbstractNotificationEngine {
 		final DispatchOrder dispatchOrder = dispatchOrder(listenerClass);
 		final DispatchMode dispatchMode = dispatchMode(listenerClass);
 
-		final WaitingFuture<NotificationResult<N>> future = new WaitingFuture<>();
+		final StandardFuture<NotificationResult<N>> future = new StandardFuture<>();
 
 		try {
 			invokeWithDispatcher(dispatchOrder, listenerClass, (dispatcher) -> {
 				assignSequence(notification);
 
 				if (dispatchMode == DispatchMode.ASYNC) {
-					dispatcher.notifyAsync(notification, future::done);
+					dispatcher.notifyAsync(notification, future::complete);
 				} else {
-					dispatcher.notifySync(notification, future::done);
+					dispatcher.notifySync(notification, future::complete);
 				}
 			});
 		} catch (NoListenersAvailableException ex) {
-			future.done(new NotificationResult<>(notification, 0));
+			future.complete(new NotificationResult<>(notification, 0));
 		}
 
 		return future;

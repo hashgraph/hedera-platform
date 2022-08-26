@@ -16,10 +16,11 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.platform.SignedStateFileManager;
+import com.swirlds.platform.state.signed.SignedStateFileManager;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.internal.SubSetting;
+import com.swirlds.platform.state.signed.SignedStateManager;
 
 import java.time.Duration;
 import java.util.function.LongUnaryOperator;
@@ -110,6 +111,11 @@ public class StateSettings extends SubSetting {
 	 */
 	public static int debugHashDepth = 5;
 
+	/**
+	 * If there are problems with state lifecycle then write errors to the log at most once per this period of time.
+	 */
+	public int stateDeletionErrorLogFrequencySeconds = 60;
+
 	public StateSettings() {
 
 	}
@@ -119,6 +125,13 @@ public class StateSettings extends SubSetting {
 		this.signedStateKeep = signedStateKeep;
 		this.signedStateDisk = signedStateDisk;
 		this.roundsNonAncient = roundsNonAncient;
+	}
+
+	/**
+	 * Get the minimum amount of time between when errors about state deletion are logged.
+	 */
+	public int getStateDeletionErrorLogFrequencySeconds() {
+		return stateDeletionErrorLogFrequencySeconds;
 	}
 
 	/**

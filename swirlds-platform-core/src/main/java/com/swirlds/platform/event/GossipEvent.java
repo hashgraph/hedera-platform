@@ -24,11 +24,11 @@ import com.swirlds.common.system.events.BaseEventUnhashedData;
 import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEvent;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEventDescriptor;
-import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * A class used to hold information about an event transferred through gossip
@@ -154,11 +154,9 @@ public class GossipEvent implements EventIntakeTask, BaseEvent, ChatterEvent {
 
 		final GossipEvent that = (GossipEvent) o;
 
-		return new EqualsBuilder()
-				.append(hashedData, that.hashedData)
-				.append(unhashedData, that.unhashedData)
-				.append(descriptor, that.descriptor)
-				.isEquals();
+		return Objects.equals(hashedData, that.hashedData)
+				&& Objects.equals(unhashedData, that.unhashedData)
+				&& Objects.equals(descriptor, that.descriptor);
 	}
 
 	/**

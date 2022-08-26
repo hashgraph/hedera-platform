@@ -19,11 +19,11 @@ package com.swirlds.common.system.events;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * A class used to store consensus data about an event.
@@ -36,6 +36,9 @@ public class ConsensusData implements SelfSerializable {
 	private static final int CLASS_VERSION_ORIGINAL = 1;
 	private static final int CLASS_VERSION_REMOVED_WITNESS_FAMOUS = 2;
 	private static final int CLASS_VERSION = CLASS_VERSION_REMOVED_WITNESS_FAMOUS;
+
+	/** Value used to indicate that consensus has not been reached */
+	public static final long NO_CONSENSUS = -1;
 
 	/** @deprecated generation (which is 1 plus max of parents' generations) */
 	@Deprecated(forRemoval = true) // there is no need to store the events generation inside consensusData
@@ -54,10 +57,10 @@ public class ConsensusData implements SelfSerializable {
 	private boolean lastInRoundReceived = false;
 
 	public ConsensusData() {
-		generation = -1;
-		roundCreated = -1;
-		roundReceived = -1;
-		consensusOrder = -1;
+		generation = NO_CONSENSUS;
+		roundCreated = NO_CONSENSUS;
+		roundReceived = NO_CONSENSUS;
+		consensusOrder = NO_CONSENSUS;
 	}
 
 	@Override
@@ -95,14 +98,12 @@ public class ConsensusData implements SelfSerializable {
 
 		final ConsensusData that = (ConsensusData) o;
 
-		return new EqualsBuilder()
-				.append(generation, that.generation)
-				.append(roundCreated, that.roundCreated)
-				.append(stale, that.stale)
-				.append(roundReceived, that.roundReceived)
-				.append(consensusOrder, that.consensusOrder)
-				.append(consensusTimestamp, that.consensusTimestamp)
-				.isEquals();
+		return (generation == that.generation)
+				&& (roundCreated == that.roundCreated)
+				&& (stale == that.stale)
+				&& (roundReceived == that.roundReceived)
+				&& (consensusOrder == that.consensusOrder)
+				&& Objects.equals(consensusTimestamp, that.consensusTimestamp);
 	}
 
 	@Override
@@ -131,9 +132,9 @@ public class ConsensusData implements SelfSerializable {
 	}
 
 	/**
+	 * @param generation
+	 * 		the generation of the event
 	 * @deprecated
-	 *
-	 * @param generation the generation of the event
 	 */
 	@Deprecated(forRemoval = true) // there is no need to store the events generation inside consensusData
 	public void setGeneration(long generation) {

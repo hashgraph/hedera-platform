@@ -17,7 +17,7 @@
 package com.swirlds.virtualmap.datasource;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.metrics.Metric;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
 
@@ -110,6 +110,16 @@ public interface VirtualDataSource<K extends VirtualKey<? super K>, V extends Vi
 	VirtualLeafRecord<K, V> loadLeafRecord(final long path) throws IOException;
 
 	/**
+	 * Find the path of the given key
+	 * @param key
+	 * 		the key for a path
+	 * @return the path or INVALID_PATH if not stored
+	 * @throws IOException
+	 * 		If there was a problem locating the key
+	 */
+	long findKey(final K key) throws IOException;
+
+	/**
 	 * Load the record for an internal node by path
 	 *
 	 * @param path
@@ -163,7 +173,7 @@ public interface VirtualDataSource<K extends VirtualKey<? super K>, V extends Vi
 	 * @param registry
 	 * 		the object that will manage statistics
 	 */
-	void registerStatistics(Consumer<StatEntry> registry);
+	void registerStatistics(Consumer<Metric> registry);
 
 	/**
 	 * Start background compaction process, if it is not already running.

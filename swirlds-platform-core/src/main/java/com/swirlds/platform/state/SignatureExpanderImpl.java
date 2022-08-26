@@ -18,8 +18,8 @@ package com.swirlds.platform.state;
 
 import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.TransactionSignature;
+import com.swirlds.common.system.transaction.ConsensusTransaction;
 import com.swirlds.common.system.transaction.SwirldTransaction;
-import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.CryptoStatistics;
 import com.swirlds.platform.components.SignatureExpander;
 import org.apache.logging.log4j.LogManager;
@@ -40,7 +40,7 @@ public class SignatureExpanderImpl implements SignatureExpander {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void expandSignatures(final Transaction[] transactions, final State consensusState) {
+	public void expandSignatures(final ConsensusTransaction[] transactions, final State consensusState) {
 		// Expand signatures for the given transactions
 		// Additionally, we should enqueue any signatures for verification
 		final long startTime = System.nanoTime();
@@ -48,7 +48,7 @@ public class SignatureExpanderImpl implements SignatureExpander {
 
 		double expandTime = 0;
 
-		for (final Transaction t : transactions) {
+		for (final ConsensusTransaction t : transactions) {
 			if (t.isSystem()) {
 				continue;
 			}

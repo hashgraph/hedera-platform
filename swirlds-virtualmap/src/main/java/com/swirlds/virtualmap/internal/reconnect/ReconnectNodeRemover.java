@@ -17,6 +17,7 @@
 package com.swirlds.virtualmap.internal.reconnect;
 
 import com.swirlds.common.threading.framework.QueueThread;
+import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.threading.pool.StandardWorkGroup;
 import com.swirlds.virtualmap.VirtualKey;
@@ -153,7 +154,7 @@ public class ReconnectNodeRemover<K extends VirtualKey<? super K>, V extends Vir
 				.setThreadName("vm-node-remover")
 				.setHandler(this::handler)
 				.setExceptionHandler(this::exceptionHandler)
-				.setInterruptable(true)
+				.setStopBehavior(Stoppable.StopBehavior.INTERRUPTABLE)
 				.build();
 
 		workGroup.execute("node-removal", () -> workQueue.buildSeed().inject());

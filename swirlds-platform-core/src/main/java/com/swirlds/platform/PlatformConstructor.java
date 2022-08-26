@@ -16,16 +16,15 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.system.AddressBook;
-import com.swirlds.common.system.NodeId;
-import com.swirlds.common.system.SwirldState;
-import com.swirlds.common.notification.NotificationFactory;
-import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
 import com.swirlds.common.stream.EventStreamManager;
-import com.swirlds.common.threading.pool.CachedPoolParallelExecutor;
-import com.swirlds.common.threading.pool.ParallelExecutor;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.SoftwareVersion;
+import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.threading.pool.CachedPoolParallelExecutor;
+import com.swirlds.common.threading.pool.ParallelExecutor;
 import com.swirlds.platform.components.SignatureExpander;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.crypto.KeysAndCerts;
@@ -36,10 +35,10 @@ import com.swirlds.platform.network.connectivity.SocketFactory;
 import com.swirlds.platform.network.connectivity.TcpFactory;
 import com.swirlds.platform.network.connectivity.TlsFactory;
 import com.swirlds.platform.state.SignatureExpanderImpl;
-import com.swirlds.platform.state.SignedState;
-import com.swirlds.platform.state.SignedStateManager;
+import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateManager;
 import com.swirlds.platform.state.State;
-import com.swirlds.platform.state.StateHasherSigner;
+import com.swirlds.platform.state.signed.StateHasherSigner;
 import com.swirlds.platform.state.SwirldStateManager;
 import com.swirlds.platform.state.SwirldStateManagerDouble;
 import com.swirlds.platform.state.SwirldStateManagerSingle;
@@ -58,6 +57,7 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.time.Instant;
 import java.util.concurrent.BlockingQueue;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
@@ -150,7 +150,7 @@ final class PlatformConstructor {
 	public static SwirldStateManager swirldStateManager(final NodeId selfId,
 			final SystemTransactionHandler systemTransactionHandler, final SwirldStateStats stats,
 			final SettingsProvider settings, final Supplier<Instant> consEstimateSupplier,
-			final State initialState) {
+			final BooleanSupplier inFreezeChecker, final State initialState) {
 
 		if (initialState.getSwirldState() instanceof SwirldState.SwirldState2) {
 			return new SwirldStateManagerDouble(
@@ -158,19 +158,19 @@ final class PlatformConstructor {
 					systemTransactionHandler,
 					stats,
 					settings,
+					inFreezeChecker,
 					signatureExpander(),
 					initialState);
 		} else {
-			final SwirldStateManagerSingle swirldStateManagerSingle = new SwirldStateManagerSingle(
+			return new SwirldStateManagerSingle(
 					selfId,
 					systemTransactionHandler,
 					stats,
 					settings,
 					consEstimateSupplier,
+					inFreezeChecker,
 					signatureExpander(),
 					initialState);
-			NotificationFactory.getEngine().register(ReconnectCompleteListener.class, swirldStateManagerSingle);
-			return swirldStateManagerSingle;
 		}
 	}
 
@@ -216,12 +216,17 @@ final class PlatformConstructor {
 	 * 		the address book of the network
 	 * @param stateHashSignQueue
 	 * 		the queue for signed states that need signatures collected
+	 * @param enterFreezePeriod
+	 * 		a runnable executed when a freeze is entered
+	 * @param softwareVersion
+	 * 		the software version of the application
 	 * @return the newly constructed instance of {@link ConsensusRoundHandler}
 	 */
 	public static ConsensusRoundHandler consensusHandler(final long selfId, final SettingsProvider settingsProvider,
 			final SwirldStateManager swirldStateManager, final ConsensusHandlingStats stats,
 			final EventStreamManager<EventImpl> eventStreamManager, final AddressBook addressBook,
-			final BlockingQueue<SignedState> stateHashSignQueue) {
+			final BlockingQueue<SignedState> stateHashSignQueue, final Runnable enterFreezePeriod,
+			final SoftwareVersion softwareVersion) {
 
 		return new ConsensusRoundHandler(
 				selfId,
@@ -230,7 +235,8 @@ final class PlatformConstructor {
 				stats,
 				eventStreamManager,
 				addressBook,
-				stateHashSignQueue
-		);
+				stateHashSignQueue,
+				enterFreezePeriod,
+				softwareVersion);
 	}
 }

@@ -19,12 +19,12 @@ package com.swirlds.platform;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.exceptions.InvalidNodeIdException;
 import com.swirlds.common.stream.EventStreamManager;
-import com.swirlds.common.system.AddressBook;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.Platform;
 import com.swirlds.common.system.SwirldMain;
 import com.swirlds.common.system.SwirldState;
-import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.system.transaction.internal.SystemTransaction;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.platform.components.CriticalQuorum;
 import com.swirlds.platform.components.EventMapper;
@@ -36,8 +36,9 @@ import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 import com.swirlds.platform.eventhandling.PreConsensusEventHandler;
 import com.swirlds.platform.network.ConnectionTracker;
 import com.swirlds.platform.network.unidirectional.SharedConnectionLocks;
-import com.swirlds.platform.state.SignedState;
-import com.swirlds.platform.state.SignedStateManager;
+import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateFileManager;
+import com.swirlds.platform.state.signed.SignedStateManager;
 import com.swirlds.platform.state.SwirldStateManager;
 import com.swirlds.platform.sync.ShadowGraph;
 import com.swirlds.platform.sync.ShadowGraphSynchronizer;
@@ -68,14 +69,14 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager, C
 	 *
 	 * @return the name of the swirld
 	 */
-	abstract String getSwirldName();
+	public abstract String getSwirldName();
 
 	/**
 	 * Returns the name of the main class this platform is running
 	 *
 	 * @return the main class name
 	 */
-	abstract String getMainClassName();
+	public abstract String getMainClassName();
 
 	/**
 	 * {@inheritDoc}
@@ -103,14 +104,6 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager, C
 	 * @return the SignedStateFileManager
 	 */
 	abstract SignedStateFileManager getSignedStateFileManager();
-
-	/**
-	 * Performs necessary operations before a reconnect such as stopping threads, clearing queues, etc.
-	 *
-	 * @throws InterruptedException
-	 * 		if this thread is interrupted
-	 */
-	abstract void prepareForReconnect() throws InterruptedException;
 
 	/**
 	 * Get the Statistics object that monitors and reports on the network and syncing.
@@ -226,7 +219,7 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager, C
 	 * 		the new system transaction to be included in a future Event
 	 * @return true if successful, false otherwise
 	 */
-	public abstract boolean createSystemTransaction(final Transaction systemTransaction);
+	public abstract boolean createSystemTransaction(final SystemTransaction systemTransaction);
 
 	/**
 	 * Record a statistics value in the Statistics object
@@ -269,7 +262,7 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager, C
 	 * 		if the specified {@code nodeId} is invalid
 	 */
 	public boolean isZeroStakeNode(final long nodeId) {
-		return getAddressBook().isZeroStakeNode(nodeId);
+		return getAddressBook().getAddress(nodeId).isZeroStake();
 	}
 
 	/**
@@ -284,11 +277,6 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager, C
 	 * 		the state to get the data from
 	 */
 	abstract void loadIntoConsensusAndEventMapper(final SignedState signedState);
-
-	/**
-	 * Sets event creation to be frozen, platform's status will be MAINTENANCE after this method is called
-	 */
-	public abstract void enterMaintenance();
 
 	/**
 	 * @return the platform instance of the {@link ShadowGraphSynchronizer}

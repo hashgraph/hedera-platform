@@ -172,4 +172,20 @@ public class RecordAccessorImpl<K extends VirtualKey<? super K>, V extends Virtu
 
 		return rec == VirtualNodeCache.DELETED_LEAF_RECORD ? null : rec;
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public long findKey(final K key) {
+		final VirtualLeafRecord<K, V> rec = cache.lookupLeafByKey(key, false);
+		if (rec != null) {
+			return rec.getPath();
+		}
+		try {
+			return dataSource.findKey(key);
+		} catch (final IOException ex) {
+			throw new UncheckedIOException("Failed to find key in the data source", ex);
+		}
+	}
 }

@@ -17,7 +17,7 @@
 package com.swirlds.platform.sync;
 
 import com.swirlds.platform.SettingsProvider;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 
 import java.io.IOException;
 import java.util.Random;
@@ -71,13 +71,13 @@ public final class SyncThrottle {
 	}
 
 	/**
-	 * Compute and write a number of bytes into a {@link SyncOutputStream} referenced by a {@link SyncConnection}.
+	 * Compute and write a number of bytes into a {@link SyncOutputStream} referenced by a {@link Connection}.
 	 *
 	 * @param conn
-	 * 		the {@link SyncConnection} object to which this throttle will be applied
+	 * 		the {@link Connection} object to which this throttle will be applied
 	 * @return a callable that will return the number of bytes written
 	 */
-	public Callable<Integer> sendThrottleBytes(final SyncConnection conn) {
+	public Callable<Integer> sendThrottleBytes(final Connection conn) {
 		return () -> {
 			final long bytesSent = conn.getDos().getSyncByteCounter().getCount();
 
@@ -98,7 +98,7 @@ public final class SyncThrottle {
 	 * 		the connection to receive throttle7 bytes from
 	 * @return a callable that returns void
 	 */
-	public Callable<Void> receiveThrottleBytes(final SyncConnection conn) {
+	public Callable<Void> receiveThrottleBytes(final Connection conn) {
 		return () -> {
 			int maxToRead = settings.getThrottle7MaxBytes() / Integer.BYTES;
 
@@ -141,16 +141,16 @@ public final class SyncThrottle {
 
 	/**
 	 * Unconditionally write a number of integers based, each with a pseudo -random value, into a {@link
-	 * SyncOutputStream} referenced by a {@link SyncConnection}.
+	 * SyncOutputStream} referenced by a {@link Connection}.
 	 *
 	 * @param conn
-	 * 		the {@link SyncConnection} object to which this throttle will be applied
+	 * 		the {@link Connection} object to which this throttle will be applied
 	 * @param throttleInts
 	 * 		the number of ints to write
 	 * @throws IOException
 	 * 		iff the {@link SyncOutputStream} referenced by {@code conn} throws
 	 */
-	private void writeRandomInts(final SyncConnection conn, final int throttleInts) throws IOException {
+	private void writeRandomInts(final Connection conn, final int throttleInts) throws IOException {
 		conn.getDos().writeInt(throttleInts);
 		for (int i = 0; i < throttleInts; i++) {
 			conn.getDos().writeInt(random.nextInt());

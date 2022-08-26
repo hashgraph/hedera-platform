@@ -21,11 +21,14 @@ import com.swirlds.common.statistics.StatEntry;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
 import com.swirlds.platform.chatter.protocol.output.MessageOutput;
 import com.swirlds.platform.chatter.protocol.output.SendCheck;
+import com.swirlds.platform.chatter.protocol.peer.CommunicationState;
 import com.swirlds.platform.stats.AverageAndMax;
 import com.swirlds.platform.stats.AverageStat;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import static com.swirlds.common.metrics.FloatFormats.FORMAT_8_1;
 
 /**
  * A {@link MessageOutput} that has a separate queue for each peer. When a message is supposed to be sent, it adds it to
@@ -35,16 +38,18 @@ import java.util.List;
  * 		the type of message
  */
 public class QueueOutputMain<T extends SelfSerializable> implements MessageOutput<T> {
+	private final int queueCapacity;
 	private final List<QueueOutputPeer<T>> peerInstances;
 	private final AverageAndMax stats;
 
-	public QueueOutputMain(final String queueName) {
+	public QueueOutputMain(final String queueName, final int queueCapacity) {
+		this.queueCapacity = queueCapacity;
 		peerInstances = new ArrayList<>();
 		stats = new AverageAndMax(
 				"chatter",
-				queueName+"Queue",
-				"size of "+queueName+" queue",
-				"%,8.1f",
+				queueName + "Queue",
+				"size of " + queueName + " queue",
+				FORMAT_8_1,
 				AverageStat.WEIGHT_VOLATILE
 		);
 	}
@@ -62,8 +67,9 @@ public class QueueOutputMain<T extends SelfSerializable> implements MessageOutpu
 	/**
 	 * {@inheritDoc}
 	 */
-	public MessageProvider createPeerInstance(final SendCheck<T> sendCheck) {
-		final QueueOutputPeer<T> queueOutputPeer = new QueueOutputPeer<>(sendCheck);
+	public MessageProvider createPeerInstance(
+			final CommunicationState communicationState, final SendCheck<T> sendCheck) {
+		final QueueOutputPeer<T> queueOutputPeer = new QueueOutputPeer<>(queueCapacity, communicationState, sendCheck);
 		peerInstances.add(queueOutputPeer);
 		return queueOutputPeer;
 	}

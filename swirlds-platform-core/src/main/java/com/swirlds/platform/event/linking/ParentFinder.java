@@ -68,22 +68,18 @@ public class ParentFinder {
 	 * @return a {@link ChildEvent} which may be an orphan
 	 */
 	public ChildEvent findParents(final GossipEvent event, final long minGenerationNonAncient) {
-		final EventImpl selfParent;
-		final EventImpl otherParent;
+		final EventImpl selfParent = getParent(event, true);
+		final EventImpl otherParent = getParent(event, false);
 		final boolean missingSP;
 		final boolean missingOP;
 		if (requiredParent(event, true, minGenerationNonAncient)) {
-			selfParent = getParent(event, true);
 			missingSP = selfParent == null;
 		} else {
-			selfParent = null;
 			missingSP = false;
 		}
 		if (requiredParent(event, false, minGenerationNonAncient)) {
-			otherParent = getParent(event, false);
 			missingOP = otherParent == null;
 		} else {
-			otherParent = null;
 			missingOP = false;
 		}
 		return new ChildEvent(event, missingSP, missingOP, selfParent, otherParent);

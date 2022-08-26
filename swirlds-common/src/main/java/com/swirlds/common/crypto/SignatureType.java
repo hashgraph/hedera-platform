@@ -17,6 +17,10 @@
 package com.swirlds.common.crypto;
 
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+
+import java.security.Security;
+
 /**
  * The type of cryptographic algorithm used to create a signature.
  */
@@ -25,10 +29,16 @@ public enum SignatureType {
 	ED25519(0x0, "NONEwithED25519", "ED25519", "", 64, "x25519"),
 
 	/** An RSA signature as specified by the FIPS 186-4 standards */
-	RSA(0x1, "SHA384withRSA", "RSA", "SunRsaSign", 384),
+	RSA(0x1, "SHA384withRSA", "RSA", getBCProviderName(), 384),
 
 	/** An Elliptical Curve based signature using the secp256k1 curve (which is not FIPS 186-4 compliant) */
-	ECDSA_SECP256K1(0x2,"NONEwithECDSA", "EC", "BC", 64, "secp256k1");
+	ECDSA_SECP256K1(0x2,"NONEwithECDSA", "EC", getBCProviderName(), 64, "secp256k1");
+
+	/* Ensure BouncyCastle provider is added before the name is used */
+	private static String getBCProviderName() {
+		Security.addProvider(new BouncyCastleProvider());
+		return BouncyCastleProvider.PROVIDER_NAME;
+	}
 
 	/**
 	 * The unique identifier used for serialization and deserialization purposes.

@@ -20,8 +20,11 @@ import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.SwirldDualState;
 import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.transaction.ConsensusTransaction;
 import com.swirlds.common.system.transaction.SwirldTransaction;
 import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.internal.SystemTransaction;
+import com.swirlds.platform.ConsensusRound;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.stats.SwirldStateStats;
@@ -30,15 +33,18 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Iterator;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.function.IntSupplier;
+import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 
 import static com.swirlds.common.utility.Units.NANOSECONDS_TO_SECONDS;
 import static com.swirlds.logging.LogMarker.EVENT_CONTENT;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT;
+import static com.swirlds.platform.EventImpl.MIN_TRANS_TIMESTAMP_INCR_NANOS;
 import static com.swirlds.platform.event.EventUtils.toShortString;
 
 /**
@@ -69,31 +75,6 @@ public class TransactionHandler {
 	}
 
 	/**
-	 * the consensus timestamp of a transaction is guaranteed to be at least this many nanoseconds
-	 * later than that of the transaction immediately before it in consensus order,
-	 * and to be a multiple of this (must be positive and a multiple of 10)
-	 */
-	public static final long MIN_TRANS_TIMESTAMP_INCR_NANOS = 1_000;
-
-	/**
-	 * Handles all the transactions in a given event. Equivalent to {@link #handleEventTransactions(EventImpl, Instant,
-	 * boolean, State, Runnable)} with a no-op runnable.
-	 *
-	 * @param event
-	 * 		the event to handle
-	 * @param consTime
-	 * 		the event's actual or estimated consensus time
-	 * @param isConsensus
-	 * 		if this event has reached consensus
-	 * @param state
-	 * 		the state to apply transaction to
-	 */
-	public void handleEventTransactions(final EventImpl event, final Instant consTime, final boolean isConsensus,
-			final State state) {
-		handleEventTransactions(event, consTime, isConsensus, state, null);
-	}
-
-	/**
 	 * Handles all the transactions in a given event.
 	 *
 	 * @param event
@@ -104,14 +85,20 @@ public class TransactionHandler {
 	 * 		if this event has reached consensus
 	 * @param state
 	 * 		the state to apply transaction to
+	 * @param handleSystem
+	 * 		true if system transactions should be handled
 	 * @param postHandle
-	 * 		a runnable to execute after handling each transaction
+	 * 		a consumer that accepts an event creator id. Executed after handling each transaction. Not executed for
+	 * 		system transactions unless {@code handleSystem} is true.
 	 */
 	public void handleEventTransactions(final EventImpl event, final Instant consTime, final boolean isConsensus,
-			final State state, final Runnable postHandle) {
+			final State state, final boolean handleSystem, final LongConsumer postHandle) {
+
 		if (event.isEmpty()) {
 			return;
 		}
+
+		final boolean runPostHandle = postHandle != null;
 
 		// the creator of the event containing this transaction
 		final long creator = event.getCreatorId();
@@ -119,23 +106,70 @@ public class TransactionHandler {
 		// The claimed creation time of the event holding this transaction
 		final Instant timeCreated = event.getTimeCreated();
 
-		final boolean runPostHandle = postHandle != null;
+		final ConsensusTransaction[] transactions = event.getTransactions();
 
-		final Transaction[] transactions = event.getTransactions();
 		for (int i = 0; i < transactions.length; i++) {
-			final Instant transConsTime = consTime.plusNanos(i * MIN_TRANS_TIMESTAMP_INCR_NANOS);
-
-			handleTransaction(event, isConsensus, creator, timeCreated, transConsTime, transactions[i], state);
-
-			if (runPostHandle) {
-				postHandle.run();
+			if (transactions[i].isSystem()) {
+				continue;
 			}
 
+			final Instant transConsTime = consTime.plusNanos(i * MIN_TRANS_TIMESTAMP_INCR_NANOS);
+			handleTransaction(
+					event,
+					isConsensus,
+					creator,
+					timeCreated,
+					transConsTime,
+					transactions[i],
+					state);
+
+			if (runPostHandle) {
+				postHandle.accept(creator);
+			}
+		}
+
+		if (handleSystem) {
+			for (final Iterator<SystemTransaction> it = event.systemTransactionIterator(); it.hasNext(); ) {
+				final SystemTransaction sysTrans = it.next();
+				systemTransactionHandler.handleSystemTransaction(
+						creator,
+						isConsensus,
+						timeCreated,
+						sysTrans);
+
+				if (runPostHandle) {
+					postHandle.accept(creator);
+				}
+			}
 		}
 	}
 
 	/**
-	 * <p>Handles a single transaction. {@code stateInfo} must not be modified while this method is executing.</p>
+	 * Handles all the transactions in a given round.
+	 *
+	 * @param round
+	 * 		the round to handle
+	 * @param state
+	 * 		the state to apply transactions to
+	 * @param postHandle
+	 * 		a runnable to execute after handling each transaction
+	 */
+	public void handleConsensusRound(final ConsensusRound round, final State state, final LongConsumer postHandle) {
+		for (final EventImpl event : round.getConsensusEvents()) {
+			handleEventTransactions(
+					event,
+					event.getConsensusTimestamp(),
+					true,
+					state,
+					true,
+					postHandle
+			);
+		}
+	}
+
+	/**
+	 * <p>Handles a single application transaction. {@code stateInfo} must not be modified while this method is
+	 * executing.</p>
 	 *
 	 * @param event
 	 * 		the event the transaction is in
@@ -149,61 +183,51 @@ public class TransactionHandler {
 	 * 		the transaction's actual or estimated consensus time
 	 * @param trans
 	 * 		the transaction
+	 * @param state
+	 * 		the state to invoke {@link SwirldState#handleTransaction(long, boolean, Instant, Instant, SwirldTransaction,
+	 *        SwirldDualState)} on
 	 */
 	public void handleTransaction(final EventImpl event, final boolean isConsensus, final long creator,
 			final Instant timeCreated, final Instant transConsTime, final Transaction trans,
 			final State state) {
 
-		// system transactions are handled pre-consensus in SystemTransactionHandlerImpl, so don't handle them here
-		// unless they have reached consensus
-		if (trans.isSystem() && !isConsensus) {
-			return;
-		}
-
 		// guard against bad apps crashing the browser
 		try {
-			if (trans.isSystem()) {
-				systemTransactionHandler.handleSystemTransaction(
-						creator,
-						isConsensus,
-						timeCreated,
-						transConsTime,
-						trans);
-			} else {
-				final SwirldTransaction swirldTransaction = (SwirldTransaction) trans;
 
-				if (isConsensus) {
-					validateSignatures(swirldTransaction);
-				}
+			final SwirldTransaction swirldTransaction = (SwirldTransaction) trans;
 
-				final long startTime = System.nanoTime();
+			if (isConsensus) {
+				validateSignatures(swirldTransaction);
+			}
 
-				state.getSwirldState().handleTransaction(
-						creator,
-						isConsensus,
-						timeCreated,
-						transConsTime,
-						swirldTransaction,
-						state.getSwirldDualState());
+			final long startTime = System.nanoTime();
 
-				// clear sigs to free up memory, since we don't need them anymore
-				if (isConsensus) {
-					swirldTransaction.clearSignatures();
-				}
+			state.getSwirldState().handleTransaction(
+					creator,
+					isConsensus,
+					timeCreated,
+					transConsTime,
+					swirldTransaction,
+					state.getSwirldDualState());
+
+			// clear sigs to free up memory, since we don't need them anymore
+			if (isConsensus) {
+				swirldTransaction.clearSignatures();
+			}
 
 				/* We only add these stats for transactions that have reached consensus. Use isConsensus to check the
 				consensus status because these stats should only be recorded for events being handled as consensus
 				events. Events in the pre-consensus queue could reach consensus before being handled pre-consensus. */
-				if (event != null && isConsensus) {
-					stats.consensusTransHandleTime((System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
-					stats.consensusTransHandled();
-					// events being played back from the stream files during recovery do not have reachedConsTimestamp
-					// set, since reachedConsTimestamp is not serialized and saved to the stream file.
-					if (event.getReachedConsTimestamp() != null) {
-						stats.consensusToHandleTime(
-								event.getReachedConsTimestamp().until(Instant.now(),
-										ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
-					}
+			if (event != null && isConsensus) {
+				stats.consensusTransHandleTime((System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
+				stats.consensusTransHandled();
+
+				// events being played back from stream file do not have reachedConsTimestamp set,
+				// since reachedConsTimestamp is not serialized and saved to stream file
+				if (event.getReachedConsTimestamp() != null) {
+					stats.consensusToHandleTime(
+							event.getReachedConsTimestamp().until(Instant.now(),
+									ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 				}
 			}
 		} catch (final InterruptedException ex) {
@@ -244,12 +268,14 @@ public class TransactionHandler {
 	 * 		a supplier for the number of transactions the {@code transSupplier} can provide
 	 * @param transSupplier
 	 * 		the supplier of transactions to apply
+	 * @param handleSystem
+	 * 		true if system transactions should be handled
 	 * @param state
 	 * 		the state to apply the transactions to
 	 */
 	public void handleTransactions(final IntSupplier numTransSupplier,
-			final Supplier<Transaction> transSupplier, final Supplier<Instant> consEstimateSupplier,
-			final State state) {
+			final Supplier<ConsensusTransaction> transSupplier, final Supplier<Instant> consEstimateSupplier,
+			final boolean handleSystem, final State state) {
 
 		final int numTrans = numTransSupplier.getAsInt();
 
@@ -263,13 +289,32 @@ public class TransactionHandler {
 
 		for (int i = 0; i < numTrans; i++) {
 			// This call must acquire a lock
-			final Transaction trans = transSupplier.get();
+			final ConsensusTransaction trans = transSupplier.get();
 			if (trans == null) {
 				// this shouldn't be necessary, but it's here just for safety
 				break;
 			}
+
 			final Instant transConsTime = baseTime.plusNanos(i * MIN_TRANS_TIMESTAMP_INCR_NANOS);
-			handleTransaction(null, false, selfId.getId(), Instant.now(), transConsTime, trans, state);
+
+			if (trans.isSystem()) {
+				if (handleSystem) {
+					final SystemTransaction sysTrans = (SystemTransaction) trans;
+					systemTransactionHandler.handleSystemTransaction(
+							selfId.getId(),
+							false,
+							Instant.now(),
+							sysTrans);
+				}
+			} else {
+				handleTransaction(null,
+						false,
+						selfId.getId(),
+						Instant.now(),
+						transConsTime,
+						trans,
+						state);
+			}
 		}
 	}
 
@@ -281,9 +326,8 @@ public class TransactionHandler {
 	 * @throws InterruptedException
 	 * @throws ExecutionException
 	 */
-	private static void validateSignatures(final SwirldTransaction swirldTransaction) throws InterruptedException,
+	private void validateSignatures(final SwirldTransaction swirldTransaction) throws InterruptedException,
 			ExecutionException {
-
 		// Validate any signatures present and wait if necessary
 		for (final TransactionSignature sig : swirldTransaction.getSignatures()) {
 			final Future<Void> future = sig.waitForFuture();

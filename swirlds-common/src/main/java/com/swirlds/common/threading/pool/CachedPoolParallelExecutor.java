@@ -78,7 +78,7 @@ public class CachedPoolParallelExecutor implements ParallelExecutor {
 		T result = null;
 		try {
 			result = foregroundTask.call();
-		} catch (Exception e) {
+		} catch (final Throwable e) {  // NOSONAR: Any exceptions & errors that occur needs to trigger onThrow.
 			toThrow = new ParallelExecutionException(e);
 			onThrow.run();
 		}

@@ -22,6 +22,8 @@ import com.swirlds.platform.chatter.protocol.PeerMessageHandler;
 /**
  * All instances related to a single chatter peer
  *
+ * @param communicationState
+ * 		the state of chatter communication with the peer
  * @param inputHandler
  * 		handles input messages
  * @param outputAggregator
@@ -30,6 +32,7 @@ import com.swirlds.platform.chatter.protocol.PeerMessageHandler;
  * 		the state of this chatter connection
  */
 public record PeerInstance(
+		CommunicationState communicationState,
 		PeerGossipState state,
 		MessageProvider outputAggregator,
 		PeerMessageHandler inputHandler) {

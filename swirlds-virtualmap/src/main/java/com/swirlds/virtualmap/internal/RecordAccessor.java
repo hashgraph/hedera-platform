@@ -101,6 +101,14 @@ public interface RecordAccessor<K extends VirtualKey<? super K>, V extends Virtu
 	VirtualLeafRecord<K, V> findLeafRecord(final long path, final boolean copy);
 
 	/**
+	 * Finds the path of the given key.
+	 * @param key
+	 * 		The key. Must not be null.
+	 * @return The path or INVALID_PATH if the key is not found.
+	 */
+	long findKey(final K key);
+
+	/**
 	 * Gets the data source backed by this {@link RecordAccessor}
 	 *
 	 * @return

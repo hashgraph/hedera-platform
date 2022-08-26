@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.network.unidirectional;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.NetworkProtocolException;
 
 import java.io.IOException;
@@ -37,7 +37,7 @@ public class MultiProtocolResponder implements NetworkProtocolResponder {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void protocolInitiated(final byte initialByte, final SyncConnection connection)
+	public void protocolInitiated(final byte initialByte, final Connection connection)
 			throws IOException, NetworkProtocolException, InterruptedException {
 		for (final ProtocolMapping mapping : mappings) {
 			if (mapping.initialByte() == initialByte) {

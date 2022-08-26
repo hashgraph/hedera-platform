@@ -19,7 +19,6 @@ module com.swirlds.fcqueue {
 	exports com.swirlds.fcqueue.internal to com.swirlds.fcqueue.test;
 
 	requires com.swirlds.common;
-	requires com.swirlds.platform;
 	requires com.swirlds.logging;
 
 	requires org.apache.logging.log4j;

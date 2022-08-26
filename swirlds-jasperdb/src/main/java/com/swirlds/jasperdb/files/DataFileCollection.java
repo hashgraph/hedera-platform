@@ -45,7 +45,7 @@ import java.util.ListIterator;
 import java.util.LongSummaryStatistics;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -299,7 +299,7 @@ public class DataFileCollection<D> implements Snapshotable {
 	 * @param filesToMerge
 	 * 		list of files to merge
 	 * @param mergingPaused
-	 * 		AtomicBoolean to monitor if we should pause merging
+	 * 		Semaphore to monitor if we should pause merging
 	 * @return list of files created during the merge
 	 * @throws IOException If there was a problem merging
 	 * @throws InterruptedException If the merge thread was interrupted
@@ -308,7 +308,7 @@ public class DataFileCollection<D> implements Snapshotable {
 			final LongFunction<Long> index,
 			final Consumer<ThreeLongsList> locationChangeHandler,
 			final List<DataFileReader<D>> filesToMerge,
-			final AtomicBoolean mergingPaused
+			final Semaphore mergingPaused
 	) throws IOException, InterruptedException {
 		// Check whether we even need to do anything. Maybe there is only a single file or
 		// *no* files that need to be merged.
@@ -932,7 +932,11 @@ public class DataFileCollection<D> implements Snapshotable {
 		// create indexed file list
 		indexedFileList.set(indexedObjectListConstructor.apply(List.of(dataFileReaders)));
 		// work out what the next index would be, the highest current index plus one
-		nextFileIndex.set(dataFileReaders[dataFileReaders.length - 1].getMetadata().getIndex() + 1);
+		int maxIndex = -1;
+		for (final DataFileReader<D> reader : dataFileReaders) {
+			maxIndex = Math.max(maxIndex, reader.getIndex());
+		}
+		nextFileIndex.set(maxIndex + 1);
 		// now call indexEntryCallback
 		if (loadedDataCallback != null) {
 			// now iterate over every file and every key

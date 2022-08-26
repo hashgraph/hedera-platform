@@ -16,7 +16,8 @@
 package com.swirlds.platform.sync;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.system.events.Event;
+import com.swirlds.common.system.events.PlatformEvent;
+import com.swirlds.common.utility.Clearable;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.stats.SyncStats;
@@ -55,7 +56,7 @@ import static com.swirlds.logging.LogMarker.SYNC_INFO;
  *
  * <p>The shadow graph is thread safe.</p>
  */
-public class ShadowGraph {
+public class ShadowGraph implements Clearable {
 
 	private static final Logger LOG = LogManager.getLogger();
 
@@ -410,7 +411,7 @@ public class ShadowGraph {
 	 * 		The event.
 	 * @return the shadow event that references an event, or null is {@code e} is null
 	 */
-	public synchronized ShadowEvent shadow(final Event e) {
+	public synchronized ShadowEvent shadow(final PlatformEvent e) {
 		if (e == null) {
 			return null;
 		}
@@ -561,7 +562,7 @@ public class ShadowGraph {
 	 * 		The event.
 	 * @return true iff the given event is expired
 	 */
-	private boolean expired(final Event event) {
+	private boolean expired(final PlatformEvent event) {
 		return event.getGeneration() < oldestGeneration;
 	}
 

@@ -16,12 +16,12 @@
 
 package com.swirlds.platform.network.connectivity;
 
-import com.swirlds.common.system.Address;
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.Address;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.platform.SettingsProvider;
-import com.swirlds.platform.SocketSyncConnection;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.SocketConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.ByteConstants;
 import com.swirlds.platform.network.ConnectionTracker;
 import com.swirlds.platform.network.NetworkUtils;
@@ -75,7 +75,7 @@ public class OutboundConnectionCreator {
 	 * 		which member to connect to
 	 * @return the new connection, or a connection that is not connected if it couldn't connect on the first try
 	 */
-	public SyncConnection createConnection(final NodeId otherId) {
+	public Connection createConnection(final NodeId otherId) {
 		final Address other = addressBook.getAddress(otherId.getId());
 		final Address ownAddress = addressBook.getAddress(selfId.getId());
 		final int port = other.getConnectPortIpv4(ownAddress);
@@ -106,7 +106,7 @@ public class OutboundConnectionCreator {
 					"`connect` : finished, {} connected to {}",
 					selfId, otherId);
 
-			return SocketSyncConnection.create(
+			return SocketConnection.create(
 					selfId,
 					otherId,
 					connectionTracker,

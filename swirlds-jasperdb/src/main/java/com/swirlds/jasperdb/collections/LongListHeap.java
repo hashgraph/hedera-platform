@@ -16,6 +16,8 @@
 
 package com.swirlds.jasperdb.collections;
 
+import com.swirlds.jasperdb.utilities.FileUtils;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -92,7 +94,7 @@ public final class LongListHeap extends LongList implements Closeable {
 		for (int i = 0; i < numOfArrays; i++) {
 			final AtomicLongArray atomicLongArray = new AtomicLongArray(numLongsPerChunk);
 			buffer.clear();
-			fileChannel.read(buffer);
+			FileUtils.completelyRead(fileChannel, buffer);
 			buffer.flip();
 			int index = 0;
 			while (buffer.remaining() > 0) {
@@ -162,7 +164,7 @@ public final class LongListHeap extends LongList implements Closeable {
 			// if buffer is full then write
 			if (!tempLongBuffer.hasRemaining()) {
 				tempBuffer.clear();
-				fc.write(tempBuffer);
+				FileUtils.completelyWrite(fc, tempBuffer);
 				tempLongBuffer.clear();
 			}
 			// add value to buffer
@@ -172,7 +174,7 @@ public final class LongListHeap extends LongList implements Closeable {
 		if (tempLongBuffer.position() > 0) {
 			tempBuffer.position(0);
 			tempBuffer.limit(tempLongBuffer.position() * Long.BYTES);
-			fc.write(tempBuffer);
+			FileUtils.completelyWrite(fc, tempBuffer);
 		}
 	}
 

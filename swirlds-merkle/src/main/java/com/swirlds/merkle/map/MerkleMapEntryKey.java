@@ -20,7 +20,8 @@ import com.swirlds.common.FastCopyable;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.merkle.utility.AbstractMerkleLeaf;
+import com.swirlds.common.merkle.MerkleLeaf;
+import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
 import com.swirlds.common.merkle.utility.Keyed;
 
 import java.io.IOException;
@@ -33,8 +34,8 @@ import java.util.Objects;
  * 		must be effectively immutable, should not implement {@link com.swirlds.common.merkle.MerkleNode}
  */
 public class MerkleMapEntryKey<K extends SelfSerializable & FastCopyable>
-		extends AbstractMerkleLeaf
-		implements Keyed<K> {
+		extends PartialMerkleLeaf
+		implements Keyed<K>, MerkleLeaf {
 
 	private static final long CLASS_ID = 0x16e1d5bf26e6fcf8L;
 
@@ -134,7 +135,7 @@ public class MerkleMapEntryKey<K extends SelfSerializable & FastCopyable>
 	 * {@inheritDoc}
 	 */
 	@Override
-	protected void onRelease() {
+	protected void destroyNode() {
 		if (key != null) {
 			key.release();
 		}

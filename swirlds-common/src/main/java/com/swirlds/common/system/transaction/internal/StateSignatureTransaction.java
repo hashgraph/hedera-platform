@@ -19,7 +19,6 @@ package com.swirlds.common.system.transaction.internal;
 import com.swirlds.common.io.streams.AugmentedDataOutputStream;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.common.system.transaction.TransactionType;
 
 import java.io.IOException;
@@ -28,13 +27,13 @@ import java.util.Objects;
 
 import static com.swirlds.common.io.streams.SerializableStreamConstants.BOOLEAN_BYTES;
 import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG;
-import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG_FREEZE;
 
 /**
  * Every round, the signature of a signed state is put in this transaction
  * and gossiped to other nodes
  */
-public class StateSignatureTransaction implements Transaction {
+public final class StateSignatureTransaction extends SystemTransaction {
+
 	/** class identifier for the purposes of serialization */
 	private static final long SIG_CLASS_ID = 0xaf7024c653caabf4L;
 	/** current class version */
@@ -42,7 +41,13 @@ public class StateSignatureTransaction implements Transaction {
 	/** maximum number of bytes allowed when deserializing signature */
 	public static final int MAX_SIGNATURE_BYTES = 1024;
 
-	/** whether this is freeze transaction or just normal signature transaction */
+	/**
+	 * whether this is freeze transaction or just normal signature transaction
+	 *
+	 * @deprecated do not use this variable. It deprecated because there is no need to track state signatures that are
+	 * 		for a freeze state separately from regular state signatures. It will be removed in a future release.
+	 */
+	@Deprecated
 	private boolean isFreeze;
 
 	/** signature of signed state */
@@ -60,26 +65,14 @@ public class StateSignatureTransaction implements Transaction {
 	/**
 	 * Create a state signature transaction
 	 *
-	 * @param isFreeze
-	 * 		Whether this a freeze transaction or normal state signature transaction
 	 * @param lastRoundReceived
 	 * 		The round number of the signed state that this transaction belongs to
 	 * @param stateSignature
 	 * 		The byte array of signature of the signed state
 	 */
-	public StateSignatureTransaction(final boolean isFreeze,
-			final long lastRoundReceived,
-			final byte[] stateSignature) {
-		this.isFreeze = isFreeze;
+	public StateSignatureTransaction(final long lastRoundReceived, final byte[] stateSignature) {
 		this.stateSignature = stateSignature;
 		this.lastRoundReceived = lastRoundReceived;
-	}
-
-	/**
-	 * @return whether this a freeze transaction or normal state signature transaction
-	 */
-	public boolean isFreeze() {
-		return isFreeze;
 	}
 
 	/**
@@ -109,7 +102,7 @@ public class StateSignatureTransaction implements Transaction {
 	 */
 	@Override
 	public TransactionType getTransactionType() {
-		return isFreeze ? SYS_TRANS_STATE_SIG_FREEZE : SYS_TRANS_STATE_SIG;
+		return SYS_TRANS_STATE_SIG;
 	}
 
 	/**

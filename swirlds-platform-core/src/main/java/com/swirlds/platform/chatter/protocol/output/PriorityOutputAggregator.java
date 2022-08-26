@@ -49,4 +49,11 @@ public class PriorityOutputAggregator implements MessageProvider {
 		}
 		return null;
 	}
+
+	@Override
+	public void clear() {
+		for (final MessageProvider provider : providers) {
+			provider.clear();
+		}
+	}
 }

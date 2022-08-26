@@ -15,6 +15,7 @@
  */
 package com.swirlds.platform;
 
+import com.swirlds.common.utility.PlatformVersion;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -291,7 +292,7 @@ class SwirldMenu extends JPanel {
 				case "About":
 					int choice = JOptionPane.showOptionDialog(null,// parentCompoinent
 							(platform == null ? "" : platform.getAbout())
-									+ "\n\n" + Settings.about,// message
+									+ "\n\n" + PlatformVersion.locateOrDefault().license(),// message
 							"About this app", // title
 							JOptionPane.DEFAULT_OPTION,// optionType
 							JOptionPane.PLAIN_MESSAGE /* INFORMATION_MESSAGE */,// messageType

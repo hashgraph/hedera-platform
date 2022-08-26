@@ -20,7 +20,7 @@ import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 import com.swirlds.common.threading.locks.LockedResource;
 import com.swirlds.platform.SettingsProvider;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.ByteConstants;
 import com.swirlds.platform.network.ConnectionManager;
 import com.swirlds.platform.network.NetworkProtocolException;
@@ -54,7 +54,7 @@ public class HeartbeatSender implements InterruptableRunnable {
 	 * if connected, send a heartbeat, wait for a response, then sleep
 	 */
 	public void run() throws InterruptedException {
-		SyncConnection conn = null;
+		Connection conn = null;
 		try (LockedResource<ConnectionManager> lc = sharedConnectionLocks.lockConnectIfNeeded(otherId)) {
 			conn = lc.getResource().waitForConnection();
 			if (conn != null && conn.connected()) {
@@ -74,7 +74,7 @@ public class HeartbeatSender implements InterruptableRunnable {
 	 * @param conn
 	 * 		the connection (which must already be connected)
 	 */
-	void doHeartbeat(final SyncConnection conn) throws IOException, NetworkProtocolException {
+	void doHeartbeat(final Connection conn) throws IOException, NetworkProtocolException {
 		final long startTime = System.nanoTime();
 		conn.getDos().write(UnidirectionalProtocols.HEARTBEAT.getInitialByte());
 		conn.getDos().flush();

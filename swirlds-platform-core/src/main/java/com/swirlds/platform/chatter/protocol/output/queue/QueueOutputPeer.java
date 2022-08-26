@@ -17,12 +17,11 @@
 package com.swirlds.platform.chatter.protocol.output.queue;
 
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.platform.chatter.protocol.ChatterConnectionState;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
 import com.swirlds.platform.chatter.protocol.output.SendCheck;
+import com.swirlds.platform.chatter.protocol.peer.CommunicationState;
 
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Buffers messages in a queue to be sent to one particular peer
@@ -31,12 +30,16 @@ import java.util.concurrent.atomic.AtomicReference;
  * 		the type of message sent
  */
 public class QueueOutputPeer<T extends SelfSerializable> implements MessageProvider {
-	private static final int QUEUE_SIZE_DEFAULT = 100_000;
-	private final ArrayBlockingQueue<T> queue = new ArrayBlockingQueue<>(QUEUE_SIZE_DEFAULT);
+	private final ArrayBlockingQueue<T> queue;
+	private final CommunicationState communicationState;
 	private final SendCheck<T> sendCheck;
-	private final AtomicReference<ChatterConnectionState> state = new AtomicReference<>(ChatterConnectionState.ACTIVE);
 
-	public QueueOutputPeer(final SendCheck<T> sendCheck) {
+	public QueueOutputPeer(
+			final int queueCapacity,
+			final CommunicationState communicationState,
+			final SendCheck<T> sendCheck) {
+		this.queue = new ArrayBlockingQueue<>(queueCapacity);
+		this.communicationState = communicationState;
 		this.sendCheck = sendCheck;
 	}
 
@@ -45,15 +48,13 @@ public class QueueOutputPeer<T extends SelfSerializable> implements MessageProvi
 	 *
 	 * @param message
 	 * 		the message to add
-	 * @throws IllegalStateException
-	 * 		if the queue is full
 	 */
 	public void add(final T message) {
-		if (state.get() != ChatterConnectionState.ACTIVE) {
+		if (!communicationState.shouldChatter()) {
 			return;
 		}
 		if (!queue.offer(message)) {
-			state.set(ChatterConnectionState.OUT_OF_SYNC);
+			communicationState.queueOverFlow();
 			queue.clear();
 		}
 	}
@@ -82,7 +83,12 @@ public class QueueOutputPeer<T extends SelfSerializable> implements MessageProvi
 	/**
 	 * @return the size of the queue held by this instance
 	 */
-	public int getQueueSize(){
+	public int getQueueSize() {
 		return queue.size();
+	}
+
+	@Override
+	public void clear() {
+		queue.clear();
 	}
 }

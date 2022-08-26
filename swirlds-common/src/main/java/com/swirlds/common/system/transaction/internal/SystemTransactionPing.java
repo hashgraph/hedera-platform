@@ -19,7 +19,6 @@ package com.swirlds.common.system.transaction.internal;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.common.system.transaction.TransactionType;
 
 import java.io.IOException;
@@ -29,7 +28,7 @@ import static com.swirlds.common.io.streams.AugmentedDataOutputStream.getArraySe
 import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_PING_MICROSECONDS;
 
 /** A system transaction giving all avgPingMilliseconds stats (sent as ping time in microseconds) */
-public class SystemTransactionPing implements Transaction {
+public final class SystemTransactionPing extends SystemTransaction {
 	/** class identifier for the purposes of serialization */
 	private static final long PING_CLASS_ID = 0xe98d3e2c500a6647L;
 	/** current class version */

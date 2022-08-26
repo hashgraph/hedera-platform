@@ -1,0 +1,236 @@
+/*
+ * Copyright 2016-2022 Hedera Hashgraph, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.swirlds.common.test.transactions;
+
+import com.swirlds.common.constructable.ConstructableRegistry;
+import com.swirlds.common.constructable.ConstructableRegistryException;
+import com.swirlds.common.internal.SettingsCommon;
+import com.swirlds.common.io.SerializableWithKnownLength;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
+import com.swirlds.common.system.transaction.internal.SystemTransactionBitsPerSecond;
+import com.swirlds.common.system.transaction.internal.SystemTransactionPing;
+import com.swirlds.common.test.crypto.SignaturePool;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.Random;
+
+import static com.swirlds.common.io.streams.SerializableDataOutputStream.getInstanceSerializedLength;
+import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_BITS_PER_SECOND;
+import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_PING_MICROSECONDS;
+import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG;
+import static com.swirlds.common.test.io.SerializationUtils.serializeDeserialize;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class TransactionSerializationTest {
+
+	private static final int MAX_TRANSACTIONS = 100;
+	private static final int MAX_TRANSACTION_BYTES = 1000;
+	private static final int MAX_ADDRESSBOOK_SIZE = 2048;
+
+	Random random = new Random();
+
+	@BeforeAll
+	static void setUp() throws ConstructableRegistryException {
+		SettingsCommon.maxTransactionCountPerEvent = MAX_TRANSACTIONS;
+		SettingsCommon.transactionMaxBytes = MAX_TRANSACTION_BYTES;
+		SettingsCommon.maxAddressSizeAllowed = MAX_ADDRESSBOOK_SIZE;
+		ConstructableRegistry.registerConstructables("com.swirlds.common.system.transaction");
+		ConstructableRegistry.registerConstructables("com.swirlds.common");
+
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 0, 1, 2, 10, 64 })
+	void SignatureSerializeDeserializeTest(int sigSize) throws IOException {
+		byte[] nbyte = null;
+		if (sigSize > 0) {
+			nbyte = new byte[sigSize];
+			random.nextBytes(nbyte);
+		}
+		final StateSignatureTransaction systemTransactionSignature = new StateSignatureTransaction(
+				random.nextLong(), nbyte);
+		final StateSignatureTransaction deserialized = serializeDeserialize(systemTransactionSignature);
+
+		assertArrayEquals(systemTransactionSignature.getStateSignature(), deserialized.getStateSignature());
+		assertEquals(systemTransactionSignature.isSystem(), deserialized.isSystem());
+		assertEquals(systemTransactionSignature.getVersion(), deserialized.getVersion());
+		assertEquals(systemTransactionSignature.getClassId(), deserialized.getClassId());
+		assertEquals(systemTransactionSignature.getMinimumSupportedVersion(),
+				deserialized.getMinimumSupportedVersion());
+
+
+		assertEquals(systemTransactionSignature, deserialized);
+		assertEquals(systemTransactionSignature.getTransactionType(), SYS_TRANS_STATE_SIG);
+		assertEquals(deserialized.getTransactionType(), SYS_TRANS_STATE_SIG);
+
+		TestExpectedSerializationLength(systemTransactionSignature, true);
+		TestExpectedSerializationLength(deserialized, true);
+
+		TestExpectedSerializationLength(systemTransactionSignature, false);
+		TestExpectedSerializationLength(deserialized, false);
+	}
+
+
+	@ParameterizedTest
+	@ValueSource(ints = { 0, 1, 2, 10, 64, 100 })
+	void BitsSecondSerializeDeserializeTest(int nodeAmount) throws IOException {
+		long[] numbers = null;
+		if (nodeAmount > 0) {
+			numbers = new long[nodeAmount];
+			for (int i = 0; i < numbers.length; i++) {
+				numbers[i] = random.nextLong();
+			}
+		}
+
+		SystemTransactionBitsPerSecond systemTransactionBitsPerSecond = new SystemTransactionBitsPerSecond(numbers);
+		SystemTransactionBitsPerSecond deserialized = serializeDeserialize(systemTransactionBitsPerSecond);
+
+		assertArrayEquals(systemTransactionBitsPerSecond.getAvgBitsPerSecSent(), deserialized.getAvgBitsPerSecSent());
+		assertEquals(systemTransactionBitsPerSecond.isSystem(), deserialized.isSystem());
+		assertEquals(systemTransactionBitsPerSecond.getVersion(), deserialized.getVersion());
+		assertEquals(systemTransactionBitsPerSecond.getClassId(), deserialized.getClassId());
+		assertEquals(systemTransactionBitsPerSecond.getMinimumSupportedVersion(),
+				deserialized.getMinimumSupportedVersion());
+
+		assertEquals(systemTransactionBitsPerSecond, deserialized);
+		assertEquals(systemTransactionBitsPerSecond.getTransactionType(), SYS_TRANS_BITS_PER_SECOND);
+		assertEquals(deserialized.getTransactionType(), SYS_TRANS_BITS_PER_SECOND);
+
+		TestExpectedSerializationLength(systemTransactionBitsPerSecond, true);
+		TestExpectedSerializationLength(deserialized, true);
+
+		TestExpectedSerializationLength(systemTransactionBitsPerSecond, false);
+		TestExpectedSerializationLength(deserialized, false);
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 0, 1, 2, 10, 64, 100 })
+	void PingSerializeDeserializeTest(int nodeAmount) throws IOException {
+		int[] numbers = null;
+		if (nodeAmount > 0) {
+			numbers = new int[nodeAmount];
+			for (int i = 0; i < numbers.length; i++) {
+				numbers[i] = random.nextInt();
+			}
+		}
+		SystemTransactionPing systemTransactionPing = new SystemTransactionPing(numbers);
+		SystemTransactionPing deserialized = serializeDeserialize(systemTransactionPing);
+
+		assertArrayEquals(systemTransactionPing.getAvgPingMilliseconds(), deserialized.getAvgPingMilliseconds());
+		assertEquals(systemTransactionPing.isSystem(), deserialized.isSystem());
+		assertEquals(systemTransactionPing.getVersion(), deserialized.getVersion());
+		assertEquals(systemTransactionPing.getClassId(), deserialized.getClassId());
+		assertEquals(systemTransactionPing.getMinimumSupportedVersion(), deserialized.getMinimumSupportedVersion());
+
+		assertEquals(systemTransactionPing, deserialized);
+		assertEquals(systemTransactionPing.getTransactionType(), SYS_TRANS_PING_MICROSECONDS);
+		assertEquals(deserialized.getTransactionType(), SYS_TRANS_PING_MICROSECONDS);
+
+		TestExpectedSerializationLength(systemTransactionPing, true);
+		TestExpectedSerializationLength(deserialized, true);
+
+		TestExpectedSerializationLength(systemTransactionPing, false);
+		TestExpectedSerializationLength(deserialized, false);
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 1, 2, 10, 64 })
+	void ApplicationWithoutSignatures(int contentSize) throws IOException {
+		byte[] nbyte = null;
+		if (contentSize > 0) {
+			nbyte = new byte[contentSize];
+			random.nextBytes(nbyte);
+		}
+
+		SwirldTransaction applicationTransaction;
+		if (contentSize == 0) {
+			//should throw NPE error
+			try {
+				applicationTransaction = new SwirldTransaction(nbyte);
+			} catch (NullPointerException e) {
+				assertEquals("contents", e.getMessage());
+				return;
+			}
+		} else {
+			applicationTransaction = new SwirldTransaction(nbyte);
+		}
+
+		SwirldTransaction deserialized = serializeDeserialize(applicationTransaction);
+		assertEquals(applicationTransaction, deserialized);
+
+		TestExpectedSerializationLength(applicationTransaction, true);
+		TestExpectedSerializationLength(deserialized, true);
+
+		TestExpectedSerializationLength(applicationTransaction, false);
+		TestExpectedSerializationLength(deserialized, false);
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 1, 1024 })
+	void ApplicationWithSignatures(int contentSize) throws IOException {
+		byte[] nbyte = null;
+		if (contentSize > 0) {
+			nbyte = new byte[contentSize];
+			random.nextBytes(nbyte);
+		}
+		SignaturePool signaturePool = new SignaturePool(1024, 4096, true);
+
+		SwirldTransaction applicationTransaction;
+		if (contentSize == 0) {
+			//should throw NPE error
+			try {
+				applicationTransaction = new SwirldTransaction(nbyte);
+			} catch (NullPointerException e) {
+				assertEquals("contents", e.getMessage());
+				return;
+			}
+		} else {
+			applicationTransaction = new SwirldTransaction(nbyte);
+		}
+
+		TestExpectedSerializationLength(applicationTransaction, true);
+		TestExpectedSerializationLength(applicationTransaction, false);
+
+		applicationTransaction.add(signaturePool.next());
+		TestExpectedSerializationLength(applicationTransaction, true);
+		TestExpectedSerializationLength(applicationTransaction, false);
+
+		applicationTransaction.add(signaturePool.next());
+		TestExpectedSerializationLength(applicationTransaction, true);
+		TestExpectedSerializationLength(applicationTransaction, false);
+	}
+
+	static void TestExpectedSerializationLength(SerializableWithKnownLength transaction, boolean writeClassId)
+			throws IOException {
+		try (final ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+			try (final SerializableDataOutputStream dos = new SerializableDataOutputStream(bos)) {
+				dos.writeSerializable(transaction, writeClassId);
+				assertEquals(dos.size(), getInstanceSerializedLength(transaction, true, writeClassId));
+			}
+		}
+	}
+
+
+	//  getSerializedLength(  SerializableDataOutputStream
+}

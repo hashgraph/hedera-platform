@@ -16,6 +16,7 @@
 
 package com.swirlds.platform.event;
 
+import com.swirlds.common.utility.Clearable;
 import com.swirlds.platform.EventImpl;
 
 import java.util.concurrent.atomic.AtomicReference;
@@ -23,7 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * A {@link SelfEventStorage} that can be accessed and modified by separate threads safely
  */
-public class ThreadSafeSelfEventStorage implements SelfEventStorage {
+public class ThreadSafeSelfEventStorage implements SelfEventStorage, Clearable {
 	private final AtomicReference<EventImpl> atomic = new AtomicReference<>();
 
 	/**
@@ -40,5 +41,10 @@ public class ThreadSafeSelfEventStorage implements SelfEventStorage {
 	@Override
 	public void setMostRecentSelfEvent(final EventImpl selfEvent) {
 		atomic.set(selfEvent);
+	}
+
+	@Override
+	public void clear() {
+		atomic.set(null);
 	}
 }

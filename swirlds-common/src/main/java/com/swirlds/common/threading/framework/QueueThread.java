@@ -16,6 +16,8 @@
 
 package com.swirlds.common.threading.framework;
 
+import com.swirlds.common.utility.Clearable;
+
 import java.util.concurrent.BlockingQueue;
 
 /**
@@ -24,6 +26,6 @@ import java.util.concurrent.BlockingQueue;
  * @param <T>
  * 		the type of the item in the queue
  */
-public interface QueueThread<T> extends StoppableThread, BlockingQueue<T> {
+public interface QueueThread<T> extends StoppableThread, BlockingQueue<T>, Clearable {
 
 }

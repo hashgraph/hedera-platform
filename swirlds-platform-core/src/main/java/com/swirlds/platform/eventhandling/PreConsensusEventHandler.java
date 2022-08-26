@@ -16,13 +16,10 @@
 
 package com.swirlds.platform.eventhandling;
 
-import com.swirlds.common.notification.Notification;
-import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
-import com.swirlds.common.notification.listeners.ReconnectCompleteNotification;
 import com.swirlds.common.system.NodeId;
-import com.swirlds.common.threading.ThreadUtils;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.utility.Clearable;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.observers.PreConsensusEventObserver;
@@ -34,8 +31,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.PriorityBlockingQueue;
 
+import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
-import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
 
 /**
@@ -43,7 +40,7 @@ import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
  * SwirldState implemented). It contains a thread queue that contains a queue of pre-consensus events (q1) and a
  * SwirldStateManager which applies those events to the state
  */
-public class PreConsensusEventHandler implements PreConsensusEventObserver, ReconnectCompleteListener {
+public class PreConsensusEventHandler implements PreConsensusEventObserver, Clearable {
 
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger LOG = LogManager.getLogger();
@@ -53,7 +50,7 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Reco
 
 	private final NodeId selfId;
 
-	private QueueThread<EventImpl> queueThread;
+	private final QueueThread<EventImpl> queueThread;
 
 	private final SwirldStateStats stats;
 
@@ -62,64 +59,39 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Reco
 	 */
 	private final SwirldStateManager swirldStateManager;
 
-	/** The queue that the queueThread takes */
-	private final BlockingQueue<EventImpl> queue;
-
 	public PreConsensusEventHandler(final NodeId selfId,
 			final SwirldStateManager swirldStateManager,
 			final SwirldStateStats stats) {
 		this.selfId = selfId;
 		this.swirldStateManager = swirldStateManager;
 		this.stats = stats;
-		this.queue = new PriorityBlockingQueue<>(INITIAL_PRE_CONS_EVENT_QUEUE_CAPACITY,
+		final BlockingQueue<EventImpl> queue = new PriorityBlockingQueue<>(INITIAL_PRE_CONS_EVENT_QUEUE_CAPACITY,
 				EventUtils::consensusPriorityComparator);
-	}
-
-	/**
-	 * Creates and starts the queue thread.
-	 */
-	public void start() {
 		queueThread = new QueueThreadConfiguration<EventImpl>()
 				.setNodeId(selfId.getId())
 				.setQueue(queue)
 				.setComponent(PLATFORM_THREAD_POOL_NAME)
 				.setThreadName("thread-curr")
-				.setInterruptable(swirldStateManager.isInterruptable())
+				.setStopBehavior(swirldStateManager.getStopBehavior())
 				// DO NOT turn the line below into a lambda reference because it will execute the getter, not the
 				// runnable returned by the getter.
 				.setWaitForItemRunnable(swirldStateManager.getPreConsensusWaitForWorkRunnable())
 				.setHandler(swirldStateManager::handlePreConsensusEvent)
 				.build();
+	}
+
+	/**
+	 * Starts the queue thread.
+	 */
+	public void start() {
 		queueThread.start();
 	}
 
-	/**
-	 * Stops and clears the queue thread in preparation reconnect.
-	 *
-	 * @throws InterruptedException
-	 * 		if this thread is interrupted while stopping the queue thread
-	 */
-	public void prepareForReconnect() throws InterruptedException {
-		LOG.info(RECONNECT.getMarker(), "pre-consensus handler: preparing for reconnect");
-		// clear the queue before stopping the queue thread because we dont want to wait for existing items
-		// to be handled.
-		queue.clear();
-		ThreadUtils.stopThreads(queueThread);
-		LOG.info(RECONNECT.getMarker(), "pre-consensus handler: ready for reconnect");
-	}
-
-	/**
-	 * Called for each {@link Notification} that this listener should handle.
-	 *
-	 * @param data
-	 * 		the notification to be handled
-	 */
 	@Override
-	public void notify(final ReconnectCompleteNotification data) {
-		start();
-		LOG.info(STARTUP.getMarker(), "PreConsensusEventHandler received ReconnectCompleteNotification, " +
-						"queueThread.size: {}",
-				queueThread == null ? null : queueThread.size());
+	public void clear() {
+		LOG.info(RECONNECT.getMarker(), "pre-consensus handler: preparing for reconnect");
+		queueThread.clear();
+		LOG.info(RECONNECT.getMarker(), "pre-consensus handler: ready for reconnect");
 	}
 
 	/**
@@ -147,14 +119,14 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Reco
 		swirldStateManager.expandSignatures(event);
 
 		// Temporarily disabled. This will be re-enabled in release 27.
-//		try {
-		// update the estimate now, so the queue can sort on it
-		event.estimateTime(selfId, stats.getAvgSelfCreatedTimestamp(), stats.getAvgOtherReceivedTimestamp());
-//			queueThread.put(event);
-//		} catch (final InterruptedException e) {
-//			LOG.error(EXCEPTION.getMarker(), "error:{} event:{}", e, event);
-//			Thread.currentThread().interrupt();
-//		}
+		try {
+			// update the estimate now, so the queue can sort on it
+			event.estimateTime(selfId, stats.getAvgSelfCreatedTimestamp(), stats.getAvgOtherReceivedTimestamp());
+			queueThread.put(event);
+		} catch (final InterruptedException e) {
+			LOG.error(EXCEPTION.getMarker(), "error:{} event:{}", e, event);
+			Thread.currentThread().interrupt();
+		}
 	}
 
 	public int getQueueSize() {

@@ -97,7 +97,7 @@ public final class MerklePathReplacement {
 
 		// We must copy if a previous node has been copied or if
 		// the node has a reference count greater than 1 (excluding artificial references).
-		if (previousNodeCopied || child.getReferenceCount() > 1 + artificialChildReferences) {
+		if (previousNodeCopied || child.getReservationCount() > 1 + artificialChildReferences) {
 			childInPath = copyAnyNodeType(child);
 
 			// Add the copied child to the parent
@@ -180,12 +180,12 @@ public final class MerklePathReplacement {
 		if (!isLastNode) {
 			// Increase the reference count of the original child.
 			// Ensures it (and its descendants) don't get released when it is replaced by the copy
-			child.incrementReferenceCount();
+			child.reserve();
 			artificialChildReferences++;
 		}
 		if (parent != root) {
 			// Now that the child holds a reference count, release the artificial reference count on the parent
-			parent.decrementReferenceCount();
+			parent.release();
 		}
 		return artificialChildReferences;
 	}
@@ -206,7 +206,7 @@ public final class MerklePathReplacement {
 			if (nodeRequiringInitialization[index]) {
 				MerkleNode node = path[index];
 				if (!node.isLeaf()) {
-					node.asInternal().initialize();
+					node.asInternal().rebuild();
 				}
 			}
 		}
@@ -232,7 +232,7 @@ public final class MerklePathReplacement {
 	 * Replace a path from one node down to another node, skipping the last several steps in the route
 	 * if configured. It is assumed that the first node in the path never needs to be replaced.
 	 *
-	 * Nodes in the newly created path are initialized via the {@link MerkleInternal#initialize()}
+	 * Nodes in the newly created path are initialized via the {@link MerkleInternal#rebuild()}
 	 * method.
 	 *
 	 * All nodes along the given path are returned with null hashes, with the exception of the skipped nodes

@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.network.protocol;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.NetworkProtocolException;
 
 import java.io.IOException;
@@ -39,6 +39,6 @@ public interface ProtocolRunnable {
 	 * @throws InterruptedException
 	 * 		if the calling thread is interrupted while running the protocol
 	 */
-	void runProtocol(SyncConnection connection)
+	void runProtocol(Connection connection)
 			throws NetworkProtocolException, IOException, InterruptedException;
 }

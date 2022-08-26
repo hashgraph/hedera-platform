@@ -26,7 +26,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
 import static com.swirlds.common.utility.Units.NANOSECONDS_TO_MICROSECONDS;
-import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.PASS;
 import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.SYNC_AND_CREATE;
 
@@ -44,55 +43,32 @@ public final class SwirldStateManagerUtils {
 	}
 
 	/**
-	 * Gets an instance of the state to be used for signing.
+	 * Performs a fast copy on a {@link State}. The {@code state} must not be modified during execution of this method.
 	 *
-	 * @param stateInfo
-	 * 		the state info wrapper object to use for the fast copy
+	 * @param state
+	 * 		the state object to fast copy
 	 * @param stats
 	 * 		object to record stats in
-	 * @return the state to sign
+	 * @return the newly created state copy
 	 */
-	public static State getStateForSigning(final StateInfo stateInfo, final SwirldStateStats stats) {
-		final State prevState = fastCopy(stateInfo, stats);
-
-		final long startNoMoreTransactions = System.nanoTime();
-		// this state will be saved, so there will be no more transactions sent to it
-		try {
-			prevState.getSwirldState().noMoreTransactions();
-		} catch (final Exception e) {
-			// defensive: catch exceptions from a bad app
-			LOG.error(EXCEPTION.getMarker(), "exception in app during noMoreTransactions:", e);
-		}
-		stats.noMoreTransactionsMicros(startNoMoreTransactions, System.nanoTime());
-
-		return prevState;
-	}
-
-	/**
-	 * Performs a fast copy and returns the previous state. This method is invoked by the consensus handler thread,
-	 * which is also the only thread that modifies the state.
-	 */
-	private static State fastCopy(final StateInfo stateInfo, final SwirldStateStats stats) {
+	public static State fastCopy(final State state, final SwirldStateStats stats) {
 		final long admitStart = System.nanoTime();
-		final State prevState = stateInfo.getState();
 		final long admitEnd = System.nanoTime();
 
 		final long copyStart = System.nanoTime();
 
 		// Create a fast copy
-		final State copy = prevState.copy();
+		final State copy = state.copy();
 
 		// Increment the reference count because this reference becomes the new value
-		copy.incrementReferenceCount();
+		copy.reserve();
 
 		final long copyEnd = System.nanoTime();
-
-		stateInfo.setState(copy);
 
 		stats.stateCopyAdmit(admitStart, admitEnd);
 		stats.stateCopyMicros((copyEnd - copyStart) * NANOSECONDS_TO_MICROSECONDS);
 
-		return prevState;
+		return copy;
 	}
 
 	/**

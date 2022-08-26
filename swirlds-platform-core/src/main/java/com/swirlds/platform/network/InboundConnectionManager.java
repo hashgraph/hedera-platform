@@ -18,7 +18,7 @@ package com.swirlds.platform.network;
 
 import com.swirlds.common.threading.locks.LockedResource;
 import com.swirlds.common.threading.locks.ResourceLock;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.connection.NotConnectedConnection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -32,16 +32,16 @@ import static com.swirlds.logging.LogMarker.SOCKET_EXCEPTIONS;
  * Manages a connection that is initiated by the peer. If a new connection is established by the peer, the previous one
  * will be closed.
  *
- * Calls to the method {@link #newConnection(SyncConnection)} are thread safe. Calls to {@link #waitForConnection()} and
+ * Calls to the method {@link #newConnection(Connection)} are thread safe. Calls to {@link #waitForConnection()} and
  * {@link #getConnection()} are not. It is assumed that these methods will either be always called by the same thread, or
  * there should be some external synchronization on them.
  */
 public class InboundConnectionManager implements ConnectionManager {
 	private static final Logger LOG = LogManager.getLogger();
 	/** the current connection in use, initially not connected. there is no synchronization on this variable */
-	private SyncConnection currentConn = NotConnectedConnection.getSingleton();
+	private Connection currentConn = NotConnectedConnection.getSingleton();
 	/** locks the connection managed by this instance */
-	private final ResourceLock<SyncConnection> lock = new ResourceLock<>(new ReentrantLock(), currentConn);
+	private final ResourceLock<Connection> lock = new ResourceLock<>(new ReentrantLock(), currentConn);
 	/** condition to wait on for a new connection */
 	private final Condition newConnection = lock.newCondition();
 
@@ -49,7 +49,7 @@ public class InboundConnectionManager implements ConnectionManager {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public SyncConnection waitForConnection() throws InterruptedException {
+	public Connection waitForConnection() throws InterruptedException {
 		if (!currentConn.connected()) {
 			currentConn = waitForNewConnection();
 		}
@@ -64,19 +64,19 @@ public class InboundConnectionManager implements ConnectionManager {
 	 * @return the current connection
 	 */
 	@Override
-	public SyncConnection getConnection() {
+	public Connection getConnection() {
 		return currentConn;
 	}
 
 	/**
-	 * Waits for a new connection until it's supplied via the {@link #newConnection(SyncConnection)} method
+	 * Waits for a new connection until it's supplied via the {@link #newConnection(Connection)} method
 	 *
 	 * @return the new connection
 	 * @throws InterruptedException
 	 * 		if interrupted while waiting
 	 */
-	private SyncConnection waitForNewConnection() throws InterruptedException {
-		try (final LockedResource<SyncConnection> lockedConn = lock.lock()) {
+	private Connection waitForNewConnection() throws InterruptedException {
+		try (final LockedResource<Connection> lockedConn = lock.lock()) {
 			while (!lockedConn.getResource().connected()) {
 				newConnection.await();
 			}
@@ -96,9 +96,9 @@ public class InboundConnectionManager implements ConnectionManager {
 	 * @throws InterruptedException
 	 * 		if the thread is interrupted while acquiring the lock
 	 */
-	public void newConnection(final SyncConnection connection) throws InterruptedException {
-		try (final LockedResource<SyncConnection> lockedConn = lock.lockInterruptibly()) {
-			final SyncConnection old = lockedConn.getResource();
+	public void newConnection(final Connection connection) throws InterruptedException {
+		try (final LockedResource<Connection> lockedConn = lock.lockInterruptibly()) {
+			final Connection old = lockedConn.getResource();
 			if (old.connected()) {
 				LOG.error(SOCKET_EXCEPTIONS.getMarker(),
 						"{} got new connection from {}, disconnecting old one",

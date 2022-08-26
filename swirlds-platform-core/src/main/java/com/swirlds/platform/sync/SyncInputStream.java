@@ -95,8 +95,8 @@ public class SyncInputStream extends SerializableDataInputStream {
 	 * @throws IOException
 	 * 		if a stream exception occurs
 	 */
-	public SyncGenerations readGenerations() throws IOException {
-		return readSerializable(false, SyncGenerations::new);
+	public Generations readGenerations() throws IOException {
+		return readSerializable(false, Generations::new);
 	}
 
 	/**

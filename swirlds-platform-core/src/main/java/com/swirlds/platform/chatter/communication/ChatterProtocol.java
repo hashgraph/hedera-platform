@@ -19,10 +19,11 @@ package com.swirlds.platform.chatter.communication;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.threading.pool.ParallelExecutionException;
 import com.swirlds.common.threading.pool.ParallelExecutor;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.Utilities;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
 import com.swirlds.platform.chatter.protocol.PeerMessageHandler;
+import com.swirlds.platform.chatter.protocol.peer.CommunicationState;
 import com.swirlds.platform.chatter.protocol.peer.PeerInstance;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.protocol.Protocol;
@@ -33,51 +34,74 @@ import java.io.IOException;
  * An instance responsible for serializing and deserializing chatter messages for a single peer
  */
 public class ChatterProtocol implements Protocol {
+	private final CommunicationState communicationState;
 	private final PeerMessageHandler messageHandler;
 	private final MessageProvider messageProvider;
 	private final ParallelExecutor parallelExecutor;
-	// ATM if chatter ends or is interrupted, it can not run again
-	private boolean ranOnce;
 
 	public ChatterProtocol(
 			final PeerInstance peerInstance,
 			final ParallelExecutor parallelExecutor) {
+		this.communicationState = peerInstance.communicationState();
 		this.messageHandler = peerInstance.inputHandler();
 		this.messageProvider = peerInstance.outputAggregator();
 		this.parallelExecutor = parallelExecutor;
-		this.ranOnce = false;
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void runProtocol(final SyncConnection connection)
+	public void runProtocol(final Connection connection)
 			throws NetworkProtocolException, IOException, InterruptedException {
-		ranOnce = true;
 		try {
+			communicationState.chatterStarted();
 			parallelExecutor.doParallel(
 					() -> read(connection),
 					() -> write(connection),
-					connection::disconnect
+					() -> readException(connection)
 			);
 		} catch (final ParallelExecutionException e) {
 			if (Utilities.isRootCauseSuppliedType(e, IOException.class)) {
 				throw new IOException(e);
 			}
 			throw new NetworkProtocolException(e);
+		} finally {
+			communicationState.chatterEnded();
+			messageProvider.clear();
 		}
+	}
+
+	private void readException(final Connection connection) {
+		// disconnect() can block for a long time in certain situations explained in #5511
+		// because of this, we end chatter as soon as reading is done, and we clear the queue
+		// this ensures we won't be holding on to old events while disconnect() is blocking
+		communicationState.chatterEnded();
+		messageProvider.clear();
+		connection.disconnect();
 	}
 
 	/**
 	 * Reads {@link SelfSerializable} messages from a stream and passes them on to chatter for handling
 	 */
-	private void read(final SyncConnection connection) throws NetworkProtocolException, IOException {
+	private void read(final Connection connection) throws NetworkProtocolException, IOException {
 		while (connection.connected()) {
 			final byte b = connection.getDis().readByte();
-			if (b == Constants.PAYLOAD) {
-				final SelfSerializable message = connection.getDis().readSerializable();
-				messageHandler.handleMessage(message);
+			switch (b) {
+				case Constants.KEEPALIVE -> {
+					// nothing to do
+				}
+				case Constants.PAYLOAD -> {
+					final SelfSerializable message = connection.getDis().readSerializable();
+					messageHandler.handleMessage(message);
+				}
+				case Constants.END -> {
+					communicationState.receivedEnd();
+					return;
+				}
+				default -> throw new NetworkProtocolException(String.format(
+						"Unexpected byte received: %02X", b
+				));
 			}
 		}
 	}
@@ -85,8 +109,8 @@ public class ChatterProtocol implements Protocol {
 	/**
 	 * Polls chatter for messages and serializes them to the stream
 	 */
-	public void write(final SyncConnection connection) throws InterruptedException, IOException {
-		while (connection.connected()) {
+	public void write(final Connection connection) throws InterruptedException, IOException {
+		while (connection.connected() && communicationState.shouldChatter()) {
 			final SelfSerializable message = messageProvider.getMessage();
 			if (message == null) {
 				connection.getDos().flush();// only flush before a sleep
@@ -97,6 +121,9 @@ public class ChatterProtocol implements Protocol {
 			connection.getDos().writeByte(Constants.PAYLOAD);
 			connection.getDos().writeSerializable(message, true);
 		}
+
+		connection.getDos().writeByte(Constants.END);
+		connection.getDos().flush();
 	}
 
 	/**
@@ -104,7 +131,7 @@ public class ChatterProtocol implements Protocol {
 	 */
 	@Override
 	public boolean shouldInitiate() {
-		return !ranOnce;
+		return communicationState.shouldChatter();
 	}
 
 	/**
@@ -112,7 +139,7 @@ public class ChatterProtocol implements Protocol {
 	 */
 	@Override
 	public boolean shouldAccept() {
-		return !ranOnce;
+		return communicationState.shouldChatter();
 	}
 
 	/**

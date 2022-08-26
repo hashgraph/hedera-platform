@@ -123,6 +123,7 @@ public final class Bucket<K extends VirtualKey<? super K>> {
 		if (keySerializer != this.keySerializer) {
 			// note, reusableDataFileOutputStream will grow as needed so no need to change its size
 			this.keySerializer = keySerializer;
+			this.keySerializationVersion = (int) keySerializer.getCurrentDataVersion();
 		}
 	}
 

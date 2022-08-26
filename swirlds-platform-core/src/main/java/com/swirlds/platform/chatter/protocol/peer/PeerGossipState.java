@@ -24,12 +24,18 @@ import com.swirlds.platform.consensus.GraphGenerations;
 import org.apache.commons.lang3.ObjectUtils;
 
 /**
- * Keeps track of events we are sure the peer knows
+ * Keeps track of the state of chatter communication with a peer, including events we are sure the peer knows
  */
 public class PeerGossipState implements Purgable {
-	private final PurgableDoubleMap<ChatterEventDescriptor, ObjectUtils.Null> events =
-			new PurgableDoubleMap<>(ChatterEventDescriptor::getGeneration);
-	private long maxReceivedDescriptorGeneration = GraphGenerations.FIRST_GENERATION;
+	/** non-ancient events we know the peer knows */
+	private final PurgableDoubleMap<ChatterEventDescriptor, ObjectUtils.Null> events;
+	/** the maximum generation of all event descriptors received */
+	private long maxReceivedDescriptorGeneration;
+
+	public PeerGossipState() {
+		events = new PurgableDoubleMap<>(ChatterEventDescriptor::getGeneration);
+		maxReceivedDescriptorGeneration = GraphGenerations.FIRST_GENERATION;
+	}
 
 	/**
 	 * Mark an event represented by this descriptor as known by the peer
@@ -79,12 +85,5 @@ public class PeerGossipState implements Purgable {
 	 */
 	public synchronized void handleEvent(final ChatterEvent event) {
 		setPeerKnows(event.getDescriptor());
-	}
-
-	/**
-	 * @return the maximum generation of all descriptors received from this peer
-	 */
-	public long getMaxReceivedDescriptorGeneration() {
-		return maxReceivedDescriptorGeneration;
 	}
 }

@@ -16,91 +16,61 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.metrics.Counter;
+import com.swirlds.common.metrics.Metric;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public final class ReconnectStatistics {
 
 	private static final String RECONNECT_CATEGORY = "Reconnect";
 
-	private static final String FORMAT_INT = "%d";
+	private final Counter senderStartTimes = new Counter(
+			RECONNECT_CATEGORY,
+			"startsReconnectAsSender",
+			"number of times a node starts reconnect as a sender"
+	);
 
-	private final AtomicInteger senderStartTimes;
+	private final Counter receiverStartTimes = new Counter(
+			RECONNECT_CATEGORY,
+			"startsReconnectAsReceiver",
+			"number of times a node starts reconnect as a receiver"
+	);
 
-	private final AtomicInteger receiverStartTimes;
+	private final Counter senderEndTimes = new Counter(
+			RECONNECT_CATEGORY,
+			"endsReconnectAsSender",
+			"number of times a node ends reconnect as a sender"
+	);
 
-	private final AtomicInteger senderEndTimes;
+	private final Counter receiverEndTimes = new Counter(
+			RECONNECT_CATEGORY,
+			"endsReconnectAsReceiver",
+			"number of times a node ends reconnect as a receiver"
+	);
 
-	private final AtomicInteger receiverEndTimes;
-
-	public ReconnectStatistics() {
-		this.senderStartTimes = new AtomicInteger();
-		this.senderEndTimes = new AtomicInteger();
-		this.receiverStartTimes = new AtomicInteger();
-		this.receiverEndTimes = new AtomicInteger();
-	}
-
-	void registerStats(final List<StatEntry> statEntries) {
-		statEntries.add(new StatEntry(
-				RECONNECT_CATEGORY,
-				"startsReconnectAsReceiver",
-				"number of times a node starts reconnect as a receiver",
-				FORMAT_INT,
-				null,
-				null,
-				null,
-				receiverStartTimes::get)
-		);
-
-		statEntries.add(new StatEntry(
-				RECONNECT_CATEGORY,
-				"endsReconnectAsReceiver",
-				"number of times a node ends reconnect as a receiver",
-				FORMAT_INT,
-				null,
-				null,
-				null,
-				receiverEndTimes::get)
-		);
-
-		statEntries.add(new StatEntry(
-				RECONNECT_CATEGORY,
-				"startsReconnectAsSender",
-				"number of times a node starts reconnect as a sender",
-				FORMAT_INT,
-				null,
-				null,
-				null,
-				senderStartTimes::get)
-		);
-
-		statEntries.add(new StatEntry(
-				RECONNECT_CATEGORY,
-				"endsReconnectAsSender",
-				"number of times a node ends reconnect as a sender",
-				FORMAT_INT,
-				null,
-				null,
-				null,
-				senderEndTimes::get)
-		);
+	void registerStats(final List<Metric> statEntries) {
+		statEntries.addAll(List.of(
+				receiverStartTimes,
+				receiverEndTimes,
+				senderStartTimes,
+				senderEndTimes
+		));
 	}
 
 	public void incrementSenderStartTimes() {
-		senderStartTimes.incrementAndGet();
+		senderStartTimes.increment();
 	}
 
 	public void incrementReceiverStartTimes() {
-		receiverStartTimes.incrementAndGet();
+		receiverStartTimes.increment();
 	}
 
 	public void incrementSenderEndTimes() {
-		senderEndTimes.incrementAndGet();
+		senderEndTimes.increment();
 	}
 
 	public void incrementReceiverEndTimes() {
-		receiverEndTimes.incrementAndGet();
+		receiverEndTimes.increment();
 	}
 }

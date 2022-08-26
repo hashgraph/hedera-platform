@@ -24,7 +24,6 @@ import com.swirlds.platform.chatter.protocol.purgable.PurgableMap;
 import com.swirlds.platform.chatter.protocol.purgable.twomaps.PurgableDoubleMap;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.GossipEvent;
-import com.swirlds.platform.sync.SyncGenerations;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,15 +37,13 @@ import java.util.Set;
  * An event linker which buffers out-of-order events until their parents are provided, or they become ancient. An event
  * received out of order is called an orphan. Once an event is no longer an orphan, it is returned by this linker.
  */
-public class OrphanBufferingLinker implements EventLinker {
+public class OrphanBufferingLinker extends AbstractEventLinker {
 	private static final Logger LOG = LogManager.getLogger();
 	private final ParentFinder parentFinder;
 	private final Queue<EventImpl> eventOutput;
 	private final Queue<EventImpl> newlyLinkedEvents;
 	private final PurgableMap<ParentDescriptor, Set<ChildEvent>> missingParents;
 	private final PurgableMap<ChatterEventDescriptor, ChildEvent> orphanMap;
-	/** the current consensus generations */
-	private GraphGenerations currentGenerations = SyncGenerations.GENESIS_GENERATIONS;
 
 	public OrphanBufferingLinker(final ParentFinder parentFinder) {
 		this.parentFinder = parentFinder;
@@ -84,7 +81,7 @@ public class OrphanBufferingLinker implements EventLinker {
 	public void linkEvent(final GossipEvent event) {
 		final ChildEvent childEvent = parentFinder.findParents(
 				event,
-				currentGenerations.getMinGenerationNonAncient()
+				getMinGenerationNonAncient()
 		);
 
 		if (!childEvent.isOrphan()) {
@@ -146,7 +143,7 @@ public class OrphanBufferingLinker implements EventLinker {
 	 */
 	@Override
 	public void updateGenerations(final GraphGenerations generations) {
-		currentGenerations = generations;
+		super.updateGenerations(generations);
 		missingParents.purge(
 				generations.getMinGenerationNonAncient(),
 				this::parentPurged
@@ -200,6 +197,21 @@ public class OrphanBufferingLinker implements EventLinker {
 	@Override
 	public EventImpl pollLinkedEvent() {
 		return eventOutput.poll();
+	}
+
+	@Override
+	public void clear() {
+		super.clear();
+		for (final EventImpl event : eventOutput) {
+			event.clear();
+		}
+		eventOutput.clear();
+		for (final EventImpl event : newlyLinkedEvents) {
+			event.clear();
+		}
+		newlyLinkedEvents.clear();
+		missingParents.clear();
+		orphanMap.clear();
 	}
 
 }

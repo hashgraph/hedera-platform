@@ -20,11 +20,12 @@ import com.swirlds.common.Console;
 import com.swirlds.common.InvalidSignedStateListener;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.internal.SettingsCommon;
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.statistics.Statistics;
-import com.swirlds.common.system.events.Event;
-import com.swirlds.common.system.transaction.SwirldTransaction;
 import com.swirlds.common.stream.Signer;
+import com.swirlds.common.system.address.Address;
+import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.system.events.PlatformEvent;
 import com.swirlds.common.utility.AutoCloseableWrapper;
 
 import javax.swing.JFrame;
@@ -40,8 +41,19 @@ public interface Platform extends Signer {
 	 *
 	 * @param newEntry
 	 * 		the new entry
+	 * @deprecated use {@link Platform#addAppMetrics(Metric...)} instead
 	 */
-	void addAppStatEntry(final StatEntry newEntry);
+	@Deprecated(forRemoval = true)
+	void addAppStatEntry(final Metric newEntry);
+
+	/**
+	 * Add new metrics to Application statistics
+	 *
+	 * @param metrics
+	 * 		the new metrics
+	 * @throws IllegalArgumentException if {@code metrics} is {@code null}
+	 */
+	void addAppMetrics(final Metric... metrics);
 
 	/**
 	 * Registers a listener to be notified each time an invalid state signature is received from a remote peer.
@@ -78,15 +90,12 @@ public interface Platform extends Signer {
 	 * <p>
 	 * A transaction can be at most 1024 bytes. If trans.length &gt; 1024, then this will return false, and
 	 * will not actually create a transaction.
-	 * <p>
-	 * WARNING: Do not add signatures to the {@link SwirldTransaction} here! Any signatures added will be silently
-	 * ignored!
 	 *
 	 * @param trans
 	 * 		the transaction to handle, encoded any way the swirld author chooses
 	 * @return true if successful
 	 */
-	boolean createTransaction(SwirldTransaction trans);
+	boolean createTransaction(byte[] trans);
 
 	/**
 	 * Create a new window of the recommended size and location, including the Swirlds menu.
@@ -140,8 +149,10 @@ public interface Platform extends Signer {
 	 * then the non-consensus events (sorted by time received).
 	 *
 	 * @return an array of all the events
+	 * @deprecated to be removed in a future release
 	 */
-	Event[] getAllEvents();
+	@Deprecated
+	PlatformEvent[] getAllEvents();
 
 	/**
 	 * get the highest generation number of all events with the given creator

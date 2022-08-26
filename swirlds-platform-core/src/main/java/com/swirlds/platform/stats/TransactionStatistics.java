@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.SwirldTransaction;
 import com.swirlds.platform.TransactionSubmitter;
 
 /**
@@ -25,8 +25,8 @@ import com.swirlds.platform.TransactionSubmitter;
 public interface TransactionStatistics {
 
 	/**
-	 * Called by {@link TransactionSubmitter#submitTransaction(Transaction)} when a transaction passes initial checks
-	 * and is offered to the transaction pool.
+	 * Called by {@link TransactionSubmitter#submitTransaction(SwirldTransaction)} when a transaction passes initial
+	 * checks and is offered to the transaction pool.
 	 */
 	void updateTransSubmitMicros(final long microseconds);
 }

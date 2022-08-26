@@ -16,9 +16,17 @@
 
 package com.swirlds.platform.chatter.communication;
 
+/**
+ * Constants used by {@link ChatterProtocol}
+ */
 public class Constants {
+	/** sent when there are no chatter messages to send */
 	public static final byte KEEPALIVE = 1;
+	/** sent to indicate that a payload follows */
 	public static final byte PAYLOAD = 2;
+	/** sent to indicate that a chatter session is ending */
+	public static final byte END = 3;
 
+	/** the amount of time to sleep if there is no payload to send */
 	public static final int NO_PAYLOAD_SLEEP_MS = 10;
 }

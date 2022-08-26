@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.system.transaction.Transaction;
+import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 
 /**
  * A source of transactions.
@@ -29,6 +29,6 @@ public interface TransactionSupplier {
 	 *
 	 * @return an array with 0 or more transactions
 	 */
-	Transaction[] getTransactions();
+	ConsensusTransactionImpl[] getTransactions();
 
 }

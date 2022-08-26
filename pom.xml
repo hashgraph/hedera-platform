@@ -23,25 +23,25 @@
 	<!-- Project Configuration -->
 	<groupId>com.swirlds</groupId>
 	<artifactId>swirlds-platform</artifactId>
-	<version>0.26.4-orvw.2</version>
-
+	<version>0.28.1-orvw.1</version>
 	<packaging>pom</packaging>
 
 	<!-- Project Information (Required for Sonatype) -->
 	<name>${project.artifactId}</name>
-	<inceptionYear>2016</inceptionYear>
-	<url>https://www.swirlds.com/</url>
-
-	<organization>
-		<name>Swirlds, Inc.</name>
-		<url>https://www.swirlds.com</url>
-	</organization>
 
 	<description>
 		Swirlds is a software platform designed to build fully-distributed applications that harness the power of the
 		cloud without servers. Now you can develop applications with fairness in decision making, speed, trust and
 		reliability, at a fraction of the cost of traditional server-based platforms.
 	</description>
+
+	<url>https://www.swirlds.com/</url>
+	<inceptionYear>2016</inceptionYear>
+
+	<organization>
+		<name>Swirlds, Inc.</name>
+		<url>https://www.swirlds.com</url>
+	</organization>
 
 	
 	
@@ -52,27 +52,46 @@
 		</license>
 	</licenses>
 	
+
 	<developers>
 		<developer>
 			<name>Nathan Klick</name>
-			<email>nathan@swirlds.com</email>
+			<email>nathan@swirldslabs.com</email>
 			<organization>Swirlds, Inc.</organization>
 			<organizationUrl>https://www.swirlds.com</organizationUrl>
 		</developer>
 		<developer>
 			<name>Lazar Petrovic</name>
-			<email>lazar@swirlds.com</email>
+			<email>lazar@swirldslabs.com</email>
 			<organization>Swirlds, Inc.</organization>
 			<organizationUrl>https://www.swirlds.com</organizationUrl>
 		</developer>
 		<developer>
-			<name>Nosh Mody</name>
-			<email>nosh@swirlds.com</email>
+			<name>Richard Bair</name>
+			<email>richard.bair@swirldslabs.com</email>
 			<organization>Swirlds, Inc.</organization>
 			<organizationUrl>https://www.swirlds.com</organizationUrl>
 		</developer>
 	</developers>
 
+	<!-- Modules -->
+	<modules>
+		<!-- Common Packages -->
+		<module>swirlds-common</module>
+		<module>swirlds-logging</module>
+
+		<!-- Main System Packages -->
+		<module>swirlds-platform-core</module>
+
+		<!-- Data Structure Packages -->
+		<module>swirlds-merkle</module>
+		<module>swirlds-fcqueue</module>
+		<module>swirlds-fchashmap</module>
+		<module>swirlds-virtualmap</module>
+		<module>swirlds-jasperdb</module>
+	</modules>
+
+	<!-- Source Control Management -->
 	
 	
 	<scm>
@@ -89,9 +108,6 @@
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
 
-		<!-- Local Repository Variables -->
-		<app.repo>${project.baseUri}sdk/data/repos/app/</app.repo>
-
 		<!-- Plugin Versions -->
 
 		<!-- Code Analysis Plugins -->
@@ -103,7 +119,7 @@
 
 		<!-- Core Maven Plugins -->
 		<plugin.maven.clean.version>3.1.0</plugin.maven.clean.version>
-		<plugin.maven.compiler.version>3.8.1</plugin.maven.compiler.version>
+		<plugin.maven.compiler.version>3.10.1</plugin.maven.compiler.version>
 		<plugin.maven.deploy.version>2.8.2</plugin.maven.deploy.version>
 		<plugin.maven.install.version>2.5.2</plugin.maven.install.version>
 		<plugin.maven.resources.version>3.2.0</plugin.maven.resources.version>
@@ -118,7 +134,7 @@
 		<plugin.maven.gpg.version>3.0.1</plugin.maven.gpg.version>
 
 		<!-- Maven CI/CD Utilities -->
-		<plugin.versions.maven.version>2.8.1</plugin.versions.maven.version>
+		<plugin.versions.maven.version>2.10.0</plugin.versions.maven.version>
 		<plugin.dependency.check.version>7.0.0</plugin.dependency.check.version>
 		<plugin.license.maven.version>4.0.rc2</plugin.license.maven.version>
 		<plugin.build.helper.version>3.2.0</plugin.build.helper.version>
@@ -129,7 +145,7 @@
 
 		<!-- Compile Time Dependencies -->
 		<dep.ow2.asm.version>9.2</dep.ow2.asm.version>
-		<dep.log4j2.version>2.17.1</dep.log4j2.version>
+		<dep.log4j2.version>2.17.2</dep.log4j2.version>
 		<dep.jackson.version>2.13.2</dep.jackson.version>
 		<dep.jackson.databind.version>2.13.2.1</dep.jackson.databind.version>
 		<dep.portmapper.version>2.0.4</dep.portmapper.version>
@@ -153,25 +169,8 @@
 		<dep.junit.jupiter.version>5.5.0-M1</dep.junit.jupiter.version>
 		<dep.mockito.version>4.1.0</dep.mockito.version>
 
-		
+
 	</properties>
-
-	<!-- Sub Modules -->
-	<modules>
-		<!-- Common Packages -->
-		<module>swirlds-common</module>
-		<module>swirlds-logging</module>
-
-		<!-- Main System Packages -->
-		<module>swirlds-platform-core</module>
-
-		<!-- Data Structure Packages -->
-		<module>swirlds-merkle</module>
-		<module>swirlds-fcqueue</module>
-		<module>swirlds-fchashmap</module>
-		<module>swirlds-virtualmap</module>
-		<module>swirlds-jasperdb</module>
-	</modules>
 
 	<!-- Dependency Management -->
 	<dependencyManagement>
@@ -407,8 +406,71 @@
 		</dependencies>
 	</dependencyManagement>
 
+	<!-- Repository Configuration -->
+	<repositories>
+		<repository>
+			<id>maven-prerelease-channel</id>
+			<url>https://us-maven.pkg.dev/swirlds-registry/maven-prerelease-channel</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+		<repository>
+			<id>maven-develop-commits</id>
+			<url>https://us-maven.pkg.dev/swirlds-registry/maven-develop-commits</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+		<repository>
+			<id>maven-adhoc-commits</id>
+			<url>https://us-maven.pkg.dev/swirlds-registry/maven-adhoc-commits</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+		<repository>
+			<id>maven-develop-daily-snapshots</id>
+			<url>https://us-maven.pkg.dev/swirlds-registry/maven-develop-daily-snapshots</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+		<repository>
+			<id>maven-develop-snapshots</id>
+			<url>https://us-maven.pkg.dev/swirlds-registry/maven-develop-snapshots</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
+
 	<!-- Build Lifecycle -->
 	<build>
+		<!-- Build Extensions -->
+		<extensions>
+			<extension>
+				<groupId>com.google.cloud.artifactregistry</groupId>
+				<artifactId>artifactregistry-maven-wagon</artifactId>
+				<version>2.1.4</version>
+			</extension>
+		</extensions>
+
 		<!-- Plugin Management -->
 		<pluginManagement>
 			<plugins>
@@ -441,6 +503,24 @@
 					<groupId>pl.project13.maven</groupId>
 					<artifactId>git-commit-id-plugin</artifactId>
 					<version>${plugin.git.commitid.version}</version>
+					<executions>
+						<execution>
+							<id>git-commit-id</id>
+							<goals>
+								<goal>revision</goal>
+							</goals>
+							<phase>initialize</phase>
+						</execution>
+					</executions>
+					<configuration>
+						<generateGitPropertiesFile>true</generateGitPropertiesFile>
+						<commitIdGenerationMode>full</commitIdGenerationMode>
+						<abbrevLength>8</abbrevLength>
+						<includeOnlyProperties>
+							<includeOnlyProperty>^git.commit.id.(abbrev|full)$</includeOnlyProperty>
+							<includeOnlyProperty>^git.build.version$</includeOnlyProperty>
+						</includeOnlyProperties>
+					</configuration>
 				</plugin>
 
 				<!-- Apache Maven Core Plugins -->
@@ -582,30 +662,6 @@
 		<!-- Plugin Definitions -->
 		<plugins>
 			<plugin>
-				<groupId>org.sonarsource.scanner.maven</groupId>
-				<artifactId>sonar-maven-plugin</artifactId>
-			</plugin>
-			<plugin>
-				<groupId>org.jacoco</groupId>
-				<artifactId>jacoco-maven-plugin</artifactId>
-				<executions>
-					<execution>
-						<id>jacoco-agent</id>
-						<goals>
-							<goal>prepare-agent</goal>
-						</goals>
-					</execution>
-					<execution>
-						<id>jacoco-report</id>
-						<phase>verify</phase>
-						<goals>
-							<goal>report</goal>
-							<goal>report-aggregate</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>versions-maven-plugin</artifactId>
 			</plugin>
@@ -688,18 +744,6 @@
 								<include>lifecycle/*</include>
 							</includes>
 						</fileset>
-						<fileset>
-							<directory>${project.basedir}/regression</directory>
-							<includes>
-								<include>*.tar.gz</include>
-								<include>regression.log</include>
-								<include>regression.jar</include>
-								<include>lib/**</include>
-								<include>tmp/**</include>
-								<include>multipage_pdf.pdf</include>
-								<include>data/lifecycle</include>
-							</includes>
-						</fileset>
 					</filesets>
 				</configuration>
 			</plugin>
@@ -731,6 +775,10 @@
 			<plugin>
 				<groupId>io.github.zlika</groupId>
 				<artifactId>reproducible-build-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>pl.project13.maven</groupId>
+				<artifactId>git-commit-id-plugin</artifactId>
 			</plugin>
 		</plugins>
 	</build>
@@ -1192,7 +1240,11 @@
 				</property>
 			</activation>
 
-			
+			<modules>
+				<!-- Test Packages-->
+				<module>swirlds-unit-tests</module>
+				
+			</modules>
 
 		</profile>
 

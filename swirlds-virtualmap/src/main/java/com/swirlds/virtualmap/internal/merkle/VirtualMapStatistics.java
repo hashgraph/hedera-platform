@@ -16,17 +16,16 @@
 
 package com.swirlds.virtualmap.internal.merkle;
 
-import com.swirlds.common.statistics.StatEntry;
-import com.swirlds.common.statistics.StatsBuffered;
-import com.swirlds.common.statistics.StatsRunningAverage;
+import com.swirlds.common.metrics.IntegerGauge;
+import com.swirlds.common.metrics.LongGauge;
+import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.RunningAverageMetric;
 
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
+
+import static com.swirlds.common.metrics.FloatFormats.FORMAT_10_2;
 
 /**
  * Encapsulates statistics for a virtual map.
@@ -36,24 +35,21 @@ public class VirtualMapStatistics {
 	private static final String STAT_CATEGORY = "virtual-map";
 	private static final double DEFAULT_HALF_LIFE = 5;
 
-	private static final String INT_FORMAT = "%d";
-	private static final String FLOAT_FORMAT = "%,10.2f";
+	private final List<Metric> statistics;
 
-	private final List<StatEntry> statistics;
+	private final LongGauge size;
 
-	private final AtomicLong size;
-
-	private final AtomicInteger flushBacklogSize = new AtomicInteger();
+	private final IntegerGauge flushBacklogSize;
 
 	/**
 	 * The average time to call the VirtualMap flush() method.
 	 */
-	private StatsRunningAverage flushLatency;
+	private final RunningAverageMetric flushLatency;
 
 	/**
 	 * The average time to call the cache merge() method.
 	 */
-	private StatsRunningAverage mergeLatency;
+	private final RunningAverageMetric mergeLatency;
 
 	/**
 	 * Create a new statistics instance for a virtual map family.
@@ -64,71 +60,37 @@ public class VirtualMapStatistics {
 	public VirtualMapStatistics(final String label) {
 		statistics = new LinkedList<>();
 
-		size = new AtomicLong();
-		flushLatency = new StatsRunningAverage(DEFAULT_HALF_LIFE);
-		mergeLatency = new StatsRunningAverage(DEFAULT_HALF_LIFE);
-
-		buildStatistics(label);
-	}
-
-	/**
-	 * This method fills in some default arguments for the StatEntry constructor and adds the statistic to the
-	 * list of all statistics.
-	 */
-	private void buildStatistic(
-			final String name,
-			final String description,
-			final String format,
-			final Supplier<Object> getStat) {
-
-		buildStatistic(name, description, format, null, null, getStat);
-	}
-
-	/**
-	 * This method fills in some default arguments for the StatEntry constructor and adds the statistic to the
-	 * list of all statistics.
-	 */
-	private void buildStatistic(
-			final String name,
-			final String description,
-			final String format,
-			final StatsBuffered buffered,
-			final Function<Double, StatsBuffered> init,
-			final Supplier<Object> getStat) {
-
-		statistics.add(new StatEntry(STAT_CATEGORY, name, description, format, buffered, init, null, getStat));
-	}
-
-	private void buildStatistics(final String label) {
-		buildStatistic("vMapSize_" + label,
-				"The size of the VirtualMap '" + label + "'",
-				INT_FORMAT,
-				size::get);
-
-		buildStatistic("vMapFlushLatency_" + label,
+		size = new LongGauge(
+				STAT_CATEGORY,
+				"vMapSize_" + label,
+				"The size of the VirtualMap '" + label + "'"
+		);
+		flushLatency = new RunningAverageMetric(
+				STAT_CATEGORY,
+				"vMapFlushLatency_" + label,
 				"The flush latency of VirtualMap '" + label + "'",
-				FLOAT_FORMAT,
-				flushLatency,
-				h -> {
-					flushLatency = new StatsRunningAverage(h);
-					return flushLatency;
-				},
-				flushLatency::getWeightedMean);
-
-		buildStatistic("vMapMergeLatency_" + label,
+				FORMAT_10_2,
+				DEFAULT_HALF_LIFE
+		);
+		mergeLatency = new RunningAverageMetric(
+				STAT_CATEGORY,
+				"vMapMergeLatency_" + label,
 				"The merge latency of VirtualMap '" + label + "'",
-				FLOAT_FORMAT,
-				mergeLatency,
-				h -> {
-					mergeLatency = new StatsRunningAverage(h);
-					return mergeLatency;
-				},
-				mergeLatency::getWeightedMean);
+				FORMAT_10_2,
+				DEFAULT_HALF_LIFE
+		);
+		flushBacklogSize = new IntegerGauge(
+				STAT_CATEGORY,
+				"vMapFlushBacklog_" + label,
+				"the number of '" + label + "' copies waiting to be flushed"
+		);
 
-		buildStatistic("vMapFlushBacklog_" + label,
-				"the number of '" + label + "' copies waiting to be flushed",
-				INT_FORMAT,
-				flushBacklogSize::get);
+		statistics.addAll(List.of(
+				size,
+				flushLatency,
+				mergeLatency,
+				flushBacklogSize
+		));
 	}
 
 	/**
@@ -137,9 +99,9 @@ public class VirtualMapStatistics {
 	 * @param registry
 	 * 		an object that manages statistics
 	 */
-	public void registerStatistics(final Consumer<StatEntry> registry) {
-		for (final StatEntry statEntry : statistics) {
-			registry.accept(statEntry);
+	public void registerStatistics(final Consumer<Metric> registry) {
+		for (final Metric metric : statistics) {
+			registry.accept(metric);
 		}
 	}
 

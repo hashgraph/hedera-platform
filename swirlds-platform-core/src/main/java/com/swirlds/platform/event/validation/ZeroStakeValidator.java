@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.event.validation;
 
-import com.swirlds.common.system.AddressBook;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.event.GossipEvent;
 import org.apache.logging.log4j.LogManager;
@@ -43,7 +43,7 @@ public class ZeroStakeValidator implements GossipEventValidator {
 		// If beta mirror node logic is enabled and the event originated from a node known to have a zero stake,
 		// then we should discard this event and not even worry about validating the signature in order
 		// to prevent a potential DoS or DDoS attack from a zero stake node
-		if (addressBook.isZeroStakeNode(event.getHashedData().getCreatorId())) {
+		if (addressBook.getAddress(event.getHashedData().getCreatorId()).isZeroStake()) {
 			LOG.debug(INVALID_EVENT_ERROR.getMarker(),
 					"Event Intake: Received event data from a zero stake node {}}",
 					() -> EventStrings.toShortString(event));

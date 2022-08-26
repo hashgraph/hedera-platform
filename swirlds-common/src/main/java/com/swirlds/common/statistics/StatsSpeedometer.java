@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.statistics;
 
+import com.swirlds.common.metrics.Clock;
 import com.swirlds.common.statistics.internal.StatsBuffer;
 
 /**
@@ -23,20 +24,25 @@ import com.swirlds.common.statistics.internal.StatsBuffer;
  * weighting comes from the last 7 periods. If 0.99 it's 70 periods, 0.999 is 700, etc.
  * <p>
  * The timer starts at instantiation, and can be reset with the reset() method.
+ *
+ * @deprecated Use {@link com.swirlds.common.metrics.SpeedometerMetric} instead of this class with {@link StatEntry}
  */
+@Deprecated(forRemoval = true)
 public class StatsSpeedometer implements StatsBuffered {
 
-	private static final double ln2 = Math.log(2);
+	private static final double LN_2 = Math.log(2);
+
+	private final Clock clock;
 
 	/**
 	 * find average since this time
 	 */
-	private long startTime = System.nanoTime();
+	private long startTime;
 
 	/**
 	 * the last time update() was called
 	 */
-	private long lastTime = System.nanoTime();
+	private long lastTime;
 
 	/**
 	 * estimated average calls/sec to cycle()
@@ -84,7 +90,7 @@ public class StatsSpeedometer implements StatsBuffered {
 	 * 		half of the exponential weighting comes from the last halfLife seconds
 	 */
 	public StatsSpeedometer(final double halfLife) {
-		reset(halfLife);
+		this(halfLife, true);
 	}
 
 	/**
@@ -97,7 +103,42 @@ public class StatsSpeedometer implements StatsBuffered {
 	 * @param saveHistory
 	 * 		true if a StatsBuffer of recent and all history should be created and used
 	 */
+	@SuppressWarnings("removal")
 	public StatsSpeedometer(final double halfLife, final boolean saveHistory) {
+		this(halfLife, saveHistory, Clock.DEFAULT);
+	}
+
+	/**
+	 * This constructor behaves exactly as the regular one, but permits to inject a {@link Clock}.
+	 * It should only be used internally.
+	 *
+	 * @param halfLife
+	 * 		half of the exponential weighting comes from the last halfLife seconds
+	 * @param clock
+	 * 		the {@code Clock} implementation, typically a mock when testing
+	 * @deprecated this constructor should only be used internally and will become non-public at some point
+	 */
+	@Deprecated(forRemoval = true)
+	public StatsSpeedometer(final double halfLife, final Clock clock) {
+		this(halfLife, true, clock);
+	}
+
+	/**
+	 * This constructor behaves exactly as the regular one, but permits to inject a {@link Clock}.
+	 * It should only be used internally.
+	 *
+	 * @param halfLife
+	 * 		half of the exponential weighting comes from the last halfLife seconds
+	 * @param clock
+	 * 		the {@code Clock} implementation, typically a mock when testing
+	 * @deprecated this constructor should only be used internally and will become non-public at some point
+	 */
+	@Deprecated(forRemoval = true)
+	public StatsSpeedometer(final double halfLife, final boolean saveHistory, final Clock clock) {
+		this.clock = clock;
+		final long now = clock.now();
+		this.startTime = now;
+		this.lastTime = now;
 		reset(halfLife, saveHistory);
 	}
 
@@ -130,12 +171,12 @@ public class StatsSpeedometer implements StatsBuffered {
 		final StatSettings settings = StatSettingsFactory.get();
 
 		this.halfLife = Math.max(0.01, halfLife); // clip to 0.01 to avoid division by zero problems
-		startTime = System.nanoTime(); // find average since this time
+		startTime = clock.now(); // find average since this time
 		lastTime = startTime; // the last time update() was called
 		cyclesPerSecond = 0; // estimated average calls to cycle() per second
 		if (saveHistory) {
-			allHistory = new StatsBuffer(settings.getBufferSize(), 0, settings.getSkipSeconds());
-			recentHistory = new StatsBuffer(settings.getBufferSize(), settings.getRecentSeconds(), 0);
+			allHistory = new StatsBuffer(settings.getBufferSize(), 0, settings.getSkipSeconds(), clock);
+			recentHistory = new StatsBuffer(settings.getBufferSize(), settings.getRecentSeconds(), 0, clock);
 		} else {
 			allHistory = null;
 			recentHistory = null;
@@ -191,15 +232,15 @@ public class StatsSpeedometer implements StatsBuffered {
 	 * @return estimated number of calls to cycle() per second
 	 */
 	private synchronized double update(final double numCycles, final boolean recordData) {
-		final long currentTime = System.nanoTime();
+		final long currentTime = clock.now();
 		final double t1 = (lastTime - startTime) / 1.0e9; // seconds: start to last update
 		final double t2 = (currentTime - startTime) / 1.0e9; // seconds: start to now
 		final double dt = (currentTime - lastTime) / 1.0e9; // seconds: last update to now
-		if (1.0 / t2 > ln2 / halfLife) { // during startup period, so do uniformly-weighted average
+		if (1.0 / t2 > LN_2 / halfLife) { // during startup period, so do uniformly-weighted average
 			cyclesPerSecond = (cyclesPerSecond * t1 + numCycles) / t2;
 		} else { // after startup, so do exponentially-weighted average with given half life
 			cyclesPerSecond = cyclesPerSecond * Math.pow(0.5, dt / halfLife)
-					+ numCycles * ln2 / halfLife;
+					+ numCycles * LN_2 / halfLife;
 		}
 		lastTime = currentTime;
 		if (allHistory != null && recordData) {
@@ -265,7 +306,7 @@ public class StatsSpeedometer implements StatsBuffered {
 // if only update(n) is called (not cycle), and if it is always called
 // exactly once a second since the start, then exponential weighting would be:
 // cyclesPerSecond = gamma * cyclesPerSecond + (1-gamma) * n
-// It it easy to verify that if we want a half life of halfLife seconds, we use:
+// It is easy to verify that if we want a half life of halfLife seconds, we use:
 // gamma = Math.pow(0.5, 1 / halfLife)
 // If we have skipped calling update() for the last dt seconds,
 // each of which should have been calls to update(0), but

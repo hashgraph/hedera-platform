@@ -17,7 +17,7 @@
 package com.swirlds.platform.network;
 
 import com.swirlds.common.system.NodeId;
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.stats.PlatformStatistics;
 
 public interface NetworkStats extends PlatformStatistics {
@@ -27,7 +27,7 @@ public interface NetworkStats extends PlatformStatistics {
 	 * @param connection
 	 * 		a new connection
 	 */
-	void connectionEstablished(final SyncConnection connection);
+	void connectionEstablished(final Connection connection);
 
 	/**
 	 * Record the ping time to this particular node

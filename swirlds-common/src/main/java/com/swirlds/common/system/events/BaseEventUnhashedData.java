@@ -20,10 +20,10 @@ import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.utility.CommonUtils;
-import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 /**
  * A class used to store base event data that does not affect the hash of that event.
@@ -70,7 +70,7 @@ public class BaseEventUnhashedData implements SelfSerializable {
 	}
 
 	@Override
-	public void serialize(SerializableDataOutputStream out) throws IOException {
+	public void serialize(final SerializableDataOutputStream out) throws IOException {
 		out.writeLong(creatorSeq);
 		out.writeLong(otherId);
 		out.writeLong(otherSeq);
@@ -78,7 +78,7 @@ public class BaseEventUnhashedData implements SelfSerializable {
 	}
 
 	@Override
-	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
+	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
 		creatorSeq = in.readLong();
 		otherId = in.readLong();
 		otherSeq = in.readLong();
@@ -97,12 +97,10 @@ public class BaseEventUnhashedData implements SelfSerializable {
 
 		final BaseEventUnhashedData that = (BaseEventUnhashedData) o;
 
-		return new EqualsBuilder()
-				.append(creatorSeq, that.creatorSeq)
-				.append(otherId, that.otherId)
-				.append(otherSeq, that.otherSeq)
-				.append(signature, that.signature)
-				.isEquals();
+		return (creatorSeq == that.creatorSeq)
+				&& (otherId == that.otherId)
+				&& (otherSeq == that.otherSeq)
+				&& Arrays.equals(signature, that.signature);
 	}
 
 	@Override

@@ -18,11 +18,15 @@ package com.swirlds.platform;
 import com.swirlds.common.settings.SettingsException;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.utility.CommonUtils;
+import com.swirlds.common.utility.PlatformVersion;
+import com.swirlds.platform.chatter.ChatterSubSetting;
 import com.swirlds.platform.internal.CryptoSettings;
 import com.swirlds.platform.internal.SubSetting;
 import com.swirlds.platform.reconnect.ReconnectSettingsImpl;
-import com.swirlds.platform.state.SignedStateManager;
 import com.swirlds.platform.state.StateSettings;
+import com.swirlds.platform.state.address.AddressBookSettingsImpl;
+import com.swirlds.platform.state.signed.SignedStateFileManager;
+import com.swirlds.platform.state.signed.SignedStateManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -59,7 +63,7 @@ import static com.swirlds.logging.LogMarker.STARTUP;
  * Browser should then call writeSettings() to write all the final settings values to settingsUsed.txt
  * (though only if settings.txt exists).
  */
-class Settings {
+public class Settings {
 	// The following paths are for 4 files and 2 directories, such as:
 
 	// /FULL/PATH/sdk/config.txt
@@ -86,9 +90,9 @@ class Settings {
 	/** path to data/apps/ */
 	static final File appsDirPath = CommonUtils.canonicalFile("data", "apps");
 	/** path to data/saved/ that is be used for storing data from the platform */
-	static final File savedDirPath = CommonUtils.canonicalFile("data", "saved");
+	public static final File savedDirPath = CommonUtils.canonicalFile("data", "saved");
 	/** file extension used by the swirlds platform, it stands for SwirldsHashgraph */
-	static final String swirldsFileExtension = ".swh";
+	public static final String swirldsFileExtension = ".swh";
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
 	/** path to log4j2.xml (which might not exist) */
@@ -96,14 +100,6 @@ class Settings {
 
 	///////////////////////////////////////////
 	// settings from settings.txt file
-	static String about = """
-			Swirlds browser v. 0.26.3
-			(c)2016-2022 Swirlds Inc
-			This is an early alpha version.
-			The Swirlds™ software is covered by one or more patents
-			(see www.swirlds.com/ip). The browser is free to download,
-			to experiment with, and to test in building apps. To deploy
-			or use those apps, contact sales@swirlds.com""";
 
 	/** verify event signatures (rather than just trusting they are correct)? */
 	static boolean verifyEventSigs = true;
@@ -123,7 +119,7 @@ class Settings {
 	static long minTransTimestampIncrNanos = 1_000;
 
 	/** settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors */
-	static StateSettings state = new StateSettings();
+	public static StateSettings state = new StateSettings();
 
 	/** if set to true, the platform will fail to start if it fails to load a state from disk */
 	static boolean requireStateLoad = false;
@@ -288,6 +284,11 @@ class Settings {
 	static VirtualMapSettingsImpl virtualMap = new VirtualMapSettingsImpl();
 
 	/**
+	 * Settings controlling address books and related components.
+	 */
+	static AddressBookSettingsImpl addressBook = new AddressBookSettingsImpl();
+
+	/**
 	 * Settings controlling JasperDB.
 	 */
 	static JasperDbSettingsImpl jasperDb = new JasperDbSettingsImpl();
@@ -409,10 +410,15 @@ class Settings {
 	static String playbackStreamFileDirectory = "";
 	/** last time stamp (inclusive) to stop the playback, format is "2019-10-02T19:46:30.037063163Z" */
 	static String playbackEndTimeStamp = "";
-	/** whether to use chatter for event gossiping and creation, if false, it will use the sync protocol */
-	static boolean useChatter = false;
-	/** how many event do we attempt to create per second when running chatter */
-	static int attemptedChatterEventPerSecond = 50;
+
+	/** All chatter related settings */
+	static ChatterSubSetting chatter = new ChatterSubSetting();
+
+	/**
+	 * if set to false, the platform will refuse to gossip with a node which has a different version of either
+	 * platform or application
+	 */
+	static boolean gossipWithDifferentVersions = false;
 
 	private Settings() {
 	}
@@ -427,15 +433,21 @@ class Settings {
 	 * @param directory
 	 * 		the directory to write to
 	 */
-	static void writeSettingsUsed(final File directory) {
+	public static void writeSettingsUsed(final File directory) {
 		final String[][] settings = Settings.currSettings();
 		try (final BufferedWriter writer = Files.newBufferedWriter(
 				Paths.get(CommonUtils.canonicalFile(directory, settingsUsedFilename).getCanonicalPath()))) {
+			writer.write(PlatformVersion.locateOrDefault().license());
+			writer.write(System.lineSeparator());
+			writer.write(System.lineSeparator());
+
 			writer.write(
 					"The following are all the settings, as modified by settings.txt, but not reflecting any changes " +
-							"made by config.txt.\n\n");
+							"made by config.txt.");
+			writer.write(System.lineSeparator());
+			writer.write(System.lineSeparator());
 			for (final String[] pair : settings) {
-				writer.write(String.format("%15s = %s\n", pair[1], pair[0]));
+				writer.write(String.format("%15s = %s%n", pair[1], pair[0]));
 			}
 		} catch (final IOException e) {
 			log.error(EXCEPTION.getMarker(), "Error in writing to settingsUsed.txt", e);

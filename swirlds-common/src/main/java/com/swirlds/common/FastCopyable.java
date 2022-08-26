@@ -15,8 +15,6 @@
  */
 package com.swirlds.common;
 
-import com.swirlds.common.exceptions.MutabilityException;
-
 /**
  * An interface for classes that can be copied and serialized in a way specific to the Swirlds platform. If
  * a class implements the FastCopyable interface, then it should use a copy-on-write strategy so that calls

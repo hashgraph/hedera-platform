@@ -16,12 +16,12 @@
 
 package com.swirlds.platform.network;
 
-import com.swirlds.platform.SyncConnection;
+import com.swirlds.platform.Connection;
 
 /**
- * Manages a single topological connection, not a single {@link SyncConnection}. This means that if the network topology
+ * Manages a single topological connection, not a single {@link Connection}. This means that if the network topology
  * states that there should be a connection A->B, there will always be a single {@link ConnectionManager}. {@link
- * SyncConnection}s could break and be re-established, but they will always go though this single point.
+ * Connection}s could break and be re-established, but they will always go though this single point.
  */
 public interface ConnectionManager {
 	/**
@@ -32,14 +32,14 @@ public interface ConnectionManager {
 	 * @throws InterruptedException
 	 * 		if the thread gets interrupted while waiting
 	 */
-	SyncConnection waitForConnection() throws InterruptedException;
+	Connection waitForConnection() throws InterruptedException;
 
 	/**
 	 * Returns whatever connection is currently available, even if it's broken. This method should never block.
 	 *
 	 * @return the connection managed by this instance. can be broken but should never be null
 	 */
-	SyncConnection getConnection();
+	Connection getConnection();
 
 	/**
 	 * Provides a new connection to this instance initiated by the peer
@@ -49,5 +49,5 @@ public interface ConnectionManager {
 	 * @throws InterruptedException
 	 * 		thrown if the thread is interrupted while handing over the new connection
 	 */
-	void newConnection(final SyncConnection connection) throws InterruptedException;
+	void newConnection(final Connection connection) throws InterruptedException;
 }

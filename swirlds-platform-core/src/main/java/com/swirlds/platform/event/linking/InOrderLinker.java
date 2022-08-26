@@ -19,9 +19,7 @@ package com.swirlds.platform.event.linking;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.EventStrings;
-import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.GossipEvent;
-import com.swirlds.platform.sync.SyncGenerations;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -33,13 +31,11 @@ import static com.swirlds.logging.LogMarker.INVALID_EVENT_ERROR;
  * An {@link EventLinker} which expects events to be provided in topological order. If an out-of-order event is provided,
  * it is logged and discarded.
  */
-public class InOrderLinker implements EventLinker {
+public class InOrderLinker extends AbstractEventLinker {
 	private static final Logger LOG = LogManager.getLogger();
 	private final ParentFinder parentFinder;
 	/** Provides the most recent event by the supplied creator ID */
 	private final Function<Long, EventImpl> mostRecentEvent;
-	/** The current consensus generations */
-	private GraphGenerations currentGenerations = SyncGenerations.GENESIS_GENERATIONS;
 	private EventImpl linkedEvent = null;
 
 	public InOrderLinker(final ParentFinder parentFinder, final Function<Long, EventImpl> mostRecentEvent) {
@@ -54,7 +50,7 @@ public class InOrderLinker implements EventLinker {
 	public void linkEvent(final GossipEvent event) {
 		final ChildEvent childEvent = parentFinder.findParents(
 				event,
-				currentGenerations.getMinGenerationNonAncient()
+				getMinGenerationNonAncient()
 		);
 		if (childEvent.isOrphan()) {
 			logMissingParents(childEvent);
@@ -68,14 +64,6 @@ public class InOrderLinker implements EventLinker {
 			linkedEvent.clear();
 		}
 		linkedEvent = childEvent.getChild();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void updateGenerations(final GraphGenerations generations) {
-		currentGenerations = generations;
 	}
 
 	/**
@@ -105,7 +93,7 @@ public class InOrderLinker implements EventLinker {
 						most recent event by missing self parent creator:{}""",
 				event::missingParentsString,
 				() -> EventStrings.toMediumString(e),
-				() -> currentGenerations.getMinGenerationNonAncient(),
+				this::getMinGenerationNonAncient,
 				() -> EventStrings.toShortString(mostRecentEvent.apply(e.getHashedData().getCreatorId())),
 				() -> EventStrings.toShortString(mostRecentEvent.apply(e.getUnhashedData().getOtherId()))
 		);

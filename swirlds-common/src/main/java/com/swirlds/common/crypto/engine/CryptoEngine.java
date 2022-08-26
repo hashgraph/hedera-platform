@@ -30,9 +30,8 @@ import com.swirlds.common.crypto.internal.CryptographySettings;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.hash.FutureMerkleHash;
 import com.swirlds.common.merkle.hash.MerkleHashBuilder;
-import com.swirlds.common.threading.futures.WaitingFuture;
+import com.swirlds.common.threading.futures.StandardFuture;
 import com.swirlds.logging.LogMarker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -243,7 +242,7 @@ public class CryptoEngine implements Cryptography {
 	 * @return the cryptographic hash for the given message contents
 	 */
 	private static Hash digestSyncInternal(final Message message, final DigestProvider provider,
-			final WaitingFuture<Void> future) {
+			final StandardFuture<Void> future) {
 		final Hash hash;
 
 		try {
@@ -272,7 +271,7 @@ public class CryptoEngine implements Cryptography {
 	 */
 	private static boolean verifySyncInternal(final TransactionSignature signature,
 			final OperationProvider<TransactionSignature, Void, Boolean, ?, SignatureType> provider,
-			final WaitingFuture<Void> future) {
+			final StandardFuture<Void> future) {
 		final boolean isValid;
 
 		try {
@@ -387,8 +386,8 @@ public class CryptoEngine implements Cryptography {
 	@Override
 	public Hash digestSync(final Message message) {
 		final DigestProvider provider = new DigestProvider();
-		final WaitingFuture<Void> future = new WaitingFuture<>();
-		future.done(null);
+		final StandardFuture<Void> future = new StandardFuture<>();
+		future.complete(null);
 
 		return digestSyncInternal(message, provider, future);
 	}
@@ -398,8 +397,8 @@ public class CryptoEngine implements Cryptography {
 	 */
 	@Override
 	public void digestSync(final List<Message> messages) {
-		final WaitingFuture<Void> future = new WaitingFuture<>();
-		future.done(null);
+		final StandardFuture<Void> future = new StandardFuture<>();
+		future.complete(null);
 
 		for (final Message message : messages) {
 			digestSyncInternal(message, digestProvider, future);
@@ -547,8 +546,8 @@ public class CryptoEngine implements Cryptography {
 	 */
 	@Override
 	public boolean verifySync(final TransactionSignature signature) {
-		final WaitingFuture<Void> future = new WaitingFuture<>();
-		future.done(null);
+		final StandardFuture<Void> future = new StandardFuture<>();
+		future.complete(null);
 		if (signature.getSignatureType() == SignatureType.ECDSA_SECP256K1) {
 			return verifySyncInternal(signature, ecdsaSecp256k1VerificationProvider, future);
 		} else {
@@ -561,8 +560,8 @@ public class CryptoEngine implements Cryptography {
 	 */
 	@Override
 	public boolean verifySync(final List<TransactionSignature> signatures) {
-		final WaitingFuture<Void> future = new WaitingFuture<>();
-		future.done(null);
+		final StandardFuture<Void> future = new StandardFuture<>();
+		future.complete(null);
 
 		boolean finalOutcome = true;
 

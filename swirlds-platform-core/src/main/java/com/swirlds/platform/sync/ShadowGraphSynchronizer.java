@@ -16,13 +16,14 @@
 
 package com.swirlds.platform.sync;
 
+import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 import com.swirlds.common.threading.pool.ParallelExecutionException;
 import com.swirlds.common.threading.pool.ParallelExecutor;
 import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SettingsProvider;
-import com.swirlds.platform.SyncConnection;
-import com.swirlds.platform.components.EventTaskCreator;
+import com.swirlds.platform.Connection;
 import com.swirlds.platform.consensus.GraphGenerations;
+import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.stats.SyncStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -35,6 +36,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -63,44 +65,56 @@ public class ShadowGraphSynchronizer {
 	 * reconnect, so we have to make sure we always get the latest one
 	 */
 	private final Supplier<GraphGenerations> generationsSupplier;
-	/** for event creation and validation */
-	private final EventTaskCreator eventTaskCreator;
+	/** called to provide the sync result when the sync is done */
+	private final Consumer<SyncResult> syncDone;
+	/** consumes events received by the peer */
+	private final Consumer<GossipEvent> eventHandler;
 	/** manages sync related decisions */
 	private final FallenBehindManager fallenBehindManager;
 	/** executes tasks in parallel */
 	private final ParallelExecutor executor;
 	/** provides system settings */
 	private final SettingsProvider settings;
+	/** if set to true, send and receive initial negotiation bytes at the start of the sync */
+	private final boolean sendRecInitBytes;
+	/** executed before fetching the tips from the shadowgraph for the second time in phase 3 */
+	private final InterruptableRunnable executePreFetchTips;
 
 	public ShadowGraphSynchronizer(
 			final ShadowGraph shadowGraph,
 			final int numberOfNodes,
 			final SyncStats stats,
 			final Supplier<GraphGenerations> generationsSupplier,
-			final EventTaskCreator eventTaskCreator,
+			final Consumer<SyncResult> syncDone,
+			final Consumer<GossipEvent> eventHandler,
 			final FallenBehindManager fallenBehindManager,
 			final ParallelExecutor executor,
-			final SettingsProvider settings) {
+			final SettingsProvider settings,
+			final boolean sendRecInitBytes,
+			final InterruptableRunnable executePreFetchTips) {
 		this.shadowGraph = shadowGraph;
 		this.numberOfNodes = numberOfNodes;
 		this.stats = stats;
 		this.generationsSupplier = generationsSupplier;
-		this.eventTaskCreator = eventTaskCreator;
+		this.syncDone = syncDone;
+		this.eventHandler = eventHandler;
 		this.fallenBehindManager = fallenBehindManager;
 		this.executor = executor;
 		this.settings = settings;
+		this.sendRecInitBytes = sendRecInitBytes;
+		this.executePreFetchTips = executePreFetchTips;
 	}
 
 	private static List<Boolean> getMyBooleans(final List<ShadowEvent> theirTipShadows) {
 		final List<Boolean> myBooleans = new ArrayList<>(theirTipShadows.size());
-		for (ShadowEvent s : theirTipShadows) {
+		for (final ShadowEvent s : theirTipShadows) {
 			myBooleans.add(s != null);// is this event is known to me
 		}
 		return myBooleans;
 	}
 
 	private static List<ShadowEvent> processTheirBooleans(
-			final SyncConnection conn,
+			final Connection conn,
 			final List<ShadowEvent> myTips,
 			final List<Boolean> theirBooleans
 	) throws SyncException {
@@ -112,7 +126,7 @@ public class ShadowGraphSynchronizer {
 							myTips.size(), theirBooleans.size())
 			);
 		}
-		List<ShadowEvent> knownTips = new ArrayList<>();
+		final List<ShadowEvent> knownTips = new ArrayList<>();
 		// process their booleans
 		for (int i = 0; i < theirBooleans.size(); i++) {
 			if (Boolean.TRUE.equals(theirBooleans.get(i))) {
@@ -135,9 +149,11 @@ public class ShadowGraphSynchronizer {
 	 * 		if issue occurs while executing tasks in parallel
 	 * @throws SyncException
 	 * 		if any sync protocol issues occur
+	 * @throws InterruptedException
+	 * 		if the calling thread gets interrupted while the sync is ongoing
 	 */
-	public boolean synchronize(final SyncConnection conn)
-			throws IOException, ParallelExecutionException, SyncException {
+	public boolean synchronize(final Connection conn)
+			throws IOException, ParallelExecutionException, SyncException, InterruptedException {
 		LOG.info(SYNC_INFO.getMarker(), "{} sync start", conn.getDescription());
 		try {
 			return reserveSynchronize(conn);
@@ -148,28 +164,30 @@ public class ShadowGraphSynchronizer {
 
 	/**
 	 * Executes a sync using the supplied connection. This method contains all the logic while {@link
-	 * #synchronize(SyncConnection)} is just for exception handling.
+	 * #synchronize(Connection)} is just for exception handling.
 	 */
-	private boolean reserveSynchronize(final SyncConnection conn)
-			throws IOException, ParallelExecutionException, SyncException {
+	private boolean reserveSynchronize(final Connection conn)
+			throws IOException, ParallelExecutionException, SyncException, InterruptedException {
 		// accumulates time points for each step in the execution of a single gossip session, used for stats
 		// reporting and performance analysis
 		final SyncTiming timing = new SyncTiming();
 		final List<EventImpl> sendList;
-		try (GenerationReservation reservation = shadowGraph.reserve()) {
+		try (final GenerationReservation reservation = shadowGraph.reserve()) {
 			conn.initForSync();
 
 			timing.start();
 
-			SyncComms.writeFirstByte(conn);
+			if (sendRecInitBytes) {
+				SyncComms.writeFirstByte(conn);
+			}
 
 			// the generation we reserved is our minimum round generation
 			// the ShadowGraph guarantees it won't be expired until we release it
-			final SyncGenerations myGenerations = getGenerations(reservation.getGeneration());
+			final Generations myGenerations = getGenerations(reservation.getGeneration());
 			final List<ShadowEvent> myTips = getTips();
 			// READ and WRITE generation numbers & tip hashes
 			final Phase1Response theirGensTips = readWriteParallel(
-					SyncComms.phase1Read(conn, numberOfNodes),
+					SyncComms.phase1Read(conn, numberOfNodes, sendRecInitBytes),
 					SyncComms.phase1Write(conn, myGenerations, myTips),
 					conn
 			);
@@ -218,8 +236,8 @@ public class ShadowGraphSynchronizer {
 		return true;
 	}
 
-	private SyncGenerations getGenerations(final long minRoundGen) {
-		return new SyncGenerations(
+	private Generations getGenerations(final long minRoundGen) {
+		return new Generations(
 				minRoundGen,
 				generationsSupplier.get().getMinGenerationNonAncient(),
 				generationsSupplier.get().getMaxRoundGeneration()
@@ -233,7 +251,7 @@ public class ShadowGraphSynchronizer {
 		return myTips;
 	}
 
-	private boolean fallenBehind(final SyncGenerations self, final SyncGenerations other, final SyncConnection conn) {
+	private boolean fallenBehind(final Generations self, final Generations other, final Connection conn) {
 		final SyncFallenBehindStatus status = SyncFallenBehindStatus.getStatus(self, other);
 		if (status == SyncFallenBehindStatus.SELF_FALLEN_BEHIND) {
 			fallenBehindManager.reportFallenBehind(conn.getOtherId());
@@ -248,8 +266,8 @@ public class ShadowGraphSynchronizer {
 
 	private List<EventImpl> createSendList(
 			final Set<ShadowEvent> knownSet,
-			final SyncGenerations myGenerations,
-			final SyncGenerations theirGenerations) {
+			final Generations myGenerations,
+			final Generations theirGenerations) throws InterruptedException {
 		// add to knownSet all the ancestors of each known event
 		final Set<ShadowEvent> knownAncestors =
 				shadowGraph.findAncestors(knownSet,
@@ -265,7 +283,7 @@ public class ShadowGraphSynchronizer {
 		final Predicate<ShadowEvent> knownAncestorsPredicate =
 				SyncUtils.unknownNonAncient(knownAncestors, myGenerations, theirGenerations);
 
-
+		executePreFetchTips.run();
 		// in order to get the peer the latest events, we get a new set of tips to search from
 		final List<ShadowEvent> myNewTips = shadowGraph.getTips();
 
@@ -287,7 +305,7 @@ public class ShadowGraphSynchronizer {
 	}
 
 	private void phase3(
-			final SyncConnection conn,
+			final Connection conn,
 			final SyncTiming timing,
 			final List<EventImpl> sendList)
 			throws ParallelExecutionException {
@@ -295,7 +313,7 @@ public class ShadowGraphSynchronizer {
 		// the reading thread uses this to indicate to the writing thread that it is done
 		final CountDownLatch eventReadingDone = new CountDownLatch(1);
 		final Integer eventsRead = readWriteParallel(
-				SyncComms.phase3Read(conn, eventTaskCreator::addEvent, stats, eventReadingDone),
+				SyncComms.phase3Read(conn, eventHandler, stats, eventReadingDone),
 				SyncComms.phase3Write(conn, sendList, eventReadingDone),
 				conn
 		);
@@ -342,7 +360,7 @@ public class ShadowGraphSynchronizer {
 	private <T> T readWriteParallel(
 			final Callable<T> readTask,
 			final Callable<Void> writeTask,
-			final SyncConnection connection)
+			final Connection connection)
 			throws ParallelExecutionException {
 		return executor.doParallel(
 				readTask,
@@ -354,12 +372,12 @@ public class ShadowGraphSynchronizer {
 	/**
 	 * Applies throttle7 if enabled and applicable to this sync.
 	 */
-	private void throttle7(final SyncConnection conn, final int eventsReceived,
+	private void throttle7(final Connection conn, final int eventsReceived,
 			final int eventsSent) throws ParallelExecutionException {
 		if (settings.isThrottle7Enabled()) {
-			SyncThrottle throttle7 = new SyncThrottle(numberOfNodes, settings);
+			final SyncThrottle throttle7 = new SyncThrottle(numberOfNodes, settings);
 			if (throttle7.shouldThrottle(eventsReceived, eventsSent)) {
-				Integer throttle7BytesWritten = readWriteParallel(
+				final Integer throttle7BytesWritten = readWriteParallel(
 						throttle7.sendThrottleBytes(conn),
 						throttle7.receiveThrottleBytes(conn),
 						conn
@@ -370,7 +388,7 @@ public class ShadowGraphSynchronizer {
 	}
 
 	private void syncDone(final SyncResult info) {
-		eventTaskCreator.syncDone(info);
+		syncDone.accept(info);
 		stats.syncDone(info);
 	}
 
@@ -382,7 +400,7 @@ public class ShadowGraphSynchronizer {
 	 * @throws IOException
 	 * 		if there are any connection issues
 	 */
-	public void rejectSync(final SyncConnection conn) throws IOException {
+	public void rejectSync(final Connection conn) throws IOException {
 		try {
 			conn.initForSync();
 			SyncComms.rejectSync(conn, numberOfNodes);
