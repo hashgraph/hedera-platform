@@ -33,9 +33,10 @@ import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.EventCounter;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 import com.swirlds.platform.eventhandling.SwirldStateSingleTransactionPool;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.network.NetworkStats;
 import com.swirlds.platform.observers.EventAddedObserver;
-import com.swirlds.platform.state.StateRegistry;
+import com.swirlds.common.utility.RuntimeObjectRegistry;
 import com.swirlds.platform.state.SwirldStateManagerDouble;
 import com.swirlds.platform.state.SwirldStateManagerSingle;
 import com.swirlds.platform.stats.AverageAndMax;
@@ -75,6 +76,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static com.swirlds.common.metrics.FloatFormats.FORMAT_10_0;
 import static com.swirlds.common.metrics.FloatFormats.FORMAT_10_1;
@@ -200,8 +202,6 @@ public class Statistics extends AbstractStatistics implements
 
 	private final ThresholdLimitingHandler<Throwable> exceptionRateLimiter = new ThresholdLimitingHandler<>(
 			EXCEPTION_RATE_THRESHOLD);
-
-	private final SavedFileStatistics savedFileStatistics;
 
 	private final ReconnectStatistics reconnectStatistics;
 
@@ -631,14 +631,6 @@ public class Statistics extends AbstractStatistics implements
 			FORMAT_16_2
 	);
 
-	/** average time it takes to acquire the lock for a state fast copy */
-	private final TimeStat avgStateCopyAdmit = new TimeStat(
-			ChronoUnit.MICROS,
-			INTERNAL_CATEGORY,
-			"avgStateCopyAdmit",
-			"average time it takes to acquire the lock for fast copying the state (in microseconds)"
-	);
-
 	/** average time it takes to create a new SignedState (in seconds) */
 	private final RunningAverageMetric avgSecNewSignedState = new RunningAverageMetric(
 			INTERNAL_CATEGORY,
@@ -1019,6 +1011,17 @@ public class Statistics extends AbstractStatistics implements
 	);
 
 	/**
+	 * average time spent in
+	 * {@code SwirldStateManager#prehandle} by the {@code intake} thread (in microseconds)
+	 */
+	private final TimeStat preHandleTime = new TimeStat(
+			ChronoUnit.MICROS,
+			INTERNAL_CATEGORY,
+			"preHandleMicros",
+			"average time it takes to perform preHandle (in microseconds)"
+	);
+
+	/**
 	 * average time spent in {@link SwirldStateManagerSingle} when performing a shuffle (in microseconds)
 	 */
 	private final RunningAverageMetric avgShuffleMicros = new RunningAverageMetric(
@@ -1220,7 +1223,6 @@ public class Statistics extends AbstractStatistics implements
 		this.perSecondStats = perSecondStats;
 		this.osBean = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
 		this.thbean = ManagementFactory.getThreadMXBean();
-		this.savedFileStatistics = new SavedFileStatistics();
 
 		this.reconnectStatistics = new ReconnectStatistics();
 		final int abSize = platform.getAddressBook() == null ? 0 : platform.getAddressBook().getSize(); //0 during unit
@@ -1277,7 +1279,7 @@ public class Statistics extends AbstractStatistics implements
 	public double[] getPingMilliseconds() {
 		final double[] times = new double[avgPingMilliseconds.length];
 		for (int i = 0; i < times.length; i++) {
-			times[i] = avgPingMilliseconds[i].getWeightedMean();
+			times[i] = avgPingMilliseconds[i].get();
 		}
 		times[platform.getSelfId().getIdAsInt()] = 0;
 		return times;
@@ -1506,28 +1508,33 @@ public class Statistics extends AbstractStatistics implements
 				stateDeletionQueueAvg,
 				stateDeletionTimeAvg,
 				tipsPerSync,
-				issCount,
-				new FunctionGauge<>(
-						INTERNAL_CATEGORY,
-						"statesInMemory",
-						"the number of State objects in memory",
-						"%d",
-						StateRegistry::getActiveStateCount),
-				new FunctionGauge<>(
-						INTERNAL_CATEGORY,
-						"oldestStateSeconds",
-						"the age of the oldest State object in memory",
-						"%d",
-						() -> StateRegistry.getOldestActiveStateAge(Instant.now()).toSeconds())
+				issCount
 		};
 		final List<Metric> entryList = new ArrayList<>(Arrays.asList(statEntries));
 
-		entryList.addAll(additionalEntries);
+		// runtime objects count and age tracked in RuntimeObjectRegistry
+		final List<FunctionGauge<Number>> runtimeObjectEntries = RuntimeObjectRegistry.getTrackedClasses()
+				.stream()
+				.flatMap(cls -> {
+					final String className = cls.getSimpleName();
+					FunctionGauge<Number> count = new FunctionGauge<>(
+							INTERNAL_CATEGORY,
+							"countInMemory" + className,
+							"the number of " + className + " objects in memory",
+							"%d",
+							() -> RuntimeObjectRegistry.getActiveObjectsCount(cls));
+					FunctionGauge<Number> maxAge = new FunctionGauge<>(
+							INTERNAL_CATEGORY,
+							"oldest" + className + "Seconds",
+							"the age of the oldest " + className + " object in memory",
+							"%d",
+							() -> RuntimeObjectRegistry.getOldestActiveObjectAge(cls, Instant.now()).toSeconds());
+					return Stream.of(count, maxAge);
+				}).toList();
+		entryList.addAll(runtimeObjectEntries);
 
-		entryList.add(this.savedFileStatistics.createMetricForTrackingFileSize("SignedState.swh",
-				"Size of SignedState.swh, bytes"));
-		entryList.add(this.savedFileStatistics.createMetricForTrackingFileSize("PostgresBackup.tar.gz",
-				"Size of PostgresDB, bytes"));
+		// additional entries
+		entryList.addAll(additionalEntries);
 
 		// atomic stats
 		entryList.addAll(avgEventsPerSyncSent.getAllEntries());
@@ -1548,8 +1555,8 @@ public class Statistics extends AbstractStatistics implements
 		entryList.add(gensWaitingForExpiry.getStatEntry());
 		entryList.add(knownSetSize.getStatEntry());
 		entryList.add(multiTipsPerSync.getStatEntry());
-		entryList.add(avgStateCopyAdmit.getAverageStat());
 		entryList.add(preConsHandleTime.getAverageStat());
+		entryList.add(preHandleTime.getAverageStat());
 		entryList.add(avgQ1PreConsEvents.getAverageStat());
 		entryList.add(avgQ1PreConsEvents.getMaxStat());
 		entryList.add(avgQ2ConsEvents.getAverageStat());
@@ -2011,8 +2018,8 @@ public class Statistics extends AbstractStatistics implements
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void consensusTransHandled() {
-		transHandledPerSecond.cycle();
+	public void consensusTransHandled(final int numTrans) {
+		transHandledPerSecond.update(numTrans);
 	}
 
 	/**
@@ -2036,7 +2043,7 @@ public class Statistics extends AbstractStatistics implements
 	 */
 	@Override
 	public double getAvgSelfCreatedTimestamp() {
-		return avgSelfCreatedTimestamp.getWeightedMean();
+		return avgSelfCreatedTimestamp.get();
 	}
 
 	/**
@@ -2044,12 +2051,7 @@ public class Statistics extends AbstractStatistics implements
 	 */
 	@Override
 	public double getAvgOtherReceivedTimestamp() {
-		return avgOtherReceivedTimestamp.getWeightedMean();
-	}
-
-	@Override
-	public void stateCopyAdmit(final long start, final long end) {
-		avgStateCopyAdmit.update(start, end);
+		return avgOtherReceivedTimestamp.get();
 	}
 
 	@Override
@@ -2060,6 +2062,11 @@ public class Statistics extends AbstractStatistics implements
 	@Override
 	public void preConsensusHandleTime(final long start, final long end) {
 		this.preConsHandleTime.update(start, end);
+	}
+
+	@Override
+	public void preHandleTime(final long start, final long end) {
+		this.preHandleTime.update(start, end);
 	}
 
 	@Override

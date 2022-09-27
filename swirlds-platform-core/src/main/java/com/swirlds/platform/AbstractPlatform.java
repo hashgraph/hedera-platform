@@ -34,6 +34,7 @@ import com.swirlds.platform.components.TransactionTracker;
 import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 import com.swirlds.platform.eventhandling.PreConsensusEventHandler;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.network.ConnectionTracker;
 import com.swirlds.platform.network.unidirectional.SharedConnectionLocks;
 import com.swirlds.platform.state.signed.SignedState;

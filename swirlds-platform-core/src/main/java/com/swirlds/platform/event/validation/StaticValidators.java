@@ -19,7 +19,7 @@ package com.swirlds.platform.event.validation;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.system.events.BaseEvent;
 import com.swirlds.common.system.events.BaseEventHashedData;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.consensus.GraphGenerations;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

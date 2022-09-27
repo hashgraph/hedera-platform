@@ -29,6 +29,7 @@ public class StateSavedToDiskPayload extends AbstractLogPayload {
 	}
 
 	public StateSavedToDiskPayload(final long round, final boolean freezeState) {
+		super("Finished writing state for round " + round + " to disk.");
 		this.round = round;
 		this.freezeState = freezeState;
 	}

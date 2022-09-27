@@ -31,8 +31,8 @@ import java.util.Objects;
 /**
  * An {@link AddressBookStore} that is included in the state. This address book store is sequential. That is,
  * once a copy is made, the old copy becomes immutable. This implementation is more performant than
- * {@link BranchingAddressBookStore}, but is incompatible with {@link com.swirlds.common.system.SwirldState}
- * (use {@link com.swirlds.common.system.SwirldState.SwirldState2} instead).
+ * {@link BranchingAddressBookStore}, but is incompatible with {@link com.swirlds.common.system.SwirldState1}
+ * (use {@link com.swirlds.common.system.SwirldState2} instead).
  */
 public class SequentialAddressBookStore extends AbstractAddressBookStore implements ComposedMerkleInternal {
 
@@ -250,7 +250,7 @@ public class SequentialAddressBookStore extends AbstractAddressBookStore impleme
 			map.release();
 		}
 	}
-	
+
 	/**
 	 * Clean up resources that the garbage collector can't clean automatically.
 	 */

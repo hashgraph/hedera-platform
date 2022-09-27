@@ -18,6 +18,7 @@ package com.swirlds.platform.eventhandling;
 import com.swirlds.common.system.EventCreationRuleResponse;
 import com.swirlds.common.system.transaction.ConsensusTransaction;
 import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
+import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRule;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
@@ -29,7 +30,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.LinkedList;
 import java.util.function.BooleanSupplier;
 
-import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.PASS;
 import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.SYNC_AND_CREATE;
@@ -105,7 +105,7 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 				if (!trans.isSystem()) {
 					numUserTransEvent--;
 				} else {
-					if (trans.getTransactionType() == SYS_TRANS_STATE_SIG) {
+					if (isSignatureTrans(trans)) {
 						numSignatureTransEvent--;
 					}
 				}
@@ -113,6 +113,11 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 		}
 
 		return selectedTrans.toArray(new ConsensusTransactionImpl[0]);
+	}
+
+	private static boolean isSignatureTrans(final ConsensusTransaction transaction) {
+		// check the class rather than casting and calling getType() because it is more performant
+		return transaction.getClass().equals(StateSignatureTransaction.class);
 	}
 
 	/**
@@ -185,7 +190,7 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 			if (!trans.isSystem()) {
 				numUserTransEvent++;
 			} else {
-				if (trans.getTransactionType() == SYS_TRANS_STATE_SIG) {
+				if (isSignatureTrans(trans)) {
 					numSignatureTransEvent++;
 				}
 			}

@@ -26,9 +26,8 @@ import com.swirlds.common.utility.CommonUtils;
  * a given half life. If it is always given the same value, then that value will be the average, regardless
  * of the timing.
  */
-public class RunningAverageMetric extends Metric {
+public class RunningAverageMetric extends AbstractDistributionMetric {
 
-	private final double halfLife;
 	private final Clock clock;
 
 	@SuppressWarnings("removal")
@@ -95,8 +94,7 @@ public class RunningAverageMetric extends Metric {
 			final String format,
 			final double halfLife,
 			final Clock clock) {
-		super(category, name, description, format);
-		this.halfLife = halfLife;
+		super(category, name, description, format, halfLife);
 		this.clock = CommonUtils.throwArgNull(clock, "clock");
 		this.runningAverage = new StatsRunningAverage(halfLife, clock);
 	}
@@ -108,23 +106,6 @@ public class RunningAverageMetric extends Metric {
 	@Override
 	public void init() {
 		runningAverage = new StatsRunningAverage(halfLife, clock);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void reset() {
-		runningAverage.reset(halfLife);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@SuppressWarnings("removal")
-	@Override
-	public Object getValue() {
-		return getWeightedMean();
 	}
 
 	/**
@@ -160,7 +141,8 @@ public class RunningAverageMetric extends Metric {
 	 *
 	 * @return the running average as of the last time recordValue was called
 	 */
-	public double getWeightedMean() {
+	@Override
+	public double get() {
 		return runningAverage.getWeightedMean();
 	}
 }

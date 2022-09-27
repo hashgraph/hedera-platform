@@ -16,8 +16,8 @@
 
 package com.swirlds.platform.observers;
 
-import com.swirlds.platform.ConsensusRound;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.event.GossipEvent;
 
 import java.util.ArrayList;

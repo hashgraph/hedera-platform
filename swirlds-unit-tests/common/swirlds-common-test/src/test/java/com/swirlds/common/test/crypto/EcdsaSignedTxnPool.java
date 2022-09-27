@@ -19,7 +19,7 @@ package com.swirlds.common.test.crypto;
 import com.goterl.lazysodium.interfaces.Sign;
 import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.crypto.TransactionSignature;
-import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.system.transaction.internal.SwirldTransaction;
 
 import java.security.KeyPair;
 import java.security.interfaces.ECPublicKey;

@@ -18,6 +18,7 @@ package com.swirlds.platform.stats.cycle;
 
 import com.swirlds.common.metrics.FloatFormats;
 import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.utility.CommonUtils;
 
 /**
  * A metric that is used to output a percentage 0-100%
@@ -28,6 +29,7 @@ public abstract class PercentageMetric extends Metric {
 
 	protected PercentageMetric(final String category, final String name, final String description) {
 		super(category, name + APPENDIX, description, FloatFormats.FORMAT_3_1);
+		CommonUtils.throwArgNull(name, "name");
 	}
 
 	public static double calculatePercentage(final int total, final int part){

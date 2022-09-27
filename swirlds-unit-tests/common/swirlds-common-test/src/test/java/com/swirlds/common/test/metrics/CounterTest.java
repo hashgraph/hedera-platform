@@ -17,11 +17,17 @@
 package com.swirlds.common.test.metrics;
 
 import com.swirlds.common.metrics.Counter;
+import com.swirlds.common.metrics.Metric;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import static com.swirlds.common.metrics.Counter.CounterMode.INCREASE_AND_DECREASE;
-import static com.swirlds.common.metrics.Counter.CounterMode.INCREASE_ONLY;
+import java.util.List;
+
+import static com.swirlds.common.metrics.Counter.Mode.INCREASE_AND_DECREASE;
+import static com.swirlds.common.metrics.Counter.Mode.INCREASE_ONLY;
+import static com.swirlds.common.metrics.Metric.ValueType.COUNTER;
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -41,7 +47,9 @@ class CounterTest {
         assertEquals(DESCRIPTION, counter.getDescription(), "The description was not set correctly in the constructor");
         assertEquals(INCREASE_ONLY, counter.getMode(), "The mode should be INCREASE_ONLY");
         assertEquals(0L, counter.get(), "The value was not initialized correctly");
-        assertEquals(0L, counter.getValue(), "The value was not initialized correctly");
+        assertEquals(0L, counter.get(COUNTER), "The value was not initialized correctly");
+        assertEquals(0L, counter.get(VALUE), "The value was not initialized correctly");
+        assertEquals(List.of(COUNTER), counter.getValueTypes(), "ValueTypes should be [COUNTER]");
     }
 
     @Test
@@ -65,7 +73,9 @@ class CounterTest {
         assertEquals(DESCRIPTION, counter.getDescription(), "The description was not set correctly in the constructor");
         assertEquals(INCREASE_AND_DECREASE, counter.getMode(), "The mode should be INCREASE_ONLY");
         assertEquals(0L, counter.get(), "The value was not initialized correctly");
-        assertEquals(0L, counter.getValue(), "The value was not initialized correctly");
+        assertEquals(0L, counter.get(COUNTER), "The value was not initialized correctly");
+        assertEquals(0L, counter.get(VALUE), "The value was not initialized correctly");
+        assertEquals(List.of(VALUE), counter.getValueTypes(), "ValueTypes should be [VALUE]");
     }
 
     @Test
@@ -92,14 +102,16 @@ class CounterTest {
 
         // then
         assertEquals(3L, counter.get(), "Value should be 3");
-        assertEquals(3L, counter.getValue(), "Value should be 3");
+        assertEquals(3L, counter.get(COUNTER), "Value should be 3");
+        assertEquals(3L, counter.get(VALUE), "Value should be 3");
 
         // when
         counter.add(5L);
 
         // then
         assertEquals(8L, counter.get(), "Value should be 8");
-        assertEquals(8L, counter.getValue(), "Value should be 8");
+        assertEquals(8L, counter.get(COUNTER), "Value should be 8");
+        assertEquals(8L, counter.get(VALUE), "Value should be 8");
     }
 
     @Test
@@ -121,7 +133,8 @@ class CounterTest {
 
         // then
         assertEquals(-3L, counter.get(), "Value should be -3");
-        assertEquals(-3L, counter.getValue(), "Value should be -3");
+        assertEquals(-3L, counter.get(COUNTER), "Value should be -3");
+        assertEquals(-3L, counter.get(VALUE), "Value should be -3");
     }
 
     @Test
@@ -143,21 +156,24 @@ class CounterTest {
 
         // then
         assertEquals(-3L, counter.get(), "Value should be -3");
-        assertEquals(-3L, counter.getValue(), "Value should be -3");
+        assertEquals(-3L, counter.get(COUNTER), "Value should be -3");
+        assertEquals(-3L, counter.get(VALUE), "Value should be -3");
 
         // when
         counter.subtract(-5L);
 
         // then
         assertEquals(2L, counter.get(), "Value should be 2");
-        assertEquals(2L, counter.getValue(), "Value should be 2");
+        assertEquals(2L, counter.get(COUNTER), "Value should be 2");
+        assertEquals(2L, counter.get(VALUE), "Value should be 2");
 
         // when
         counter.subtract(0L);
 
         // then
         assertEquals(2L, counter.get(), "Value should be 2");
-        assertEquals(2L, counter.getValue(), "Value should be 2");
+        assertEquals(2L, counter.get(COUNTER), "Value should be 2");
+        assertEquals(2L, counter.get(VALUE), "Value should be 2");
     }
 
     @Test
@@ -171,14 +187,16 @@ class CounterTest {
 
         // then
         assertEquals(1L, counter.get(), "Value should be 1");
-        assertEquals(1L, counter.getValue(), "Value should be 1");
+        assertEquals(1L, counter.get(COUNTER), "Value should be 1");
+        assertEquals(1L, counter.get(VALUE), "Value should be 1");
 
         // when
         counter.increment();
 
         // then
         assertEquals(2L, counter.get(), "Value should be 2");
-        assertEquals(2L, counter.getValue(), "Value should be 2");
+        assertEquals(2L, counter.get(COUNTER), "Value should be 2");
+        assertEquals(2L, counter.get(VALUE), "Value should be 2");
     }
 
     @Test
@@ -200,14 +218,63 @@ class CounterTest {
 
         // then
         assertEquals(-1L, counter.get(), "Value should be -1");
-        assertEquals(-1L, counter.getValue(), "Value should be -1");
+        assertEquals(-1L, counter.get(COUNTER), "Value should be -1");
+        assertEquals(-1L, counter.get(VALUE), "Value should be -1");
 
         // when
         counter.decrement();
 
         // then
         assertEquals(-2L, counter.get(), "Value should be -2");
-        assertEquals(-2L, counter.getValue(), "Value should be -2");
+        assertEquals(-2L, counter.get(COUNTER), "Value should be -2");
+        assertEquals(-2L, counter.get(VALUE), "Value should be -2");
     }
 
+    @Test
+    void testSnapshotWithIncreaseOnly() {
+        // given
+        final Counter counter = new Counter(CATEGORY, NAME, DESCRIPTION);
+        counter.add(2L);
+
+        // when
+        final List<Pair<Metric.ValueType, Object>> snapshot = counter.takeSnapshot();
+
+        // then
+        assertEquals(2L, counter.get(), "Value should be 2");
+        assertEquals(2L, counter.get(COUNTER), "Value should be 2");
+        assertEquals(2L, counter.get(VALUE), "Value should be 2");
+        assertEquals(List.of(Pair.of(COUNTER, 2L)), snapshot, "Snapshot is not correct");
+    }
+
+    @Test
+    void testSnapshotWithIncreaseAndDecrease() {
+        // given
+        final Counter counter = new Counter(CATEGORY, NAME, DESCRIPTION, INCREASE_AND_DECREASE);
+        counter.add(2L);
+
+        // when
+        final List<Pair<Metric.ValueType, Object>> snapshot = counter.takeSnapshot();
+
+        // then
+        assertEquals(2L, counter.get(), "Value should be 2");
+        assertEquals(2L, counter.get(COUNTER), "Value should be 2");
+        assertEquals(2L, counter.get(VALUE), "Value should be 2");
+        assertEquals(List.of(Pair.of(VALUE, 2L)), snapshot, "Snapshot is not correct");
+    }
+
+    @Test
+    void testInvalidGets() {
+        // given
+        final Counter counter = new Counter(CATEGORY, NAME, DESCRIPTION, INCREASE_AND_DECREASE);
+
+        // then
+        assertThrows(IllegalArgumentException.class, () -> counter.get(null),
+                "Calling get() with null should throw an IAE");
+        assertThrows(IllegalArgumentException.class, () -> counter.get(Metric.ValueType.MIN),
+                "Calling get() with an unsupported MetricType should throw an IAE");
+        assertThrows(IllegalArgumentException.class, () -> counter.get(Metric.ValueType.MAX),
+                "Calling get() with an unsupported MetricType should throw an IAE");
+        assertThrows(IllegalArgumentException.class, () -> counter.get(Metric.ValueType.STD_DEV),
+                "Calling get() with an unsupported MetricType should throw an IAE");
+    }
 }

@@ -27,6 +27,7 @@ import static com.swirlds.common.utility.CommonUtils.throwArgNull;
  * An array iterator that skips certain indices.
  *
  * @param <T>
+ * 		the type being iterated
  */
 public class SkippingIterator<T> implements Iterator<T> {
 

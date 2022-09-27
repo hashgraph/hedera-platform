@@ -18,8 +18,8 @@ package com.swirlds.platform.components;
 
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.Consensus;
-import com.swirlds.platform.ConsensusRound;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.sync.Generations;
 
 import java.util.LinkedList;

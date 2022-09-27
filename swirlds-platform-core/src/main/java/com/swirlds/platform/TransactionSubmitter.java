@@ -17,7 +17,7 @@
 package com.swirlds.platform;
 
 import com.swirlds.common.system.PlatformStatus;
-import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.system.transaction.internal.SwirldTransaction;
 import com.swirlds.common.utility.BooleanFunction;
 import com.swirlds.platform.stats.TransactionStatistics;
 

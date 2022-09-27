@@ -17,6 +17,9 @@
 package com.swirlds.common.metrics;
 
 import com.swirlds.common.statistics.StatsBuffered;
+import org.apache.commons.lang3.tuple.Pair;
+
+import java.util.List;
 
 import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
@@ -24,6 +27,20 @@ import static com.swirlds.common.utility.CommonUtils.throwArgNull;
  * A single metric that is monitored here.
  */
 public abstract class Metric {
+
+	/**
+	 * A {@code Metric} can keep track of several values, which are distinguished via the {@code MetricType}
+	 */
+	public enum ValueType {COUNTER, VALUE, MAX, MIN, STD_DEV}
+
+	protected static final List<ValueType> VALUE_TYPE = List.of(ValueType.VALUE);
+	protected static final List<ValueType> DISTRIBUTION_TYPES = List.of(
+			ValueType.VALUE,
+			ValueType.MAX,
+			ValueType.MIN,
+			ValueType.STD_DEV
+	);
+	protected static final List<ValueType> COUNTER_TYPE = List.of(ValueType.COUNTER);
 
 	private final String category;
 	private final String name;
@@ -54,7 +71,7 @@ public abstract class Metric {
 	}
 
 	/**
-	 * the kind of statistic (stats are grouped or filtered by this)
+	 * the kind of metric (metrics are grouped or filtered by this)
 	 *
 	 * @return the category
 	 */
@@ -90,6 +107,34 @@ public abstract class Metric {
 	}
 
 	/**
+	 * Returns a list of {@link ValueType}s that are provided by this {@code Metric}.
+	 * The list of {@code ValueTypes} will always be in the same order.
+	 *
+	 * @return the list of {@code ValueTypes}
+	 */
+	public abstract List<ValueType> getValueTypes();
+
+	/**
+	 * Returns the current value of the given {@link ValueType}.
+	 *
+	 * @param valueType The {@code ValueType} of the requested value
+	 * @return the current value
+	 * @throws IllegalArgumentException if the given {@code ValueType} is not supported by this {@code Metric}
+	 */
+	public abstract Object get(final ValueType valueType);
+
+	/**
+	 * Take a snapshot of the current value(s) and return them. If the functionality of this {@code Metric}
+	 * requires it to be reset in regular intervals, it is done automatically after the snapshot was generated.
+	 * The list of {@code ValueTypes} will always be in the same order.
+	 *
+	 * @return the list of {@code ValueTypes} with their current values
+	 * @deprecated Implementation detail, will become non-public at some point
+	 */
+	@Deprecated(forRemoval = true)
+	public abstract List<Pair<ValueType, Object>> takeSnapshot();
+
+	/**
 	 * This method initializes the {@code Metric}
 	 *
 	 * @deprecated This method seems to be a byproduct of the current Statistics-initialization
@@ -110,33 +155,6 @@ public abstract class Metric {
 	}
 
 	/**
-	 * This method returns the current value of the {@code Metric}.
-	 * <p>
-	 * As a {@code Metric} can have more than one value, this method will be replaced.
-	 *
-	 * @return the current value
-	 * @deprecated This method is only temporary and will be removed during the Metric overhaul.
-	 */
-	@Deprecated(forRemoval = true)
-	public abstract Object getValue();
-
-	/**
-	 * This method returns the current value and clears it before returning. It is called periodically when the
-	 * {@code Metric} is output to file. Together this implements a sliding window where only the values between
-	 * two reads are aggregated.
-	 * <p>
-	 * The functionality of this method and {@link Metric#reset()} can easily be confused. Also, it is
-	 * questionable, if we really want exponentially decaying metrics AND sliding window metrics in parallel.
-	 *
-	 * @return the current value
-	 * @deprecated This method is only temporary and will be removed during the Metric overhaul.
-	 */
-	@Deprecated(forRemoval = true)
-	public Object getValueAndReset() {
-		return getValue();
-	}
-
-	/**
 	 * This method returns the {@link StatsBuffered} of this metric, if there is one.
 	 * <p>
 	 * This method is only used to simplify the migration and will be removed afterwards
@@ -148,4 +166,5 @@ public abstract class Metric {
 	public StatsBuffered getStatsBuffered() {
 		return null;
 	}
+
 }

@@ -19,8 +19,6 @@ package com.swirlds.platform.state;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRule;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
 import com.swirlds.platform.stats.SwirldStateStats;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -33,9 +31,6 @@ import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResp
  * A utility class with useful methods for implementations of {@link SwirldStateManager}.
  */
 public final class SwirldStateManagerUtils {
-
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
-	private static final Logger LOG = LogManager.getLogger();
 
 	// prevent instantiation of a static utility class
 	private SwirldStateManagerUtils() {
@@ -52,9 +47,6 @@ public final class SwirldStateManagerUtils {
 	 * @return the newly created state copy
 	 */
 	public static State fastCopy(final State state, final SwirldStateStats stats) {
-		final long admitStart = System.nanoTime();
-		final long admitEnd = System.nanoTime();
-
 		final long copyStart = System.nanoTime();
 
 		// Create a fast copy
@@ -65,7 +57,6 @@ public final class SwirldStateManagerUtils {
 
 		final long copyEnd = System.nanoTime();
 
-		stats.stateCopyAdmit(admitStart, admitEnd);
 		stats.stateCopyMicros((copyEnd - copyStart) * NANOSECONDS_TO_MICROSECONDS);
 
 		return copy;

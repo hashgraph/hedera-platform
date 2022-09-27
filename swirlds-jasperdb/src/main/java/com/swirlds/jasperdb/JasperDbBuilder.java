@@ -18,6 +18,7 @@ package com.swirlds.jasperdb;
 
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.io.utility.TemporaryFileBuilder;
 import com.swirlds.jasperdb.files.hashmap.KeySerializer;
 import com.swirlds.jasperdb.settings.JasperDbSettings;
 import com.swirlds.jasperdb.settings.JasperDbSettingsFactory;
@@ -31,7 +32,8 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.Objects;
 
-import static com.swirlds.common.utility.CommonUtils.hardLinkTree;
+import static com.swirlds.common.io.utility.FileUtils.hardLinkTree;
+import static com.swirlds.common.io.utility.FileUtils.rethrowIO;
 
 /**
  * An implementation of {@link VirtualDataSourceBuilder} for building {@link VirtualDataSourceJasperDB}
@@ -45,14 +47,14 @@ import static com.swirlds.common.utility.CommonUtils.hardLinkTree;
  */
 public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualValue>
 		implements VirtualDataSourceBuilder<K, V> {
-    
+
 	private static final long CLASS_ID = 0xe3f6da254983b38cL;
 
 	private static final class ClassVersion {
 		public static final int ORIGINAL = 1;
 		public static final int REMOVE_MERGE_ENABLED_FLAG = 2;
 	}
-  
+
 	/**
 	 * Since {@code com.swirlds.platform.Browser} populates settings, and it is loaded before
 	 * any application classes that might instantiate a data source, the {@link JasperDbSettingsFactory}
@@ -61,9 +63,10 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
 	private final JasperDbSettings settings = JasperDbSettingsFactory.get();
 
 	/**
-	 * The base directory in which the database directory will be created. By default picked up from settings.
+	 * The base directory in which the database directory will be created. By default, a temporary location
+	 * provided by {@link com.swirlds.common.io.utility.TemporaryFileBuilder}.
 	 */
-	private Path storageDir = Path.of(settings.getStoragePath());
+	private Path storageDir;
 	/**
 	 * If the database should prefer to use the disk for its indexes. The default is false which should be correct for
 	 * most production use cases. Only set to true if you need to open a database using the minimum RAM possible and can
@@ -110,7 +113,7 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
 	 */
 	private KeySerializer<K> keySerializer;
 
-  /**
+	/**
 	 * {@inheritDoc}
 	 */
 	@Override
@@ -162,6 +165,7 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
 	/**
 	 * Specify the base directory in which the database directory will be created. The database will be created as a
 	 * sub-directory of this storage directory. By default, it is loaded from settings.
+	 *
 	 * @see com.swirlds.jasperdb.settings.DefaultJasperDbSettings
 	 */
 	public JasperDbBuilder<K, V> storageDir(final Path dir) {
@@ -241,7 +245,7 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
 					virtualLeafRecordSerializer,
 					virtualInternalRecordSerializer,
 					keySerializer,
-					storageDir.resolve(name),
+					getStorageDir(name),
 					label,
 					maxNumOfKeys,
 					withDbCompactionEnabled,
@@ -273,7 +277,7 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
 	@Override
 	public VirtualDataSourceJasperDB<K, V> build(final String name, final String label,
 			final VirtualDataSource<K, V> snapshotMe, boolean withDbCompactionEnabled) {
-		return build(label, storageDir.resolve(name), snapshotMe, withDbCompactionEnabled);
+		return build(label, getStorageDir(name), snapshotMe, withDbCompactionEnabled);
 	}
 
 	/**
@@ -323,9 +327,8 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
 	@Override
 	public VirtualDataSource<K, V> build(final String name, final String label, final Path from,
 			final boolean withDbCompactionEnabled) {
-		final Path to = storageDir.resolve(name);
-		hardLinkTree(from.toFile(), to.toFile());
-
+		final Path to = getStorageDir(name);
+		rethrowIO(() -> hardLinkTree(from, to));
 		try {
 			return createDataSource(
 					virtualLeafRecordSerializer,
@@ -342,6 +345,17 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
 		}
 	}
 
+	private Path getStorageDir(String name) {
+		if (storageDir == null) {
+			try {
+				return TemporaryFileBuilder.buildTemporaryFile("database-" + name);
+			} catch (final IOException e) {
+				throw new UncheckedIOException(e);
+			}
+		}
+		return storageDir.resolve(name);
+	}
+
 	/**
 	 * Validate that all settings that have to be set have been set
 	 */
@@ -352,10 +366,6 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
 
 		if (keySerializer == null) {
 			throw new IllegalArgumentException("keySerializer must be specified");
-		}
-
-		if (storageDir == null) {
-			throw new IllegalArgumentException("storageDir must be specified");
 		}
 	}
 
@@ -420,7 +430,7 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
 		final JasperDbBuilder<?, ?> that = (JasperDbBuilder<?, ?>) o;
 
 		// Storage dir is intentionally omitted
-		return  preferDiskBasedIndexes == that.preferDiskBasedIndexes &&
+		return preferDiskBasedIndexes == that.preferDiskBasedIndexes &&
 				maxNumOfKeys == that.maxNumOfKeys &&
 				internalHashesRamToDiskThreshold == that.internalHashesRamToDiskThreshold &&
 				Objects.equals(virtualLeafRecordSerializer, that.virtualLeafRecordSerializer) &&

@@ -17,7 +17,7 @@
 package com.swirlds.platform.event.linking;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.event.GossipEvent;
 
 import java.util.function.Function;

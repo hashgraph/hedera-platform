@@ -16,9 +16,8 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.system.transaction.internal.SystemTransaction;
-
-import java.time.Instant;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 
 /**
  * Handles system transactions.
@@ -26,28 +25,18 @@ import java.time.Instant;
 public interface SystemTransactionHandler {
 
 	/**
-	 * All system transactions are handled by calling this method. handleSystemTransaction is the
-	 * equivalent of SwirldMain.handleTransaction, except that the "app" is the Platform itself.
-	 * <p>
-	 * Every system transaction is sent here twice, first with consensus being false, and again with
-	 * consensus being true. In other words, the platform will act like an app that implements SwirldState2
-	 * rather than an app implementing SwirldState.
-	 * <p>
-	 * This method is called by the thread-cons thread in ConsensusRoundHandler, and by this::preConsensusEvent. But it
-	 * could have deadlock problems if it tried to get a lock on Platform or Hashgraph while, for example, one of the
-	 * syncing threads is  holding those locks and waiting for the forCons/threadCons queue to not be full. So if this
-	 * method is changed, it should avoid that.
+	 * Pre-consensus system transactions are handled by calling this method.
 	 *
-	 * @param creator
-	 * 		the ID number of the member who created this transaction
-	 * @param isConsensus
-	 * 		is this transaction's timeCreated and position in history part of the consensus?
-	 * @param timeCreated
-	 * 		the time when this transaction was first created and sent to the network, as claimed by
-	 * 		the member that created it (which might be dishonest or mistaken)
-	 * @param trans
-	 * 		the transaction to handle, encoded any way the swirld app author chooses
+	 * @param event
+	 * 		the pre-consensus event with 0 or more system transactions to handle
 	 */
-	void handleSystemTransaction(final long creator, final boolean isConsensus,
-			final Instant timeCreated, final SystemTransaction trans);
+	void handleSystemTransactions(final EventImpl event);
+
+	/**
+	 * All consensus system transactions are handled by calling this method.
+	 *
+	 * @param round
+	 * 		the round of events with 0 or more system transactions to handle
+	 */
+	void handleSystemTransactions(final ConsensusRound round);
 }

@@ -19,13 +19,13 @@ package com.swirlds.common.system.transaction.internal;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.system.transaction.TransactionType;
+import com.swirlds.common.system.transaction.SystemTransactionType;
 
 import java.io.IOException;
 import java.util.Arrays;
 
 import static com.swirlds.common.io.streams.AugmentedDataOutputStream.getArraySerializedLength;
-import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_BITS_PER_SECOND;
+import static com.swirlds.common.system.transaction.SystemTransactionType.SYS_TRANS_BITS_PER_SECOND;
 
 /** A system transaction giving all avgBytePerSecSent stats (sent as bits per second) */
 public final class SystemTransactionBitsPerSecond extends SystemTransaction {
@@ -65,7 +65,7 @@ public final class SystemTransactionBitsPerSecond extends SystemTransaction {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public TransactionType getTransactionType() {
+	public SystemTransactionType getType() {
 		return SYS_TRANS_BITS_PER_SECOND;
 	}
 

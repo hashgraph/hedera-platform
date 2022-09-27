@@ -17,10 +17,14 @@
 package com.swirlds.common.test.metrics;
 
 import com.swirlds.common.metrics.FunctionGauge;
+import com.swirlds.common.metrics.Metric;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.function.Supplier;
 
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
@@ -45,7 +49,8 @@ class FunctionGaugeTest {
 		assertEquals(DESCRIPTION, gauge.getDescription(), "The description was not set correctly in the constructor");
 		assertEquals(FORMAT, gauge.getFormat(), "The format was not set correctly in the constructor");
 		assertEquals("Hello World", gauge.get());
-		assertEquals("Hello World", gauge.getValue());
+		assertEquals("Hello World", gauge.get(VALUE));
+		assertEquals(List.of(VALUE), gauge.getValueTypes(), "ValueTypes should be [VALUE]");
 	}
 
 	@Test
@@ -74,14 +79,50 @@ class FunctionGaugeTest {
 
 		// then
 		assertEquals("Hello World", gauge.get(), "Value should be 'Hello World'");
-		assertEquals("Hello World", gauge.getValue(), "Value should be 'Hello World'");
+		assertEquals("Hello World", gauge.get(VALUE), "Value should be 'Hello World'");
 
 		// when
 		when(supplier.get()).thenReturn("Goodbye World");
 
 		// then
 		assertEquals("Goodbye World", gauge.get(), "Value should be 'Goodbye World'");
-		assertEquals("Goodbye World", gauge.getValue(), "Value should be 'Goodbye World'");
+		assertEquals("Goodbye World", gauge.get(VALUE), "Value should be 'Goodbye World'");
 	}
 
+	@SuppressWarnings("unchecked")
+	@Test
+	void testSnapshot() {
+		// given
+		final Supplier<String> supplier = mock(Supplier.class);
+		final FunctionGauge<String> gauge = new FunctionGauge<>(CATEGORY, NAME, DESCRIPTION, FORMAT, supplier);
+
+		// when
+		when(supplier.get()).thenReturn("Hello World");
+		final List<Pair<Metric.ValueType, Object>> snapshot = gauge.takeSnapshot();
+
+		// then
+		assertEquals("Hello World", gauge.get(), "Value should be 'Hello World'");
+		assertEquals("Hello World", gauge.get(VALUE), "Value should be 'Hello World'");
+		assertEquals(List.of(Pair.of(VALUE, "Hello World")), snapshot, "Snapshot is not correct");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testInvalidGets() {
+		// given
+		final Supplier<String> supplier = mock(Supplier.class);
+		final FunctionGauge<String> gauge = new FunctionGauge<>(CATEGORY, NAME, DESCRIPTION, FORMAT, supplier);
+
+		// then
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(null),
+				"Calling get() with null should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.COUNTER),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.MIN),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.MAX),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.STD_DEV),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+	}
 }

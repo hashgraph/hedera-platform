@@ -22,7 +22,9 @@ import com.swirlds.common.merkle.exceptions.IllegalChildIndexException;
 import com.swirlds.common.merkle.impl.PartialNaryMerkleInternal;
 import com.swirlds.common.system.SwirldDualState;
 import com.swirlds.common.system.SwirldState;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.common.utility.RuntimeObjectRecord;
+import com.swirlds.common.utility.RuntimeObjectRegistry;
+import com.swirlds.platform.internal.EventImpl;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -70,16 +72,16 @@ public class State extends PartialNaryMerkleInternal implements MerkleInternal {
 	/**
 	 * Used to track the lifespan of this state.
 	 */
-	private final StateRecord record;
+	private final RuntimeObjectRecord registryRecord;
 
 	public State() {
-		record = StateRegistry.createStateRecord();
+		registryRecord = RuntimeObjectRegistry.createRecord(getClass());
 	}
 
 	private State(final State that) {
 		super(that);
 
-		record = StateRegistry.createStateRecord();
+		registryRecord = RuntimeObjectRegistry.createRecord(getClass());
 
 		if (that.getSwirldState() != null) {
 			this.setSwirldState(that.getSwirldState().copy());
@@ -238,7 +240,7 @@ public class State extends PartialNaryMerkleInternal implements MerkleInternal {
 	 */
 	@Override
 	protected void destroyNode() {
-		record.release();
+		registryRecord.release();
 	}
 
 	/**

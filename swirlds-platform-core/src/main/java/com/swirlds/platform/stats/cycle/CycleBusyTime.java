@@ -16,8 +16,14 @@
 
 package com.swirlds.platform.stats.cycle;
 
+import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.utility.Units;
 import com.swirlds.platform.stats.atomic.AtomicIntPair;
+import org.apache.commons.lang3.tuple.Pair;
+
+import java.util.List;
+
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * Tracks the fraction of busy time to idle in a cycle
@@ -58,13 +64,31 @@ public class CycleBusyTime extends PercentageMetric {
 		intPair.accumulate(0, (int) (nanoTime * Units.NANOSECONDS_TO_MICROSECONDS));
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public Object getValue() {
-		return intPair.computeDouble(CycleBusyTime::busyPercentage);
+	public List<ValueType> getValueTypes() {
+		return Metric.VALUE_TYPE;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public Object getValueAndReset() {
-		return intPair.computeDoubleAndReset(CycleBusyTime::busyPercentage);
+	public Double get(final ValueType valueType) {
+		if (valueType == VALUE) {
+			return intPair.computeDouble(CycleBusyTime::busyPercentage);
+		}
+		throw new IllegalArgumentException("Unknown MetricType");
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@SuppressWarnings("removal")
+	@Override
+	public List<Pair<ValueType, Object>> takeSnapshot() {
+		return List.of(Pair.of(VALUE, intPair.computeDoubleAndReset(CycleBusyTime::busyPercentage)));
 	}
 }

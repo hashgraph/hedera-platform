@@ -16,10 +16,11 @@
 
 package com.swirlds.platform.chatter.protocol.peer;
 
-import com.swirlds.platform.chatter.protocol.Purgable;
+import com.swirlds.common.sequence.Purgable;
+import com.swirlds.common.sequence.map.SequenceMap;
+import com.swirlds.common.sequence.map.StandardSequenceMap;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEvent;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEventDescriptor;
-import com.swirlds.platform.chatter.protocol.purgable.twomaps.PurgableDoubleMap;
 import com.swirlds.platform.consensus.GraphGenerations;
 import org.apache.commons.lang3.ObjectUtils;
 
@@ -28,12 +29,12 @@ import org.apache.commons.lang3.ObjectUtils;
  */
 public class PeerGossipState implements Purgable {
 	/** non-ancient events we know the peer knows */
-	private final PurgableDoubleMap<ChatterEventDescriptor, ObjectUtils.Null> events;
+	private final SequenceMap<ChatterEventDescriptor, ObjectUtils.Null> events;
 	/** the maximum generation of all event descriptors received */
 	private long maxReceivedDescriptorGeneration;
 
 	public PeerGossipState() {
-		events = new PurgableDoubleMap<>(ChatterEventDescriptor::getGeneration);
+		events = new StandardSequenceMap<>(ChatterEventDescriptor::getGeneration);
 		maxReceivedDescriptorGeneration = GraphGenerations.FIRST_GENERATION;
 	}
 

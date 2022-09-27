@@ -40,14 +40,12 @@ import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MIN_
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MOVE_LIST_CHUNK_SIZE;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_SMALL_MERGE_CUTOFF_MB;
-import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_STORAGE_DIRECTORY;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_WRITER_OUTPUT_BUFFER_BYTES;
 
 @SuppressWarnings("unused")
 public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings {
 	public static final int MAX_NUMBER_OF_SAVES_BEFORE_MERGE = 100;
 
-	public String storagePath = DEFAULT_STORAGE_DIRECTORY;
 	public int maxNumOfKeys = DEFAULT_MAX_NUM_OF_KEYS;
 	public int internalHashesRamToDiskThreshold = DEFAULT_INTERNAL_HASHES_RAM_TO_DISK_THRESHOLD;
 	public int smallMergeCutoffMb = DEFAULT_SMALL_MERGE_CUTOFF_MB;
@@ -69,18 +67,6 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
 	public long keySetHalfDiskHashMapSize = DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_SIZE;
 	public int keySetHalfDiskHashMapBuffer = DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_BUFFER;
 	public boolean indexRebuildingEnforced = DEFAULT_INDEX_REBUILDING_ENFORCED;
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public String getStoragePath() {
-		return this.storagePath;
-	}
-
-	public void setStoragePath(final String storagePath) {
-		this.storagePath = storagePath;
-	}
 
 	/**
 	 * {@inheritDoc}

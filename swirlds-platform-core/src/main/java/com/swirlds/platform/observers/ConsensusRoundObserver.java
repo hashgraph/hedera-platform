@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.observers;
 
-import com.swirlds.platform.ConsensusRound;
+import com.swirlds.platform.internal.ConsensusRound;
 
 /**
  * An observer that is notified when a round has achieved consensus.

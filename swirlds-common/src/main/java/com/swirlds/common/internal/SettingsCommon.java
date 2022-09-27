@@ -16,6 +16,10 @@
 
 package com.swirlds.common.internal;
 
+/**
+ * @deprecated this is not a good access pattern, don't add to this mess by increasing the places where its used
+ */
+@Deprecated
 public class SettingsCommon {
 
 	// used by Transaction
@@ -48,4 +52,11 @@ public class SettingsCommon {
 	public static boolean enablePingTrans = true;
 	/** should a transaction be sent after each state signature transaction, giving all avgBytePerSecSent[] stats? */
 	public static boolean enableBpsTrans = true;
+
+	// used by MetricsWriterService
+	public static int threadPriorityNonSync = Thread.NORM_PRIORITY;
+	public static String csvFileName = "";
+	public static String csvOutputFolder = "";
+	public static boolean csvAppend = false;
+	public static long csvWriteFrequency = 3000L;
 }

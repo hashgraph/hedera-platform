@@ -16,7 +16,7 @@
 
 package com.swirlds.jasperdb.collections;
 
-import com.swirlds.jasperdb.utilities.FileUtils;
+import com.swirlds.jasperdb.utilities.JasperDBFileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import sun.misc.Unsafe;
@@ -107,7 +107,7 @@ public final class LongListOffHeap extends LongList implements Closeable {
 		for (int i = 0; i < numOfBuffers; i++) {
 			final ByteBuffer directBuffer = ByteBuffer.allocateDirect(memoryChunkSize);
 			directBuffer.order(ByteOrder.nativeOrder());
-			FileUtils.completelyRead(fileChannel, directBuffer);
+			JasperDBFileUtils.completelyRead(fileChannel, directBuffer);
 			directBuffer.position(0);
 			data.add(directBuffer);
 		}
@@ -191,7 +191,7 @@ public final class LongListOffHeap extends LongList implements Closeable {
 			} else {
 				buf.limit(buf.capacity());
 			}
-			FileUtils.completelyWrite(fc, buf);
+			JasperDBFileUtils.completelyWrite(fc, buf);
 		}
 	}
 

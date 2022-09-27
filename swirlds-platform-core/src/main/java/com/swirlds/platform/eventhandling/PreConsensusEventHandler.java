@@ -20,7 +20,7 @@ import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.utility.Clearable;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.observers.PreConsensusEventObserver;
 import com.swirlds.platform.state.SwirldStateManager;
@@ -87,6 +87,13 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Clea
 		queueThread.start();
 	}
 
+	/**
+	 * Stops the queue thread. For unit testing purposes only.
+	 */
+	public void stop() {
+		queueThread.stop();
+	}
+
 	@Override
 	public void clear() {
 		LOG.info(RECONNECT.getMarker(), "pre-consensus handler: preparing for reconnect");
@@ -95,8 +102,9 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Clea
 	}
 
 	/**
-	 * Expand signatures on the pre-consensus event and add it to the queue (q1) for handling. Events that are null,
-	 * empty, or should be discarded according to {@link SwirldStateManager#discardPreConsensusEvent(EventImpl)} are not
+	 * Do pre-handle processing on the pre-consensus event and add it to the queue (q1) for handling. Events that are
+	 * null or empty are discarded immediately. All other events go through pre-handle processing. Events that should
+	 * not be handled pre-consensus according to {@link SwirldStateManager#discardPreConsensusEvent(EventImpl)} are not
 	 * added to the queue.
 	 */
 	@Override
@@ -106,19 +114,14 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Clea
 			return;
 		}
 
-		// we don't need events that should be discarded
+		// All events are supplied for preHandle
+		swirldStateManager.preHandle(event);
+
+		// some events should not be applied as pre-consensus, so discard them
 		if (swirldStateManager.discardPreConsensusEvent(event)) {
 			return;
 		}
 
-		// Expand signatures for events received from sync operations
-		// Additionally, we should enqueue any signatures for verification
-		// Signature expansion should be the last thing that is done. It can be fairly time consuming, so we don't
-		// want to delay the verification of an event for it because other events depend on this one being valid.
-		// Furthermore, we don't want to validate signatures contained in an event that is invalid.
-		swirldStateManager.expandSignatures(event);
-
-		// Temporarily disabled. This will be re-enabled in release 27.
 		try {
 			// update the estimate now, so the queue can sort on it
 			event.estimateTime(selfId, stats.getAvgSelfCreatedTimestamp(), stats.getAvgOtherReceivedTimestamp());

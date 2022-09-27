@@ -16,19 +16,23 @@
 
 package com.swirlds.common.test.state;
 
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.system.Round;
 import com.swirlds.common.system.SwirldDualState;
-import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.SwirldState2;
 import com.swirlds.common.system.address.AddressBook;
-import com.swirlds.common.system.transaction.SwirldTransaction;
 
-import java.time.Instant;
+import java.io.IOException;
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
+
+import static com.swirlds.common.threading.interrupt.Uninterruptable.abortAndThrowIfInterrupted;
 
 
 /**
  * A dummy swirld state for SignedStateManager unit tests.
  */
-public class DummySwirldState2 extends AbstractDummySwirldState implements SwirldState.SwirldState2 {
+public class DummySwirldState2 extends AbstractDummySwirldState implements SwirldState2 {
 
 	// The version history of this class.
 	// Versions that have been released must NEVER be given a different value.
@@ -47,6 +51,7 @@ public class DummySwirldState2 extends AbstractDummySwirldState implements Swirl
 
 	private static final long CLASS_ID = 0xa7d6e4b5feda7ce5L;
 
+	private CountDownLatch serializationLatch;
 
 	public DummySwirldState2() {
 		super();
@@ -79,27 +84,14 @@ public class DummySwirldState2 extends AbstractDummySwirldState implements Swirl
 		return super.getAddressBookCopy();
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
 	@Override
-	public void handleTransaction(final long id, final boolean isConsensus, final Instant timeCreated,
-			final Instant timestamp,
-			final SwirldTransaction trans, final SwirldDualState swirldDualState) {
+	public void handleConsensusRound(final Round round, final SwirldDualState swirldDualState) {
 		// intentionally does nothing
 	}
 
 	@Override
 	public boolean isArchived() {
 		return archived;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void expandSignatures(final SwirldTransaction trans) {
-		// intentionally does nothing
 	}
 
 	/**
@@ -155,5 +147,30 @@ public class DummySwirldState2 extends AbstractDummySwirldState implements Swirl
 	@Override
 	public int getVersion() {
 		return CLASS_VERSION;
+	}
+
+	/**
+	 * If called, the next serialization attempt will block until {@link #unblockSerialization()} has been called.
+	 */
+	public void enableBlockingSerialization() {
+		serializationLatch = new CountDownLatch(1);
+	}
+
+	/**
+	 * Should only be called if {@link #enableBlockingSerialization()} has previously been called.
+	 */
+	public void unblockSerialization() {
+		serializationLatch.countDown();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void serialize(final SerializableDataOutputStream out) throws IOException {
+		if (serializationLatch != null) {
+			abortAndThrowIfInterrupted(serializationLatch::await,
+					"interrupted while waiting for latch");
+		}
 	}
 }

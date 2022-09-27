@@ -18,7 +18,6 @@ package com.swirlds.jasperdb.files.hashmap;
 
 import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.Snapshotable;
-import com.swirlds.jasperdb.collections.LongList;
 import com.swirlds.jasperdb.collections.LongListBufferedWrapper;
 import com.swirlds.jasperdb.collections.LongListDisk;
 import com.swirlds.jasperdb.collections.LongListOffHeap;
@@ -245,10 +244,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>> implements AutoClo
 				"[{}] Starting merging {} files total {} Gb",
 				storeName, size, formatSizeBytes(filesToMergeSize));
 		final List<Path> newFilesCreated = fileCollection.mergeFiles(
-				(key) -> bucketIndexToBucketLocation.get(key, LongList.IMPERMISSIBLE_VALUE),
-				// update index with all moved data
-				moves -> moves.forEach(bucketIndexToBucketLocation::putIfEqual),
-				filesToMerge, mergingPaused);
+				bucketIndexToBucketLocation, filesToMerge, mergingPaused);
 		logMergeStats(
 				storeName, (System.currentTimeMillis() - START) * Units.MILLISECONDS_TO_SECONDS,
 				filesToMergeSize, getSizeOfFilesByPath(newFilesCreated),

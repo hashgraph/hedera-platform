@@ -22,6 +22,7 @@ import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.writer.MetricsWriterService;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
 import com.swirlds.common.notification.listeners.ReconnectCompleteNotification;
@@ -38,7 +39,7 @@ import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.system.address.Address;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.events.PlatformEvent;
-import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.system.transaction.internal.SwirldTransaction;
 import com.swirlds.common.system.transaction.internal.SystemTransaction;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
@@ -79,9 +80,9 @@ import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.event.creation.AncientParentsRule;
+import com.swirlds.platform.event.creation.BelowIntCreationRule;
 import com.swirlds.platform.event.creation.ChatterEventCreator;
 import com.swirlds.platform.event.creation.ChatteringRule;
-import com.swirlds.platform.event.creation.BelowIntCreationRule;
 import com.swirlds.platform.event.creation.LoggingEventCreationRules;
 import com.swirlds.platform.event.creation.OtherParentTracker;
 import com.swirlds.platform.event.creation.StaticCreationRules;
@@ -102,6 +103,8 @@ import com.swirlds.platform.event.validation.ZeroStakeValidator;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 import com.swirlds.platform.eventhandling.PreConsensusEventHandler;
 import com.swirlds.platform.intake.IntakeCycleStats;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.internal.SignedStateLoadingException;
 import com.swirlds.platform.network.communication.NegotiationProtocols;
 import com.swirlds.platform.network.communication.NegotiatorThread;
@@ -132,22 +135,23 @@ import com.swirlds.platform.reconnect.ReconnectThrottle;
 import com.swirlds.platform.reconnect.SignedStateValidator;
 import com.swirlds.platform.state.BackgroundHashChecker;
 import com.swirlds.platform.state.DualStateImpl;
+import com.swirlds.platform.state.State;
+import com.swirlds.platform.state.StateSettings;
+import com.swirlds.platform.state.SwirldStateManager;
+import com.swirlds.platform.state.signed.DeserializedSignedState;
 import com.swirlds.platform.state.signed.SavedStateInfo;
 import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.state.signed.SignedStateFileManager;
 import com.swirlds.platform.state.signed.SignedStateManager;
-import com.swirlds.platform.state.State;
-import com.swirlds.platform.state.StateSettings;
-import com.swirlds.platform.state.SwirldStateManager;
 import com.swirlds.platform.stats.PerSecondStat;
 import com.swirlds.platform.stats.StatConstructor;
 import com.swirlds.platform.stats.simple.LongMetric;
 import com.swirlds.platform.swirldapp.SwirldAppLoader;
+import com.swirlds.platform.sync.Generations;
 import com.swirlds.platform.sync.ShadowGraph;
 import com.swirlds.platform.sync.ShadowGraphEventObserver;
 import com.swirlds.platform.sync.ShadowGraphSynchronizer;
 import com.swirlds.platform.sync.SimultaneousSyncThrottle;
-import com.swirlds.platform.sync.Generations;
 import com.swirlds.platform.sync.SyncProtocolResponder;
 import com.swirlds.platform.system.SystemExitReason;
 import com.swirlds.platform.threading.PauseAndClear;
@@ -164,6 +168,7 @@ import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Rectangle;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -180,6 +185,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
+import static com.swirlds.common.io.utility.FileUtils.deleteDirectoryAndLog;
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.common.merkle.utility.MerkleUtils.rehashTree;
 import static com.swirlds.common.utility.Units.SECONDS_TO_MILLISECONDS;
@@ -189,6 +195,8 @@ import static com.swirlds.logging.LogMarker.PLATFORM_STATUS;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.platform.state.address.AddressBookUtils.getOwnHostCount;
+import static com.swirlds.platform.state.signed.SignedStateFileReader.getSavedStateFiles;
+import static com.swirlds.platform.state.signed.SignedStateFileReader.readStateFile;
 import static com.swirlds.platform.system.SystemExitReason.SAVED_STATE_NOT_LOADED;
 import static com.swirlds.platform.system.SystemExitReason.SWIRLD_MAIN_THREW_EXCEPTION;
 import static com.swirlds.platform.system.SystemUtils.exitSystem;
@@ -450,16 +458,11 @@ public class SwirldsPlatform extends AbstractPlatform {
 		if (Settings.state.getSaveStatePeriod() > 0
 				|| Settings.state.dumpStateOnISS
 				|| Settings.state.dumpStateOnFatal) {
-			signedStateFileManager = new SignedStateFileManager(this, freezeManager::freezeComplete);
-
-			new ThreadConfiguration()
-					.setPriority(Settings.threadPriorityNonSync)
-					.setNodeId(selfId.getId())
-					.setComponent(PLATFORM_THREAD_POOL_NAME)
-					.setThreadName("objectFileManager")
-					.setRunnable(signedStateFileManager)
-					.build()
-					.start();
+			signedStateFileManager = new SignedStateFileManager(
+					mainClassName,
+					selfId,
+					swirldName,
+					freezeManager::freezeComplete);
 		}
 
 		signedStateManager = new SignedStateManager(this,
@@ -580,8 +583,8 @@ public class SwirldsPlatform extends AbstractPlatform {
 	@Override
 	void setInfoMember(final StateHierarchy.InfoMember infoMember) {
 		this.infoMember = infoMember;
-		this.platformName = infoMember.name//
-				+ " - " + infoMember.swirld.name //
+		this.platformName = infoMember.name
+				+ " - " + infoMember.swirld.name
 				+ " - " + infoMember.swirld.app.name;
 	}
 
@@ -601,8 +604,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 */
 	synchronized boolean loadSavedStateFromDisk() throws SignedStateLoadingException {
 
-		final SavedStateInfo[] savedStateFiles = SignedStateFileManager.getSavedStateFiles(mainClassName,
-				selfId, swirldName);
+		final SavedStateInfo[] savedStateFiles = getSavedStateFiles(mainClassName, selfId, swirldName);
 		if (savedStateFiles == null || savedStateFiles.length == 0) {
 			if (Settings.requireStateLoad) {
 				throw new SignedStateLoadingException("No saved states found on disk!");
@@ -618,8 +620,8 @@ public class SwirldsPlatform extends AbstractPlatform {
 				// load the latest saved state
 				try {
 
-					final SignedStateFileManager.DeserializedSignedState deserializedSignedState =
-							SignedStateFileManager.readSavedState(savedStateFiles[i]);
+					final DeserializedSignedState deserializedSignedState =
+							readStateFile(savedStateFiles[i].stateFile());
 
 					final Hash oldHash = deserializedSignedState.originalHash();
 					signedState = deserializedSignedState.signedState();
@@ -664,8 +666,11 @@ public class SwirldsPlatform extends AbstractPlatform {
 				}
 			} else {
 				// delete the older ones
-				SignedStateFileManager.deleteRecursively(
-						savedStateFiles[i].getDir());// delete the dir it is in
+				try {
+					deleteDirectoryAndLog(savedStateFiles[i].getDir());
+				} catch (final IOException e) {
+					throw new UncheckedIOException(e);
+				}
 			}
 		}
 		return loadedSavedState;
@@ -718,13 +723,17 @@ public class SwirldsPlatform extends AbstractPlatform {
 		try {
 			// Make sure the signature set in the signed state is big enough for the current address book
 			signedState.expandSigSetIfNeeded(initialAddressBook);
-			swirldStateManager.loadFromSignedState(signedState);
-			swirldStateManager.getConsensusState().getSwirldState().init(
+
+			// It's important to call init() before loading the signed state. The loading process makes copies
+			// of the state, and we want to be sure that the first state in the chain of copies has been initialized.
+			signedState.getSwirldState().init(
 					this,
 					initialAddressBook.copy(),
 					signedState.getState().getSwirldDualState(),
 					InitTrigger.RECONNECT,
 					signedState.getState().getPlatformState().getPlatformData().getCreationSoftwareVersion());
+
+			swirldStateManager.loadFromSignedState(signedState);
 			getSignedStateManager().addCompleteSignedState(signedState, false);
 			loadIntoConsensusAndEventMapper(signedState);
 			// eventLinker is not thread safe, which is not a problem regularly because it is only used by a single
@@ -1209,6 +1218,13 @@ public class SwirldsPlatform extends AbstractPlatform {
 	 */
 	@Override
 	void run() {
+		if (Thread.getDefaultUncaughtExceptionHandler() == null) {
+			// If there is no default uncaught exception handler already provided, make sure we set one to avoid threads
+			// silently dying from exceptions.
+			Thread.setDefaultUncaughtExceptionHandler((Thread t, Throwable e) ->
+					log.error(EXCEPTION.getMarker(), "exception on thread {}", t.getName(), e));
+		}
+
 		syncManager = new SyncManagerImpl(
 				intakeQueue,
 				topology.getConnectionGraph(),
@@ -1316,17 +1332,14 @@ public class SwirldsPlatform extends AbstractPlatform {
 			}
 		}
 
-		if (Settings.csvFileName != null && !Settings.csvFileName.isBlank()) {
-			new ThreadConfiguration()
-					.setPriority(Settings.threadPriorityNonSync)
-					.setNodeId(selfId.getId())
-					.setComponent(PLATFORM_THREAD_POOL_NAME)
-					.setThreadName("CsvWriter")
-					.setRunnable(new CsvWriter(this, selfId, Settings.csvOutputFolder, Settings.csvFileName,
-							Settings.csvWriteFrequency, Settings.csvAppend, Settings.showInternalStats))
-					.build()
-					.start();
+		// Note: Temporary solution until management of metrics was cleaned up
+		final List<Metric> metrics = new ArrayList<>(getStats().getMetrics());
+		metrics.addAll(CryptoStatistics.getInstance().getMetrics());
+		if (getAppStats() != null) {
+			metrics.addAll(getAppStats().getMetrics());
 		}
+		final MetricsWriterService writerService = new MetricsWriterService(metrics, selfId);
+		writerService.start();
 
 		if (Settings.runPauseCheckTimer) {
 			// periodically check current time stamp to detect whether the java application
@@ -1952,7 +1965,7 @@ public class SwirldsPlatform extends AbstractPlatform {
 
 		/* seconds from self creating an event to self creating the next event */
 		double c2c = 1.0 / Math.max(0.5,
-				stats.eventsCreatedPerSecond.getCyclesPerSecond());
+				stats.eventsCreatedPerSecond.get());
 		/* seconds from self creating an event to the consensus timestamp that event receives */
 		double c2t = stats.getAvgSelfCreatedTimestamp();
 

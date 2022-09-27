@@ -17,21 +17,23 @@
 package com.swirlds.platform.state;
 
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.SwirldDualState;
 import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.SwirldState1;
 import com.swirlds.common.system.transaction.ConsensusTransaction;
 import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
-import com.swirlds.platform.ConsensusRound;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.ConsensusRound;
 import com.swirlds.platform.SettingsProvider;
-import com.swirlds.platform.components.SignatureExpander;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.eventhandling.SwirldStateSingleTransactionPool;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.stats.SwirldStateStats;
 import org.apache.logging.log4j.LogManager;
@@ -43,6 +45,10 @@ import java.util.Arrays;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.function.BooleanSupplier;
@@ -143,9 +149,6 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	/** Handle transactions by applying them to a state */
 	private final TransactionHandler transactionHandler;
 
-	/** Expands signatures on pre-consensus transactions. */
-	private final SignatureExpander signatureExpander;
-
 	/** Supplies the current size of the queue of transactions waiting to be applied to stateCurr. */
 	private final IntSupplier currSizeSupplier;
 
@@ -158,6 +161,16 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	/** Removes and returns a single transaction from the queue of transactions to be applied to stateWork. */
 	private final Supplier<ConsensusTransaction> pollWork;
 
+	/** Handles system transactions */
+	private final SystemTransactionHandler systemTransactionHandler;
+
+	/** Executes a runnable in the background */
+	private final ExecutorService executor = Executors.newSingleThreadExecutor(
+			new ThreadConfiguration()
+					.setComponent("statemanager")
+					.setThreadName("worker")
+					.buildFactory());
+
 	// Used of creating mock instances in unit testing
 	public SwirldStateManagerSingle() {
 		selfId = null;
@@ -168,11 +181,11 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 		settings = null;
 		transactionPool = null;
 		transactionHandler = null;
-		signatureExpander = null;
 		currSizeSupplier = null;
 		workSizeSupplier = null;
 		pollCurr = null;
 		pollWork = null;
+		systemTransactionHandler = null;
 	}
 
 	/**
@@ -190,8 +203,6 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	 * 		an estimator of consensus time for self transactions
 	 * @param inFreeze
 	 * 		indicates if the system is currently in a freeze
-	 * @param signatureExpander
-	 * 		expands signatures on transactions
 	 * @param initialState
 	 * 		the initial state of this application
 	 */
@@ -202,16 +213,15 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 			final SettingsProvider settings,
 			final Supplier<Instant> consEstimateSupplier,
 			final BooleanSupplier inFreeze,
-			final SignatureExpander signatureExpander,
 			final State initialState) {
 		this.selfId = selfId;
 		this.stats = stats;
 		this.settings = settings;
 		this.consEstimateSupplier = consEstimateSupplier;
-		this.signatureExpander = signatureExpander;
+		this.systemTransactionHandler = systemTransactionHandler;
 
 		this.transactionPool = new SwirldStateSingleTransactionPool(settings, inFreeze);
-		this.transactionHandler = new TransactionHandler(selfId, systemTransactionHandler, stats);
+		this.transactionHandler = new TransactionHandler(selfId, stats);
 		setState(initialState);
 
 		this.currSizeSupplier = this.transactionPool::getCurrSize;
@@ -258,8 +268,18 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void expandSignatures(final EventImpl event) {
-		signatureExpander.expandSignatures(event.getTransactions(), stateCons.getState());
+	public void preHandle(final EventImpl event) {
+		if (event.isEmpty()) {
+			return;
+		}
+
+		// Self transactions are pre-handled on submission
+		if (event.getCreatorId() != selfId.getId()) {
+			transactionHandler.preHandle(event, (SwirldState1) stateCons.getState().getSwirldState());
+		}
+
+		// This is the only place that handles system transactions pre-consensus.
+		systemTransactionHandler.handleSystemTransactions(event);
 	}
 
 	/**
@@ -283,24 +303,16 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 		// the time is set after the flag.
 		final boolean isConsensus = event.getConsensusTimestamp() != null;
 
-		if (isConsensus && !shouldConsEventBeHandled(event, stateCurr)) {
+		if (shouldDiscardEvent(isConsensus, event, stateCurr)) {
 			stats.preConsensusHandleTime(startTime, System.nanoTime());
 			return;
 		}
+		updateEstimatedTime(isConsensus, event);
 
-		final Instant consensusTime = getConsensusTime(isConsensus, event);
+		final SwirldState1 currSwirldState = (SwirldState1) stateCurr.getState().getSwirldState();
+		final SwirldDualState dualState = stateCurr.getState().getSwirldDualState();
 
-		// The pre-consensus handler thread is the only thread that handles system transactions pre-consensus.
-		// The consensus handler thread is the only thread that handles system transactions post-consensus.
-		// The thread-work thread should NOT handle system transactions at all.
-		transactionHandler.handleEventTransactions(
-				event,
-				consensusTime,
-				isConsensus,
-				stateCurr.getState(),
-				true,
-				null
-		);
+		transactionHandler.handlePreConsensusEvent(currSwirldState, dualState, event);
 
 		// Add this event to the threadWork queue it to handle
 		if (!threadWork.offer(event)) {
@@ -311,21 +323,19 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	}
 
 	/**
-	 * Use consensus time if available. Otherwise, use an estimated time.
+	 * Update the estimated consensus time of the event if it has not already reached consensus.
 	 *
 	 * @param isConsensus
-	 * 		indicates if the {@code event} has reached consensus
+	 * 		true if the {@code event} has reached consensus
 	 * @param event
 	 * 		the event
-	 * @return the estimated or actual consensus time
 	 */
-	private Instant getConsensusTime(final boolean isConsensus, final EventImpl event) {
+	private void updateEstimatedTime(final boolean isConsensus, final EventImpl event) {
 		if (isConsensus) {
-			return event.getConsensusTimestamp();
+			return;
 		}
 		// time was estimated before, but we update it again here to estimate with the latest information
 		event.estimateTime(selfId, stats.getAvgSelfCreatedTimestamp(), stats.getAvgOtherReceivedTimestamp());
-		return event.getEstimatedTime();
 	}
 
 	/**
@@ -333,12 +343,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	 */
 	@Override
 	public InterruptableRunnable getPreConsensusWaitForWorkRunnable() {
-		return () -> {
-			// Shuffle, if it is time to do so
-			shuffleIfTimeToShuffle(stateCurr);
-
-			handleSelfTransactions();
-		};
+		return this::preConsensusWaitForWork;
 	}
 
 	/**
@@ -346,8 +351,17 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	 */
 	@Override
 	public InterruptableRunnable getConsensusWaitForWorkRunnable() {
+		return this::consensusWaitForWork;
+	}
+
+	private void preConsensusWaitForWork() {
 		// Shuffle, if it is time to do so
-		return () -> shuffleIfTimeToShuffle(stateCons);
+		shuffleIfTimeToShuffle(stateCurr);
+		handleSelfTransactions();
+	}
+
+	private void consensusWaitForWork() {
+		shuffleIfTimeToShuffle(stateCons);
 	}
 
 	/**
@@ -380,16 +394,18 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	 * Applies self transactions to the current state.
 	 */
 	private void handleSelfTransactions() {
-		transactionHandler.handleTransactions(currSizeSupplier, pollCurr, consEstimateSupplier, true,
-				stateCurr.getState());
+		final State curr = stateCurr.getState();
+		transactionHandler.handleTransactions(currSizeSupplier, pollCurr, consEstimateSupplier,
+				(SwirldState1) curr.getSwirldState(), curr.getSwirldDualState());
 	}
 
 	/**
 	 * Applies self transactions to the work state.
 	 */
 	private void handleWorkTransactions() {
-		transactionHandler.handleTransactions(workSizeSupplier, pollWork, consEstimateSupplier, false,
-				stateWork.getState());
+		final State work = stateWork.getState();
+		transactionHandler.handleTransactions(workSizeSupplier, pollWork, consEstimateSupplier,
+				(SwirldState1) work.getSwirldState(), work.getSwirldDualState());
 	}
 
 	/**
@@ -467,23 +483,14 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 		// Remember isConsensus, in case a thread changes it during this
 		final boolean isConsensus = event.isConsensus();
 
-		if (isConsensus && !shouldConsEventBeHandled(event, stateWork)) {
+		if (shouldDiscardEvent(isConsensus, event, stateWork)) {
 			return;
 		}
+		updateEstimatedTime(isConsensus, event);
 
-		final Instant consensusTime = getConsensusTime(isConsensus, event);
-
-		// The pre-consensus handler thread is the only thread that handles system transactions pre-consensus.
-		// The consensus handler thread is the only thread that handles system transactions post-consensus.
-		// The thread-work thread should NOT handle system transactions at all.
-		transactionHandler.handleEventTransactions(
-				event,
-				consensusTime,
-				isConsensus,
-				stateWork.getState(),
-				false,
-				null
-		);
+		final SwirldState1 workSwirldState = (SwirldState1) stateWork.getState().getSwirldState();
+		final SwirldDualState dualState = stateWork.getState().getSwirldDualState();
+		transactionHandler.handlePreConsensusEvent(workSwirldState, dualState, event);
 
 		// Add this event to the forNext queue so that it can be 
 		// applied to the new forWork state after the next shuffle
@@ -502,21 +509,60 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 		shuffleIfTimeToShuffle(stateCons);
 
 		// Discard events that have already been applied to stateCons
-		if (round.isComplete() && !shouldConsEventBeHandled(round.getLastEvent(), stateCons)) {
+		if (round.isComplete() && shouldDiscardEvent(true, round.getLastEvent(), stateCons)) {
 			LOG.error(ERROR.getMarker(),
 					"Encountered out of order consensus event! Event Order = {}, stateCons lastCons = {}",
 					round.getLastEvent().getConsensusOrder(), stateCons.getLastCons());
 			return;
 		}
 
-		// if the handled transaction is a self transaction, then remove it from the
-		// list of transactions that will be sent to the new stateWork to handle
-		// after the next shuffle.
-		transactionHandler.handleConsensusRound(round, stateCons.getState(), id -> {
-			if (selfId.equalsMain(id)) {
-				transactionPool.pollCons();
+		// Poll transCons in the background while the application handles the round
+		final Future<?> future = beginTransactionPolling(round);
+
+		transactionHandler.handleRound(round, stateCons.getState());
+		systemTransactionHandler.handleSystemTransactions(round);
+
+		completeTransactionPolling(future, round.getRoundNum());
+	}
+
+	/**
+	 * Submits a background task that polls self transactions from the transCons queue, one for each transaction in the
+	 * round. Removing these transactions from transCons prevents them from being sent to the new stateWork to handle
+	 * after the next shuffle.
+	 *
+	 * @param round
+	 * 		the round being handled
+	 * @return the future of the background task
+	 */
+	private Future<?> beginTransactionPolling(final ConsensusRound round) {
+		return executor.submit(pollCons(round));
+	}
+
+	private Runnable pollCons(final ConsensusRound round) {
+		return () -> {
+			for (final EventImpl event : round.getConsensusEvents()) {
+				if (selfId.equalsMain(event.getCreatorId())) {
+					for (int i = 0; i < event.getTransactions().length; i++) {
+						transactionPool.pollCons();
+					}
+				}
 			}
-		});
+		};
+	}
+
+	private void completeTransactionPolling(final Future<?> future, final long roundNum) {
+		try {
+			future.get();
+		} catch (final InterruptedException e) {
+			LOG.error(EXCEPTION.getMarker(),
+					"Transaction polling thread [ nodeId = {} ] was interrupted while handling consensus round {}",
+					selfId.getId(), roundNum, e);
+			Thread.currentThread().interrupt();
+		} catch (final ExecutionException e) {
+			LOG.error(EXCEPTION.getMarker(),
+					"Execution exception while executing transaction polling thread [ nodeId = {} ] for round {}",
+					selfId.getId(), roundNum, e);
+		}
 	}
 
 	/**
@@ -527,22 +573,23 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	 * 		the event to check
 	 * @param stateInfo
 	 * 		the state to check
-	 * @return true if the event should be applied to the state according to consensus time
+	 * @return true if the event should be discarded and not applied to the state
 	 */
-	private static boolean shouldConsEventBeHandled(final EventImpl event, final StateInfo stateInfo) {
-		if (!event.isConsensus()) {
-			return true;
+	private static boolean shouldDiscardEvent(final boolean isConsensus, final EventImpl event,
+			final StateInfo stateInfo) {
+		if (!isConsensus) {
+			return false;
 		}
 
-		// Do not handle this event if it is before the previously handled
+		// Discard this event if it is before the previously handled
 		// consensus event according to consensus order. This is how events
 		// in the forNext queue get discarded so that they are not applied to stateWork twice.
 		if (stateInfo.getLastCons() != null
 				&& event.getConsensusOrder() <= stateInfo.getLastCons().getConsensusOrder()) {
-			return false;
+			return true;
 		}
 		stateInfo.setLastCons(event);
-		return true;
+		return false;
 	}
 
 	/**
@@ -644,6 +691,11 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	 */
 	@Override
 	public boolean submitTransaction(final ConsensusTransactionImpl transaction) {
+		// pre-handle application transactions now because they will be
+		// handled even before being put into an event
+		if (!transaction.isSystem()) {
+			transactionHandler.preHandle(transaction, (SwirldState1) stateCons.getState().getSwirldState());
+		}
 		return transactionPool.submitTransaction(transaction);
 	}
 
@@ -804,7 +856,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 		 * could access stateCurr by calling {@link SwirldStateManagerSingle#getCurrentSwirldState()}.</p>
 		 */
 		private void deleteCurrStateAndReplaceWithWork() {
-			synchronized (SwirldStateManagerSingle.class) {
+			synchronized (SwirldStateManagerSingle.this) {
 				if (stateCurrReturned != stateCurr.getState()) {
 					// if they are not the same, we can delete this one
 					try {

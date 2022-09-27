@@ -16,38 +16,25 @@
 
 package com.swirlds.platform.state.signed;
 
-import java.io.File;
-import java.util.Objects;
+import java.nio.file.Path;
 
-public class SavedStateInfo {
-	private final long round;
-	private final File stateFile;
-	private final File events;
+/**
+ * A description of a signed state file and its associated round number.
+ *
+ * @param round
+ * 		the round when the signed state was created
+ * @param stateFile
+ * 		the file containing the signed state
+ */
+public record SavedStateInfo(long round, Path stateFile) {
 
-	public SavedStateInfo(long round, File stateFile, File events) {
-		Objects.requireNonNull(stateFile);
-		this.round = round;
-		this.stateFile = stateFile;
-		this.events = events;
+	/**
+	 * Get the parent directory.
+	 *
+	 * @return the parent directory
+	 */
+	public Path getDir() {
+		return stateFile.toAbsolutePath().getParent();
 	}
 
-	public long getRound() {
-		return round;
-	}
-
-	public File getDir() {
-		return stateFile.getAbsoluteFile().getParentFile();
-	}
-
-	public File getStateFile() {
-		return stateFile;
-	}
-
-	public File getEvents() {
-		return events;
-	}
-
-	public boolean hasEvents() {
-		return events != null && events.exists() && events.isFile();
-	}
 }

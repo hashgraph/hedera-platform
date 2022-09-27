@@ -24,10 +24,11 @@ import com.swirlds.common.merkle.MerkleNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.function.Predicate;
 
 import static com.swirlds.common.merkle.iterators.MerkleIterationOrder.BREADTH_FIRST;
@@ -57,7 +58,7 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
 	 * Write a node that implements the type {@link ExternalSelfSerializable}.
 	 */
 	private void writeSerializableNode(
-			final File directory,
+			final Path directory,
 			final ExternalSelfSerializable node) throws IOException {
 
 		writeClassIdVersion(node, true);
@@ -76,7 +77,7 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
 	/**
 	 * Writes a MerkleInternal node to the stream.
 	 */
-	private void writeInternal(final File directory, final MerkleInternal node) throws IOException {
+	private void writeInternal(final Path directory, final MerkleInternal node) throws IOException {
 		if (node instanceof ExternalSelfSerializable externalSelfSerializable) {
 			writeSerializableNode(directory, externalSelfSerializable);
 		} else {
@@ -87,7 +88,7 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
 	/**
 	 * Write a leaf node to the stream.
 	 */
-	private void writeLeaf(final File directory, final MerkleLeaf node) throws IOException {
+	private void writeLeaf(final Path directory, final MerkleLeaf node) throws IOException {
 		writeSerializableNode(directory, node);
 	}
 
@@ -101,28 +102,32 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
 	/**
 	 * Perform basic sanity checks on the output directory.
 	 */
-	@SuppressWarnings("DuplicatedCode")
-	private static void validateDirectory(final File directory) {
+	@SuppressWarnings({ "DuplicatedCode", "resource" })
+	private static void validateDirectory(final Path directory) {
 		if (directory == null) {
 			throw new IllegalArgumentException("directory must not be null");
 		}
-		if (!directory.exists()) {
+		if (!Files.exists(directory)) {
 			throw new IllegalArgumentException("directory " + directory + " does not exist");
 		}
-		if (!directory.isDirectory()) {
+		if (!Files.isDirectory(directory)) {
 			throw new IllegalArgumentException("'directory' " + directory + " is not a directory");
 		}
-		if (!Files.isReadable(directory.toPath())) {
+		if (!Files.isReadable(directory)) {
 			throw new IllegalArgumentException("invalid read permissions for directory " + directory);
 		}
-		if (!Files.isWritable(directory.toPath())) {
+		if (!Files.isWritable(directory)) {
 			throw new IllegalArgumentException("invalid write permissions for directory " + directory);
 		}
 
-		final File[] contents = directory.listFiles();
-		if (contents != null && contents.length > 0) {
-			LOG.info(STATE_TO_DISK.getMarker(),
-					"merkle tree being written to directory {} that is not empty", directory);
+
+		try {
+			if (!Files.list(directory).toList().isEmpty()) {
+				LOG.info(STATE_TO_DISK.getMarker(),
+						"merkle tree being written to directory {} that is not empty", directory);
+			}
+		} catch (final IOException e) {
+			throw new UncheckedIOException(e);
 		}
 	}
 
@@ -136,7 +141,7 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
 	 * @throws IOException
 	 * 		thrown if any IO problems occur
 	 */
-	public void writeMerkleTree(final File directory, final MerkleNode root) throws IOException {
+	public void writeMerkleTree(final Path directory, final MerkleNode root) throws IOException {
 		writeInt(MerkleSerializationProtocol.CURRENT);
 		writeBoolean(root == null);
 

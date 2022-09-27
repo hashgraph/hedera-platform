@@ -25,8 +25,6 @@ import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.stream.InvalidStreamFileException;
 import com.swirlds.common.stream.StreamType;
 import com.swirlds.common.stream.StreamTypeFromJson;
-import com.swirlds.common.utility.CommonUtils;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
@@ -56,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.swirlds.common.io.utility.FileUtils.getAbsolutePath;
 import static com.swirlds.common.stream.EventStreamType.EVENT;
 import static com.swirlds.common.stream.LinkedObjectStreamUtilities.computeEntireHash;
 import static com.swirlds.common.stream.LinkedObjectStreamUtilities.computeMetaHash;
@@ -150,7 +149,7 @@ public class FileSignTool {
 	public static byte[] sign(final byte[] data,
 			final KeyPair sigKeyPair) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidKeyException,
 			SignatureException {
-		Signature signature;
+		final Signature signature;
 		signature = Signature.getInstance(SignatureType.RSA.signingAlgorithm(), SignatureType.RSA.provider());
 		signature.initSign(sigKeyPair.getPrivate());
 		if (LOGGER.isDebugEnabled()) {
@@ -179,12 +178,13 @@ public class FileSignTool {
 	public static boolean verifySignature(final byte[] data, final byte[] signature,
 			final PublicKey publicKey, final String sigFilePath) {
 		try {
-			Signature sig = Signature.getInstance(SignatureType.RSA.signingAlgorithm(), SignatureType.RSA.provider());
+			final Signature sig = Signature.getInstance(SignatureType.RSA.signingAlgorithm(),
+					SignatureType.RSA.provider());
 			sig.initVerify(publicKey);
 			sig.update(data);
 			return sig.verify(signature);
-		} catch (NoSuchAlgorithmException | NoSuchProviderException |
-				InvalidKeyException | SignatureException e) {
+		} catch (final NoSuchAlgorithmException | NoSuchProviderException |
+					   InvalidKeyException | SignatureException e) {
 			LOGGER.error(MARKER, "Failed to verify Signature: {}, PublicKey: {}, File: {}",
 					hex(signature),
 					hex(publicKey.getEncoded()),
@@ -207,16 +207,16 @@ public class FileSignTool {
 	 */
 	public static KeyPair loadPfxKey(final String keyFileName, final String password, final String alias) {
 		KeyPair sigKeyPair = null;
-		try (FileInputStream fis = new FileInputStream(keyFileName)) {
-			KeyStore keyStore = KeyStore.getInstance(KEYSTORE_TYPE);
+		try (final FileInputStream fis = new FileInputStream(keyFileName)) {
+			final KeyStore keyStore = KeyStore.getInstance(KEYSTORE_TYPE);
 			keyStore.load(fis, password.toCharArray());
 
 			sigKeyPair = new KeyPair(
 					keyStore.getCertificate(alias).getPublicKey(),
 					(PrivateKey) keyStore.getKey(alias, password.toCharArray()));
 			LOGGER.info(MARKER, "keypair has loaded successfully from file {}", keyFileName);
-		} catch (NoSuchAlgorithmException | KeyStoreException |
-				UnrecoverableKeyException | IOException | CertificateException e) {
+		} catch (final NoSuchAlgorithmException | KeyStoreException |
+					   UnrecoverableKeyException | IOException | CertificateException e) {
 			LOGGER.error(MARKER, "loadPfxKey :: ERROR ", e);
 		}
 		return sigKeyPair;
@@ -232,7 +232,7 @@ public class FileSignTool {
 	 * @return signature file path
 	 */
 	public static String buildDestSigFilePath(final File destDir, final File streamFile) {
-		String sigFileName = streamFile.getName() + SIG_FILE_NAME_END;
+		final String sigFileName = streamFile.getName() + SIG_FILE_NAME_END;
 		return new File(destDir, sigFileName).getPath();
 	}
 
@@ -249,13 +249,13 @@ public class FileSignTool {
 	 * 		event file hash value
 	 */
 	public static void generateSigFileOldVersion(final String filePath, final byte[] signature, final byte[] fileHash) {
-		try (FileOutputStream output = new FileOutputStream(filePath, false)) {
+		try (final FileOutputStream output = new FileOutputStream(filePath, false)) {
 			output.write(TYPE_FILE_HASH);
 			output.write(fileHash);
 			output.write(TYPE_SIGNATURE);
 			output.write(integerToBytes(signature.length));
 			output.write(signature);
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			LOGGER.error(MARKER,
 					"generateSigFile :: Fail to generate signature file for {}. Exception: {}", filePath, e);
 		}
@@ -270,7 +270,7 @@ public class FileSignTool {
 	 * @return a byte array
 	 */
 	public static byte[] integerToBytes(final int number) {
-		ByteBuffer b = ByteBuffer.allocate(BYTES_COUNT_IN_INT);
+		final ByteBuffer b = ByteBuffer.allocate(BYTES_COUNT_IN_INT);
 		b.putInt(number);
 		return b.array();
 	}
@@ -303,24 +303,24 @@ public class FileSignTool {
 				}
 
 				// get entire Hash for this stream file
-				Hash entireHash = computeEntireHash(streamFile);
+				final Hash entireHash = computeEntireHash(streamFile);
 				// get metaData Hash for this stream file
-				Hash metaHash = computeMetaHash(streamFile, streamType);
+				final Hash metaHash = computeMetaHash(streamFile, streamType);
 
 				// generate signature for entire Hash
-				com.swirlds.common.crypto.Signature entireSignature = new com.swirlds.common.crypto.Signature(
+				final com.swirlds.common.crypto.Signature entireSignature = new com.swirlds.common.crypto.Signature(
 						SignatureType.RSA, sign(entireHash.getValue(), sigKeyPair));
 				// generate signature for metaData Hash
-				com.swirlds.common.crypto.Signature metaSignature = new com.swirlds.common.crypto.Signature(
+				final com.swirlds.common.crypto.Signature metaSignature = new com.swirlds.common.crypto.Signature(
 						SignatureType.RSA, sign(metaHash.getValue(), sigKeyPair));
 				writeSignatureFile(entireHash, entireSignature, metaHash, metaSignature,
 						destSigFilePath, streamType);
 			} else {
 				signSingleFileOldVersion(sigKeyPair, streamFile, destSigFilePath);
 			}
-		} catch (NoSuchAlgorithmException | NoSuchProviderException |
-				InvalidKeyException | SignatureException |
-				InvalidStreamFileException | IOException e) {
+		} catch (final NoSuchAlgorithmException | NoSuchProviderException |
+					   InvalidKeyException | SignatureException |
+					   InvalidStreamFileException | IOException e) {
 			LOGGER.error(MARKER,
 					"Failed to sign file {} ", streamFile.getName(), e);
 		}
@@ -350,8 +350,8 @@ public class FileSignTool {
 	public static void signSingleFileOldVersion(final KeyPair sigKeyPair, final File streamFile,
 			final String destSigFilePath) throws IOException, NoSuchAlgorithmException, NoSuchProviderException,
 			InvalidKeyException, SignatureException {
-		byte[] fileHash = computeEntireHash(streamFile).getValue();
-		byte[] signature = sign(fileHash, sigKeyPair);
+		final byte[] fileHash = computeEntireHash(streamFile).getValue();
+		final byte[] signature = sign(fileHash, sigKeyPair);
 		generateSigFileOldVersion(destSigFilePath, signature, fileHash);
 	}
 
@@ -365,9 +365,9 @@ public class FileSignTool {
 	 * 		thrown if there are any problems during the operation
 	 */
 	public static StreamType loadStreamTypeFromJson(final String jsonPath) throws IOException {
-		ObjectMapper objectMapper = new ObjectMapper();
+		final ObjectMapper objectMapper = new ObjectMapper();
 
-		File file = new File(jsonPath);
+		final File file = new File(jsonPath);
 
 		return objectMapper.readValue(file, StreamTypeFromJson.class);
 	}
@@ -394,14 +394,14 @@ public class FileSignTool {
 		SettingsCommon.maxAddressSizeAllowed = 1024;
 	}
 
-	public static void main(String[] args) {
+	public static void main(final String[] args) {
 		final String streamTypeJsonPath = System.getProperty(STREAM_TYPE_JSON_PROPERTY);
 		// load StreamType from json file, if such json file doesn't exist, use EVENT as streamType
 		StreamType streamType = EVENT;
 		if (streamTypeJsonPath != null) {
 			try {
 				streamType = loadStreamTypeFromJson(streamTypeJsonPath);
-			} catch (IOException e) {
+			} catch (final IOException e) {
 				LOGGER.error(MARKER, "fail to load StreamType from {}.", streamTypeJsonPath, e);
 				return;
 			}
@@ -410,55 +410,55 @@ public class FileSignTool {
 		// register constructables and set settings
 		try {
 			prepare(streamType);
-		} catch (ConstructableRegistryException e) {
+		} catch (final ConstructableRegistryException e) {
 			LOGGER.error(MARKER, "fail to register constructables.", e);
 			return;
 		}
 
-		String logConfigPath = System.getProperty(LOG_CONFIG_PROPERTY);
+		final String logConfigPath = System.getProperty(LOG_CONFIG_PROPERTY);
 		final File logConfigFile = logConfigPath == null ?
-				CommonUtils.canonicalFile(".", DEFAULT_LOG_CONFIG) : new File(logConfigPath);
+				getAbsolutePath().resolve(DEFAULT_LOG_CONFIG).toFile() : new File(logConfigPath);
 		if (logConfigFile.exists()) {
-			LoggerContext context = (LoggerContext) LogManager
+			final LoggerContext context = (LoggerContext) LogManager
 					.getContext(false);
 			context.setConfigLocation(logConfigFile.toURI());
-		}
 
-		String fileName = System.getProperty(FILE_NAME_PROPERTY);
-		String keyFileName = System.getProperty(KEY_PROPERTY);
-		String destDirName = System.getProperty(DEST_DIR_PROPERTY);
-		String alias = System.getProperty(ALIAS_PROPERTY);
-		String password = System.getProperty(PASSWORD_PROPERTY);
+			final String fileName = System.getProperty(FILE_NAME_PROPERTY);
+			final String keyFileName = System.getProperty(KEY_PROPERTY);
+			final String destDirName = System.getProperty(DEST_DIR_PROPERTY);
+			final String alias = System.getProperty(ALIAS_PROPERTY);
+			final String password = System.getProperty(PASSWORD_PROPERTY);
 
-		KeyPair sigKeyPair = loadPfxKey(keyFileName, password, alias);
+			final KeyPair sigKeyPair = loadPfxKey(keyFileName, password, alias);
 
-		String fileDirName = System.getProperty(DIR_PROPERTY);
+			final String fileDirName = System.getProperty(DIR_PROPERTY);
 
-		try {
-			// create directory if necessary
-			final File destDir = new File(Files.createDirectories(Paths.get(destDirName)).toUri());
+			try {
+				// create directory if necessary
+				final File destDir = new File(Files.createDirectories(Paths.get(destDirName)).toUri());
 
-			if (fileDirName != null) {
-				File folder = new File(fileDirName);
-				final StreamType finalStreamType = streamType;
-				File[] streamFiles = folder.listFiles((dir, name) -> finalStreamType.isStreamFile(name));
-				File[] accountBalanceFiles = folder.listFiles(
-						(dir, name) -> {
-							String lowerCaseName = name.toLowerCase();
-							return lowerCaseName.endsWith(CSV_EXTENSION) || lowerCaseName.endsWith(
-									ACCOUNT_BALANCE_EXTENSION);
-						});
-				List<File> totalList = new ArrayList<>();
-				totalList.addAll(Arrays.asList(streamFiles));
-				totalList.addAll(Arrays.asList(accountBalanceFiles));
-				for (File item : totalList) {
-					signSingleFile(sigKeyPair, item, destDir, streamType);
+				if (fileDirName != null) {
+					final File folder = new File(fileDirName);
+					final StreamType finalStreamType = streamType;
+					final File[] streamFiles = folder.listFiles((dir, name) -> finalStreamType.isStreamFile(name));
+					final File[] accountBalanceFiles = folder.listFiles(
+							(dir, name) -> {
+								final String lowerCaseName = name.toLowerCase();
+								return lowerCaseName.endsWith(CSV_EXTENSION) || lowerCaseName.endsWith(
+										ACCOUNT_BALANCE_EXTENSION);
+							});
+					final List<File> totalList = new ArrayList<>();
+					totalList.addAll(Arrays.asList(streamFiles));
+					totalList.addAll(Arrays.asList(accountBalanceFiles));
+					for (final File item : totalList) {
+						signSingleFile(sigKeyPair, item, destDir, streamType);
+					}
+				} else {
+					signSingleFile(sigKeyPair, new File(fileName), destDir, streamType);
 				}
-			} else {
-				signSingleFile(sigKeyPair, new File(fileName), destDir, streamType);
+			} catch (final IOException e) {
+				LOGGER.error(MARKER, "Got IOException", e);
 			}
-		} catch (IOException e) {
-			LOGGER.error(MARKER, "Got IOException", e);
 		}
 	}
 }

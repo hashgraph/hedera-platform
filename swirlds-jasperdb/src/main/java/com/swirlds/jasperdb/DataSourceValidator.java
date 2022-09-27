@@ -127,7 +127,7 @@ public class DataSourceValidator<K extends VirtualKey<? super K>, V extends Virt
 	 */
 	private static void assertTrue(boolean testResult, String message) {
 		if (!testResult) {
-			throw new AssertionError(message);
+			throw new IllegalStateException(message);
 		}
 	}
 

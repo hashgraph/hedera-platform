@@ -16,14 +16,18 @@
 
 package com.swirlds.common.metrics;
 
+import com.swirlds.common.utility.CommonUtils;
+
 import java.util.concurrent.atomic.AtomicLong;
+
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * An {@code LongGauge} stores a single {@code long} value.
  * <p>
  * Only the current value is stored, no history or distribution is kept.
  */
-public class LongGauge extends Metric {
+public class LongGauge extends AbstractGauge<Long> {
 
 	private final AtomicLong value = new AtomicLong();
 
@@ -119,10 +123,13 @@ public class LongGauge extends Metric {
 	/**
 	 * {@inheritDoc}
 	 */
-	@SuppressWarnings("removal")
 	@Override
-	public Long getValue() {
-		return get();
+	public Long get(final ValueType valueType) {
+		CommonUtils.throwArgNull(valueType, "valueType");
+		if (valueType == VALUE) {
+			return get();
+		}
+		throw new IllegalArgumentException("Unsupported ValueType");
 	}
 
 	/**

@@ -26,7 +26,7 @@
 	<parent>
 		<groupId>com.swirlds</groupId>
 		<artifactId>swirlds-platform</artifactId>
-		<version>0.28.1-orvw.1</version>
+		<version>0.29.2-orvw.1</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -48,19 +48,19 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-common</artifactId>
-			<version>0.28.1-orvw.1</version>
+			<version>0.29.2-orvw.1</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-logging</artifactId>
-			<version>0.28.1-orvw.1</version>
+			<version>0.29.2-orvw.1</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-common-test</artifactId>
-			<version>0.28.1-orvw.1</version>
+			<version>0.29.2-orvw.1</version>
 		</dependency>
 
 		<!-- OffByNull PortMapper -->
@@ -136,21 +136,21 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-fchashmap</artifactId>
-			<version>0.28.1-orvw.1</version>
+			<version>0.29.2-orvw.1</version>
 			<scope>compile</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-virtualmap</artifactId>
-			<version>0.28.1-orvw.1</version>
+			<version>0.29.2-orvw.1</version>
 			<scope>compile</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-jasperdb</artifactId>
-			<version>0.28.1-orvw.1</version>
+			<version>0.29.2-orvw.1</version>
 			<scope>compile</scope>
 		</dependency>
 
@@ -163,8 +163,14 @@
 		<dependency>
 			<groupId>com.swirlds</groupId>
 			<artifactId>swirlds-fcqueue</artifactId>
-			<version>0.28.1-orvw.1</version>
+			<version>0.29.2-orvw.1</version>
 			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.assertj</groupId>
+			<artifactId>assertj-core</artifactId>
+			<version>3.23.1</version>
+			<scope>test</scope>
 		</dependency>
 	</dependencies>
 

@@ -21,7 +21,7 @@ import com.swirlds.common.system.events.BaseEvent;
 import com.swirlds.common.system.events.BaseEventHashedData;
 import com.swirlds.common.system.events.BaseEventUnhashedData;
 import com.swirlds.common.utility.CommonUtils;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 
 /**
  * A class used to convert an event into a string

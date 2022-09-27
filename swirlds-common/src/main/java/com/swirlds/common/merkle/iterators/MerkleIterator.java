@@ -16,6 +16,7 @@
 
 package com.swirlds.common.merkle.iterators;
 
+import com.swirlds.common.io.utility.IOConsumer;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.iterators.internal.BreadthFirstAlgorithm;

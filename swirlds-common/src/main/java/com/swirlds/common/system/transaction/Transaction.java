@@ -60,15 +60,6 @@ public sealed interface Transaction extends SerializableWithKnownLength permits 
 	boolean isSystem();
 
 	/**
-	 * To be removed in an upcoming release and moved to SystemTransaction.
-	 *
-	 * @return transaction type
-	 * @deprecated moving to {@link com.swirlds.common.system.transaction.internal.SystemTransaction} soon
-	 */
-	@Deprecated
-	TransactionType getTransactionType();
-
-	/**
 	 * Returns the byte located at {@code index} position from the transaction content/payload.
 	 *
 	 * This method is thread-safe and guaranteed to be atomic in nature.
@@ -85,14 +76,13 @@ public sealed interface Transaction extends SerializableWithKnownLength permits 
 	byte getContents(final int index);
 
 	/**
-	 * Returns the custom metadata object attached to this transaction, or null if none was set since the node started
-	 * up.
+	 * Returns the custom metadata object set via {@link #setMetadata(Object)}.
 	 *
 	 * @param <T>
-	 * 		the type of object to return
-	 * @return the custom object, or {@code null} if none has been set
+	 * 		the type of metadata object to return
+	 * @return the custom metadata object, or {@code null} if none was set
 	 * @throws ClassCastException
-	 * 		if the type of object requested is different from the type provided to {@link #setMetadata(Object)}
+	 * 		if the type of object supplied to {@link #setMetadata(Object)} is not compatible with {@code T}
 	 */
 	<T> T getMetadata();
 

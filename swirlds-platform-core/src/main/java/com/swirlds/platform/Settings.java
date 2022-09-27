@@ -31,19 +31,20 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+import static com.swirlds.common.io.utility.FileUtils.getAbsolutePath;
+import static com.swirlds.common.io.utility.FileUtils.rethrowIO;
 import static com.swirlds.common.settings.ParsingUtils.parseDuration;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STARTUP;
@@ -78,25 +79,21 @@ public class Settings {
 	// -Djavax.net.debug=ssl,handshake
 
 	/** path to config.txt (which might not exist) */
-	static final File configPath = CommonUtils.canonicalFile("config.txt");
+	static final Path configPath = getAbsolutePath("config.txt");
 	/** path to settings.txt (which might not exist) */
-	static final File settingsPath = CommonUtils.canonicalFile(".", "settings.txt");
+	static final Path settingsPath = getAbsolutePath("settings.txt");
 	/** name of the settings used file */
 	static final String settingsUsedFilename = "settingsUsed.txt";
 	/** the directory where the settings used file will be created on startup if and only if settings.txt exists */
-	static final File settingsUsedDir = CommonUtils.canonicalFile(".");
+	static final Path settingsUsedDir = getAbsolutePath();
 	/** path to data/keys/ */
-	static final File keysDirPath = CommonUtils.canonicalFile("data", "keys");
+	static final Path keysDirPath = getAbsolutePath().resolve("data").resolve("keys");
 	/** path to data/apps/ */
-	static final File appsDirPath = CommonUtils.canonicalFile("data", "apps");
-	/** path to data/saved/ that is be used for storing data from the platform */
-	public static final File savedDirPath = CommonUtils.canonicalFile("data", "saved");
-	/** file extension used by the swirlds platform, it stands for SwirldsHashgraph */
-	public static final String swirldsFileExtension = ".swh";
+	static final Path appsDirPath = getAbsolutePath().resolve("data").resolve("apps");
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
 	/** path to log4j2.xml (which might not exist) */
-	static File logPath = CommonUtils.canonicalFile(".", "log4j2.xml");
+	static Path logPath = rethrowIO(() -> getAbsolutePath("log4j2.xml"));
 
 	///////////////////////////////////////////
 	// settings from settings.txt file
@@ -110,13 +107,6 @@ public class Settings {
 	static boolean showInternalStats = false;
 	/** show expand statistics values, inlcude mean, min, max, stdDev */
 	static boolean verboseStatistics = false;
-
-	/**
-	 * the consensus timestamp of a transaction is guaranteed to be at least this many nanoseconds
-	 * later than that of the transaction immediately before it in consensus order,
-	 * and to be a multiple of this (must be positive and a multiple of 10)
-	 */
-	static long minTransTimestampIncrNanos = 1_000;
 
 	/** settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors */
 	public static StateSettings state = new StateSettings();
@@ -236,7 +226,7 @@ public class Settings {
 	/** priority for threads that sync (in SyncCaller, SyncListener, SyncServer) */
 	static int threadPrioritySync = Thread.NORM_PRIORITY;// Thread.MAX_PRIORITY;
 	/** priority for threads that don't sync (all but SyncCaller, SyncListener,SyncServer */
-	static int threadPriorityNonSync = Thread.NORM_PRIORITY;
+	public static int threadPriorityNonSync = Thread.NORM_PRIORITY;
 	/** maximum number of bytes allowed in a transaction */
 	static int transactionMaxBytes = 6144;
 	/** the maximum number of address allowed in a address book, the same as the maximum allowed network size */
@@ -294,6 +284,11 @@ public class Settings {
 	static JasperDbSettingsImpl jasperDb = new JasperDbSettingsImpl();
 
 	/**
+	 * Settings for temporary files.
+	 */
+	static TemporaryFileSettingsImpl temporaryFiles = new TemporaryFileSettingsImpl();
+
+	/**
 	 * if on, transThrottle will stop initiating syncs and thus stop generating events if the are no non consensus user
 	 * transactions. If states are being saved to disk, it will only stop after all user transactions have been handled
 	 * by a state that has been saved to disk.
@@ -315,7 +310,7 @@ public class Settings {
 	/**
 	 * The frequency, in milliseconds, at which values are written to the statistics CSV file.
 	 */
-	static int csvWriteFrequency = CsvWriter.DEFAULT_WRITE_PERIOD;
+	static int csvWriteFrequency = 3000;
 
 	/** Indicates whether statistics should be appended to the CSV file. */
 	static boolean csvAppend = false;
@@ -433,10 +428,9 @@ public class Settings {
 	 * @param directory
 	 * 		the directory to write to
 	 */
-	public static void writeSettingsUsed(final File directory) {
+	public static void writeSettingsUsed(final Path directory) {
 		final String[][] settings = Settings.currSettings();
-		try (final BufferedWriter writer = Files.newBufferedWriter(
-				Paths.get(CommonUtils.canonicalFile(directory, settingsUsedFilename).getCanonicalPath()))) {
+		try (final BufferedWriter writer = Files.newBufferedWriter(directory.resolve(settingsUsedFilename))) {
 			writer.write(PlatformVersion.locateOrDefault().license());
 			writer.write(System.lineSeparator());
 			writer.write(System.lineSeparator());
@@ -449,6 +443,7 @@ public class Settings {
 			for (final String[] pair : settings) {
 				writer.write(String.format("%15s = %s%n", pair[1], pair[0]));
 			}
+			writer.flush();
 		} catch (final IOException e) {
 			log.error(EXCEPTION.getMarker(), "Error in writing to settingsUsed.txt", e);
 		}
@@ -458,7 +453,7 @@ public class Settings {
 	 * @return true if the settings.txt file exists
 	 */
 	static boolean settingsTxtExists() {
-		return Settings.settingsPath.exists();
+		return Files.exists(Settings.settingsPath);
 	}
 
 	/**
@@ -477,7 +472,7 @@ public class Settings {
 		}
 
 		try {
-			scanner = new Scanner(Settings.settingsPath, StandardCharsets.UTF_8.name());
+			scanner = new Scanner(Settings.settingsPath.toFile(), StandardCharsets.UTF_8.name());
 		} catch (final FileNotFoundException e) { // this should never happen
 			CommonUtils.tellUserConsole("The file " + Settings.settingsPath
 					+ " exists, but can't be opened. " + e);

@@ -26,11 +26,17 @@ module com.swirlds.common {
 	exports com.swirlds.common.io.exceptions;
 	exports com.swirlds.common.io.extendable;
 	exports com.swirlds.common.io.extendable.extensions;
+	exports com.swirlds.common.io.settings;
 	exports com.swirlds.common.io.streams;
+	exports com.swirlds.common.io.utility;
 	exports com.swirlds.common.merkle;
 	exports com.swirlds.common.merkle.copy;
 	exports com.swirlds.common.merkle.exceptions;
 	exports com.swirlds.common.merkle.hash;
+	exports com.swirlds.common.merkle.impl;
+	exports com.swirlds.common.merkle.impl.destroyable;
+	exports com.swirlds.common.merkle.impl.internal;
+	exports com.swirlds.common.merkle.interfaces;
 	exports com.swirlds.common.merkle.iterators;
 	exports com.swirlds.common.merkle.route;
 	exports com.swirlds.common.merkle.synchronization;
@@ -40,8 +46,13 @@ module com.swirlds.common {
 	exports com.swirlds.common.merkle.synchronization.utility;
 	exports com.swirlds.common.merkle.synchronization.views;
 	exports com.swirlds.common.merkle.utility;
+	exports com.swirlds.common.metrics;
+	exports com.swirlds.common.metrics.writer;
 	exports com.swirlds.common.notification;
 	exports com.swirlds.common.notification.listeners;
+	exports com.swirlds.common.sequence;
+	exports com.swirlds.common.sequence.map;
+	exports com.swirlds.common.sequence.set;
 	exports com.swirlds.common.settings;
 	exports com.swirlds.common.stream;
 	exports com.swirlds.common.system;
@@ -82,14 +93,10 @@ module com.swirlds.common {
 	exports com.swirlds.common.io.extendable.extensions.internal to com.swirlds.common.test;
 	exports com.swirlds.common.system.transaction.internal to com.swirlds.platform, com.swirlds.platform.test,
 			com.swirlds.common.test;
-	exports com.swirlds.common.merkle.interfaces;
-	exports com.swirlds.common.merkle.impl;
 	opens com.swirlds.common.merkle.impl to com.fasterxml.jackson.databind;
-	exports com.swirlds.common.merkle.impl.internal;
 	opens com.swirlds.common.merkle.impl.internal to com.fasterxml.jackson.databind;
-	exports com.swirlds.common.merkle.impl.destroyable;
 	opens com.swirlds.common.merkle.impl.destroyable to com.fasterxml.jackson.databind;
-	exports com.swirlds.common.metrics;
+	opens com.swirlds.common.io.utility to com.fasterxml.jackson.databind;
 
 	requires com.swirlds.logging;
 

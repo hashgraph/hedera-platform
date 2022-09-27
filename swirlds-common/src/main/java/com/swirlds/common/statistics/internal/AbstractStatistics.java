@@ -28,9 +28,11 @@ import org.apache.logging.log4j.MarkerManager;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IllegalFormatException;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -87,6 +89,8 @@ public abstract class AbstractStatistics implements Statistics {
 	 */
 	protected Metric[] statEntries;
 
+	protected List<Metric> metrics = Collections.emptyList();
+
 	/**
 	 * what is the width if the stats expands
 	 */
@@ -112,6 +116,16 @@ public abstract class AbstractStatistics implements Statistics {
 	}
 
 	/**
+	 * Returns an immutable {@link List} of all metrics knwon to the system
+	 *
+	 * @return the {@code List} of metrics
+	 */
+	@Override
+	public List<Metric> getMetrics() {
+		return metrics;
+	}
+
+	/**
 	 * Set up info related to the statistics. This is called by the constructor, which accesses the field [statEntries].
 	 * If a class extends AbstractStatistics and it assigns to the [statEntries] field after calling super(),
 	 * then it will need to call setupStatEntries() at the end, to do the setup again.
@@ -122,6 +136,7 @@ public abstract class AbstractStatistics implements Statistics {
 			for (final Metric metric : statEntries) {
 				metric.init();
 			}
+			metrics = List.of(statEntries);
 			initStatEntries(SettingsCommon.showInternalStats);
 			if (printStats) {
 				printStats = false;
@@ -147,6 +162,7 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @param writePeriod
 	 * 		number of milliseconds between writes
 	 */
+	@SuppressWarnings("removal")
 	@Override
 	public void setStatsWritePeriod(final int writePeriod) {
 		this.statsWritePeriod = writePeriod;
@@ -164,6 +180,7 @@ public abstract class AbstractStatistics implements Statistics {
 	 *
 	 * @return the array of statistic entries.
 	 */
+	@SuppressWarnings("removal")
 	@Override
 	public String[][] getAvailableStats() {
 		return allStatEntries;
@@ -174,6 +191,7 @@ public abstract class AbstractStatistics implements Statistics {
 	 *
 	 * @return number of different statistics that can be retrieved by getStat().
 	 */
+	@SuppressWarnings("removal")
 	@Override
 	public int getNumStats() {
 		return getAvailableStats().length;
@@ -196,7 +214,7 @@ public abstract class AbstractStatistics implements Statistics {
 		if (metric == null) {
 			return -1.0;
 		}
-		final Object value = metric.getValue();
+		final Object value = metric.get(Metric.ValueType.VALUE);
 		if (value instanceof Number number) {
 			return number.doubleValue();
 		}
@@ -220,7 +238,7 @@ public abstract class AbstractStatistics implements Statistics {
 		if (metric == null) {
 			return -1.0;
 		}
-		final Object value = metric.getValue();
+		final Object value = metric.get(Metric.ValueType.VALUE);
 		if (value instanceof Number number) {
 			return number.doubleValue();
 		}
@@ -234,7 +252,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		the name of the statistic to get
 	 * @return the StatsBuffer, or null if there is no statistic for that name, or there is one but it
 	 * 		doesn't keep a history
+	 * @deprecated To get all history, use {@link Metric#getStatsBuffered()}
 	 */
+	@Deprecated(forRemoval = true)
 	@SuppressWarnings("removal")
 	public StatsBuffer getAllHistory(final String statName) {
 		final Metric metric = name2entry.get(statName);
@@ -255,7 +275,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		the name of the statistic to get
 	 * @return the StatsBuffer, or null if there is no statistic for that name, or there is one but it
 	 * 		doesn't keep a history
+	 * @deprecated To get the recent history, use {@link Metric#getStatsBuffered()}
 	 */
+	@Deprecated(forRemoval = true)
 	@SuppressWarnings("removal")
 	public StatsBuffer getRecentHistory(final String statName) {
 		final Metric metric = name2entry.get(statName);
@@ -276,7 +298,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @param index
 	 * 		the index of the statistic to get
 	 * @return the StatsBuffer, or null if there is none
+	 * @deprecated To get all history, use {@link Metric#getStatsBuffered()}
 	 */
+	@Deprecated(forRemoval = true)
 	@SuppressWarnings("removal")
 	public StatsBuffer getAllHistory(final int index) {
 		final Metric metric = index2entry.get(index);
@@ -296,7 +320,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @param index
 	 * 		the index of the statistic to get
 	 * @return the StatsBuffered, or null if there is none
+	 * @deprecated To get the recent history, use {@link Metric#getStatsBuffered()}
 	 */
+	@Deprecated(forRemoval = true)
 	@SuppressWarnings("removal")
 	public StatsBuffer getRecentHistory(final int index) {
 		final Metric metric = index2entry.get(index);
@@ -319,6 +345,7 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		the name of the statistic (call getAvailableStats to see the possible choices)
 	 * @return the statistic converted to a string
 	 */
+	@SuppressWarnings("removal")
 	@Override
 	public String getStatString(final String statName) {
 		final Metric metric = name2entry.get(statName);
@@ -337,6 +364,7 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		the name of the statistic
 	 * @return the index, or -1 if that name doesn't match any statistic
 	 */
+	@SuppressWarnings("removal")
 	@Override
 	public int getStatIndex(final String statName) {
 		final Metric metric = name2entry.get(statName);
@@ -360,7 +388,10 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @param reset
 	 * 		whether to reset the value when returning
 	 * @return the statistic converted to a string
+	 * @deprecated To get the value, use {@link Metric#get(Metric.ValueType)} with {@link Metric.ValueType#VALUE}.
+	 * 		The parameter {@code reset} is not supported anymore.
 	 */
+	@Deprecated(forRemoval = true)
 	@SuppressWarnings("removal")
 	public String getStatString(final int index, final boolean reset) {
 		final Metric metric = index2entry.get(index);
@@ -368,7 +399,7 @@ public abstract class AbstractStatistics implements Statistics {
 			if (metric == null) {
 				return "";
 			}
-			final Object value = reset ? metric.getValueAndReset() : metric.getValue();
+			final Object value = metric.get(Metric.ValueType.VALUE);
 			return String.format(Locale.US, metric.getFormat(), value);
 		} catch (final IllegalFormatException e) {
 			log.error(EXCEPTION.getMarker(), "unable to compute string for {}", metric.getName(), e);
@@ -379,6 +410,7 @@ public abstract class AbstractStatistics implements Statistics {
 	/**
 	 * Same as {@link #getStatString(int, boolean)} with reset=false
 	 */
+	@SuppressWarnings("removal")
 	@Override
 	public String getStatString(final int index) {
 		return getStatString(index, false);
@@ -392,7 +424,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @param index
 	 * 		index of the statistic in the array returned by index2entry
 	 * @return the statistic converted to a string
+	 * @deprecated To get the minimum, use {@link Metric#get(Metric.ValueType)} with {@link Metric.ValueType#MIN}
 	 */
+	@Deprecated(forRemoval = true)
 	@SuppressWarnings("removal")
 	public String getMinString(final int index) {
 		try {
@@ -415,7 +449,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @param index
 	 * 		index of the statistic in the array returned by index2entry
 	 * @return the statistic converted to a string
+	 * @deprecated To get the maximum, use {@link Metric#get(Metric.ValueType)} with {@link Metric.ValueType#MAX}
 	 */
+	@Deprecated(forRemoval = true)
 	@SuppressWarnings("removal")
 	public String getMaxString(final int index) {
 		try {
@@ -438,7 +474,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @param index
 	 * 		index of the statistic in the array returned by index2entry
 	 * @return the statistic converted to a string
+	 * @deprecated To get the standard deviation, use {@link Metric#get(Metric.ValueType)} with {@link Metric.ValueType#STD_DEV}
 	 */
+	@Deprecated(forRemoval = true)
 	@SuppressWarnings("removal")
 	public String getStdDevString(final int index) {
 		try {
@@ -461,6 +499,7 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		index of the statistic in the array returned by index2entry
 	 * @return the statistic category
 	 */
+	@SuppressWarnings("removal")
 	@Override
 	public String getStatCategory(final int index) {
 		final Metric metric = index2entry.get(index);
@@ -477,6 +516,7 @@ public abstract class AbstractStatistics implements Statistics {
 	 * 		index of the statistic in the array returned by index2entry
 	 * @return the statistic name
 	 */
+	@SuppressWarnings("removal")
 	@Override
 	public String getName(final int index) {
 		final Metric metric = index2entry.get(index);
@@ -494,11 +534,13 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @param metric
 	 * 		the Metric describing this statistic
 	 * @return the statistic converted to a string
+	 * @deprecated To get the value, use {@link Metric#get(Metric.ValueType)} with {@link Metric.ValueType#VALUE}
 	 */
+	@Deprecated(forRemoval = true)
 	@SuppressWarnings("removal")
 	private static String getStatString(final Metric metric) {
 		try {
-			return String.format(Locale.US, metric.getFormat(), metric.getValue());
+			return String.format(Locale.US, metric.getFormat(), metric.get(Metric.ValueType.VALUE));
 		} catch (final IllegalFormatException e) {
 			log.error(ERROR, "", e);
 		}
@@ -591,7 +633,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * Get category names of all entries
 	 *
 	 * @return String array of category names
+	 * @deprecated To get a list of categories, call {@link Statistics#getMetrics()} and extract the categories.
 	 */
+	@Deprecated(forRemoval = true)
 	public String[] getCategoryStrings() {
 
 		final String[] result = getStringArray();
@@ -625,7 +669,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * @param allowExpand
 	 * 		allow expand if Settings.verboseStatistics is true
 	 * @return String array of stats names
+	 * @deprecated To get a list of values, call {@link Statistics#getMetrics()} and extract the values.
 	 */
+	@Deprecated(forRemoval = true)
 	public String[] getNameStrings(final boolean allowExpand) {
 		final String[] result;
 		if (allowExpand) {
@@ -671,7 +717,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * Get stats values of all entries
 	 *
 	 * @return String array of stats values
+	 * @deprecated To get a list of values, call {@link Statistics#getMetrics()} and extract the values.
 	 */
+	@Deprecated(forRemoval = true)
 	public String[] getResetValueStrings() {
 
 		final String[] result = getStringArray();
@@ -706,7 +754,9 @@ public abstract class AbstractStatistics implements Statistics {
 	 * Get stats descriptions of all entries
 	 *
 	 * @return String array of stats descriptions
+	 * @deprecated To get the list of descriptions, call {@link Statistics#getMetrics()} and extract the descriptions.
 	 */
+	@Deprecated(forRemoval = true)
 	public String[] getDescriptionStrings() {
 		final String[] result = statEntries != null ? new String[statEntries.length] : new String[0];
 		if (statEntries != null) {

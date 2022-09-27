@@ -123,6 +123,7 @@ sdk/results
 # Swirlds Files
 *.swh
 *.evts
+*/swirlds-tmp
 
 # sdk binaries
 sdk/swirlds.jar

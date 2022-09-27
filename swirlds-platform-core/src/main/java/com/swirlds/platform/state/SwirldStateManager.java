@@ -16,21 +16,19 @@
 
 package com.swirlds.platform.state;
 
+import com.swirlds.common.system.Round;
 import com.swirlds.common.system.SwirldDualState;
 import com.swirlds.common.system.SwirldState;
-import com.swirlds.common.system.transaction.SwirldTransaction;
 import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 import com.swirlds.common.utility.Clearable;
-import com.swirlds.platform.ConsensusRound;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.FreezePeriodChecker;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRule;
 import com.swirlds.platform.eventhandling.EventTransactionPool;
 import com.swirlds.platform.state.signed.LoadableFromSignedState;
-
-import java.time.Instant;
 
 /**
  * The methods used to interact with instances of {@link SwirldState}.
@@ -39,17 +37,16 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 		LoadableFromSignedState {
 
 	/**
-	 * Passes all non-system transactions to {@link SwirldState#expandSignatures(SwirldTransaction)} for signature
-	 * expansion. Invoked prior to adding the event to the queue for pre-consensus handling.
+	 * Invokes the pre-handle method. Called after the event has been verified but before
+	 * {@link #handlePreConsensusEvent(EventImpl)}.
 	 *
 	 * @param event
+	 * 		the event to handle
 	 */
-	void expandSignatures(final EventImpl event);
+	void preHandle(final EventImpl event);
 
 	/**
-	 * Handles an event before it reaches consensus. Implementations are responsible for passing each to
-	 * {@link SwirldState#handleTransaction(long, boolean, Instant, Instant, SwirldTransaction,
-	 * SwirldDualState)} with {@code consensus} equal to {@code false}.
+	 * Handles an event before it reaches consensus..
 	 *
 	 * @param event
 	 * 		the event to handle
@@ -97,11 +94,10 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 
 	/**
 	 * Handles the events in a consensus round. Implementations are responsible for invoking {@link
-	 * SwirldState#handleTransaction(long, boolean, Instant, Instant, SwirldTransaction,
-	 * SwirldDualState)} on all user transactions in the contained events with {@code consensus}
-	 * equal to {@code true}.
+	 * SwirldState#handleConsensusRound(Round, SwirldDualState)}.
 	 *
 	 * @param round
+	 * 		the round to handle
 	 */
 	void handleConsensusRound(final ConsensusRound round);
 

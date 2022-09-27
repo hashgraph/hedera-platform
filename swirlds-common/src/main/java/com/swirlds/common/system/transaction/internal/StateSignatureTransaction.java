@@ -19,14 +19,14 @@ package com.swirlds.common.system.transaction.internal;
 import com.swirlds.common.io.streams.AugmentedDataOutputStream;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.system.transaction.TransactionType;
+import com.swirlds.common.system.transaction.SystemTransactionType;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Objects;
 
 import static com.swirlds.common.io.streams.SerializableStreamConstants.BOOLEAN_BYTES;
-import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG;
+import static com.swirlds.common.system.transaction.SystemTransactionType.SYS_TRANS_STATE_SIG;
 
 /**
  * Every round, the signature of a signed state is put in this transaction
@@ -101,7 +101,7 @@ public final class StateSignatureTransaction extends SystemTransaction {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public TransactionType getTransactionType() {
+	public SystemTransactionType getType() {
 		return SYS_TRANS_STATE_SIG;
 	}
 

@@ -34,15 +34,16 @@ import com.swirlds.common.test.merkle.dummy.DummyMerkleInternal;
 import com.swirlds.common.test.merkle.dummy.DummyMerkleLeaf;
 import com.swirlds.common.test.merkle.dummy.DummyMerkleNode;
 import com.swirlds.common.test.merkle.util.MerkleTestUtils;
-import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.test.framework.ResourceLoader;
 import com.swirlds.test.framework.TestComponentTags;
 import com.swirlds.test.framework.TestTypeTags;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -52,9 +53,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedList;
 import java.util.List;
 
+import static com.swirlds.common.io.utility.FileUtils.deleteDirectory;
 import static com.swirlds.common.test.merkle.util.MerkleTestUtils.areTreesEqual;
 import static com.swirlds.common.test.merkle.util.MerkleTestUtils.buildLessSimpleTreeExtended;
 import static com.swirlds.common.test.merkle.util.MerkleTestUtils.isFullyInitialized;
@@ -69,21 +73,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @DisplayName("Merkle Serialization Tests")
 class MerkleSerializationTests {
 
-	private static final File directory = new File(System.getProperty("user.dir") + "/tmp");
+	/**
+	 * Temporary directory provided by JUnit
+	 */
+	@TempDir
+	Path testDirectory;
 
 	@BeforeAll
 	static void setUp() throws ConstructableRegistryException {
 		ConstructableRegistry.registerConstructables("com.swirlds.common");
 	}
 
-	@AfterAll
-	static void tearDown() {
-		CommonUtils.deleteDirectory(directory);
-	}
-
-	private static void resetDirectory() {
-		CommonUtils.deleteDirectory(directory);
-		assertTrue(directory.mkdirs(), "unable to build directory");
+	private void resetDirectory() throws IOException {
+		deleteDirectory(testDirectory);
+		Files.createDirectories(testDirectory);
 	}
 
 	/**
@@ -96,12 +99,12 @@ class MerkleSerializationTests {
 		final ByteArrayOutputStream baseStream = new ByteArrayOutputStream();
 		final MerkleDataOutputStream outputStream = new MerkleDataOutputStream(baseStream);
 
-		outputStream.writeMerkleTree(directory, root);
+		outputStream.writeMerkleTree(testDirectory, root);
 
 		final MerkleDataInputStream inputStream = new MerkleDataInputStream(
 				new ByteArrayInputStream(baseStream.toByteArray()));
 
-		final DummyMerkleNode deserializedTree = inputStream.readMerkleTree(directory, Integer.MAX_VALUE);
+		final DummyMerkleNode deserializedTree = inputStream.readMerkleTree(testDirectory, Integer.MAX_VALUE);
 
 		if (root == null) {
 			assertNull(deserializedTree, "tree should be null");
@@ -144,12 +147,11 @@ class MerkleSerializationTests {
 		ByteArrayOutputStream baseStream = new ByteArrayOutputStream();
 		MerkleDataOutputStream outputStream = new MerkleDataOutputStream(baseStream);
 
-		outputStream.writeMerkleTree(directory, tree);
-		final int standardLength = baseStream.size();
+		outputStream.writeMerkleTree(testDirectory, tree);
 
 		MerkleDataInputStream inputStream = new MerkleDataInputStream(new ByteArrayInputStream(
 				baseStream.toByteArray()));
-		final DummyMerkleNode deserialized = inputStream.readMerkleTree(directory, Integer.MAX_VALUE);
+		final DummyMerkleNode deserialized = inputStream.readMerkleTree(testDirectory, Integer.MAX_VALUE);
 
 
 		assertTrue(areTreesEqual(tree, deserialized), "tree should match generated");
@@ -168,7 +170,7 @@ class MerkleSerializationTests {
 		final FileOutputStream baseStream = new FileOutputStream(filePath);
 		final MerkleDataOutputStream outputStream = new MerkleDataOutputStream(baseStream);
 		outputStream.writeProtocolVersion();
-		outputStream.writeMerkleTree(directory, tree);
+		outputStream.writeMerkleTree(testDirectory, tree);
 		baseStream.close();
 	}
 
@@ -184,7 +186,7 @@ class MerkleSerializationTests {
 		// uncomment the following line to regenerate the file
 		// writeTreeToFile(MerkleTestUtils.buildTreeWithExternalData(), "serialized-tree-v3.dat");
 
-		final File dir = getFile("merkle/serialized-tree-v3");
+		final Path dir = getFile("merkle/serialized-tree-v3");
 
 		final MerkleDataInputStream dataStream = new MerkleDataInputStream(
 				ResourceLoader.loadFileAsStream("merkle/serialized-tree-v3/serialized-tree-v3.dat"));
@@ -200,12 +202,12 @@ class MerkleSerializationTests {
 
 		final ByteArrayOutputStream baseStream = new ByteArrayOutputStream();
 		final MerkleDataOutputStream outputStream = new MerkleDataOutputStream(baseStream);
-		outputStream.writeMerkleTree(directory, tree);
+		outputStream.writeMerkleTree(testDirectory, tree);
 
 		final MerkleDataInputStream inputStream = new MerkleDataInputStream(
 				new ByteArrayInputStream(baseStream.toByteArray()));
 
-		assertThrows(InvalidVersionException.class, () -> inputStream.readMerkleTree(directory, Integer.MAX_VALUE),
+		assertThrows(InvalidVersionException.class, () -> inputStream.readMerkleTree(testDirectory, Integer.MAX_VALUE),
 				"expected error during deserialization");
 	}
 
@@ -322,13 +324,13 @@ class MerkleSerializationTests {
 		final ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
 		final MerkleDataOutputStream out = new MerkleDataOutputStream(byteOut);
 
-		out.writeMerkleTree(directory, originalRoot);
+		out.writeMerkleTree(testDirectory, originalRoot);
 		out.flush();
 
 		final MerkleDataInputStream in =
 				new DebuggableMerkleDataInputStream(new ByteArrayInputStream(byteOut.toByteArray()));
 
-		final MerkleInternal deserializedRoot = in.readMerkleTree(directory, Integer.MAX_VALUE);
+		final MerkleInternal deserializedRoot = in.readMerkleTree(testDirectory, Integer.MAX_VALUE);
 
 		// The root is untouched
 		assertTrue(deserializedRoot instanceof DummyMerkleInternal, "incorrect node type");
@@ -398,8 +400,16 @@ class MerkleSerializationTests {
 		DummyMerkleInternal.resetMigrationMapper();
 	}
 
+
+	/**
+	 * Disabled on Windows because it does not support changing a file or directory's readability and write-ability.
+	 *
+	 * @throws IOException
+	 */
+	@DisabledOnOs(OS.WINDOWS)
 	@Test
 	@DisplayName("Directory Validation Test")
+	@SuppressWarnings("ResultOfMethodCallIgnored")
 	void directoryValidationTest() throws IOException {
 
 		resetDirectory();
@@ -412,14 +422,15 @@ class MerkleSerializationTests {
 		assertThrows(IllegalArgumentException.class, () -> out.writeMerkleTree(null, null),
 				"null directory should not be permitted");
 
-		final File nonExistentDirectory = new File("if/this/actually/exists/I/will/eat/my/hat");
+		final Path nonExistentDirectory = new File("if/this/actually/exists/I/will/eat/my/hat").toPath();
 		assertThrows(IllegalArgumentException.class, () -> in.readMerkleTree(nonExistentDirectory, 0),
 				"directory must exist");
 		assertThrows(IllegalArgumentException.class, () -> out.writeMerkleTree(nonExistentDirectory, null),
 				"directory must exist");
 
-		final File notADirectory = directory.toPath().resolve("notADirectory.txt").toFile();
-		final SerializableDataOutputStream fOut = new SerializableDataOutputStream(new FileOutputStream(notADirectory));
+		final Path notADirectory = testDirectory.resolve("notADirectory.txt");
+		final SerializableDataOutputStream fOut =
+				new SerializableDataOutputStream(new FileOutputStream(notADirectory.toFile()));
 		fOut.writeNormalisedString("this is not a directory");
 		fOut.close();
 		assertThrows(IllegalArgumentException.class, () -> in.readMerkleTree(notADirectory, 0),
@@ -427,22 +438,25 @@ class MerkleSerializationTests {
 		assertThrows(IllegalArgumentException.class, () -> out.writeMerkleTree(notADirectory, null),
 				"must be an actual directory");
 
-		final File writeProtectedDirectory = directory.toPath().resolve("writeProtected").toFile();
-		writeProtectedDirectory.mkdirs();
-		writeProtectedDirectory.setWritable(false);
+		final Path writeProtectedDirectory = testDirectory.resolve("writeProtected");
+		Files.createDirectories(writeProtectedDirectory);
+		writeProtectedDirectory.toFile().setWritable(false);
 		assertThrows(EOFException.class, () -> in.readMerkleTree(writeProtectedDirectory, 0),
 				"should pass directory validation and fail later in the operation, write permission not needed");
 		assertThrows(IllegalArgumentException.class, () -> out.writeMerkleTree(writeProtectedDirectory, null),
 				"must have write permissions");
-		writeProtectedDirectory.setWritable(true);
+		writeProtectedDirectory.toFile().setWritable(true);
 
-		final File readProtectedDirectory = directory.toPath().resolve("readProtected").toFile();
-		readProtectedDirectory.mkdirs();
-		readProtectedDirectory.setReadable(false);
+		final Path readProtectedDirectory = testDirectory.resolve("readProtected");
+		Files.createDirectories(readProtectedDirectory);
+		readProtectedDirectory.toFile().setReadable(false);
 		assertThrows(IllegalArgumentException.class, () -> in.readMerkleTree(readProtectedDirectory, 0),
 				"must have read permissions");
 		assertThrows(IllegalArgumentException.class, () -> out.writeMerkleTree(readProtectedDirectory, null),
 				"must have read permissions");
+
+		// Reset to true so the directory can be deleted between tests
+		readProtectedDirectory.toFile().setReadable(true);
 	}
 
 }

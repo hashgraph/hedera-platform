@@ -18,12 +18,14 @@ package com.swirlds.common.metrics;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
+
 /**
  * An {@code IntegerGauge} stores a single {@code int} value.
  * <p>
  * Only the current value is stored, no history or distribution is kept.
  */
-public class IntegerGauge extends Metric {
+public class IntegerGauge extends AbstractGauge<Integer> {
 
 	private final AtomicInteger value = new AtomicInteger();
 
@@ -119,10 +121,12 @@ public class IntegerGauge extends Metric {
 	/**
 	 * {@inheritDoc}
 	 */
-	@SuppressWarnings("removal")
 	@Override
-	public Integer getValue() {
-		return get();
+	public Integer get(final ValueType valueType) {
+		if (valueType == VALUE) {
+			return get();
+		}
+		throw new IllegalArgumentException("Unsupported ValueType");
 	}
 
 	/**

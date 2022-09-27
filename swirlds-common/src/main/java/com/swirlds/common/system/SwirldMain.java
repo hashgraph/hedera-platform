@@ -15,6 +15,8 @@
  */
 package com.swirlds.common.system;
 
+import com.swirlds.common.system.address.AddressBook;
+
 import java.time.Instant;
 
 /**
@@ -26,6 +28,12 @@ public interface SwirldMain extends Runnable {
 	/**
 	 * This should only be called by the Platform. It is passed a reference to the platform, so the
 	 * SwirldMain will know who to call. (This is dependency injection).
+	 *
+	 * SwirldApp can use {@link Platform#getState()} to access {@link SwirldState},
+	 * but must not make any changes to {@link SwirldState} returned from {@link Platform#getState()}.
+	 *
+	 * Any changes necessary to initialize {@link SwirldState} should be made
+	 * in {@link SwirldState#init(Platform, AddressBook, SwirldDualState, InitTrigger, SoftwareVersion)}
 	 *
 	 * @param platform
 	 * 		the Platform that instantiated this SwirldMain

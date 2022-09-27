@@ -16,17 +16,15 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.SwirldDualState;
-import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.SwirldState1;
+import com.swirlds.common.system.SwirldState2;
+import com.swirlds.common.system.events.Event;
 import com.swirlds.common.system.transaction.ConsensusTransaction;
-import com.swirlds.common.system.transaction.SwirldTransaction;
 import com.swirlds.common.system.transaction.Transaction;
-import com.swirlds.common.system.transaction.internal.SystemTransaction;
-import com.swirlds.platform.ConsensusRound;
-import com.swirlds.platform.EventImpl;
-import com.swirlds.platform.components.SystemTransactionHandler;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.stats.SwirldStateStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -34,23 +32,14 @@ import org.apache.logging.log4j.Logger;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Iterator;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.function.IntSupplier;
-import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 
 import static com.swirlds.common.utility.Units.NANOSECONDS_TO_SECONDS;
-import static com.swirlds.logging.LogMarker.EVENT_CONTENT;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
-import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT;
-import static com.swirlds.platform.EventImpl.MIN_TRANS_TIMESTAMP_INCR_NANOS;
 import static com.swirlds.platform.event.EventUtils.toShortString;
+import static com.swirlds.platform.internal.EventImpl.MIN_TRANS_TIMESTAMP_INCR_NANOS;
 
-/**
- * Handles transactions by passing them to a {@link SwirldState#handleTransaction(long, boolean,
- * Instant, Instant, SwirldTransaction, SwirldDualState)}.
- */
 public class TransactionHandler {
 
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
@@ -62,49 +51,93 @@ public class TransactionHandler {
 	/** Stats relevant to SwirldState operations. */
 	private final SwirldStateStats stats;
 
-	/** Handles system transactions */
-	private final SystemTransactionHandler systemTransactionHandler;
-
-	public TransactionHandler(
-			final NodeId selfId,
-			final SystemTransactionHandler systemTransactionHandler,
-			final SwirldStateStats stats) {
+	public TransactionHandler(final NodeId selfId, final SwirldStateStats stats) {
 		this.selfId = selfId;
-		this.systemTransactionHandler = systemTransactionHandler;
 		this.stats = stats;
 	}
 
 	/**
-	 * Handles all the transactions in a given event.
+	 * Applies an event to the {@link SwirldState2#preHandle(Event)} method and handles any
+	 * exceptions gracefully.
 	 *
 	 * @param event
-	 * 		the event to handle
-	 * @param consTime
-	 * 		the event's actual or estimated consensus time
-	 * @param isConsensus
-	 * 		if this event has reached consensus
-	 * @param state
-	 * 		the state to apply transaction to
-	 * @param handleSystem
-	 * 		true if system transactions should be handled
-	 * @param postHandle
-	 * 		a consumer that accepts an event creator id. Executed after handling each transaction. Not executed for
-	 * 		system transactions unless {@code handleSystem} is true.
+	 * 		the event to apply
+	 * @param swirldState
+	 * 		the swirld state to apply {@code event} to
 	 */
-	public void handleEventTransactions(final EventImpl event, final Instant consTime, final boolean isConsensus,
-			final State state, final boolean handleSystem, final LongConsumer postHandle) {
+	public void preHandle(final EventImpl event, final SwirldState2 swirldState) {
+		try {
+			swirldState.preHandle(event);
+		} catch (final Throwable t) {
+			LOG.error(EXCEPTION.getMarker(),
+					"error invoking SwirldState2.preHandle() [ nodeId = {} ] with event {}",
+					selfId.getId(),
+					event.toMediumString(), t);
+		}
+	}
+
+	/**
+	 * Applies all transaction in an event to the {@link SwirldState1#preHandle(Transaction)} method and handles any
+	 * exceptions gracefully.
+	 *
+	 * @param event
+	 * 		the event with transactions to apply
+	 * @param swirldState
+	 * 		the swirld state to apply {@code event} to
+	 */
+	public void preHandle(final Event event, final SwirldState1 swirldState) {
+		for (final Iterator<Transaction> it = event.transactionIterator(); it.hasNext(); ) {
+			final Transaction transaction = it.next();
+			preHandle(transaction, swirldState);
+		}
+	}
+
+	/**
+	 * Applies a transaction to the {@link SwirldState1#preHandle(Transaction)} method and handles any
+	 * exceptions gracefully.
+	 *
+	 * @param transaction
+	 * 		the transaction to apply
+	 * @param swirldState
+	 * 		the swirld state to apply {@code event} to
+	 */
+	public void preHandle(final Transaction transaction, final SwirldState1 swirldState) {
+		try {
+			swirldState.preHandle(transaction);
+		} catch (final Throwable t) {
+			LOG.error(EXCEPTION.getMarker(),
+					"error invoking SwirldState1.preHandle() [ nodeId = {} ] with transaction {}",
+					selfId.getId(),
+					transaction, t);
+		}
+	}
+
+
+	/**
+	 * Applies an event to {@link SwirldState1} as a pre-consensus event and handles any exceptions gracefully.
+	 *
+	 * @param swirldState
+	 * 		the swirld state to apply the transactions to
+	 * @param dualState
+	 * 		the dual state associated with {@code swirldState}
+	 * @param event
+	 * 		the event to apply
+	 */
+	public void handlePreConsensusEvent(final SwirldState1 swirldState, final SwirldDualState dualState,
+			final EventImpl event) {
 
 		if (event.isEmpty()) {
 			return;
 		}
 
-		final boolean runPostHandle = postHandle != null;
-
 		// the creator of the event containing this transaction
-		final long creator = event.getCreatorId();
+		final long creatorId = event.getCreatorId();
 
 		// The claimed creation time of the event holding this transaction
 		final Instant timeCreated = event.getTimeCreated();
+
+		// The actual (or estimated, if not available) consensus time of this event
+		final Instant consTime = event.getEstimatedTime();
 
 		final ConsensusTransaction[] transactions = event.getTransactions();
 
@@ -114,168 +147,82 @@ public class TransactionHandler {
 			}
 
 			final Instant transConsTime = consTime.plusNanos(i * MIN_TRANS_TIMESTAMP_INCR_NANOS);
-			handleTransaction(
-					event,
-					isConsensus,
-					creator,
-					timeCreated,
-					transConsTime,
-					transactions[i],
-					state);
-
-			if (runPostHandle) {
-				postHandle.accept(creator);
-			}
-		}
-
-		if (handleSystem) {
-			for (final Iterator<SystemTransaction> it = event.systemTransactionIterator(); it.hasNext(); ) {
-				final SystemTransaction sysTrans = it.next();
-				systemTransactionHandler.handleSystemTransaction(
-						creator,
-						isConsensus,
+			try {
+				swirldState.handleTransaction(
+						creatorId,
 						timeCreated,
-						sysTrans);
-
-				if (runPostHandle) {
-					postHandle.accept(creator);
-				}
+						transConsTime,
+						transactions[i],
+						dualState);
+			} catch (final Throwable t) {
+				LOG.error(EXCEPTION.getMarker(),
+						"error invoking SwirldState.handlePreConsensusEvent() [ nodeId = {} ] with event {}",
+						selfId.getId(),
+						toShortString(event), t);
 			}
 		}
 	}
 
 	/**
-	 * Handles all the transactions in a given round.
+	 * Applies a consensus round to SwirldState, handles any exceptions gracefully, and updates relevant statistics.
 	 *
 	 * @param round
-	 * 		the round to handle
+	 * 		the round to apply
 	 * @param state
-	 * 		the state to apply transactions to
-	 * @param postHandle
-	 * 		a runnable to execute after handling each transaction
+	 * 		the state to apply {@code round} to
 	 */
-	public void handleConsensusRound(final ConsensusRound round, final State state, final LongConsumer postHandle) {
-		for (final EventImpl event : round.getConsensusEvents()) {
-			handleEventTransactions(
-					event,
-					event.getConsensusTimestamp(),
-					true,
-					state,
-					true,
-					postHandle
-			);
-		}
-	}
-
-	/**
-	 * <p>Handles a single application transaction. {@code stateInfo} must not be modified while this method is
-	 * executing.</p>
-	 *
-	 * @param event
-	 * 		the event the transaction is in
-	 * @param isConsensus
-	 * 		if the transaction's event has reached consensus
-	 * @param creator
-	 * 		the creator of the transaction
-	 * @param timeCreated
-	 * 		the time the event was created as claimed by its creator
-	 * @param transConsTime
-	 * 		the transaction's actual or estimated consensus time
-	 * @param trans
-	 * 		the transaction
-	 * @param state
-	 * 		the state to invoke {@link SwirldState#handleTransaction(long, boolean, Instant, Instant, SwirldTransaction,
-	 *        SwirldDualState)} on
-	 */
-	public void handleTransaction(final EventImpl event, final boolean isConsensus, final long creator,
-			final Instant timeCreated, final Instant transConsTime, final Transaction trans,
-			final State state) {
-
-		// guard against bad apps crashing the browser
+	public void handleRound(final ConsensusRound round, final State state) {
 		try {
-
-			final SwirldTransaction swirldTransaction = (SwirldTransaction) trans;
-
-			if (isConsensus) {
-				validateSignatures(swirldTransaction);
-			}
-
+			final Instant timeOfHandle = Instant.now();
 			final long startTime = System.nanoTime();
 
-			state.getSwirldState().handleTransaction(
-					creator,
-					isConsensus,
-					timeCreated,
-					transConsTime,
-					swirldTransaction,
-					state.getSwirldDualState());
+			state.getSwirldState().handleConsensusRound(round, state.getSwirldDualState());
 
-			// clear sigs to free up memory, since we don't need them anymore
-			if (isConsensus) {
-				swirldTransaction.clearSignatures();
+			final double secondsElapsed = (System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS;
+
+			// Avoid dividing by zero
+			if (round.getNumAppTransactions() == 0) {
+				stats.consensusTransHandleTime(secondsElapsed);
+			} else {
+				stats.consensusTransHandleTime(secondsElapsed / round.getNumAppTransactions());
 			}
+			stats.consensusTransHandled(round.getNumAppTransactions());
 
-				/* We only add these stats for transactions that have reached consensus. Use isConsensus to check the
-				consensus status because these stats should only be recorded for events being handled as consensus
-				events. Events in the pre-consensus queue could reach consensus before being handled pre-consensus. */
-			if (event != null && isConsensus) {
-				stats.consensusTransHandleTime((System.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
-				stats.consensusTransHandled();
-
+			for (final EventImpl event : round.getConsensusEvents()) {
 				// events being played back from stream file do not have reachedConsTimestamp set,
 				// since reachedConsTimestamp is not serialized and saved to stream file
 				if (event.getReachedConsTimestamp() != null) {
 					stats.consensusToHandleTime(
-							event.getReachedConsTimestamp().until(Instant.now(),
+							event.getReachedConsTimestamp().until(timeOfHandle,
 									ChronoUnit.NANOS) * NANOSECONDS_TO_SECONDS);
 				}
 			}
-		} catch (final InterruptedException ex) {
-			handleInterruptedException();
-		} catch (final Exception ex) {
-			handleException(event, trans, state, ex);
+		} catch (final Throwable t) {
+			LOG.error(EXCEPTION.getMarker(),
+					"error invoking SwirldState.handleConsensusRound() [ nodeId = {} ] with round {}",
+					selfId.getId(),
+					round.getRoundNum(), t);
 		}
 	}
 
-	private void handleInterruptedException() {
-		LOG.info(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(),
-				"handleTransaction Interrupted [ nodeId = {} ]. " +
-						"This should happen only during a reconnect",
-				selfId.getId());
-		Thread.currentThread().interrupt();
-	}
-
-	private void handleException(final EventImpl event, final Transaction trans, final State state,
-			final Exception ex) {
-		LOG.error(EXCEPTION.getMarker(),
-				"error while calculating parameters to send {} or while calling it with event {}",
-				(state == null
-						? "platform.handleTransaction"
-						: "the app's SwirldState.handleTransaction"),
-				toShortString(event), ex);
-
-		LOG.error(EVENT_CONTENT.getMarker(),
-				"error calculating parameters while calling it using a context \nwith event: {}\nwith trans: " +
-						"{}",
-				() -> event, trans::toString);
-	}
-
 	/**
-	 * <p>Applies transactions to a state. These transactions have no event context and are applied with {@code
-	 * consensus == false} and an estimated consensus time.</p>
+	 * <p>Applies transactions to a state. These transactions have no event context and have not reached consensus.</p>
 	 *
 	 * @param numTransSupplier
 	 * 		a supplier for the number of transactions the {@code transSupplier} can provide
 	 * @param transSupplier
 	 * 		the supplier of transactions to apply
-	 * @param handleSystem
-	 * 		true if system transactions should be handled
-	 * @param state
-	 * 		the state to apply the transactions to
+	 * @param swirldState
+	 * 		the swirld state to apply the transactions to
+	 * @param dualState
+	 * 		the dual state associated with {@code swirldState}
 	 */
-	public void handleTransactions(final IntSupplier numTransSupplier,
-			final Supplier<ConsensusTransaction> transSupplier, final Supplier<Instant> consEstimateSupplier,
-			final boolean handleSystem, final State state) {
+	public void handleTransactions(
+			final IntSupplier numTransSupplier,
+			final Supplier<ConsensusTransaction> transSupplier,
+			final Supplier<Instant> consEstimateSupplier,
+			final SwirldState1 swirldState,
+			final SwirldDualState dualState) {
 
 		final int numTrans = numTransSupplier.getAsInt();
 
@@ -297,43 +244,38 @@ public class TransactionHandler {
 
 			final Instant transConsTime = baseTime.plusNanos(i * MIN_TRANS_TIMESTAMP_INCR_NANOS);
 
-			if (trans.isSystem()) {
-				if (handleSystem) {
-					final SystemTransaction sysTrans = (SystemTransaction) trans;
-					systemTransactionHandler.handleSystemTransaction(
-							selfId.getId(),
-							false,
-							Instant.now(),
-							sysTrans);
-				}
-			} else {
-				handleTransaction(null,
-						false,
-						selfId.getId(),
-						Instant.now(),
-						transConsTime,
-						trans,
-						state);
+			if (!trans.isSystem()) {
+				handleSelfTransaction(swirldState, dualState, transConsTime, trans);
 			}
 		}
 	}
 
 	/**
-	 * Validates any signatures present and waits if necessary.
+	 * Applies a single pre-consensus self transaction to {@link SwirldState1} and handles any exceptions gracefully.
 	 *
-	 * @param swirldTransaction
-	 * 		the transaction whose signatures need to be validated
-	 * @throws InterruptedException
-	 * @throws ExecutionException
+	 * @param swirldState
+	 * 		the swirld state to apply the transactions to
+	 * @param dualState
+	 * 		the dual state associated with {@code swirldState}
+	 * @param consTime
+	 * 		the estimated consensus time of the transaction
+	 * @param transaction
+	 * 		the transaction to apply
 	 */
-	private void validateSignatures(final SwirldTransaction swirldTransaction) throws InterruptedException,
-			ExecutionException {
-		// Validate any signatures present and wait if necessary
-		for (final TransactionSignature sig : swirldTransaction.getSignatures()) {
-			final Future<Void> future = sig.waitForFuture();
-
-			// Block & Ignore the Void return
-			future.get();
+	private void handleSelfTransaction(final SwirldState1 swirldState, final SwirldDualState dualState,
+			final Instant consTime, final Transaction transaction) {
+		try {
+			swirldState.handleTransaction(
+					selfId.getId(),
+					Instant.now(),
+					consTime,
+					transaction,
+					dualState);
+		} catch (final Throwable t) {
+			LOG.error(EXCEPTION.getMarker(),
+					"error invoking SwirldState.handleTransaction() [ nodeId = {} ] with transaction {}",
+					selfId.getId(),
+					transaction, t);
 		}
 	}
 }

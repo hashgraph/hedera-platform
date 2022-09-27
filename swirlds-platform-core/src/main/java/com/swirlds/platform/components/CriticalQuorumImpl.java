@@ -19,7 +19,7 @@ package com.swirlds.platform.components;
 import com.swirlds.common.system.EventCreationRuleResponse;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.events.BaseEvent;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.Utilities;
 import com.swirlds.platform.event.EventUtils;
 

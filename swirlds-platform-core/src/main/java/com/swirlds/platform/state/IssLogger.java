@@ -18,7 +18,7 @@ package com.swirlds.platform.state;
 
 import com.swirlds.logging.payloads.IssPayload;
 import com.swirlds.logging.payloads.IssResolvedPayload;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.stats.IssStats;
 import org.apache.logging.log4j.LogManager;

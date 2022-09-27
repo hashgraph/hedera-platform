@@ -17,7 +17,7 @@
 package com.swirlds.platform.event.linking;
 
 import com.swirlds.logging.LogMarker;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.event.GossipEvent;
 import org.apache.logging.log4j.LogManager;

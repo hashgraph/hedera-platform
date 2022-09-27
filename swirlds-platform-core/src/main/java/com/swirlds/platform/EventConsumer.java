@@ -16,6 +16,8 @@
 
 package com.swirlds.platform;
 
+import com.swirlds.common.system.events.Event;
+
 /**
  * A function that consumes an event and returns whether should continue or not.
  * Is used by {@link StreamEventParser}
@@ -29,5 +31,5 @@ public interface EventConsumer {
 	 * 		an event to be consumed
 	 * @return whether should continue consuming
 	 */
-	boolean consume(final EventImpl event);
+	boolean consume(final Event event);
 }

@@ -19,10 +19,12 @@ package com.swirlds.platform.components;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
 import com.swirlds.common.system.transaction.internal.SystemTransaction;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.Instant;
+import java.util.Iterator;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STATE_SIG_DIST;
@@ -59,20 +61,40 @@ public class SystemTransactionHandlerImpl implements SystemTransactionHandler {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void handleSystemTransaction(final long creator, final boolean isConsensus,
-			final Instant timeCreated, final SystemTransaction trans) {
+	public void handleSystemTransactions(final EventImpl event) {
+		for (final Iterator<SystemTransaction> it = event.systemTransactionIterator(); it.hasNext(); ) {
+			final SystemTransaction trans = it.next();
+			handleSystemTransaction(trans, event.getCreatorId(), false);
+		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void handleSystemTransactions(final ConsensusRound round) {
+		for (final EventImpl event : round.getConsensusEvents()) {
+			for (final Iterator<SystemTransaction> it = event.systemTransactionIterator(); it.hasNext(); ) {
+				final SystemTransaction trans = it.next();
+				handleSystemTransaction(trans, event.getCreatorId(), true);
+			}
+		}
+	}
+
+	private void handleSystemTransaction(final SystemTransaction transaction, final long creatorId,
+			final boolean isConsensus) {
 		try {
-			switch (trans.getTransactionType()) {
+			switch (transaction.getType()) {
 				case SYS_TRANS_STATE_SIG: // a signature on a signed state
 					// self-signature was recorded when it was created, so only record other-sigs here
-					if (!selfId.equalsMain(creator)) {
-						final StateSignatureTransaction signatureTransaction = (StateSignatureTransaction) trans;
+					if (!selfId.equalsMain(creatorId)) {
+						final StateSignatureTransaction signatureTransaction = (StateSignatureTransaction) transaction;
 						final long lastRoundReceived = signatureTransaction.getLastRoundReceived();
 						final byte[] sig = signatureTransaction.getStateSignature();
 						LOG.debug(STATE_SIG_DIST.getMarker(),
 								"platform {} got sig from {} for round {} at handleSystemTransaction",
-								selfId, creator, lastRoundReceived);
-						recorder.recordStateSig(lastRoundReceived, creator, null, sig);
+								selfId, creatorId, lastRoundReceived);
+						recorder.recordStateSig(lastRoundReceived, creatorId, null, sig);
 					}
 					break;
 				case SYS_TRANS_PING_MICROSECONDS: // latency between members
@@ -82,15 +104,18 @@ public class SystemTransactionHandlerImpl implements SystemTransactionHandler {
 				default:
 					LOG.error(EXCEPTION.getMarker(),
 							"Unknown system transaction type {}",
-							trans.getTransactionType());
+							transaction.getType());
 					break;
 			}
 		} catch (final RuntimeException e) {
 			LOG.error(EXCEPTION.getMarker(),
-					"Error while handling transaction: kind {} id {} isConsensus {} transaction {} error",
-					trans.getTransactionType(),
-					creator, isConsensus, trans, e);
-
+					"Error while handling system transaction: " +
+							"type: {}, id: {}, isConsensus: {}, transaction: {}, error:",
+					transaction.getType(),
+					creatorId,
+					isConsensus,
+					transaction,
+					e);
 		}
 	}
 }

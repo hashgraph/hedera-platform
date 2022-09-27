@@ -20,6 +20,11 @@ import com.swirlds.common.metrics.FloatFormats;
 import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.utility.Units;
 import com.swirlds.platform.stats.atomic.AtomicSumAndCount;
+import org.apache.commons.lang3.tuple.Pair;
+
+import java.util.List;
+
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * Tracks the average time taken for an operation by accumulating the time and the number of operation. The actual
@@ -46,13 +51,33 @@ public class AccumulatedAverageTime extends Metric {
 		sumAndCount.add((int) (nanoTime * Units.NANOSECONDS_TO_MICROSECONDS));
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public Object getValue() {
-		return sumAndCount.average() * Units.MICROSECONDS_TO_MILLISECONDS;
+	public List<ValueType> getValueTypes() {
+		return Metric.VALUE_TYPE;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public Object getValueAndReset() {
-		return sumAndCount.averageAndReset() * Units.MICROSECONDS_TO_MILLISECONDS;
+	public Double get(final ValueType valueType) {
+		if (valueType == VALUE) {
+			return sumAndCount.average() * Units.MICROSECONDS_TO_MILLISECONDS;
+		}
+		throw new IllegalArgumentException("Unknown MetricType");
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return
+	 */
+	@SuppressWarnings("removal")
+	@Override
+	public List<Pair<ValueType, Object>> takeSnapshot() {
+		return List.of(Pair.of(VALUE, sumAndCount.averageAndReset() * Units.MICROSECONDS_TO_MILLISECONDS));
 	}
 }

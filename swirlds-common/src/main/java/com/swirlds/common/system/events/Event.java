@@ -20,6 +20,7 @@ import com.swirlds.common.system.transaction.Transaction;
 
 import java.time.Instant;
 import java.util.Iterator;
+import java.util.function.Consumer;
 
 /**
  * An event created by a node with zero or more transactions.
@@ -57,4 +58,16 @@ public interface Event {
 	 * @return the estimated consensus timestamp
 	 */
 	Instant getEstimatedTime();
+
+	/**
+	 * A convenience method that supplies every transaction in this event to a consumer.
+	 *
+	 * @param consumer
+	 * 		a transaction consumer
+	 */
+	default void forEachTransaction(final Consumer<Transaction> consumer) {
+		for (final Iterator<Transaction> transIt = transactionIterator(); transIt.hasNext(); ) {
+			consumer.accept(transIt.next());
+		}
+	}
 }

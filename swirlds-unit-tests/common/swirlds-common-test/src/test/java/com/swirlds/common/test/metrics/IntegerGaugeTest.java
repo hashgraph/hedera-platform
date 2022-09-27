@@ -17,20 +17,23 @@
 package com.swirlds.common.test.metrics;
 
 import com.swirlds.common.metrics.IntegerGauge;
+import com.swirlds.common.metrics.Metric;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class IntegerGaugeTest {
 
-
 	private static final String CATEGORY = "CaTeGoRy";
 	private static final String NAME = "NaMe";
 	private static final String DESCRIPTION = "DeScRiPtIoN";
 	private static final String FORMAT = "FoRmAt";
-
 
 	@Test
 	@DisplayName("Constructor should store values")
@@ -42,7 +45,8 @@ class IntegerGaugeTest {
 		assertEquals(DESCRIPTION, gauge.getDescription(), "The description was not set correctly in the constructor");
 		assertEquals(FORMAT, gauge.getFormat(), "The format was not set correctly in the constructor");
 		assertEquals(0, gauge.get(), "The value was not initialized correctly");
-		assertEquals(0, gauge.getValue(), "The value was not initialized correctly");
+		assertEquals(0, gauge.get(VALUE), "The value was not initialized correctly");
+		assertEquals(List.of(VALUE), gauge.getValueTypes(), "ValueTypes should be [VALUE]");
 	}
 
 	@Test
@@ -68,7 +72,8 @@ class IntegerGaugeTest {
 		assertEquals(DESCRIPTION, gauge.getDescription(), "The description was not set correctly in the constructor");
 		assertEquals(FORMAT, gauge.getFormat(), "The format was not set correctly in the constructor");
 		assertEquals(42, gauge.get(), "The value was not initialized correctly");
-		assertEquals(42, gauge.getValue(), "The value was not initialized correctly");
+		assertEquals(42, gauge.get(VALUE), "The value was not initialized correctly");
+		assertEquals(List.of(VALUE), gauge.getValueTypes(), "ValueTypes should be [VALUE]");
 	}
 
 	@Test
@@ -94,7 +99,8 @@ class IntegerGaugeTest {
 		assertEquals(DESCRIPTION, gauge.getDescription(), "The description was not set correctly in the constructor");
 		assertEquals("%d", gauge.getFormat(), "The format was not set correctly in the constructor");
 		assertEquals(0, gauge.get(), "The value was not initialized correctly");
-		assertEquals(0, gauge.getValue(), "The value was not initialized correctly");
+		assertEquals(0, gauge.get(VALUE), "The value was not initialized correctly");
+		assertEquals(List.of(VALUE), gauge.getValueTypes(), "ValueTypes should be [VALUE]");
 	}
 
 	@Test
@@ -118,7 +124,8 @@ class IntegerGaugeTest {
 		assertEquals(DESCRIPTION, gauge.getDescription(), "The description was not set correctly in the constructor");
 		assertEquals("%d", gauge.getFormat(), "The format was not set correctly in the constructor");
 		assertEquals(42, gauge.get(), "The value was not initialized correctly");
-		assertEquals(42, gauge.getValue(), "The value was not initialized correctly");
+		assertEquals(42, gauge.get(VALUE), "The value was not initialized correctly");
+		assertEquals(List.of(VALUE), gauge.getValueTypes(), "ValueTypes should be [VALUE]");
 	}
 
 	@Test
@@ -143,13 +150,45 @@ class IntegerGaugeTest {
 
 		// then
 		assertEquals(5, gauge.get(), "Value should be 5");
-		assertEquals(5, gauge.getValue(), "Value should be 5");
+		assertEquals(5, gauge.get(VALUE), "Value should be 5");
 
 		// when
 		gauge.set(3);
 
 		// then
 		assertEquals(3, gauge.get(), "Value should be 3");
-		assertEquals(3, gauge.getValue(), "Value should be 3");
+		assertEquals(3, gauge.get(VALUE), "Value should be 3");
+	}
+
+	@Test
+	void testSnapshot() {
+		// given
+		final IntegerGauge gauge = new IntegerGauge(CATEGORY, NAME, DESCRIPTION, FORMAT, 2);
+
+		// when
+		final List<Pair<Metric.ValueType, Object>> snapshot = gauge.takeSnapshot();
+
+		// then
+		assertEquals(2, gauge.get(), "Value should be 2");
+		assertEquals(2, gauge.get(VALUE), "Value should be 2");
+		assertEquals(List.of(Pair.of(VALUE, 2)), snapshot, "Snapshot is not correct");
+	}
+
+	@Test
+	void testInvalidGets() {
+		// given
+		final IntegerGauge gauge = new IntegerGauge(CATEGORY, NAME, DESCRIPTION, FORMAT, 2);
+
+		// then
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(null),
+				"Calling get() with null should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.COUNTER),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.MIN),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.MAX),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.STD_DEV),
+				"Calling get() with an unsupported MetricType should throw an IAE");
 	}
 }

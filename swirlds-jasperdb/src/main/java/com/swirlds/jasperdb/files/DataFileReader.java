@@ -17,7 +17,7 @@
 package com.swirlds.jasperdb.files;
 
 import com.swirlds.jasperdb.collections.IndexedObject;
-import com.swirlds.jasperdb.utilities.FileUtils;
+import com.swirlds.jasperdb.utilities.JasperDBFileUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -269,7 +269,7 @@ public final class DataFileReader<D> implements AutoCloseable, Comparable<DataFi
 		buffer.position(0);
 		buffer.limit(bytesToRead);
 		// read data
-		FileUtils.completelyRead(fileChannel, buffer, byteOffsetInFile);
+		JasperDBFileUtils.completelyRead(fileChannel, buffer, byteOffsetInFile);
 		buffer.flip();
 		return buffer;
 	}

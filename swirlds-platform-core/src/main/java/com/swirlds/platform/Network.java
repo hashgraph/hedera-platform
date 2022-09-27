@@ -15,6 +15,7 @@
  */
 package com.swirlds.platform;
 
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.p2p.portforwarding.PortMapping;
 import com.swirlds.p2p.portforwarding.PortMappingListener;
@@ -135,9 +136,11 @@ public class Network {
 		portForwarder.setPortMappings(portsToBeMapped);
 
 		// execute tries to open the ports specified above
-		portForwarderThread = new Thread(portForwarder, "PortForwarder");
-		portForwarderThread.setDaemon(true);
-		portForwarderThread.start();
+		portForwarderThread = new ThreadConfiguration()
+				.setComponent("network")
+				.setThreadName("PortForwarder")
+				.setRunnable(portForwarder)
+				.build(true /*start*/);
 	}
 
 	/**

@@ -80,7 +80,7 @@ import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
-import static com.swirlds.common.metrics.Counter.CounterMode.INCREASE_AND_DECREASE;
+import static com.swirlds.common.metrics.Counter.Mode.INCREASE_AND_DECREASE;
 import static com.swirlds.common.utility.Units.BYTES_TO_BITS;
 import static com.swirlds.jasperdb.KeyRange.INVALID_KEY_RANGE;
 import static com.swirlds.logging.LogMarker.ERROR;

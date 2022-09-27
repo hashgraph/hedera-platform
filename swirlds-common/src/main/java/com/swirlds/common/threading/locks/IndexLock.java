@@ -124,4 +124,33 @@ public class IndexLock {
 		final int hash = object == null ? 0 : object.hashCode();
 		return autoLock(hash);
 	}
+
+	/**
+	 * Lock every index. This is expensive, use with caution.
+	 */
+	public void fullyLock() {
+		for (int index = 0; index < parallelism; index++) {
+			locks[index].lock();
+		}
+	}
+
+	/**
+	 * Lock every index. This is expensive, use with caution.
+	 */
+	public void fullyUnlock() {
+		for (int index = 0; index < parallelism; index++) {
+			locks[index].unlock();
+		}
+	}
+
+	/**
+	 * Acquire a lock on every index and return an autocloseable object that will release the lock.
+	 * This is expensive, use with caution.
+	 *
+	 * @return an object that will unlock the lock once it is closed
+	 */
+	public Locked autoFullLock() {
+		fullyLock();
+		return this::fullyUnlock;
+	}
 }

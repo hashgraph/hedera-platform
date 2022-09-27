@@ -20,7 +20,7 @@ package com.swirlds.common.system;
  * A class that holds all the user readable names
  */
 public abstract class PlatformStatNames {
-	/** number of consensus transactions per second handled by SwirldState.handleTransaction() */
+	/** number of consensus transactions per second handled by SwirldState.handleConsensusRound() */
 	public static final String TRANSACTIONS_HANDLED_PER_SECOND = "transH/sec";
 	/** time from creating an event to knowing its consensus (in seconds) */
 	public static final String CREATION_TO_CONSENSUS_SEC = "secC2C";

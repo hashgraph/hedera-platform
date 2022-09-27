@@ -20,8 +20,7 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.system.SoftwareVersion;
 import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.system.address.AddressBook;
-import com.swirlds.platform.EventImpl;
-import com.swirlds.platform.state.LocalStateEvents;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.MinGenInfo;
 import com.swirlds.platform.state.PlatformData;
 import com.swirlds.platform.state.PlatformState;
@@ -99,9 +98,6 @@ public class SignedState implements Releasable, SignedStateInfo {
 	 * True if this state has gathered sufficient signatures, otherwise false.
 	 */
 	private boolean complete;
-
-	/** Data that is stored to local storage and is not hashed */
-	private LocalStateEvents localStateEvents;
 
 	private State state;
 
@@ -184,7 +180,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 		super();
 	}
 
-	public SignedState(State state) {
+	public SignedState(final State state) {
 		state.reserve();
 		this.state = state;
 	}
@@ -208,7 +204,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 	 * @param sigSet
 	 * 		the signatures to be attached to this signed state
 	 */
-	public void setSigSet(SigSet sigSet) {
+	public void setSigSet(final SigSet sigSet) {
 		this.sigSet = sigSet;
 	}
 
@@ -241,7 +237,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 	 * @param shouldSaveToDisk
 	 * 		whether this signed state should be saved to disk
 	 */
-	public void setShouldSaveToDisk(boolean shouldSaveToDisk) {
+	public void setShouldSaveToDisk(final boolean shouldSaveToDisk) {
 		this.shouldSaveToDisk = shouldSaveToDisk;
 	}
 
@@ -257,7 +253,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 	 *
 	 * @return true if this {@link SignedState} has been written to disk, false otherwise
 	 */
-	synchronized boolean isSavedToDisk() {
+	public synchronized boolean isSavedToDisk() {
 		return savedToDisk;
 	}
 
@@ -285,7 +281,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 		if (reservations == 0 && weakReservations == 0) {
 			try {
 				release();
-			} catch (Exception e) {
+			} catch (final Exception e) {
 				log.error(EXCEPTION.getMarker(),
 						"Exception while deleting saved state:", e);
 			}
@@ -327,7 +323,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 		if (reservations == 0) {
 			try {
 				state.getSwirldState().archive();
-			} catch (Exception e) {
+			} catch (final Exception e) {
 				log.error(EXCEPTION.getMarker(),
 						"Exception while archiving saved state:", e);
 			}
@@ -380,19 +376,25 @@ public class SignedState implements Releasable, SignedStateInfo {
 		weakReservations--;
 	}
 
-	public LocalStateEvents getLocalStateEvents() {
-		return localStateEvents;
+	/**
+	 * Get the number of strong reservations.
+	 */
+	public synchronized int getReservations() {
+		return reservations;
 	}
 
-	public void setLocalStateEvents(LocalStateEvents localStateEvents) {
-		this.localStateEvents = localStateEvents;
+	/**
+	 * Get the number of weak reservations.
+	 */
+	public synchronized int getWeakReservations() {
+		return weakReservations;
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean equals(Object o) {
+	public boolean equals(final Object o) {
 		if (this == o) {
 			return true;
 		}
@@ -401,7 +403,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 			return false;
 		}
 
-		SignedState that = (SignedState) o;
+		final SignedState that = (SignedState) o;
 
 		return new EqualsBuilder()
 				.append(sigSet, that.sigSet)

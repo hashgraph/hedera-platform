@@ -36,13 +36,8 @@ import java.awt.GraphicsEnvironment;
 import java.awt.Window;
 import java.awt.event.HierarchyEvent;
 import java.awt.event.HierarchyListener;
-import java.io.File;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.text.Normalizer;
 import java.util.Arrays;
 import java.util.Collection;
@@ -50,7 +45,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 
 /**
@@ -302,44 +296,6 @@ public class CommonUtils {
 	}
 
 	/**
-	 * Given a sequence of directory and file names, such as {".","sdk","test","..","config.txt"}, convert
-	 * it to a File in canonical form, such as /full/path/sdk/config.txt by assuming it starts in the
-	 * current working directory (which is the same as System.getProperty("user.dir")).
-	 *
-	 * @param names
-	 * 		the sequence of names
-	 * @return the File in canonical form
-	 */
-	public static File canonicalFile(String... names) {
-		return canonicalFile(new File("."), names);
-	}
-
-	/**
-	 * Given a starting directory and a sequence of directory and file names, such as "sdk" and
-	 * {"data","test","..","config.txt"}, convert it to a File in canonical form, such as
-	 * /full/path/sdk/data/config.txt by assuming it starts in the current working directory (which is the
-	 * same as System.getProperty("user.dir")).
-	 *
-	 * @param start
-	 * 		the starting directory
-	 * @param names
-	 * 		the sequence of names
-	 * @return the File in canonical form, or null if there are any errors
-	 */
-	public static File canonicalFile(File start, String... names) {
-		File f = start;
-		try {
-			f = f.getCanonicalFile();
-			for (int i = 0; i < names.length; i++) {
-				f = new File(f, names[i]).getCanonicalFile();
-			}
-		} catch (IOException e) {
-			f = null;
-		}
-		return f;
-	}
-
-	/**
 	 * Given a name from the address book, return the corresponding alias to associate with certificates in
 	 * the trust store. This is found by lowercasing all the letters, removing accents, and deleting every
 	 * character other than letters and digits. A "letter" is anything in the Unicode category "letter",
@@ -377,24 +333,6 @@ public class CommonUtils {
 	}
 
 	/**
-	 * Delete a directory and all files contained in this directory
-	 *
-	 * @param directoryToBeDeleted
-	 * 		the directory to be deleted
-	 * @return <code>true</code> if and only if the directory is
-	 * 		successfully deleted; <code>false</code> otherwise
-	 */
-	public static boolean deleteDirectory(File directoryToBeDeleted) {
-		File[] allContents = directoryToBeDeleted.listFiles();
-		if (allContents != null) {
-			for (File file : allContents) {
-				deleteDirectory(file);
-			}
-		}
-		return directoryToBeDeleted.delete();
-	}
-
-	/**
 	 * Convert an int to a byte array, little endian.
 	 *
 	 * @param value
@@ -404,65 +342,6 @@ public class CommonUtils {
 	public static byte[] intToBytes(int value) {
 		byte[] result = new byte[Integer.BYTES];
 		return Conversion.intToByteArray(value, 0, result, 0, Integer.BYTES);
-	}
-
-	/**
-	 * Create a shallow copy of a directory structure using hard links. Resulting directory structure will contain the
-	 * same files. Modifying files in the new directory will also modify the corresponding files in the original
-	 * directory. Deleting files in the new directory has no effect on the old directory. Adding files to the new
-	 * directory has no effect on the old directory.
-	 *
-	 * @param source
-	 * 		the directory structure to copy, is legal for this argument to be a regular file (??)
-	 * @param destination
-	 * 		the location where the directory structure will be placed, assumed that no file or directory
-	 * 		already exists in this location. Note that the root of the copied directory structure will be placed at this
-	 * 		destination, and not in this destination.
-	 */
-	public static void hardLinkTree(final File source, final File destination) {
-
-		try {
-
-			if (!source.exists()) {
-				throw new IOException(source + " does not exist or can not be accessed");
-			}
-
-			if (destination.exists()) {
-				throw new IOException(destination + " already exists");
-			}
-
-			final Path sourcePath = source.toPath();
-			final Path destinationPath = destination.toPath();
-
-			// Recreate the directory tree
-			try (final Stream<Path> files = Files.walk(source.toPath())) {
-				files.filter(Files::isDirectory).forEach((final Path originalDirectoryPath) -> {
-					final Path relativeDirectoryPath = sourcePath.relativize(originalDirectoryPath);
-					final Path newDirectoryPath = destinationPath.resolve(relativeDirectoryPath);
-					try {
-						Files.createDirectories(newDirectoryPath);
-					} catch (final IOException ex) {
-						throw new UncheckedIOException(ex);
-					}
-				});
-			}
-
-			// Hard link files
-			try (final Stream<Path> files = Files.walk(source.toPath())) {
-				files.filter(Files::isRegularFile).forEach((final Path originalFilePath) -> {
-					final Path relativeFilePath = sourcePath.relativize(originalFilePath);
-					final Path newFilePath = destinationPath.resolve(relativeFilePath);
-					try {
-						Files.createLink(newFilePath, originalFilePath);
-					} catch (final IOException ex) {
-						throw new UncheckedIOException(ex);
-					}
-				});
-			}
-
-		} catch (final IOException ex) {
-			throw new UncheckedIOException(ex);
-		}
 	}
 
 	/**

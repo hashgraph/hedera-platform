@@ -17,7 +17,7 @@
 package com.swirlds.jasperdb.collections;
 
 import com.swirlds.jasperdb.files.DataFileCommon;
-import com.swirlds.jasperdb.utilities.FileUtils;
+import com.swirlds.jasperdb.utilities.JasperDBFileUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -41,7 +41,7 @@ import static com.swirlds.common.utility.Units.MEBIBYTES_TO_BYTES;
  * but instead trigger an automatic expansion of the list's capacity. Thus a {@link LongList}
  * behaves more like a long-to-long map than a traditional list.
  */
-public abstract class LongList {
+public abstract class LongList implements CASable {
 	/**
 	 * A suitable default for the maximum number of longs that may be stored (32GB of longs).
 	 */
@@ -140,7 +140,7 @@ public abstract class LongList {
 		if (fileChannel.size() > 0) {
 			// read header from existing file
 			final ByteBuffer headerBuffer = ByteBuffer.allocate(FILE_HEADER_SIZE);
-			FileUtils.completelyRead(fileChannel, headerBuffer);
+			JasperDBFileUtils.completelyRead(fileChannel, headerBuffer);
 			headerBuffer.rewind();
 			final int formatVersion = headerBuffer.getInt();
 			if (formatVersion != FILE_FORMAT_VERSION) {
@@ -183,6 +183,18 @@ public abstract class LongList {
 		final long subIndex = index % numLongsPerChunk;
 		final long presentValue = lookupInChunk(dataIndex, subIndex);
 		return presentValue == 0 ? defaultValue : presentValue;
+	}
+
+	/**
+	 * Implements CASable.get(index)
+	 * @param index
+	 *      position, key, etc.
+	 * @return
+	 *      read value
+	 */
+	@Override
+	public long get(final long index) {
+		return get(index, LongList.IMPERMISSIBLE_VALUE);
 	}
 
 	/**
@@ -290,7 +302,7 @@ public abstract class LongList {
 		headerBuffer.putLong(maxLongs);
 		headerBuffer.flip();
 		// always write at start of file
-		FileUtils.completelyWrite(fc, headerBuffer, 0);
+		JasperDBFileUtils.completelyWrite(fc, headerBuffer, 0);
 		fc.position(FILE_HEADER_SIZE);
 	}
 

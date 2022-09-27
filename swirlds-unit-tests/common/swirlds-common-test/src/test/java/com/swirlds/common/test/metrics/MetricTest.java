@@ -17,7 +17,10 @@
 package com.swirlds.common.test.metrics;
 
 import com.swirlds.common.metrics.Metric;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -58,10 +61,20 @@ class MetricTest {
 			super(category, name, description, format);
 		}
 
+		@Override
+		public List<ValueType> getValueTypes() {
+			throw new UnsupportedOperationException("Not implemented in DummyMetric");
+		}
+
+		@Override
+		public Object get(final ValueType valueType) {
+			throw new UnsupportedOperationException("Not implemented in DummyMetric");
+		}
+
 		@SuppressWarnings("removal")
 		@Override
-		public Object getValue() {
-			return null;
+		public List<Pair<ValueType, Object>> takeSnapshot() {
+			throw new UnsupportedOperationException("Not implemented in DummyMetric");
 		}
 	}
 }

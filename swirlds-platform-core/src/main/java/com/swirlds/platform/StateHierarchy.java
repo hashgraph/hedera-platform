@@ -18,12 +18,16 @@ package com.swirlds.platform;
 import com.swirlds.common.utility.CommonUtils;
 
 import javax.swing.JPanel;
-import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
+
+import static com.swirlds.common.io.utility.FileUtils.getAbsolutePath;
+import static com.swirlds.common.io.utility.FileUtils.rethrowIO;
 
 /**
  * Maintain all the metadata about the state hierarchy, which has 4 levels: (app, swirld, member, state).
@@ -42,29 +46,28 @@ class StateHierarchy {
 	 *
 	 * @param fromAppName
 	 * 		the name of the virtual data/apps/*.jar file, or null if none.
-	 * @param fromAppMain
-	 * 		the class of the virtual SwirldMain, or null if none.
 	 */
-	public StateHierarchy(final String fromAppName, final Class<?> fromAppMain) {
-		final File appsDirPath = CommonUtils.canonicalFile("data", "apps");
-		final File[] appFiles = appsDirPath
-				.listFiles((dir, name) -> name.endsWith(".jar"));
+	public StateHierarchy(final String fromAppName) {
+		final Path appsDirPath = getAbsolutePath().resolve("data").resolve("apps");
+		final List<Path> appFiles = rethrowIO(
+				() -> Files.list(appsDirPath).filter(path -> path.toString().endsWith(".jar")).toList());
 		final List<String> names = new ArrayList<>();
 
 		if (fromAppName != null) { // if there's a virtual jar, list it first
 			names.add(fromAppName);
-			final File[] toDelete = appsDirPath
-					.listFiles((dir, name) -> name.equals(fromAppName));
+			final List<Path> toDelete = rethrowIO(
+					() -> Files.list(appsDirPath)
+							.filter(path -> path.getFileName().toString().equals(fromAppName)).toList());
 			if (toDelete != null) {
-				for (File file : toDelete) {
-					file.delete(); // deletes if the virtual file also really exists. Else does nothing.
+				for (final Path file : toDelete) {
+					rethrowIO(() -> Files.deleteIfExists(file));
 				}
 			}
 		}
 
 		if (appFiles != null) {
-			for (File app : appFiles) {
-				names.add(getMainClass(app.getAbsolutePath()));
+			for (final Path app : appFiles) {
+				names.add(getMainClass(app.toAbsolutePath().toString()));
 			}
 		}
 

@@ -60,14 +60,14 @@ abstract public class ResourceLoader {
 	 * 		the path of the resource
 	 * @return a File representing the resource
 	 */
-	public static File getFile(final String path) throws URISyntaxException {
+	public static Path getFile(final String path) throws URISyntaxException {
 		final URL resource = classLoader.getResource(path);
 		checkIfFound(resource, path);
 		final URI uri = resource.toURI();
 		checkIfFound(uri, path);
 		File file = new File(uri);
 		checkIfFound(file, path);
-		return file;
+		return file.toPath();
 	}
 
 	/**

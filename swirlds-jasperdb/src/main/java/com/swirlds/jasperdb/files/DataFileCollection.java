@@ -18,6 +18,7 @@ package com.swirlds.jasperdb.files;
 
 import com.swirlds.jasperdb.KeyRange;
 import com.swirlds.jasperdb.Snapshotable;
+import com.swirlds.jasperdb.collections.CASable;
 import com.swirlds.jasperdb.collections.ImmutableIndexedObjectList;
 import com.swirlds.jasperdb.collections.ImmutableIndexedObjectListUsingArray;
 import com.swirlds.jasperdb.collections.LongList;
@@ -49,15 +50,12 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.LongFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.swirlds.common.utility.Units.GIBIBYTES_TO_BYTES;
 import static com.swirlds.common.utility.Units.MEBIBYTES_TO_BYTES;
-import static com.swirlds.jasperdb.KeyRange.INVALID_KEY;
 import static com.swirlds.jasperdb.KeyRange.INVALID_KEY_RANGE;
 import static com.swirlds.jasperdb.files.DataFileCommon.byteOffsetFromDataLocation;
 import static com.swirlds.jasperdb.files.DataFileCommon.dataLocationToString;
@@ -292,7 +290,7 @@ public class DataFileCollection<D> implements Snapshotable {
 	/**
 	 * Merges all files in filesToMerge
 	 *
-	 * @param locationChangeHandler
+	 * @param index
 	 * 		takes a map of moves from old location to new location. Once it is finished and
 	 * 		returns it is assumed all readers will no longer be looking in old location, so old
 	 * 		files can be safely deleted.
@@ -305,8 +303,7 @@ public class DataFileCollection<D> implements Snapshotable {
 	 * @throws InterruptedException If the merge thread was interrupted
 	 */
 	public synchronized List<Path> mergeFiles(
-			final LongFunction<Long> index,
-			final Consumer<ThreeLongsList> locationChangeHandler,
+			final CASable index,
 			final List<DataFileReader<D>> filesToMerge,
 			final Semaphore mergingPaused
 	) throws IOException, InterruptedException {
@@ -400,14 +397,14 @@ public class DataFileCollection<D> implements Snapshotable {
 				for (final DataFileIterator blockIterator : blockIterators) {
 					LOG.error(EXCEPTION.getMarker(), "blockIterator={}", blockIterator);
 				}
-				throw new AssertionError("This should never happen, lowestKey is less than " +
+				throw new IllegalStateException("This should never happen, lowestKey is less than " +
 						"the last lowestKey. This could mean the files have keys in non-ascending order.");
 			}
 			lastLowestKey = lowestKey;
-			long[] tmp = lastRoundsKeys;
+			final long[] tmp = lastRoundsKeys;
 			lastRoundsKeys = thisRoundsKeys;
 			thisRoundsKeys = tmp;
-			long curDataLocation = index.apply(lowestKey);
+			final long curDataLocation = index.get(lowestKey);
 			boolean seen = false;
 			// check if that key is in range
 			if (keyRange.withinRange(lowestKey)) {
@@ -418,9 +415,7 @@ public class DataFileCollection<D> implements Snapshotable {
 				for (final DataFileIterator blockIterator : blockIterators) {
 					final long key = blockIterator.getDataItemsKey();
 					if (key != lowestKey) continue;
-					if (blockIterator.getDataItemsDataLocation() == curDataLocation) {
-						seen = true;
-					}
+					seen = seen || blockIterator.getDataItemsDataLocation() == curDataLocation;
 					int cmp = blockIterator.getDataFileCreationDate().compareTo(newestIteratorTime);
 					if (cmp > 0 || (cmp == 0 && blockIterator.getDataFileIndex() > newestIndex)) {
 						newestIteratorWithLowestKey = blockIterator;
@@ -443,7 +438,7 @@ public class DataFileCollection<D> implements Snapshotable {
 							newFileWriter.getFileSizeEstimate() >= settings.getMaxDataFileBytes()) {
 						// finish writing current file, add it for reading then open new file for writing
 						closeCurrentMergeFile(
-								newFileWriter, locationChangeHandler,
+								newFileWriter, index,
 								movesMap);
 						LOG.info(JASPER_DB.getMarker(), "MovesMap.size() = {}", movesMap.size());
 						movesMap.clear();
@@ -473,7 +468,7 @@ public class DataFileCollection<D> implements Snapshotable {
 			}
 		}
 		// close current file
-		closeCurrentMergeFile(newFileWriter, locationChangeHandler, movesMap);
+		closeCurrentMergeFile(newFileWriter, index, movesMap);
 		// check if we need to pause
 		waitIfMergingPaused(mergingPaused);
 		// delete old files
@@ -660,12 +655,17 @@ public class DataFileCollection<D> implements Snapshotable {
 									wrappedIndexValue = dataLocationToString(wrappedDataLocation);
 								}
 							}
+
+							final String currentFiles = indexedFileList.get() == null
+									? "UNKNOWN"
+									: indexedFileList.get().prettyPrintedIndices();
+
 							return "Store [" + storeName + "] had IOException while trying to read " +
 									"key [" + keyIntoIndex + "] at " +
 									"offset [" + byteOffsetFromDataLocation(dataLocation) + "] from " +
 									"file [" + fileIndexFromDataLocation(dataLocation) + "] " +
 									"on retry [" + currentRetry + "]. " +
-									"Current files are [" + indexedFileList.get().prettyPrintedIndices() + "]" +
+									"Current files are [" + currentFiles + "]" +
 									", wrappedDataLocation=" + wrappedIndexValue +
 									", validKeyRange=" + this.validKeyRange +
 									", storeDir=[" + storeDir.toAbsolutePath() + "]";
@@ -755,15 +755,15 @@ public class DataFileCollection<D> implements Snapshotable {
 	/** Finish a merge file and close it. */
 	private void closeCurrentMergeFile(
 			final DataFileWriter<D> newFileWriter,
-			final Consumer<ThreeLongsList> locationChangeHandler,
+			final CASable index,
 			final ThreeLongsList movesMap
 	) throws IOException {
 		// close current file
 		final DataFileMetadata metadata = newFileWriter.finishWriting();
 		// add it for reading
 		final DataFileReader<D> dataFileReader = addNewDataFileReader(newFileWriter.getPath(), metadata);
-		// call locationChangeHandler
-		locationChangeHandler.accept(movesMap);
+		// apply index changes
+		movesMap.forEach(index::putIfEqual);
 		// we have updated all indexes now so can now include this file in future merges
 		dataFileReader.setFileAvailableForMerging(true);
 	}

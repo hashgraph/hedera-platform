@@ -19,6 +19,7 @@ package com.swirlds.jasperdb.files;
 import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.KeyRange;
 import com.swirlds.jasperdb.Snapshotable;
+import com.swirlds.jasperdb.collections.CASable;
 import com.swirlds.jasperdb.collections.LongList;
 import com.swirlds.jasperdb.files.DataFileCollection.LoadedDataCallback;
 import org.apache.logging.log4j.LogManager;
@@ -149,26 +150,33 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
 		final int size = filesToMerge.size();
 		if (size < minNumberOfFilesToMerge) {
 			LOG.info(JASPER_DB.getMarker(),
-					"[{}] No meed to merge as {} is less than the minimum {} files to merge.",
+					"[{}] No need to merge as {} is less than the minimum {} files to merge.",
 					storeName, size, minNumberOfFilesToMerge);
 			return;
 		}
 		final long filesToMergeSize = getSizeOfFiles(filesToMerge);
 		LOG.info(JASPER_DB.getMarker(), "[{}] Starting merging {} files, total {}...\n",
 				storeName, size, formatSizeBytes(filesToMergeSize));
+
+		CASable indexUpdater = index;
 		if (enableDeepValidation) {
 			startChecking();
+			indexUpdater = new CASable() {
+				@Override
+				public long get(long key) {
+					return index.get(key);
+				}
+
+				@Override
+				public boolean putIfEqual(long key, long oldValue, long newValue) {
+					boolean casSuccessful = index.putIfEqual(key, oldValue, newValue);
+					checkItem(casSuccessful, key, oldValue, newValue);
+					return casSuccessful;
+				}
+			};
 		}
 		final List<Path> newFilesCreated = fileCollection.mergeFiles(
-				(key) -> index.get(key, LongList.IMPERMISSIBLE_VALUE),
-				// update index with all moved data
-				moves -> moves.forEach((key, oldValue, newValue) -> {
-					boolean casSuccessful = index.putIfEqual(key, oldValue, newValue);
-					if (enableDeepValidation) {
-						checkItem(casSuccessful, key, oldValue, newValue);
-					}
-				}),
-				filesToMerge, mergingPaused);
+				indexUpdater, filesToMerge, mergingPaused);
 		if (enableDeepValidation) {
 			endChecking(filesToMerge);
 		}

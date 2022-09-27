@@ -17,16 +17,20 @@
 package com.swirlds.common.test.threading;
 
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
-import com.swirlds.common.threading.locks.Locked;
 import com.swirlds.common.threading.locks.IndexLock;
+import com.swirlds.common.threading.locks.Locked;
 import com.swirlds.test.framework.TestComponentTags;
 import com.swirlds.test.framework.TestTypeTags;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.swirlds.common.test.AssertionUtils.assertEventuallyDoesNotThrow;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -203,5 +207,72 @@ class IndexLockTests {
 					"If a lock is initialized it should not throw a null pointer exception");
 			lock.unlock(i);
 		}
+	}
+
+	@Test
+	@DisplayName("fullLock() Test")
+	void fullLockTest() throws InterruptedException {
+		final int size = 10;
+		final IndexLock lock = new IndexLock(size);
+
+		lock.fullyLock();
+
+		final List<Thread> threads = new LinkedList<>();
+		for (int index = 0; index < size; index++) {
+
+			final int finalIndex = index;
+			threads.add(new ThreadConfiguration()
+					.setThreadName("background-locker")
+					.setRunnable(() -> {
+						lock.lock(finalIndex);
+						lock.unlock(finalIndex);
+					})
+					.build(true));
+		}
+
+		// Give the thread time to acquire the lock if it can
+		MILLISECONDS.sleep(20);
+
+		threads.forEach(thread -> assertTrue(thread.isAlive(), "thread should be blocked"));
+
+		lock.fullyUnlock();
+
+		assertEventuallyDoesNotThrow(
+				() -> threads.forEach(thread -> assertFalse(thread.isAlive(),
+						"thread should be unblocked by now")),
+				Duration.ofSeconds(1), "all threads should be unblocked by now");
+
+	}
+
+	@Test
+	@DisplayName("autoFullLock() Test")
+	void autoFullLockTest() throws InterruptedException {
+		final int size = 10;
+		final IndexLock lock = new IndexLock(size);
+
+		final List<Thread> threads = new LinkedList<>();
+		try (Locked locked = lock.autoFullLock()) {
+			for (int index = 0; index < size; index++) {
+
+				final int finalIndex = index;
+				threads.add(new ThreadConfiguration()
+						.setThreadName("background-locker")
+						.setRunnable(() -> {
+							lock.lock(finalIndex);
+							lock.unlock(finalIndex);
+						})
+						.build(true));
+			}
+
+			// Give the thread time to acquire the lock if it can
+			MILLISECONDS.sleep(20);
+
+			threads.forEach(thread -> assertTrue(thread.isAlive(), "thread should be blocked"));
+		}
+
+		assertEventuallyDoesNotThrow(
+				() -> threads.forEach(thread -> assertFalse(thread.isAlive(),
+						"thread should be unblocked by now")),
+				Duration.ofSeconds(1), "all threads should be unblocked by now");
 	}
 }

@@ -18,28 +18,41 @@ package com.swirlds.common.statistics;
 
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.utility.CommonUtils;
+import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import static com.swirlds.common.metrics.Metric.ValueType.MAX;
+import static com.swirlds.common.metrics.Metric.ValueType.MIN;
+import static com.swirlds.common.metrics.Metric.ValueType.STD_DEV;
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
 /**
  * A very flexible implementation of Metric which behavior is mostly passed to it via lambdas.
+ *
+ * @deprecated This class should not be used in new code anymore. Instead of the specialized {@link Metric}
+ * implementation should be used.
  */
+@SuppressWarnings("unused")
+@Deprecated(forRemoval = true)
 public class StatEntry extends Metric {
 
-	/** the statistics object (if it implements StatsBuffered), else null */
+	public static final String UNSUPPORTED_VALUE_TYPE_ERROR = "Unsupported ValueType";
 	private StatsBuffered buffered;
-	/** a lambda that instantiates and initializes, using the given half life */
 	private final Function<Double, StatsBuffered> init;
-	/** a lambda that resets the statistic, using the given half life */
 	private final Consumer<Double> reset;
-	/** a lambda that returns the statistic string */
 	private final Supplier<Object> statsStringSupplier;
-	/** a lambda that returns the statistic string and resets it at the same time */
 	private final Supplier<Object> resetStatsStringSupplier;
+
+	private Object snapshot;
+	private double snapshotMax;
+	private double snapshotMin;
+	private double snapshotStdDev;
 
 	/**
 	 * stores all the parameters, which can be accessed directly
@@ -99,6 +112,99 @@ public class StatEntry extends Metric {
 	}
 
 	/**
+	 * Getter for {@code buffered}
+	 *
+	 * @return the {@link StatsBuffered}, if available, otherwise {@code null}
+	 */
+	public StatsBuffered getBuffered() {
+		return buffered;
+	}
+
+	/**
+	 * Getter for {@code init}, a lambda that instantiates and initializes, using the given half life
+	 *
+	 * @return the initialization-lambda, if available, otherwise {@code null}
+	 */
+	public Function<Double, StatsBuffered> getInit() {
+		return init;
+	}
+
+	/**
+	 * Getter for {@code reset}, a lambda that resets the metric, using the given half life
+	 *
+	 * @return the reset-lambda, if available, otherwise {@code null}
+	 */
+	public Consumer<Double> getReset() {
+		return reset;
+	}
+
+	/**
+	 * Getter for {@code statsStringSupplier}, a lambda that returns the metric value
+	 *
+	 * @return the lambda
+	 */
+	public Supplier<Object> getStatsStringSupplier() {
+		return statsStringSupplier;
+	}
+
+	/**
+	 * Getter for {@code resetStatsStringSupplier}, a lambda that returns the statistic string
+	 * and resets it at the same time
+	 *
+	 * @return the lambda
+	 */
+	public Supplier<Object> getResetStatsStringSupplier() {
+		return resetStatsStringSupplier;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public List<ValueType> getValueTypes() {
+		return buffered == null? Metric.VALUE_TYPE : Metric.DISTRIBUTION_TYPES;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Object get(final ValueType valueType) {
+		CommonUtils.throwArgNull(valueType, "valueType");
+		if (buffered == null) {
+			if (valueType == VALUE) {
+				return statsStringSupplier.get();
+			}
+			throw new IllegalArgumentException(UNSUPPORTED_VALUE_TYPE_ERROR);
+		} else {
+			return switch (valueType) {
+				case VALUE -> statsStringSupplier.get();
+				case MAX -> buffered.getMax();
+				case MIN -> buffered.getMin();
+				case STD_DEV -> buffered.getStdDev();
+				default -> throw new IllegalArgumentException(UNSUPPORTED_VALUE_TYPE_ERROR);
+			};
+		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@SuppressWarnings("removal")
+	@Override
+	public List<Pair<ValueType, Object>> takeSnapshot() {
+		if (buffered == null) {
+			return List.of(Pair.of(VALUE, resetStatsStringSupplier.get()));
+		}
+
+		final double max = buffered.getMax();
+		final double min = buffered.getMin();
+		final double stdDev = buffered.getStdDev();
+		final Object value = resetStatsStringSupplier.get();
+		return List.of(Pair.of(VALUE, value), Pair.of(MAX, max), Pair.of(MIN, min), Pair.of(STD_DEV, stdDev));
+	}
+
+	/**
 	 * {@inheritDoc}
 	 */
 	@SuppressWarnings("removal")
@@ -126,25 +232,7 @@ public class StatEntry extends Metric {
 	 */
 	@SuppressWarnings("removal")
 	@Override
-	public Object getValue() {
-		return statsStringSupplier.get();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@SuppressWarnings("removal")
-	@Override
-	public Object getValueAndReset() {
-		return resetStatsStringSupplier.get();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@SuppressWarnings("removal")
-	@Override
 	public StatsBuffered getStatsBuffered() {
-		return buffered;
+		return getBuffered();
 	}
 }

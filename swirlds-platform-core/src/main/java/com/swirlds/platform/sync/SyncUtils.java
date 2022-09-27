@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.sync;
 
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.consensus.GraphGenerations;
 
 import java.util.Collection;

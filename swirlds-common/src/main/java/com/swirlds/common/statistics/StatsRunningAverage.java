@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Logger;
  * a given half life. If it is always given the same value, then that value will be the average, regardless
  * of the timing.
  *
- * @deprecated Use {@link com.swirlds.common.metrics.RunningAverageMetric} instead of this class with {@link StatEntry}
+ * @deprecated Use {@link com.swirlds.common.metrics.RunningAverageMetric} instead
  */
 @Deprecated(forRemoval = true)
 public class StatsRunningAverage implements StatsBuffered {

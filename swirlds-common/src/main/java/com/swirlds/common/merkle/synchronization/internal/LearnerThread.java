@@ -265,6 +265,7 @@ public class LearnerThread<T> {
 			LOG.warn(RECONNECT.getMarker(), "learner thread interrupted");
 			Thread.currentThread().interrupt();
 		} catch (final Exception ex) {
+			LOG.error(RECONNECT.getMarker(), "exception in the learner's receiving thread", ex);
 			throw new MerkleSynchronizationException("exception in the learner's receiving thread", ex);
 		}
 	}

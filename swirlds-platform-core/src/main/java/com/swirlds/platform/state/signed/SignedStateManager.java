@@ -29,13 +29,12 @@ import com.swirlds.common.system.transaction.internal.SystemTransactionPing;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.utility.AutoCloseableWrapper;
 import com.swirlds.platform.AbstractPlatform;
-import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.SwirldsPlatform;
 import com.swirlds.platform.components.StateSignatureRecorder;
 import com.swirlds.platform.crypto.CryptoConstants;
 import com.swirlds.platform.crypto.CryptoStatic;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.IssLogger;
-import com.swirlds.platform.state.LocalStateEvents;
 import com.swirlds.platform.state.NewSignedStateRunnable;
 import com.swirlds.platform.state.StateSettings;
 import com.swirlds.platform.system.Fatal;
@@ -50,6 +49,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.swirlds.common.utility.Units.BYTES_TO_BITS;
@@ -58,7 +58,6 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.FREEZE;
 import static com.swirlds.logging.LogMarker.LAST_COMPLETE_SIGNED_STATE;
 import static com.swirlds.logging.LogMarker.SIGNED_STATE;
-import static com.swirlds.logging.LogMarker.STATE_ON_DISK_QUEUE;
 import static com.swirlds.logging.LogMarker.STATE_SIG_DIST;
 import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
@@ -104,7 +103,7 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 	 */
 	private final LinkedHashMap<Long, SignedState> allStates = new LinkedHashMap<>();
 	/** a list of states that are saved to disk */
-	private final LinkedList<Long> savedToDisk = new LinkedList<>();
+	private final AtomicLong lastSavedRound = new AtomicLong(-1);
 	/** the last SignedState round that is intended to be saved to disk */
 	private volatile long lastSSRoundGoingToDisk = -1;
 	/** the member ID for self */
@@ -253,7 +252,6 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 			try (final AutoCloseableWrapper<SignedState> wrapper = getLastCompleteSignedState()) {
 				final SignedState state = wrapper.get();
 				if (state != null) {
-					state.weakReserveState();
 					signedStateFileManager.saveFatalStateToDisk(state);
 				}
 			} catch (final InterruptedException e) {
@@ -297,9 +295,7 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 	 * @return the round number of the latest round saved to disk
 	 */
 	public long getLastRoundSavedToDisk() {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			return savedToDisk.size() == 0 ? -1 : savedToDisk.getLast();
-		}
+		return lastSavedRound.get();
 	}
 
 	/** @return latest round for which we do NOT have a supermajority */
@@ -540,7 +536,7 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 				final long[] avgBitsPerSecSent = new long[platform.getStats().avgBytePerSecSent.length];
 				for (int i = 0; i < platform.getStats().avgBytePerSecSent.length; i++) {
 					avgBitsPerSecSent[i] =
-							(long) platform.getStats().avgBytePerSecSent[i].getCyclesPerSecond() * BYTES_TO_BITS;
+							(long) platform.getStats().avgBytePerSecSent[i].get() * BYTES_TO_BITS;
 				}
 				final SystemTransaction systemTransaction = new SystemTransactionBitsPerSecond(avgBitsPerSecSent);
 				final boolean good = platform.createSystemTransaction(systemTransaction);
@@ -555,7 +551,7 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 				final int[] avgBitsPerSecSent = new int[platform.getStats().avgPingMilliseconds.length];
 				for (int i = 0; i < platform.getStats().avgPingMilliseconds.length; i++) {
 					avgBitsPerSecSent[i] = (int)
-							(platform.getStats().avgPingMilliseconds[i].getWeightedMean() * MILLISECONDS_TO_SECONDS);
+							(platform.getStats().avgPingMilliseconds[i].get() * MILLISECONDS_TO_SECONDS);
 				}
 				final SystemTransaction systemTransaction = new SystemTransactionPing(avgBitsPerSecSent);
 				final boolean good = platform.createSystemTransaction(systemTransaction);
@@ -583,7 +579,6 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 			}
 			// save the last recovered state, even state save period requirement is not met
 			if (shouldSaveToDisk || ss.getLastRoundReceived() >= platform.getRoundOfLastRecoveredEvent()) {
-				ss.weakReserveState();
 				signedStateFileManager.saveSignedStateToDisk(ss);
 				lastSignedStateTimestamp = ss.getConsensusTimestamp();
 			}
@@ -592,12 +587,6 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 		}
 
 		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			final EventImpl[] localEvents = eventsForRound.get(ss.getLastRoundReceived());
-			if (localEvents != null) {
-				final LocalStateEvents localStateEvents = new LocalStateEvents();
-				localStateEvents.setEvents(localEvents);
-				ss.setLocalStateEvents(localStateEvents);
-			}
 			eventsForRound.remove(ss.getLastRoundReceived());
 
 			if (shouldSaveToDisk) {
@@ -742,15 +731,9 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 					}
 
 					if (signedState.shouldSaveToDisk()) {
-						signedState.weakReserveState();
 						if (signedStateFileManager.saveSignedStateToDisk(signedState)) {
 							lastSaveStateTimeMS = System.currentTimeMillis();
-							if (!savedToDisk.offer(signedState.getLastRoundReceived())) {
-								log.warn(SIGNED_STATE.getMarker(), "Offer Failed - SavedToDisk [ round = {} ]",
-										signedState::getLastRoundReceived);
-							}
-						} else {
-							signedState.weakReleaseState();
+							lastSavedRound.set(signedState.getLastRoundReceived());
 						}
 					}
 				}
@@ -816,7 +799,6 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 		}
 		lastISSDumpTimestampSeconds = currentTimeSeconds;
 
-		state.weakReserveState();
 		signedStateFileManager.saveIssStateToDisk(state);
 	}
 
@@ -825,16 +807,9 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
 			// check if we have a complete state and check if we already saved this state to disk
 			if (lastCompleteSignedState != null &&
-					savedToDisk.peekLast() != lastCompleteSignedState.getLastRoundReceived()) {
-				lastCompleteSignedState.weakReserveState();
+					lastSavedRound.get() != lastCompleteSignedState.getLastRoundReceived()) {
 				if (signedStateFileManager.saveSignedStateToDisk(lastCompleteSignedState)) {
-					if (!savedToDisk.offer(lastCompleteSignedState.getLastRoundReceived())) {
-						log.warn(STATE_ON_DISK_QUEUE.getMarker(),
-								"Offer Failed - saveLastCompleteStateToDisk [ round = {} ]",
-								lastCompleteSignedState::getLastRoundReceived);
-					}
-				} else {
-					lastCompleteSignedState.weakReleaseState();
+					lastSavedRound.set(lastCompleteSignedState.getLastRoundReceived());
 				}
 			}
 		}
@@ -853,11 +828,7 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 						lastCompleteSignedState.getLastRoundReceived());
 			}
 			if (onDisk) {
-				if (!savedToDisk.offer(signedState.getLastRoundReceived())) {
-					log.warn(STATE_ON_DISK_QUEUE.getMarker(),
-							"Offer Failed - addCompleteSignedState [ round = {} ]",
-							signedState::getLastRoundReceived);
-				}
+				lastSavedRound.set(signedState.getLastRoundReceived());
 			}
 		}
 	}
@@ -910,20 +881,6 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 			}
 			log.debug(SIGNED_STATE.getMarker(),
 					"finished putting old states to deletionQueue, allStates size: {}", size);
-
-			log.debug(SIGNED_STATE.getMarker(),
-					"platform {} is about to remove old SignedState on disk, savedToDisk size: {}",
-					platform.getSelfId(), savedToDisk.size());
-			// Also keep track of how many we have on disk, so we always have at least signedStateDisk.
-			// Do not delete signed states on disk if we have dumped due to an ISS.
-			while (savedToDisk.size() > stateSettings.getSignedStateDisk() && lastISSDumpTimestampSeconds == 0) {
-				final Long forRemoval = savedToDisk.poll();
-
-				signedStateFileManager.deleteSignedStateFromDisk(forRemoval);
-			}
-			log.debug(SIGNED_STATE.getMarker(),
-					"finished putting into taskQueue, savedToDisk size: {}",
-					savedToDisk.size());
 		}
 	}
 

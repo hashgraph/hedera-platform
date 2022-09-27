@@ -16,26 +16,26 @@
 
 package com.swirlds.platform.swirldapp;
 
-import com.swirlds.common.system.SwirldMain;
 import com.swirlds.common.constructable.URLClassLoaderWithLookup;
+import com.swirlds.common.system.SwirldMain;
 
-import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
+import java.nio.file.Path;
 
 public class SwirldAppLoader {
 	/** the name of the app class inheriting from {@link SwirldMain} */
 	private String mainClassName;
 	/** the location of the JAR where the apps classes are located */
-	private File appJarPath;
+	private Path appJarPath;
 	/** the constructor for the main program of the app */
 	private Constructor<?> appMainConstructor;
 	/** The classloader used to load the app */
 	private URLClassLoaderWithLookup classLoader;
 
-	private SwirldAppLoader(String mainClassName, File appJarPath, Constructor<?> appMainConstructor,
-			URLClassLoaderWithLookup classLoader) {
+	private SwirldAppLoader(final String mainClassName, final Path appJarPath, final Constructor<?> appMainConstructor,
+			final URLClassLoaderWithLookup classLoader) {
 		this.mainClassName = mainClassName;
 		this.appJarPath = appJarPath;
 		this.appMainConstructor = appMainConstructor;
@@ -68,11 +68,13 @@ public class SwirldAppLoader {
 	 * @throws AppLoaderException
 	 * 		if any problems occur while loading the app
 	 */
-	public static SwirldAppLoader loadSwirldApp(String mainClassName, File appJarPath) throws AppLoaderException {
+	public static SwirldAppLoader loadSwirldApp(final String mainClassName, final Path appJarPath)
+			throws AppLoaderException {
+
 		URLClassLoaderWithLookup classLoader;
 		try {
 			classLoader = new URLClassLoaderWithLookup(
-					new URL[] { appJarPath.toURI().toURL() },
+					new URL[] { appJarPath.toUri().toURL() },
 					Thread.currentThread().getContextClassLoader());
 			Class<?> mainClass = Class.forName(mainClassName, true, classLoader);
 			Constructor<?>[] constructors = mainClass.getDeclaredConstructors();

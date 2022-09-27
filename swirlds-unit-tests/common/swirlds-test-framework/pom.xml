@@ -26,7 +26,7 @@
 	<parent>
 		<groupId>com.swirlds</groupId>
 		<artifactId>swirlds-unit-tests</artifactId>
-		<version>0.28.1-orvw.1</version>
+		<version>0.29.2-orvw.1</version>
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 

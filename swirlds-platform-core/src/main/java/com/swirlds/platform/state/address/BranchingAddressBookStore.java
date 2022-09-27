@@ -32,8 +32,8 @@ import java.util.Objects;
 /**
  * An {@link AddressBookStore} that supports branching copies (i.e. when a copy is made, both the new
  * and the original remain mutable). This address book is compatible with
- * {@link com.swirlds.common.system.SwirldState SwirldState}. Although technically compatible with
- * {@link com.swirlds.common.system.SwirldState.SwirldState2 SwirldState2}, it is less performant.
+ * {@link com.swirlds.common.system.SwirldState SwirldState1}. Although technically compatible with
+ * {@link com.swirlds.common.system.SwirldState SwirldState2}, it is less performant.
  */
 public class BranchingAddressBookStore
 		extends AbstractAddressBookStore

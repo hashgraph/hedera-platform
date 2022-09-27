@@ -18,6 +18,7 @@ package com.swirlds.common.test.threading;
 
 
 import com.swirlds.common.exceptions.MutabilityException;
+import com.swirlds.common.test.AssertionUtils;
 import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.StoppableThread;
 import com.swirlds.common.threading.framework.ThreadSeed;
@@ -707,5 +708,26 @@ class StoppableThreadTests {
 				"copy configuration should match");
 		assertEquals(configuration.getHangingThreadPeriod(), copy2.getHangingThreadPeriod(),
 				"copy configuration should match");
+	}
+
+	@Test
+	@DisplayName("Interrupt Flag Test")
+	void interruptFlagTest() throws InterruptedException {
+		final StoppableThread stoppableThread = new StoppableThreadConfiguration<>()
+				.setWork(() -> {
+					try {
+						HOURS.sleep(10000000);
+					} catch (final InterruptedException e) {
+						Thread.currentThread().interrupt();
+					}
+				})
+				.build(true);
+
+		assertEventuallyTrue(stoppableThread::isAlive, Duration.ofSeconds(1), "thread should be alive by now");
+
+		stoppableThread.interrupt();
+
+		stoppableThread.join(1000);
+		assertFalse(stoppableThread.isAlive(), "thread should have died by now");
 	}
 }

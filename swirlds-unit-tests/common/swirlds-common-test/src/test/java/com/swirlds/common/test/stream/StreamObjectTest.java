@@ -19,13 +19,11 @@ package com.swirlds.common.test.stream;
 import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.constructable.ConstructableRegistryException;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.stream.EventStreamType;
 import com.swirlds.common.stream.LinkedObjectStreamUtilities;
 import com.swirlds.common.stream.LinkedObjectStreamValidateUtils;
 import com.swirlds.common.stream.StreamType;
 import com.swirlds.common.stream.StreamValidationResult;
 import com.swirlds.common.test.RandomUtils;
-import com.swirlds.common.utility.CommonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
@@ -36,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
@@ -45,10 +44,11 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
+import static com.swirlds.common.io.utility.FileUtils.deleteDirectory;
 import static com.swirlds.common.stream.LinkedObjectStreamUtilities.generateStreamFileNameFromInstant;
-import static com.swirlds.common.stream.StreamValidationResult.START_HASH_NOT_MATCH;
 import static com.swirlds.common.stream.StreamValidationResult.OK;
 import static com.swirlds.common.stream.StreamValidationResult.SIG_FILE_COUNT_MISMATCH;
+import static com.swirlds.common.stream.StreamValidationResult.START_HASH_NOT_MATCH;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -125,16 +125,14 @@ class StreamObjectTest {
 		clearDir();
 	}
 
-	static void clearDir() {
+	static void clearDir() throws IOException {
 		// delete the dir if exists
-		File dir = new File(dirPath);
-		CommonUtils.deleteDirectory(dir);
+		final Path dir = new File(dirPath).toPath();
+		deleteDirectory(dir);
 	}
 
 	/**
 	 * verify if generated stream file and signatures are valid
-	 *
-	 * @return
 	 */
 	static StreamValidationResult verifyDirectory(final boolean restart) {
 		List<File> streamFiles = new ArrayList<>();

@@ -16,8 +16,8 @@
 
 package com.swirlds.platform.sync;
 
-import com.swirlds.platform.ConsensusRound;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.observers.ConsensusRoundObserver;
 import com.swirlds.platform.observers.EventAddedObserver;

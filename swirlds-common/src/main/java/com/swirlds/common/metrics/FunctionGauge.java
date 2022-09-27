@@ -20,6 +20,8 @@ import com.swirlds.common.utility.CommonUtils;
 
 import java.util.function.Supplier;
 
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
+
 /**
  * A {@code FunctionGauge} maintains a single value.
  *
@@ -30,7 +32,7 @@ import java.util.function.Supplier;
  *
  * @param <T> the type of the contained value
  */
-public class FunctionGauge<T> extends Metric {
+public class FunctionGauge<T> extends AbstractGauge<T> {
 
 	private final Supplier<T> supplier;
 
@@ -63,10 +65,12 @@ public class FunctionGauge<T> extends Metric {
 	/**
 	 * {@inheritDoc}
 	 */
-	@SuppressWarnings("removal")
 	@Override
-	public T getValue() {
-		return get();
+	public T get(final ValueType valueType) {
+		if (valueType == VALUE) {
+			return get();
+		}
+		throw new IllegalArgumentException("Unsupported ValueType");
 	}
 
 	/**

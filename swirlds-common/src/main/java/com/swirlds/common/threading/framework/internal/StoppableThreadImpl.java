@@ -190,9 +190,10 @@ public class StoppableThreadImpl<T extends InterruptableRunnable> implements Typ
 	 * The method to execute on the {@link #thread} object.
 	 */
 	private void run() {
+		final Thread currentThread = Thread.currentThread();
 		try {
 			for (Status currentStatus = status.get();
-				 currentStatus != Status.DYING;
+				 currentStatus != Status.DYING && !currentThread.isInterrupted();
 				 currentStatus = status.get()) {
 
 				if (currentStatus == Status.PAUSED) {

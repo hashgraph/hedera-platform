@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.platform.ConsensusRound;
+import com.swirlds.platform.internal.ConsensusRound;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 
 /**

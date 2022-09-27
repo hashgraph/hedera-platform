@@ -19,12 +19,12 @@ package com.swirlds.common.test.merkle.util;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.test.io.InputOutputStream;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 public class MerkleSerializeUtils {
 
-	public static <T extends MerkleNode> T serializeDeserialize(final File directory, final T root) throws IOException {
+	public static <T extends MerkleNode> T serializeDeserialize(final Path directory, final T root) throws IOException {
 		try (InputOutputStream io = new InputOutputStream()) {
 			io.getOutput().writeMerkleTree(directory, root);
 			io.startReading();

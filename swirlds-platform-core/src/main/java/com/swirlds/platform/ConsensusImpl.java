@@ -19,6 +19,7 @@ package com.swirlds.platform;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.event.EventUtils;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.stats.ConsensusStats;
 import org.apache.logging.log4j.LogManager;
@@ -47,7 +48,7 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.EXPIRE_EVENT;
 import static com.swirlds.logging.LogMarker.INVALID_EVENT_ERROR;
 import static com.swirlds.logging.LogMarker.STARTUP;
-import static com.swirlds.platform.Settings.minTransTimestampIncrNanos;
+import static com.swirlds.platform.internal.EventImpl.MIN_TRANS_TIMESTAMP_INCR_NANOS;
 
 /**
  * All the code for calculating the consensus for events in a hashgraph. This calculates
@@ -191,9 +192,9 @@ public class ConsensusImpl implements Consensus {
 	 * The minimum consensus timestamp for the next event that reaches consensus. This is null if no event
 	 * has reached consensus yet. As each event reaches its consensus, its timestamp is moved forward (if
 	 * necessary) to be at least this time.
-	 * And then minTimestamp is moved forward by n * {@link Settings#minTransTimestampIncrNanos} nanoseconds, if the
+	 * And then minTimestamp is moved forward by n * {@link EventImpl#MIN_TRANS_TIMESTAMP_INCR_NANOS} nanoseconds, if the
 	 * event had n transactions (or n=1 if no transactions).
-	 * Then minTimestamp is rounded up to the nearest multiple of {@link Settings#minTransTimestampIncrNanos}
+	 * Then minTimestamp is rounded up to the nearest multiple of {@link EventImpl#MIN_TRANS_TIMESTAMP_INCR_NANOS}
 	 */
 	private Instant minTimestamp = null;
 
@@ -1603,10 +1604,10 @@ public class ConsensusImpl implements Consensus {
 	 */
 	static Instant calcMinTimestampForNextEvent(final Instant lastTransTimestamp) {
 		// adds minTransTimestampIncrNanos
-		Instant t = lastTransTimestamp.plusNanos(minTransTimestampIncrNanos);
+		Instant t = lastTransTimestamp.plusNanos(MIN_TRANS_TIMESTAMP_INCR_NANOS);
 		// rounds up to the nearest multiple of minTransTimestampIncrNanos
-		t = t.plusNanos(minTransTimestampIncrNanos - 1
-				- ((minTransTimestampIncrNanos + t.getNano() - 1) % minTransTimestampIncrNanos));
+		t = t.plusNanos(MIN_TRANS_TIMESTAMP_INCR_NANOS - 1
+				- ((MIN_TRANS_TIMESTAMP_INCR_NANOS + t.getNano() - 1) % MIN_TRANS_TIMESTAMP_INCR_NANOS));
 		return t;
 	}
 

@@ -17,9 +17,13 @@
 package com.swirlds.platform.stats.simple;
 
 import com.swirlds.common.metrics.Metric;
+import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.LongSupplier;
+
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * A simple metric that just returns a long value
@@ -32,13 +36,40 @@ public class LongMetric extends Metric {
 		super(category, name, description, FORMAT);
 	}
 
-	@Override
-	public Object getValue() {
+	public long get() {
 		final LongSupplier longSupplier = supplier.get();
 		if (longSupplier == null) {
-			return 0;
+			return 0L;
 		}
 		return longSupplier.getAsLong();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public List<ValueType> getValueTypes() {
+		return Metric.VALUE_TYPE;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Long get(final ValueType valueType) {
+		if (valueType == VALUE) {
+			return get();
+		}
+		throw new IllegalArgumentException("Unknown MetricType");
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@SuppressWarnings("removal")
+	@Override
+	public List<Pair<ValueType, Object>> takeSnapshot() {
+		return List.of(Pair.of(VALUE, get()));
 	}
 
 	public void setSupplier(final LongSupplier supplier) {

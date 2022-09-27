@@ -311,9 +311,9 @@ final class ConcurrentArray<T> {
 		// Convert the sub-arrays into a single array and sort it. We considered numerous alternatives to try to
 		// avoid the array copies, but we could not find a more efficient solution. Lock so that we can safely combine
 		// the arrays and sort the result.
+		final SubArray<T> newArray = new SubArray<>(numberOfElements);
 		synchronized (this) {
 			// Copy all the arrays to one new array
-			final SubArray<T> newArray = new SubArray<>(numberOfElements);
 			int nextIndex = 0;
 			for (final SubArray<T> array : arrays) {
 				final int arraySize = array.size.get();
@@ -327,9 +327,8 @@ final class ConcurrentArray<T> {
 			// Now sort
 			Arrays.parallelSort(newArray.array, 0, numberOfElements, comparator);
 		}
-
 		// Create and return the stream
-		return Arrays.stream(arrays.getFirst().array, 0, size());
+		return Arrays.stream(newArray.array);
 	}
 
 	public StandardFuture<Void> parallelTraverse(Executor executor, Consumer<T> action) {

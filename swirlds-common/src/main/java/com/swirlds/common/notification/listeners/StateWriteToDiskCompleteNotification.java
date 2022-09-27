@@ -16,10 +16,10 @@
 
 package com.swirlds.common.notification.listeners;
 
-import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.notification.AbstractNotification;
+import com.swirlds.common.system.SwirldState;
 
-import java.io.File;
+import java.nio.file.Path;
 import java.time.Instant;
 
 /**
@@ -30,11 +30,11 @@ public class StateWriteToDiskCompleteNotification extends AbstractNotification {
 	private final long roundNumber;
 	private final Instant consensusTimestamp;
 	private final SwirldState state;
-	private final File folder;
+	private final Path folder;
 	private final boolean isFreezeState;
 
 	public StateWriteToDiskCompleteNotification(final long roundNumber, final Instant consensusTimestamp,
-			final SwirldState state, final File folder, final boolean isFreezeState) {
+			final SwirldState state, final Path folder, final boolean isFreezeState) {
 		this.roundNumber = roundNumber;
 		this.consensusTimestamp = consensusTimestamp;
 		this.state = state;
@@ -74,12 +74,13 @@ public class StateWriteToDiskCompleteNotification extends AbstractNotification {
 	 *
 	 * @return the path containing the saved state
 	 */
-	public File getFolder() {
+	public Path getFolder() {
 		return folder;
 	}
 
 	/**
 	 * Gets whether this is a freeze state
+	 *
 	 * @return whether this is a freeze state
 	 */
 	public boolean isFreezeState() {

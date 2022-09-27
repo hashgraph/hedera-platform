@@ -22,53 +22,48 @@ public interface SwirldStateStats {
 
 	/**
 	 * Records the amount of time to handle a consensus transaction in {@link SwirldState}.
-	 *
-	 * @param seconds
 	 */
 	void consensusTransHandleTime(double seconds);
 
 	/**
 	 * Records the amount of time between a transaction reaching consensus and being handled in {@link SwirldState}.
-	 *
-	 * @param seconds
 	 */
 	void consensusToHandleTime(double seconds);
 
 	/**
-	 * Records the fact that a consensus transaction was handled by {@link SwirldState}.
+	 * Records the fact that consensus transactions were handled by {@link SwirldState}.
 	 */
-	void consensusTransHandled();
+	void consensusTransHandled(final int numTrans);
 
 	/**
 	 * Records the time it takes {@link SwirldState#copy()} to finish (in microseconds)
-	 *
-	 * @param micros
 	 */
 	void stateCopyMicros(final double micros);
 
 	/**
 	 * Records the time spent performing a shuffle in {@link com.swirlds.platform.state.SwirldStateManagerSingle}  (in
 	 * microseconds).
-	 *
-	 * @param micros
 	 */
 	void shuffleMicros(final double micros);
 
 	/**
-	 * The average difference in creation time and consensus time for self events.
-	 *
-	 * @return
+	 * Returns the average difference in creation time and consensus time for self events.
 	 */
 	double getAvgSelfCreatedTimestamp();
 
 	/**
-	 * The average difference in creation time and consensus time for other events.
-	 *
-	 * @return
+	 * Returns the average difference in creation time and consensus time for other events.
 	 */
 	double getAvgOtherReceivedTimestamp();
 
-	void stateCopyAdmit(final long start, final long end);
-
+	/**
+	 * The amount of time it takes to handle a single event from the pre-consensus event queue.
+	 */
 	void preConsensusHandleTime(long start, final long end);
+
+	/**
+	 * The amount of time it takes to apply an event or a transaction, depending on which {@link SwirldState} the
+	 * application implements.
+	 */
+	void preHandleTime(long start, long end);
 }

@@ -24,6 +24,8 @@ import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
 import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.utility.RuntimeObjectRecord;
+import com.swirlds.common.utility.RuntimeObjectRegistry;
 import com.swirlds.common.utility.ValueReference;
 import com.swirlds.virtualmap.datasource.VirtualDataSource;
 import com.swirlds.virtualmap.datasource.VirtualDataSourceBuilder;
@@ -33,10 +35,10 @@ import com.swirlds.virtualmap.internal.merkle.VirtualRootNode;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -156,11 +158,16 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	private VirtualRootNode<K, V> root;
 
 	/**
+	 * Used to track the lifespan of this virtual map. The record is released when the map is destroyed.
+	 */
+	private final RuntimeObjectRecord registryRecord;
+
+	/**
 	 * Required by the {@link com.swirlds.common.constructable.RuntimeConstructable} contract.
 	 * This can <strong>only</strong> be called as part of serialization and reconnect, not for normal use.
 	 */
 	public VirtualMap() {
-		// no-op
+		registryRecord = RuntimeObjectRegistry.createRecord(getClass());
 	}
 
 	/**
@@ -172,6 +179,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	 * 		The data source builder. Must not be null.
 	 */
 	public VirtualMap(final String label, final VirtualDataSourceBuilder<K, V> dataSourceBuilder) {
+		this();
 		setChild(ChildIndices.MAP_STATE_CHILD_INDEX, new VirtualMapState(Objects.requireNonNull(label)));
 		setChild(ChildIndices.VIRTUAL_ROOT_CHILD_INDEX,
 				new VirtualRootNode<>(Objects.requireNonNull(dataSourceBuilder)));
@@ -184,6 +192,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	 * 		must not be null.
 	 */
 	private VirtualMap(VirtualMap<K, V> source) {
+		this();
 		setChild(ChildIndices.MAP_STATE_CHILD_INDEX, source.getState().copy());
 		setChild(ChildIndices.VIRTUAL_ROOT_CHILD_INDEX, source.getRoot().copy());
 	}
@@ -285,7 +294,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	 */
 	@Override
 	public void serialize(final SerializableDataOutputStream out,
-			final File outputDirectory) throws IOException {
+			final Path outputDirectory) throws IOException {
 
 		// Create and write to state the name of the file we will expect later on deserialization
 		final String outputFileName = state.getLabel() + ".vmap";
@@ -294,9 +303,9 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 		out.writeNormalisedString(outputFileName);
 
 		// Write the virtual map and sub nodes
-		final File outputFile = new File(outputDirectory, outputFileName);
+		final Path outputFile = outputDirectory.resolve(outputFileName);
 		try (SerializableDataOutputStream serout = new SerializableDataOutputStream(
-				new BufferedOutputStream(new FileOutputStream(outputFile)))) {
+				new BufferedOutputStream(new FileOutputStream(outputFile.toFile())))) {
 			serout.writeSerializable(state, true);
 			serout.writeInt(root.getVersion());
 			root.serialize(serout, outputDirectory);
@@ -309,7 +318,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	@Override
 	public void deserialize(
 			final SerializableDataInputStream in,
-			final File inputDirectory,
+			final Path inputDirectory,
 			final int version) throws IOException {
 
 		if (version == ClassVersion.ORIGINAL) {
@@ -319,7 +328,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 
 		final int fileNameLengthInBytes = in.readInt();
 		final String inputFileName = in.readNormalisedString(fileNameLengthInBytes);
-		final File inputFile = new File(inputDirectory, inputFileName);
+		final Path inputFile = inputDirectory.resolve(inputFileName);
 		loadFromFile(inputFile);
 	}
 
@@ -332,18 +341,18 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	 * @throws IOException
 	 * 		For problems.
 	 */
-	public void loadFromFile(final File inputFile) throws IOException {
+	public void loadFromFile(final Path inputFile) throws IOException {
 
 		final ValueReference<VirtualMapState> virtualMapState = new ValueReference<>();
 		final ValueReference<VirtualRootNode<K, V>> virtualRootNode = new ValueReference<>();
 
 		deserializeAndDebugOnFailure(
-				() -> new SerializableDataInputStream(new BufferedInputStream(new FileInputStream(inputFile))),
+				() -> new SerializableDataInputStream(new BufferedInputStream(new FileInputStream(inputFile.toFile()))),
 				(final MerkleDataInputStream stream) -> {
 					virtualMapState.setValue(stream.readSerializable());
 					virtualRootNode.setValue(new VirtualRootNode<>());
 					virtualRootNode.getValue().deserialize(
-							stream, inputFile.getParentFile(), stream.readInt());
+							stream, inputFile.getParent(), stream.readInt());
 					return null;
 				},
 				null);
@@ -351,6 +360,14 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 		state = virtualMapState.getValue();
 		root = virtualRootNode.getValue();
 		addDeserializedChildren(List.of(state, root), getVersion());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	protected void destroyNode() {
+		registryRecord.release();
 	}
 
 	/*-----------------------------------------------------------------------------

@@ -17,13 +17,16 @@
 package com.swirlds.common.metrics;
 
 import com.swirlds.common.threading.AtomicDouble;
+import com.swirlds.common.utility.CommonUtils;
+
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * A {@code DoubleGauge} stores a single {@code double} value.
  * <p>
  * Only the current value is stored, no history or distribution is kept.
  */
-public class DoubleGauge extends Metric {
+public class DoubleGauge extends AbstractGauge<Double> {
 
 	private final AtomicDouble value = new AtomicDouble();
 
@@ -78,10 +81,13 @@ public class DoubleGauge extends Metric {
 	/**
 	 * {@inheritDoc}
 	 */
-	@SuppressWarnings("removal")
 	@Override
-	public Double getValue() {
-		return get();
+	public Double get(final ValueType valueType) {
+		CommonUtils.throwArgNull(valueType, "type");
+		if (valueType == VALUE) {
+			return get();
+		}
+		throw new IllegalArgumentException("Unsupported ValueType");
 	}
 
 	/**
@@ -102,5 +108,4 @@ public class DoubleGauge extends Metric {
 	public void set(final double newValue) {
 		this.value.set(newValue);
 	}
-
 }

@@ -17,6 +17,7 @@ package com.swirlds.platform;
 
 import com.swirlds.platform.crypto.CryptoConstants;
 import com.swirlds.platform.event.EventConstants;
+import com.swirlds.platform.internal.EventImpl;
 
 import java.util.ArrayList;
 import java.util.Collections;

@@ -26,14 +26,14 @@ import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.utility.Clearable;
-import com.swirlds.platform.ConsensusRound;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.observers.ConsensusRoundObserver;
 import com.swirlds.platform.state.MinGenInfo;
-import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.SwirldStateManager;
+import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.stats.ConsensusHandlingStats;
 import com.swirlds.platform.stats.CycleTimingStat;
 import org.apache.logging.log4j.LogManager;
@@ -172,6 +172,13 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable 
 	 */
 	public void start() {
 		queueThread.start();
+	}
+
+	/**
+	 * Stops the queue thread. For unit testing purposes only.
+	 */
+	public void stop() {
+		queueThread.stop();
 	}
 
 	@Override

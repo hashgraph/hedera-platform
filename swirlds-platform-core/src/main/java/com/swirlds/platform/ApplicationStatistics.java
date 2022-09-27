@@ -82,6 +82,7 @@ public class ApplicationStatistics extends AbstractStatistics {
 		for (Metric metric : statEntries) {
 			metric.init();
 		}
+		metrics = List.of(statEntries);
 		initStatEntries(Settings.showInternalStats);
 		if (printStats) {
 			printStats = false;

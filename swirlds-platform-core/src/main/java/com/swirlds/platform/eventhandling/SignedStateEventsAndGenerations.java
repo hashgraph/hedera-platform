@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.eventhandling;
 
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.MinGenInfo;
 import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.state.StateSettings;

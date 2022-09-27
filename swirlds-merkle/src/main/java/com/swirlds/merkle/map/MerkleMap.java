@@ -25,6 +25,8 @@ import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
 import com.swirlds.common.merkle.utility.DebugIterationEndpoint;
 import com.swirlds.common.merkle.utility.Keyed;
+import com.swirlds.common.utility.RuntimeObjectRecord;
+import com.swirlds.common.utility.RuntimeObjectRegistry;
 import com.swirlds.fchashmap.FCHashMap;
 import com.swirlds.fchashmap.FCHashMapSettingsFactory;
 import com.swirlds.merkle.tree.MerkleBinaryTree;
@@ -112,6 +114,11 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 	 * True if this object has been archived, otherwise false.
 	 */
 	private boolean archived;
+
+	/**
+	 * Used to track the lifespan of this merkle map. The record is released when the map is destroyed.
+	 */
+	private final RuntimeObjectRecord registryRecord;
 
 	private static class ChildIndices {
 		/**
@@ -229,6 +236,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 		setTree(new MerkleBinaryTree<>());
 		setImmutable(false);
 		lock = new StampedLock();
+		registryRecord = RuntimeObjectRegistry.createRecord(getClass());
 	}
 
 	/**
@@ -246,6 +254,8 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 		setImmutable(false);
 		that.setImmutable(true);
+
+		registryRecord = RuntimeObjectRegistry.createRecord(getClass());
 	}
 
 	/**
@@ -306,6 +316,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 	 */
 	@Override
 	protected synchronized void destroyNode() {
+		registryRecord.release();
 		if (!isArchived()) {
 			index.release();
 		}

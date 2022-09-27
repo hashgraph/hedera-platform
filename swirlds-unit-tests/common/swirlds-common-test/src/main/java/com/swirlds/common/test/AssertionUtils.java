@@ -17,6 +17,8 @@
 package com.swirlds.common.test;
 
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.threading.interrupt.InterruptableSupplier;
 import com.swirlds.common.utility.CompareTo;
 import com.swirlds.common.utility.ValueReference;
 
@@ -241,7 +243,7 @@ public final class AssertionUtils {
 	 * 		an error message if the operation takes too long
 	 */
 	public static void completeBeforeTimeout(
-			final Runnable operation,
+			final InterruptableRunnable operation,
 			final Duration maxDuration,
 			final String message) throws InterruptedException {
 
@@ -251,7 +253,7 @@ public final class AssertionUtils {
 		new ThreadConfiguration()
 				.setComponent("assertion-utils")
 				.setThreadName("assert-prompt-completion")
-				.setRunnable(() -> {
+				.setInterruptableRunnable(() -> {
 					operation.run();
 					latch.countDown();
 				})
@@ -278,7 +280,7 @@ public final class AssertionUtils {
 	 * @return the value returned by the operation
 	 */
 	public static <T> T completeBeforeTimeout(
-			final Supplier<T> operation,
+			final InterruptableSupplier<T> operation,
 			final Duration maxDuration,
 			final String message) throws InterruptedException {
 
@@ -289,7 +291,7 @@ public final class AssertionUtils {
 		new ThreadConfiguration()
 				.setComponent("assertion-utils")
 				.setThreadName("assert-prompt-completion")
-				.setRunnable(() -> {
+				.setInterruptableRunnable(() -> {
 					value.set(operation.get());
 					latch.countDown();
 				})

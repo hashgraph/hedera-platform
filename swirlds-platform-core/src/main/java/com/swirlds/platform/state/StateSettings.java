@@ -16,10 +16,10 @@
 
 package com.swirlds.platform.state;
 
-import com.swirlds.platform.state.signed.SignedStateFileManager;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.internal.SubSetting;
+import com.swirlds.platform.state.signed.SignedStateFileManager;
 import com.swirlds.platform.state.signed.SignedStateManager;
 
 import java.time.Duration;
@@ -29,6 +29,23 @@ import java.util.function.LongUnaryOperator;
  * Settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors.
  */
 public class StateSettings extends SubSetting {
+
+	/**
+	 * The directory where states are saved. This is relative to the current working directory, unless
+	 * the provided path begins with "/", in which case it will be interpreted as an absolute path.
+	 */
+	public String savedStateDirectory = "data/saved";
+
+	/**
+	 * If true, clean out all data in the {@link #savedStateDirectory} except for the previously saved state.
+	 */
+	public boolean cleanSavedStateDirectory = false;
+
+	/**
+	 * The number of states permitted to sit in the signed state file manager's queue of states being written.
+	 * If this queue backs up then some states may not be written to disk.
+	 */
+	public int stateSavingQueueSize = 20;
 
 	/**
 	 * The frequency of writes of a state to disk every this many seconds (0 to never write).
@@ -81,23 +98,11 @@ public class StateSettings extends SubSetting {
 	public boolean dumpStateOnFatal = true;
 
 	/**
-	 * If true, a snapshot of all events will be saved after every round. This can be used in conjunction with
-	 * dumpStateOnISS so that an ISS state will be saved with events.
-	 */
-	public boolean saveEventsForEveryState = false;
-
-	/**
 	 * If one ISS is detected, it is likely that others will be detected shortly afterwards. Specify the minimum
 	 * time, in seconds, that must transpire after dumping a state before another state dump is permitted. Ignored
 	 * if dumpStateOnISS is false.
 	 */
 	public double secondsBetweenISSDumps = Duration.ofHours(6).toSeconds();
-
-	/**
-	 * Whether to generate the file LocalEvents.evn or not.
-	 * This file is generated every time a SignedState is saved.
-	 */
-	public boolean saveLocalEvents = false;
 
 	/**
 	 * If true then a single background thread is used to do validation of signed state hashes. Validation is on

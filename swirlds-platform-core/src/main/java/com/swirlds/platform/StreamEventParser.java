@@ -23,7 +23,9 @@ import com.swirlds.common.crypto.ImmutableHash;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.stream.EventStreamManager;
 import com.swirlds.common.system.events.DetailedConsensusEvent;
+import com.swirlds.common.system.events.Event;
 import com.swirlds.logging.payloads.StreamParseErrorPayload;
+import com.swirlds.platform.internal.EventImpl;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -318,7 +320,7 @@ public class StreamEventParser extends Thread {
 	 * 		Event to be handled
 	 * @return indicate whether should continue parse event from input stream
 	 */
-	private boolean handleEvent(EventImpl event) {
+	private boolean handleEvent(final Event event) {
 		if (event == null) {
 			LOGGER.info(EVENT_PARSER.getMarker(), "Finished parsing events");
 			if (prevParsedEvent != null) {
@@ -328,13 +330,16 @@ public class StreamEventParser extends Thread {
 			}
 			return false;
 		}
+
+		final EventImpl eventImpl = (EventImpl) event;
+		
 		// events saved in stream file are consensus events
 		// we need to setConsensus to be true, otherwise we will got `ConsensusRoundHandler queue has non consensus
 		// event` error in ConsensusRoundHandler.applyConsensusEventToState() when handling this event during state
 		// recovery
-		event.setConsensus(true);
+		eventImpl.setConsensus(true);
 
-		Instant consensusTimestamp = event.getConsensusTimestamp();
+		Instant consensusTimestamp = eventImpl.getConsensusTimestamp();
 
 		boolean shouldContinue;
 		// Search criteria :
@@ -356,7 +361,7 @@ public class StreamEventParser extends Thread {
 				// This is the first recovered event, also could be the first event within current file
 				trySetInitialRunningHash();
 			}
-			prevParsedEvent = event;
+			prevParsedEvent = eventImpl;
 			shouldContinue = true;
 		} else if (consensusTimestamp.isAfter(endTimestamp)) {
 			LOGGER.info(EVENT_PARSER.getMarker(),
@@ -368,10 +373,10 @@ public class StreamEventParser extends Thread {
 			// the same event stream file as the original one.
 			// skip being played back by handleTransaction function
 			LOGGER.info(EVENT_PARSER.getMarker(), "Adding event {} to stream writer directly",
-					event.getConsensusTimestamp());
+					eventImpl.getConsensusTimestamp());
 			shouldContinue = true;
 			trySetInitialRunningHash();
-			eventStreamManager.addEvent(event);
+			eventStreamManager.addEvent(eventImpl);
 		}
 		return shouldContinue;
 	}

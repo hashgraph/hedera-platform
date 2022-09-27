@@ -16,7 +16,7 @@
 
 package com.swirlds.common.test;
 
-import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.system.transaction.internal.SwirldTransaction;
 import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
 import com.swirlds.common.system.transaction.internal.SystemTransaction;
@@ -35,6 +35,9 @@ public class TransactionUtils {
 
 	private static final AtomicLong nextLong = new AtomicLong(0);
 	private static final AtomicInteger nextInt = new AtomicInteger(0);
+	private static final double DEFAULT_SYS_RATIO = 0.1;
+	private static final double DEFAULT_TRANS_COUNT_STD_DEV = 10;
+	private static final double DEFAULT_TRANS_COUNT_AVG = 50;
 
 	public static SwirldTransaction[] randomSwirldTransactions(final long seed, final int number) {
 		return randomSwirldTransactions(new Random(seed), number);
@@ -55,6 +58,11 @@ public class TransactionUtils {
 		}
 
 		return transactions;
+	}
+
+	public static ConsensusTransactionImpl[] incrementingMixedTransactions(final RandomGenerator random) {
+		return incrementingMixedTransactions(random, DEFAULT_TRANS_COUNT_AVG, DEFAULT_TRANS_COUNT_STD_DEV,
+				DEFAULT_SYS_RATIO);
 	}
 
 	/**

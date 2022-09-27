@@ -18,7 +18,7 @@ package com.swirlds.platform.components;
 
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.utility.Clearable;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.event.SelfEventStorage;
 import com.swirlds.platform.observers.EventAddedObserver;

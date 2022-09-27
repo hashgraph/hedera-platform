@@ -16,6 +16,7 @@
 
 package com.swirlds.platform.reconnect;
 
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.threading.locks.LockedResource;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.Connection;
@@ -27,6 +28,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.Semaphore;
 
+import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 
 /**
@@ -59,12 +61,16 @@ public class ReconnectController implements Runnable {
 	 */
 	public void start() {
 		if (!threadRunning.tryAcquire()) {
-			LOG.error(LogMarker.EXCEPTION.getMarker(),
+			LOG.error(EXCEPTION.getMarker(),
 					"Attempting to start reconnect controller while its already running");
 			return;
 		}
 		LOG.error(LogMarker.RECONNECT.getMarker(), "Starting ReconnectController");
-		new Thread(this).start();
+		new ThreadConfiguration()
+				.setComponent("reconnect")
+				.setThreadName("reconnect-controller")
+				.setRunnable(this)
+				.build(true /*start*/);
 	}
 
 	@Override
@@ -77,7 +83,7 @@ public class ReconnectController implements Runnable {
 				Thread.sleep(FAILED_RECONNECT_SLEEP_MILLIS);
 			}
 		} catch (final RuntimeException | InterruptedException e) {
-			LOG.error(LogMarker.EXCEPTION.getMarker(), "Unexpected error occurred while reconnecting", e);
+			LOG.error(EXCEPTION.getMarker(), "Unexpected error occurred while reconnecting", e);
 			SystemUtils.exitSystem(SystemExitReason.RECONNECT_FAILURE);
 		} finally {
 			threadRunning.release();

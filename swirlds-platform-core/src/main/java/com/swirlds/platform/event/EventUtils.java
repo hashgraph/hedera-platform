@@ -20,7 +20,7 @@ import com.swirlds.common.system.events.BaseEvent;
 import com.swirlds.common.system.events.PlatformEvent;
 import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.logging.LogMarker;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.EventStrings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

@@ -61,6 +61,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -73,6 +74,7 @@ import java.util.stream.Stream;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
+import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT;
 import static com.swirlds.logging.LogMarker.VIRTUAL_MERKLE_STATS;
 import static com.swirlds.virtualmap.internal.Path.FIRST_LEFT_PATH;
 import static com.swirlds.virtualmap.internal.Path.INVALID_PATH;
@@ -922,6 +924,11 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 					sortedDirtyLeaves,
 					deletedLeaves);
 
+		} catch (final ClosedByInterruptException ex) {
+			LOG.info(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(),
+					"flush interrupted - this is probably not an error " +
+							"if this happens shortly after a reconnect");
+			Thread.currentThread().interrupt();
 		} catch (final IOException ex) {
 			LOG.error(EXCEPTION.getMarker(), "Error while flushing VirtualMap", ex);
 			throw new UncheckedIOException(ex);
@@ -938,10 +945,10 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	@Override
 	public void serialize(
 			final SerializableDataOutputStream out,
-			final File outputDirectory) throws IOException {
+			final Path outputDirectory) throws IOException {
 
 		final RecordAccessor<K, V> detachedRecords = pipeline.detachCopy(
-				this, state.getLabel(), outputDirectory.toPath(), false, false);
+				this, state.getLabel(), outputDirectory, false, false);
 		assert detachedRecords.getDataSource() == null : "No data source should be created.";
 
 		out.writeNormalisedString(state.getLabel());
@@ -955,13 +962,13 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	@Override
 	public void deserialize(
 			final SerializableDataInputStream in,
-			final File inputDirectory,
+			final Path inputDirectory,
 			final int version) throws IOException {
 
 		final String name = in.readNormalisedString(MAX_LABEL_LENGTH);
 		dataSourceBuilder = in.readSerializable();
 
-		final File source = inputDirectory.toPath().resolve(name).toFile();
+		final File source = inputDirectory.resolve(name).toFile();
 		if (!source.exists() || !source.isDirectory()) {
 			throw new IOException("No virtual map data found at " + source);
 		}

@@ -16,7 +16,14 @@
 
 package com.swirlds.platform.stats.cycle;
 
+import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.utility.Units;
 import com.swirlds.platform.stats.atomic.AtomicIntPair;
+import org.apache.commons.lang3.tuple.Pair;
+
+import java.util.List;
+
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * Tracks the fraction of time spent in a single interval of a cycle
@@ -41,16 +48,38 @@ public class IntervalPercentageMetric extends PercentageMetric {
 	 * 		the number of nanoseconds this interval lasted
 	 */
 	public void updateTime(final long cycleNanoTime, final long intervalNanoTime) {
-		totalAndInterval.accumulate((int) cycleNanoTime, (int) intervalNanoTime);
+		totalAndInterval.accumulate(toMicros(cycleNanoTime), toMicros(intervalNanoTime));
 	}
 
-	@Override
-	public Object getValue() {
-		return totalAndInterval.computeDouble(PercentageMetric::calculatePercentage);
+	private int toMicros(final long nanos){
+		return (int) (nanos * Units.NANOSECONDS_TO_MICROSECONDS);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public Object getValueAndReset() {
-		return totalAndInterval.computeDoubleAndReset(PercentageMetric::calculatePercentage);
+	public List<ValueType> getValueTypes() {
+		return Metric.VALUE_TYPE;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Double get(final ValueType valueType) {
+		if (valueType == VALUE) {
+			return totalAndInterval.computeDouble(PercentageMetric::calculatePercentage);
+		}
+		throw new IllegalArgumentException("Unknown MetricType");
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@SuppressWarnings("removal")
+	@Override
+	public List<Pair<ValueType, Object>> takeSnapshot() {
+		return List.of(Pair.of(VALUE, totalAndInterval.computeDoubleAndReset(PercentageMetric::calculatePercentage)));
 	}
 }

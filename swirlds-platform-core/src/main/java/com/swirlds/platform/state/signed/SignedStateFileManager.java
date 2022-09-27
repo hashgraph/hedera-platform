@@ -16,413 +16,203 @@
 
 package com.swirlds.platform.state.signed;
 
-import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.streams.MerkleDataInputStream;
-import com.swirlds.common.io.streams.MerkleDataOutputStream;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteListener;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteNotification;
 import com.swirlds.common.system.NodeId;
-import com.swirlds.common.utility.CommonUtils;
-import com.swirlds.logging.LogMarker;
-import com.swirlds.logging.payloads.StateSavedToDiskPayload;
-import com.swirlds.platform.AbstractPlatform;
+import com.swirlds.common.threading.framework.QueueThread;
+import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.platform.Settings;
-import com.swirlds.platform.state.LocalStateEvents;
-import com.swirlds.platform.state.signed.SavedStateInfo;
-import com.swirlds.platform.state.signed.SigSet;
-import com.swirlds.platform.state.signed.SignedState;
-import com.swirlds.platform.state.State;
-import com.swirlds.platform.state.StateSettings;
-import org.apache.commons.lang3.tuple.Pair;
-import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.util.TreeMap;
-import java.util.concurrent.BlockingQueue;
+import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.LinkedBlockingQueue;
 
-import static com.swirlds.common.io.streams.StreamDebugUtils.deserializeAndDebugOnFailure;
-import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
+import static com.swirlds.common.io.utility.FileUtils.deleteDirectoryAndLog;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STATE_TO_DISK;
-import static com.swirlds.platform.system.SystemExitReason.SAVED_STATE_NOT_LOADED;
-import static com.swirlds.platform.system.SystemUtils.exitSystem;
+import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
+import static com.swirlds.platform.state.signed.SignedStateFileReader.getSavedStateFiles;
+import static com.swirlds.platform.state.signed.SignedStateFileUtils.getSignedStatesBaseDirectory;
+import static com.swirlds.platform.state.signed.SignedStateFileUtils.getSignedStateDirectory;
+import static com.swirlds.platform.state.signed.SignedStateFileWriter.writeSignedStateToDisk;
 
-public class SignedStateFileManager implements Runnable {
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
-	private static final Logger log = LogManager.getLogger();
+/**
+ * This class is responsible for managing the signed state writing pipeline.
+ */
+public class SignedStateFileManager {
 
-	/** The signed state file was not versioned before, this byte was introduced to mark a versioned file */
-	private static final byte VERSIONED_FILE_BYTE = Byte.MAX_VALUE;
-
-	/** The current version of the signed state file */
-	private static final int FILE_VERSION = 1;
-
-	private static final int MAX_MERKLE_NODES_IN_STATE = Integer.MAX_VALUE;
-
-	private static final String HASH_INFO_FILE_NAME = "hashInfo.txt";
-
-	/** task queue that is polled forever */
-	private final BlockingQueue<FileManagerTask> taskQueue = new LinkedBlockingQueue<>(20);
-
-	/** Reference to the platform */
-	private final AbstractPlatform platform;
+	private static final Logger LOG = LogManager.getLogger(SignedStateFileManager.class);
 
 	/** A runnable that indicates the freeze state has been written to disk and the freeze is complete. */
 	private final Runnable freezeComplete;
 
 	/**
+	 * The ID of this node.
+	 */
+	private final NodeId selfId;
+
+	/**
+	 * The name of the application that is currently running.
+	 */
+	private final String mainClassName;
+
+	/**
+	 * The swirld name.
+	 */
+	private final String swirldName;
+
+	private final QueueThread<Runnable> taskQueue;
+
+	/**
 	 * Creates a new instance.
 	 *
-	 * @param platform
-	 * 		the platform instance
+	 * @param mainClassName
+	 * 		the main class name of this node
+	 * @param selfId
+	 * 		the ID of this node
+	 * @param swirldName
+	 * 		the name of the swirld
 	 * @param freezeComplete
 	 * 		a runnable that tells the system a freeze is complete
 	 */
-	public SignedStateFileManager(final AbstractPlatform platform, final Runnable freezeComplete) {
-		this.platform = platform;
+	public SignedStateFileManager(
+			final String mainClassName,
+			final NodeId selfId,
+			final String swirldName,
+			final Runnable freezeComplete) {
+
+		this.selfId = selfId;
+		this.mainClassName = mainClassName;
+		this.swirldName = swirldName;
 		this.freezeComplete = freezeComplete;
+
+		this.taskQueue = new QueueThreadConfiguration<Runnable>()
+				.setCapacity(Settings.state.stateSavingQueueSize)
+				.setMaxBufferSize(1)
+				.setPriority(Settings.threadPriorityNonSync)
+				.setNodeId(selfId.getId())
+				.setComponent(PLATFORM_THREAD_POOL_NAME)
+				.setThreadName("signed-state-file-manager")
+				.setHandler(Runnable::run)
+				.build(true);
 	}
 
 	/**
-	 * Polls the queue of tasks and executes them
+	 * Stops the background thread.
+	 * <p>
+	 * <strong>For unit testing purposes only.</strong>
 	 */
-	@Override
-	public void run() {
-		while (true) {
-			FileManagerTask task = null;
-			try {
-				task = taskQueue.take();
-
-				switch (task.operation) {
-					case WRITE:
-						writeSignedStateToDisk(task.signedState, task.description, task.getDir());
-						break;
-					case DELETE:
-						deleteRecursively(task.getDir());
-						break;
-					default:
-						log.error(EXCEPTION.getMarker(),
-								"Error in SignedStateFileManager.run(), unknown task: {}",
-								task.operation.toString());
-						break;
-				}
-			} catch (InterruptedException ex) {
-				Thread.currentThread().interrupt();
-			} catch (Exception e) {
-				log.error(EXCEPTION.getMarker(),
-						"Exception in SignedStateFileManager.run():", e);
-			} finally {
-				if (task != null) {
-					task.finish();
-				}
-			}
-		}
-
+	public void stop() {
+		taskQueue.stop();
 	}
 
 	/**
-	 * Write a file that contains information about the hash of the state. A useful nugget of information
-	 * for when a human needs to decide what is contained within a signed state file. If the file already
-	 * exists in the given directory then it is overwritten.
-	 *
-	 * @param state
-	 * 		the state that is being written
-	 * @param dir
-	 * 		the directory where the state is being written
+	 * Get the number of enqueued state saving tasks. The number returned here will not reflect a state
+	 * saving task that is currently in progress.
 	 */
-	private static void writeHashInfoFile(final State state, final File dir) {
-		final String platformInfo = state.getPlatformState().getInfoString();
-		final String hashInfo = generateHashDebugString(state, StateSettings.getDebugHashDepth());
-		log.info(STATE_TO_DISK.getMarker(), "Information for state written to disk:\n{}\n{}", platformInfo,
-				hashInfo);
-
-		final File hashInfoFile = CommonUtils.canonicalFile(dir, HASH_INFO_FILE_NAME);
-
-		try (final BufferedWriter writer = new BufferedWriter(new FileWriter(hashInfoFile));) {
-			writer.write(platformInfo);
-			writer.newLine();
-			writer.write(hashInfo);
-			writer.flush();
-		} catch (final IOException e) {
-			log.error(EXCEPTION.getMarker(), "Unable to write hash info file", e);
-		}
+	public int getTaskQueueSize() {
+		return taskQueue.size();
 	}
 
 	/**
-	 * Writes a SignedState to a file
+	 * Notify signed state listeners that a new state has been saved.
 	 *
 	 * @param signedState
-	 * 		the object to be written. Will have already been reserved for archival.
-	 * @param taskDescription
-	 * 		a description of the task
-	 * @param dir
-	 * 		the directory where the state will be stored
-	 * @throws IOException
-	 * 		if there is any problems with writing to a file
+	 * 		the state that was saved
+	 * @param savedStateDirectory
+	 * 		the directory that contains the saved state
 	 */
-	public void writeSignedStateToDisk(final SignedState signedState,
-			final String taskDescription, File dir) throws IOException {
-
-		try {
-			log.info(STATE_TO_DISK.getMarker(), "Started writing '{}' to disk", taskDescription);
-
-			// we need to create the directories where the file should be stored if it doesn't exist
-			if (!dir.mkdirs()) {
-				throw new IOException(
-						"Directory '" + dir.getAbsolutePath() + "' could not be created!");
-			}
-
-			// the files we need to create
-			File stateFile = getSavedStateFile(dir, SignedStateFileType.WHOLE_STATE);
-			File events = getSavedStateFile(dir, SignedStateFileType.EVENTS);
-
-			// the temp files we will first write to and then rename
-			File tmpStateFile = getSavedStateFile(dir, SignedStateFileType.WHOLE_STATE, true);
-			File tmpEvents = getSavedStateFile(dir, SignedStateFileType.EVENTS, true);
-
-			throwIfExists(stateFile, tmpStateFile, events, tmpEvents);
-
-			try {
-				writeAndRename(stateFile, tmpStateFile, out -> {
-					out.write(VERSIONED_FILE_BYTE);
-					out.writeInt(FILE_VERSION);
-					out.writeProtocolVersion();
-					out.writeMerkleTree(dir, signedState.getState());
-					out.writeSerializable(signedState.getState().getHash(), true);
-					out.writeSerializable(signedState.getSigSet(), true);
-				});
-
-				log.info(STATE_TO_DISK.getMarker(),
-						"Done writing saved state with HashEventsCons {}, starting with local events",
-						signedState::getHashEventsCons);
-
-				writeHashInfoFile(signedState.getState(), dir);
-				log.info(STATE_TO_DISK.getMarker(),
-						() -> new StateSavedToDiskPayload(signedState.getLastRoundReceived(),
-								signedState.isFreezeState()).toString());
-
-				if (Settings.state.saveLocalEvents) {
-					writeAndRename(events, tmpEvents, out -> {
-						out.writeInt(FILE_VERSION);
-						out.writeProtocolVersion();
-						out.writeSerializable(signedState.getLocalStateEvents(), true);
-					});
-				}
-
-				Settings.writeSettingsUsed(dir);
-			} catch (Exception e) {
-				log.error(EXCEPTION.getMarker(),
-						"Exception when writing the signed state for round {} to disk:",
-						signedState.getLastRoundReceived(), e);
-				return;
-			}
-
-			// Notify any registered listeners that we have written a signed state to disk
-			NotificationFactory.getEngine().dispatch(
-					StateWriteToDiskCompleteListener.class,
-					new StateWriteToDiskCompleteNotification(
-							signedState.getLastRoundReceived(),
-							signedState.getConsensusTimestamp(),
-							signedState.getSwirldState(),
-							dir,
-							signedState.isFreezeState()
-					)
-			);
-		} finally {
-			// release the signed state if it was reserved
-			// set it to saved to disk in all cases so that it can be deleted from memory
-			signedState.setSavedToDisk(true);
-			signedState.weakReleaseState();
-		}
-
-
-		if (signedState.isFreezeState()) {
-			log.info(STATE_TO_DISK.getMarker(), "Finished writing during freeze '{}' to disk", taskDescription);
-			freezeComplete.run();
-		} else {
-			log.info(STATE_TO_DISK.getMarker(), "Finished writing '{}' to disk", taskDescription);
-		}
-	}
-
-	public static void writeAndRename(
-			final File file,
-			final File tmpFile,
-			WritingConsumer<MerkleDataOutputStream> writeMethod) throws Exception {
-
-		try (FileOutputStream fileOut = new FileOutputStream(tmpFile);
-			 BufferedOutputStream bufOut = new BufferedOutputStream(fileOut);
-			 MerkleDataOutputStream out = new MerkleDataOutputStream(bufOut)) {
-
-			writeMethod.write(out);
-
-			// flush all the data to the file stream
-			out.flush();
-			// make sure the data is actually written to disk
-			fileOut.getFD().sync();
-		}
-
-		if (!tmpFile.renameTo(file)) {
-			throw new Exception(
-					"Cannot rename temp file '" +
-							tmpFile.getAbsolutePath() +
-							"' to '" +
-							file.getAbsolutePath() +
-							"'"
-			);
-		}
-	}
-
-	private void throwIfExists(File... files) throws IOException {
-		for (File file : files) {
-			if (file.exists()) {
-				throw new IOException(
-						"File " + file.getAbsolutePath() + " already exists!");
-			}
-		}
-	}
-
-	/**
-	 * This record encapsulates the data read from a new signed state.
-	 *
-	 * @param signedState
-	 * 		the signed state that was loaded
-	 * @param originalHash
-	 * 		the hash of the signed state when it was serialized, may not be the same as the current hash
-	 */
-	public record DeserializedSignedState(SignedState signedState, Hash originalHash) {
-
-	}
-
-	/**
-	 * Reads a SignedState from a file
-	 *
-	 * @param file
-	 * 		the file to read from
-	 * @return a {@link Pair} containing the original {@link Hash} and the {@link SignedState} that were read from disk
-	 * @throws IOException
-	 * 		if there is any problems with reading from a file
-	 */
-	public static DeserializedSignedState readSignedStateFromFile(final File file)
-			throws IOException {
-		if (!file.exists()) {
-			throw new IOException(
-					"File " + file.getAbsolutePath() + " does not exist!");
-		}
-		if (!file.isFile()) {
-			throw new IOException(
-					"File " + file.getAbsolutePath() + " is not a file!");
-		}
-
-		return readSavedState(new SavedStateInfo(0/* unused */, file, null));
-	}
-
-	/**
-	 * Reads a SignedState from disk
-	 *
-	 * @param info
-	 * 		information about where the saved state is stored
-	 * @return a pair of Hash and SignedState
-	 * @throws IOException
-	 * 		if there is any problems with reading from a file
-	 */
-	public static DeserializedSignedState readSavedState(final SavedStateInfo info)
-			throws IOException {
-
-		DeserializedSignedState returnState;
-
-		final Triple<State, Hash, SigSet> data = deserializeAndDebugOnFailure(
-				() -> new BufferedInputStream(new FileInputStream(info.getStateFile())),
-				(final MerkleDataInputStream in) -> {
-					byte versionByte = in.readByte();
-					if (versionByte != VERSIONED_FILE_BYTE) {
-						throw new IOException(
-								"File is not versioned -- data corrupted or is an unsupported legacy state");
-					}
-
-					in.readInt();// file version
-					in.readProtocolVersion();
-
-					final State state = in.readMerkleTree(info.getDir(), MAX_MERKLE_NODES_IN_STATE);
-					final Hash hash = in.readSerializable();
-					final SigSet sigSet = in.readSerializable(true, () ->
-							new SigSet(state.getPlatformState().getAddressBook()));
-
-					return Triple.of(state, hash, sigSet);
-				},
-				() -> {
-					log.error(EXCEPTION.getMarker(), "failed to load state");
-					exitSystem(SAVED_STATE_NOT_LOADED);
-				}
+	private static void notifySavedStateListeners(final SignedState signedState, final Path savedStateDirectory) {
+		NotificationFactory.getEngine().dispatch(
+				StateWriteToDiskCompleteListener.class,
+				new StateWriteToDiskCompleteNotification(
+						signedState.getLastRoundReceived(),
+						signedState.getConsensusTimestamp(),
+						signedState.getSwirldState(),
+						savedStateDirectory,
+						signedState.isFreezeState()
+				)
 		);
-
-		final SignedState newSignedState = new SignedState(data.getLeft());
-
-		newSignedState.setSigSet(data.getRight());
-
-		returnState = new DeserializedSignedState(newSignedState, data.getMiddle());
-
-		if (!info.hasEvents()) {
-			log.warn(LogMarker.ERROR.getMarker(),
-					"No local data found in '{}'",
-					info.getDir().getAbsolutePath());
-			return returnState;
-		}
-
-		final LocalStateEvents localStateEvents = deserializeAndDebugOnFailure(
-				() -> new BufferedInputStream(new FileInputStream(info.getEvents())),
-				(final MerkleDataInputStream in) -> {
-					in.readInt();// file version
-					in.readProtocolVersion();
-					return in.readSerializable();
-				},
-				() -> {
-					log.error(EXCEPTION.getMarker(), "failed to load events");
-					exitSystem(SAVED_STATE_NOT_LOADED);
-				});
-
-		returnState.signedState().setLocalStateEvents(localStateEvents);
-
-		return returnState;
-	}
-
-	public static void deleteRecursively(final File f) {
-		log.info(STATE_TO_DISK.getMarker(), "deleting directory {}", f.getAbsolutePath());
-		final boolean success = CommonUtils.deleteDirectory(f);
-		if (success) {
-			log.info(STATE_TO_DISK.getMarker(), "successfully deleted directory {}", f.getAbsolutePath());
-		} else {
-			log.error(EXCEPTION.getMarker(), "failed to delete directory {}", f.getAbsolutePath());
-		}
 	}
 
 	/**
-	 * Notifies the platform that the signed state is complete, the platform will then write it to a file
+	 * <p>
+	 * Notifies the platform that the signed state is complete, the platform will then write it to a file.
+	 * </p>
+	 *
+	 * <p>
+	 * This method will take a weak reservation on the signed state before returning, and will eventually release
+	 * that weak reservation when the state has been fully written to disk (or if state saving fails).
+	 * </p>
 	 *
 	 * @param signedState
 	 * 		the complete signed state
+	 * @param directory
+	 * 		the directory where the signed state will be written
+	 * @param taskDescription
+	 * 		a human-readable description of the operation being performed
+	 * @param finishedCallback
+	 * 		a function that is called after state writing is complete (called even if state writing fails),
+	 * 		ignored if null
 	 * @return true if it will be written to disk, false otherwise
 	 */
-	public boolean saveSignedStateToDisk(SignedState signedState) {
-		String taskDesc = "Signed state for round " + signedState.getLastRoundReceived();
+	private boolean saveSignedStateToDisk(
+			final SignedState signedState,
+			final Path directory,
+			final String taskDescription,
+			final Runnable finishedCallback) {
 
-		return offerTask(new FileManagerTask(
-				FileManagerOperation.WRITE,
+		signedState.weakReserveState();
+
+		final boolean accepted = taskQueue.offer(() -> {
+			try {
+				writeSignedStateToDisk(directory, signedState, taskDescription);
+				notifySavedStateListeners(signedState, directory);
+				if (signedState.isFreezeState()) {
+					freezeComplete.run();
+				}
+			} catch (final Throwable e) {
+				LOG.error(EXCEPTION.getMarker(),
+						"Unable to write signed state to disk for round {} to {}.",
+						signedState.getLastRoundReceived(), directory, e);
+			} finally {
+				signedState.weakReleaseState();
+				if (finishedCallback != null) {
+					finishedCallback.run();
+				}
+			}
+		});
+
+		if (!accepted) {
+			signedState.weakReleaseState();
+			if (finishedCallback != null) {
+				finishedCallback.run();
+			}
+			LOG.error(STATE_TO_DISK.getMarker(),
+					"Unable to save signed state to disk for round {} due to backlog of " +
+							"operations in the SignedStateManager task queue.",
+					signedState.getLastRoundReceived());
+		}
+
+		return accepted;
+	}
+
+	/**
+	 * Save a signed state to disk. This method will called periodically under standard operations.
+	 *
+	 * @param signedState
+	 * 		the signed state to be written to disk.
+	 * @return true if it will be written to disk, false otherwise
+	 */
+	public boolean saveSignedStateToDisk(final SignedState signedState) {
+		return saveSignedStateToDisk(
 				signedState,
-				signedState.getLastRoundReceived(),
-				taskDesc,
-				getSignedStateDir(signedState.getLastRoundReceived())));
+				getSignedStateDir(signedState.getLastRoundReceived()),
+				"periodic snapshot",
+				this::deleteOldStates);
 	}
 
 	/**
@@ -433,25 +223,16 @@ public class SignedStateFileManager implements Runnable {
 	 *
 	 * @param signedState
 	 * 		the signed state to be saved which has an ISS
+	 * @return true if it will be written to disk, false otherwise
 	 */
-	public void saveIssStateToDisk(final SignedState signedState) {
-		offerTask(
-				new FileManagerTask(
-						FileManagerOperation.WRITE,
-						signedState,
-						signedState.getLastRoundReceived(),
-						null,
-						CommonUtils.canonicalFile(
-								Settings.savedDirPath,
-								"iss",
-								String.format(
-										"node%d_round%d",
-										platform.getSelfId().getId(),
-										signedState.getLastRoundReceived()
-								)
-						)
-				)
-		);
+	public boolean saveIssStateToDisk(final SignedState signedState) {
+		return saveSignedStateToDisk(
+				signedState,
+				getSignedStatesBaseDirectory()
+						.resolve("iss")
+						.resolve(String.format("node%d_round%d", selfId.getId(), signedState.getLastRoundReceived())),
+				"emergency ISS dump",
+				null);
 	}
 
 	/**
@@ -459,119 +240,21 @@ public class SignedStateFileManager implements Runnable {
 	 *
 	 * @param signedState
 	 * 		the state to save
+	 * @return true if it will be written to disk, false otherwise
 	 */
-	public void saveFatalStateToDisk(final SignedState signedState) throws InterruptedException {
-		log.info(STATE_TO_DISK.getMarker(), "writing state to disk in response to a fatal exception");
-
-		final String taskDesc = "Fatal signed state for round " + signedState.getLastRoundReceived();
-
-		final FileManagerTask task = new FileManagerTask(
-				FileManagerOperation.WRITE,
+	public boolean saveFatalStateToDisk(final SignedState signedState) throws InterruptedException {
+		final CountDownLatch latch = new CountDownLatch(1);
+		final boolean accepted = saveSignedStateToDisk(
 				signedState,
-				signedState.getLastRoundReceived(),
-				taskDesc,
-				CommonUtils.canonicalFile(
-						Settings.savedDirPath,
-						"fatal",
-						String.format(
-								"node%d_round%d",
-								platform.getSelfId().getId(),
-								signedState.getLastRoundReceived()
-						)
-				)
-		);
+				getSignedStatesBaseDirectory()
+						.resolve("fatal")
+						.resolve(String.format("node%d_round%d", selfId.getId(), signedState.getLastRoundReceived())),
+				"emergency dump after fatal exception",
+				latch::countDown);
 
-		if (offerTask(task)) {
-			task.waitUntilFinished();
-		}
+		latch.await();
+		return accepted;
 	}
-
-	/**
-	 * Tells the platform to delete the signed state from disk
-	 *
-	 * @param roundNumber
-	 * 		the signed state to be deleted
-	 */
-	public void deleteSignedStateFromDisk(final Long roundNumber) {
-		offerTask(
-				new FileManagerTask(
-						FileManagerOperation.DELETE,
-						null,
-						roundNumber,
-						"delete task",
-						getSignedStateDir(roundNumber)
-				));
-	}
-
-	/**
-	 * Add a task to the queue and log an error if it fails
-	 *
-	 * @param task
-	 * 		the task to add to the queue
-	 * @return true if the task was added
-	 */
-	private boolean offerTask(FileManagerTask task) {
-		if (!taskQueue.offer(task)) {
-			log.error(EXCEPTION.getMarker(),
-					"SignedStateFileManager task: '{}' for round {} cannot be added because queue is full!",
-					task.getDescription(), task.getRound());
-			task.signedState.weakReleaseState();
-			return false;
-		}
-		return true;
-	}
-
-	/**
-	 * The same as {@link #getSavedStateFile(File, SignedStateFileType, boolean)} with the tmpFile value set to false
-	 *
-	 * @see #getSavedStateFile(File, SignedStateFileType, boolean)
-	 */
-	static File getSavedStateFile(File dir, SignedStateFileType type) {
-		return getSavedStateFile(dir, type, false);
-	}
-
-	/**
-	 * Get the File for a signed state. The file returned will be dependent on the file type. A signed state can be
-	 * split into multiple files so the type will determine which part of the state the file is needed for.
-	 *
-	 * @param dir
-	 * 		the directory in which is should ce contained
-	 * @param type
-	 * 		the type of file that should be returned
-	 * @param tmpFile
-	 * 		whether this is a temporary file or not
-	 * @return the File object
-	 */
-	static File getSavedStateFile(File dir, SignedStateFileType type, boolean tmpFile) {
-		String filename = null;
-		switch (type) {
-			case WHOLE_STATE:
-				filename = "SignedState";
-				break;
-			case LOCAL:
-				filename = "LocalData";
-				break;
-			case EVENTS:
-				filename = "LocalEvents";
-				break;
-		}
-
-		String extension = "";
-		switch (type) {
-			case WHOLE_STATE:
-			case LOCAL:
-				extension = Settings.swirldsFileExtension;
-				break;
-			case EVENTS:
-				extension = ".evn";
-				break;
-		}
-		if (tmpFile) {
-			extension += ".tmp";
-		}
-		return CommonUtils.canonicalFile(dir, filename + extension);
-	}
-
 
 	/**
 	 * Get the directory for a particular signed state. This directory might not exist
@@ -580,138 +263,24 @@ public class SignedStateFileManager implements Runnable {
 	 * 		the round number for the signed state
 	 * @return the File that represents the directory of the signed state for the particular round
 	 */
-	public File getSignedStateDir(long round) {
-		return getSignedStateDir(round, platform.getMainClassName(), platform.getSelfId(), platform.getSwirldName());
-	}
-
-	static File getSignedStateDir(long round, String mainClassName, NodeId selfId, String swirldName) {
-		return CommonUtils.canonicalFile(Settings.savedDirPath, mainClassName,
-				selfId.toString(), swirldName, Long.toString(round));
+	private Path getSignedStateDir(long round) {
+		return getSignedStateDirectory(mainClassName, selfId, swirldName, round);
 	}
 
 	/**
-	 * Looks for saved state files locally and returns an array of them sorted from newest to oldest
-	 *
-	 * @param mainClassName
-	 * 		the name of the main app class
-	 * @param platformId
-	 * 		the ID of the plaform
-	 * @param swirldName
-	 * 		the swirld name
-	 * @return Information about saved states on disk, or null if none are found
+	 * Purge old states on the disk.
 	 */
-	public static SavedStateInfo[] getSavedStateFiles(String mainClassName, NodeId platformId,
-			String swirldName) {
-		File dir = CommonUtils.canonicalFile(Settings.savedDirPath, mainClassName,
-				platformId.toString(), swirldName);
-		if (!dir.exists() || !dir.isDirectory()) {
-			return null;
-		}
-		File[] dirs = dir.listFiles(File::isDirectory);
-		TreeMap<Long, SavedStateInfo> savedStates = new TreeMap<>();
-		for (File subDir : dirs) {
+	private synchronized void deleteOldStates() {
+		final SavedStateInfo[] savedStates = getSavedStateFiles(mainClassName, selfId, swirldName);
+
+		// States are returned newest to oldest. So delete from the end of the list to delete the oldest states.
+		for (int index = savedStates.length - 1; index >= Settings.state.getSignedStateDisk(); index--) {
+			final SavedStateInfo savedStateInfo = savedStates[index];
 			try {
-				long round = Long.parseLong(subDir.getName());
-				File stateFile = getSavedStateFile(subDir, SignedStateFileType.WHOLE_STATE);
-				if (!stateFile.exists()) {
-					log.warn(LogMarker.ERROR.getMarker(),
-							"Saved state file ({}) not found, but directory exists '{}'",
-							stateFile.getName(), subDir.getAbsolutePath());
-					continue;
-				}
-
-				File events = getSavedStateFile(subDir, SignedStateFileType.EVENTS);
-				savedStates.put(round, new SavedStateInfo(
-						round,
-						stateFile,
-						events.exists() ? events : null
-				));
-			} catch (NumberFormatException e) {
-				log.warn(LogMarker.ERROR.getMarker(),
-						"Unexpected directory '{}' in '{}'",
-						subDir.getName(), dir.getAbsolutePath());
+				deleteDirectoryAndLog(savedStateInfo.getDir());
+			} catch (final IOException e) {
+				// Intentionally ignored, deleteDirectoryAndLog will log any exceptions that happen
 			}
-
 		}
-		return savedStates.descendingMap().values().toArray(new SavedStateInfo[] { });
-	}
-
-	/** an internal class used to keep all details of the operation that needs to be performed */
-	private class FileManagerTask {
-		/** the operation that needs to be performed */
-		private final FileManagerOperation operation;
-		/** the object that needs to be serialized to a file, if the it's a write operation */
-		private final SignedState signedState;
-		/** the round number of the signed state */
-		private final long round;
-		/** an optional database snapshot task to be executed in tandem with the object file operation */
-		/** a description of the task */
-		private final String description;
-		/** the directory where the files are stored */
-		private final File dir;
-
-		/**
-		 * This latch is counted down when the task has been completed.
-		 */
-		private final CountDownLatch latch = new CountDownLatch(1);
-
-		/**
-		 * Block until the task has been completed.
-		 *
-		 * @throws InterruptedException
-		 * 		if this thread is interrupted
-		 */
-		public void waitUntilFinished() throws InterruptedException {
-			latch.await();
-		}
-
-		public FileManagerTask(FileManagerOperation operation, SignedState signedState, long round,
-				String description, File dir) {
-			this.operation = operation;
-			this.signedState = signedState;
-			this.round = round;
-			this.description = description;
-			this.dir = dir;
-		}
-
-		public FileManagerOperation getOperation() {
-			return operation;
-		}
-
-		public SignedState getSignedState() {
-			return signedState;
-		}
-
-		public long getRound() {
-			return round;
-		}
-
-		public String getDescription() {
-			return description;
-		}
-
-		public File getDir() {
-			return dir;
-		}
-
-		public void finish() {
-			latch.countDown();
-		}
-	}
-
-	@FunctionalInterface
-	public interface WritingConsumer<T> {
-		void write(T t) throws IOException;
-	}
-
-	/** operations that can be performed */
-	private enum FileManagerOperation {
-		WRITE, DELETE
-	}
-
-	private enum SignedStateFileType {
-		WHOLE_STATE,
-		LOCAL,
-		EVENTS
 	}
 }

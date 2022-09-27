@@ -18,7 +18,7 @@ package com.swirlds.platform.sync;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.system.events.PlatformEvent;
 import com.swirlds.common.utility.Clearable;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.stats.SyncStats;
 import org.apache.logging.log4j.LogManager;

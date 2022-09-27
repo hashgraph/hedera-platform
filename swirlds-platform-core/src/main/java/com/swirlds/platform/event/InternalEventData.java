@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.event;
 
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.RoundInfo;
 
 import java.time.Instant;

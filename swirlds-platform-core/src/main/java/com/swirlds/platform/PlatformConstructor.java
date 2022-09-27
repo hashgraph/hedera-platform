@@ -19,33 +19,37 @@ package com.swirlds.platform;
 import com.swirlds.common.stream.EventStreamManager;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.SoftwareVersion;
-import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.SwirldState1;
+import com.swirlds.common.system.SwirldState2;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.threading.pool.CachedPoolParallelExecutor;
 import com.swirlds.common.threading.pool.ParallelExecutor;
-import com.swirlds.platform.components.SignatureExpander;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.crypto.KeysAndCerts;
 import com.swirlds.platform.crypto.PlatformSigner;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 import com.swirlds.platform.eventhandling.PreConsensusEventHandler;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.network.connectivity.SocketFactory;
 import com.swirlds.platform.network.connectivity.TcpFactory;
 import com.swirlds.platform.network.connectivity.TlsFactory;
-import com.swirlds.platform.state.SignatureExpanderImpl;
-import com.swirlds.platform.state.signed.SignedState;
-import com.swirlds.platform.state.signed.SignedStateManager;
 import com.swirlds.platform.state.State;
-import com.swirlds.platform.state.signed.StateHasherSigner;
 import com.swirlds.platform.state.SwirldStateManager;
 import com.swirlds.platform.state.SwirldStateManagerDouble;
 import com.swirlds.platform.state.SwirldStateManagerSingle;
+import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateManager;
+import com.swirlds.platform.state.signed.StateHasherSigner;
 import com.swirlds.platform.stats.ConsensusHandlingStats;
 import com.swirlds.platform.stats.SignedStateStats;
 import com.swirlds.platform.stats.SwirldStateStats;
 import com.swirlds.platform.system.PlatformConstructionException;
+import com.swirlds.platform.system.SystemExitReason;
+import com.swirlds.platform.system.SystemUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.security.InvalidKeyException;
@@ -60,12 +64,16 @@ import java.util.concurrent.BlockingQueue;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
+import static com.swirlds.logging.LogMarker.ERROR;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
 
 /**
  * Used to construct platform components that use DI
  */
 final class PlatformConstructor {
+
+	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
+	private static final Logger LOG = LogManager.getLogger();
 
 	/** The maximum size of the queue holding signed states ready to be hashed and signed by others. */
 	private static final int STATE_HASH_QUEUE_MAX = 1;
@@ -152,16 +160,15 @@ final class PlatformConstructor {
 			final SettingsProvider settings, final Supplier<Instant> consEstimateSupplier,
 			final BooleanSupplier inFreezeChecker, final State initialState) {
 
-		if (initialState.getSwirldState() instanceof SwirldState.SwirldState2) {
+		if (initialState.getSwirldState() instanceof SwirldState2) {
 			return new SwirldStateManagerDouble(
 					selfId,
 					systemTransactionHandler,
 					stats,
 					settings,
 					inFreezeChecker,
-					signatureExpander(),
 					initialState);
-		} else {
+		} else if (initialState.getSwirldState() instanceof SwirldState1) {
 			return new SwirldStateManagerSingle(
 					selfId,
 					systemTransactionHandler,
@@ -169,13 +176,12 @@ final class PlatformConstructor {
 					settings,
 					consEstimateSupplier,
 					inFreezeChecker,
-					signatureExpander(),
 					initialState);
+		} else {
+			LOG.error(ERROR.getMarker(), "Unrecognized SwirldState class: {}", initialState.getClass());
+			SystemUtils.exitSystem(SystemExitReason.FATAL_ERROR);
+			return null;
 		}
-	}
-
-	private static SignatureExpander signatureExpander() {
-		return new SignatureExpanderImpl();
 	}
 
 	/**

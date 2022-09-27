@@ -19,7 +19,7 @@ package com.swirlds.platform.state.address;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.interfaces.Archivable;
 import com.swirlds.common.system.address.AddressBook;
-import com.swirlds.platform.chatter.protocol.Purgable;
+import com.swirlds.common.sequence.Purgable;
 
 /**
  * An in-state collection of address books from recent rounds.

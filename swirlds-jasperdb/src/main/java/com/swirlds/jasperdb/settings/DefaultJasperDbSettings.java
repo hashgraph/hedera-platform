@@ -18,7 +18,6 @@ package com.swirlds.jasperdb.settings;
 
 import com.swirlds.jasperdb.collections.ThreeLongsList;
 
-import java.nio.file.Path;
 import java.time.temporal.ChronoUnit;
 
 import static com.swirlds.common.utility.Units.GIBIBYTES_TO_BYTES;
@@ -30,8 +29,7 @@ import static com.swirlds.common.utility.Units.GIBIBYTES_TO_BYTES;
  * without Browser-configured settings.
  */
 public class DefaultJasperDbSettings implements JasperDbSettings {
-	/** The default storage directory to create databases in */
-	public static final String DEFAULT_STORAGE_DIRECTORY = Path.of("database").toAbsolutePath().toString();
+
 	/** A default of 500 million should be big enough to allow us a few billion before having to think about it */
 	public static final int DEFAULT_MAX_NUM_OF_KEYS = 500_000_000;
 	/** Default to 100% on disk */
@@ -57,14 +55,6 @@ public class DefaultJasperDbSettings implements JasperDbSettings {
 	public static final long DEFAULT_KEY_SET_BLOOM_FILTER_SIZE_IN_BYTES = 2L * GIBIBYTES_TO_BYTES;
 	public static final long DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_SIZE = 1_000_000_000;
 	public static final int DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_BUFFER = 1_000_000;
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public String getStoragePath() {
-		return DEFAULT_STORAGE_DIRECTORY;
-	}
 
 	/**
 	 * {@inheritDoc}

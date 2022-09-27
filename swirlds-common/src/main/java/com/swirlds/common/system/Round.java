@@ -17,8 +17,11 @@
 package com.swirlds.common.system;
 
 import com.swirlds.common.system.events.ConsensusEvent;
+import com.swirlds.common.system.transaction.ConsensusTransaction;
 
 import java.util.Iterator;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * A collection of unique events that reached consensus at the same time. The consensus data for every event in the round
@@ -46,4 +49,35 @@ public interface Round {
 	 * @return the round number
 	 */
 	long getRoundNum();
+
+	/**
+	 * A convenience method that supplies every transaction in this round to a consumer.
+	 *
+	 * @param transactionConsumer
+	 * 		a transaction consumer
+	 */
+	default void forEachTransaction(final Consumer<ConsensusTransaction> transactionConsumer) {
+		for (final Iterator<ConsensusEvent> eventIt = eventIterator(); eventIt.hasNext(); ) {
+			final ConsensusEvent event = eventIt.next();
+			for (final Iterator<ConsensusTransaction> transIt = event.consensusTransactionIterator(); transIt.hasNext(); ) {
+				transactionConsumer.accept(transIt.next());
+			}
+		}
+	}
+
+	/**
+	 * A convenience method that supplies every transaction in this round to a consumer, along with the transaction's
+	 * event.
+	 *
+	 * @param consumer
+	 * 		an event and transaction consumer
+	 */
+	default void forEachEventTransaction(final BiConsumer<ConsensusEvent, ConsensusTransaction> consumer) {
+		for (final Iterator<ConsensusEvent> eventIt = eventIterator(); eventIt.hasNext(); ) {
+			final ConsensusEvent event = eventIt.next();
+			for (final Iterator<ConsensusTransaction> transIt = event.consensusTransactionIterator(); transIt.hasNext(); ) {
+				consumer.accept(event, transIt.next());
+			}
+		}
+	}
 }

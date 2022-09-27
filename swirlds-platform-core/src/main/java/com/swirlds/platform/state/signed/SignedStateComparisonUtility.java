@@ -30,10 +30,10 @@ import com.swirlds.platform.Browser;
 import com.swirlds.platform.swirldapp.AppLoaderException;
 import com.swirlds.platform.swirldapp.SwirldAppLoader;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -42,7 +42,9 @@ import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 
+import static com.swirlds.common.io.utility.FileUtils.getAbsolutePath;
 import static com.swirlds.common.merkle.iterators.MerkleIterationOrder.PRE_ORDERED_DEPTH_FIRST;
+import static com.swirlds.platform.state.signed.SignedStateFileReader.readStateFile;
 
 /**
  * A tool for loading and comparing signed states.
@@ -78,9 +80,8 @@ public final class SignedStateComparisonUtility {
 	public static SignedState loadSignedState(final String path)
 			throws IOException, ExecutionException, InterruptedException {
 
-		final File file = new File(path);
-		final SignedStateFileManager.DeserializedSignedState deserializedSignedState =
-				SignedStateFileManager.readSignedStateFromFile(file);
+		final Path file = getAbsolutePath(path);
+		final DeserializedSignedState deserializedSignedState = readStateFile(file);
 		final SignedState signedState = deserializedSignedState.signedState();
 
 		CryptoFactory.getInstance().digestTreeAsync(signedState.getState()).get();

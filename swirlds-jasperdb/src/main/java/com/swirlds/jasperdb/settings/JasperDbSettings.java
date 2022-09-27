@@ -24,15 +24,6 @@ import java.time.temporal.ChronoUnit;
 public interface JasperDbSettings {
 
 	/**
-	 * Get the base path for database storage, JasperDbBuilder will create database directories inside this storage
-	 * path.
-	 * This is the machine specific part of the database path.
-	 *
-	 * @return Database storage base directory.
-	 */
-	String getStoragePath();
-
-	/**
 	 * Get the maximum number of unique keys we expect to be stored in this database. This is used for calculating in
 	 * memory index sizes.
 	 * <p><b>IMPORTANT: This can only be set before a new database is created, changing on an existing database will

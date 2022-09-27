@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.eventhandling;
 
-import com.swirlds.platform.ConsensusRound;
+import com.swirlds.platform.internal.ConsensusRound;
 import com.swirlds.platform.stats.ConsensusHandlingStats;
 
 import java.util.Collection;

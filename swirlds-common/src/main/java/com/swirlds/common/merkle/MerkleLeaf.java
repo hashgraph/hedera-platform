@@ -21,8 +21,8 @@ import com.swirlds.common.io.ExternalSelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 /**
  * A Merkle Leaf has only data and does not have children.
@@ -39,7 +39,7 @@ public interface MerkleLeaf extends MerkleNode, SerializableHashable, ExternalSe
 	 * {@inheritDoc}
 	 */
 	@Override
-	default void serialize(final SerializableDataOutputStream out, final File outputDirectory) throws IOException {
+	default void serialize(final SerializableDataOutputStream out, final Path outputDirectory) throws IOException {
 		// Default implementation ignores the provided directory. Override this method to utilize the directory.
 		serialize(out);
 	}
@@ -50,7 +50,7 @@ public interface MerkleLeaf extends MerkleNode, SerializableHashable, ExternalSe
 	@Override
 	default void deserialize(
 			final SerializableDataInputStream in,
-			final File inputDirectory,
+			final Path inputDirectory,
 			final int version) throws IOException {
 		// Default implementation ignores the provided directory. Override this method to utilize the directory.
 		deserialize(in, version);

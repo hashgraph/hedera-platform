@@ -28,7 +28,6 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * A wrapper for a LongList that has two modes, direct pass though or an overlaid cache buffer. Important, any changes
  * directly to the wrapped list while it is wrapped will cause this classes state to get out of sync.
- * <p>
  */
 public class LongListBufferedWrapper extends LongList implements Closeable {
 
@@ -62,7 +61,7 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 
 		private void flushOps() {
 			long curValue = ops.get();
-			for (;;) {
+			for (; ; ) {
 				final long oldValue = curValue;
 				curValue = ops.compareAndExchange(curValue, curValue ^ FLAG);
 				if (curValue == oldValue) break;
@@ -75,7 +74,7 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 
 		long acquire() {
 			long curValue = ops.get();
-			for (;;) {
+			for (; ; ) {
 				final long inc = (curValue & FLAG) == 0 ? INCREMENT0 : INCREMENT1;
 				final long oldValue = curValue;
 				curValue = ops.compareAndExchange(curValue, curValue + inc);
@@ -83,12 +82,12 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 			}
 		}
 
-		void release(long inc) {
+		void release(final long inc) {
 			ops.addAndGet(-inc);
 		}
 
 		void start() {
-			if (!skipCacheOnWrite) return;	// already started
+			if (!skipCacheOnWrite) return;    // already started
 			skipCacheOnWrite = false;
 			cachedChanges.set(new ConcurrentHashMap<>());
 			// Ensure all operations see cachedChanges != null
@@ -96,7 +95,7 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 		}
 
 		void stop() {
-			if (skipCacheOnWrite) return;	//already stopped
+			if (skipCacheOnWrite) return;    //already stopped
 			skipCacheOnWrite = true;
 			// Ensure all operations see skipCacheOnWrite == true
 			flushOps();
@@ -316,7 +315,7 @@ public class LongListBufferedWrapper extends LongList implements Closeable {
 	 * 		If there was a problem creating or writing to the file.
 	 */
 	@Override
-	public void writeToFile(Path file) throws IOException {
+	public void writeToFile(final Path file) throws IOException {
 		wrappedLongList.writeToFile(file);
 	}
 

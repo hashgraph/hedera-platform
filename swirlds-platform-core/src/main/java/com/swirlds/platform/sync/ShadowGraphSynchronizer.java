@@ -19,7 +19,7 @@ package com.swirlds.platform.sync;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 import com.swirlds.common.threading.pool.ParallelExecutionException;
 import com.swirlds.common.threading.pool.ParallelExecutor;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.consensus.GraphGenerations;

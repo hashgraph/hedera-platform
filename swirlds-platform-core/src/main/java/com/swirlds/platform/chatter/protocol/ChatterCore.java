@@ -16,6 +16,7 @@
 
 package com.swirlds.platform.chatter.protocol;
 
+import com.swirlds.common.sequence.Purgable;
 import com.swirlds.common.statistics.StatEntry;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.utility.CommonUtils;

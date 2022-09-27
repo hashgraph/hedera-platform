@@ -28,9 +28,8 @@ import com.swirlds.common.utility.CommonUtils;
  * <p>
  * The timer starts at instantiation, and can be reset with the reset() method.
  */
-public class SpeedometerMetric extends Metric {
+public class SpeedometerMetric extends AbstractDistributionMetric {
 
-	private final double halfLife;
 	private final Clock clock;
 
 	@SuppressWarnings("removal")
@@ -97,8 +96,7 @@ public class SpeedometerMetric extends Metric {
 			final String format,
 			final double halfLife,
 			final Clock clock) {
-		super(category, name, description, format);
-		this.halfLife = halfLife;
+		super(category, name, description, format, halfLife);
 		this.clock = CommonUtils.throwArgNull(clock, "clock");
 		this.speedometer = new StatsSpeedometer(halfLife, clock);
 	}
@@ -110,23 +108,6 @@ public class SpeedometerMetric extends Metric {
 	@Override
 	public void init() {
 		speedometer = new StatsSpeedometer(halfLife, clock);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void reset() {
-		speedometer.reset(halfLife);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@SuppressWarnings("removal")
-	@Override
-	public Object getValue() {
-		return getCyclesPerSecond();
 	}
 
 	/**
@@ -171,8 +152,8 @@ public class SpeedometerMetric extends Metric {
 	 *
 	 * @return the estimated number of calls to cycle() per second, recently
 	 */
-	public double getCyclesPerSecond() {
+	@Override
+	public double get() {
 		return speedometer.getCyclesPerSecond();
 	}
-
 }

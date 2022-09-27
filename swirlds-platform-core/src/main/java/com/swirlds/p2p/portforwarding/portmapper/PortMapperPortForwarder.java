@@ -26,6 +26,7 @@ import com.offbynull.portmapper.gateways.process.internalmessages.KillProcessReq
 import com.offbynull.portmapper.mapper.MappedPort;
 import com.offbynull.portmapper.mapper.PortMapper;
 import com.offbynull.portmapper.mapper.PortType;
+import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.p2p.portforwarding.PortForwarder;
 import com.swirlds.p2p.portforwarding.PortMapping;
 import com.swirlds.p2p.portforwarding.PortMappingListener;
@@ -142,10 +143,11 @@ public class PortMapperPortForwarder implements PortForwarder, Runnable {
 				}
 			}
 			if (minSleep > 0) {
-				refresher = new Thread(new MappingRefresher(this, minSleep),
-						"MappingRefresher");
-				refresher.setDaemon(true);
-				refresher.start();
+				refresher = new ThreadConfiguration()
+						.setComponent("network")
+						.setThreadName("MappingRefresher")
+						.setRunnable(new MappingRefresher(this, minSleep))
+						.build(true /*start*/);
 			}
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();

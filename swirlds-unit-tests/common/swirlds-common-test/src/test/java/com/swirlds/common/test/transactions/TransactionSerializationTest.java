@@ -21,7 +21,7 @@ import com.swirlds.common.constructable.ConstructableRegistryException;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.SerializableWithKnownLength;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.system.transaction.SwirldTransaction;
+import com.swirlds.common.system.transaction.internal.SwirldTransaction;
 import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
 import com.swirlds.common.system.transaction.internal.SystemTransactionBitsPerSecond;
 import com.swirlds.common.system.transaction.internal.SystemTransactionPing;
@@ -35,9 +35,9 @@ import java.io.IOException;
 import java.util.Random;
 
 import static com.swirlds.common.io.streams.SerializableDataOutputStream.getInstanceSerializedLength;
-import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_BITS_PER_SECOND;
-import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_PING_MICROSECONDS;
-import static com.swirlds.common.system.transaction.TransactionType.SYS_TRANS_STATE_SIG;
+import static com.swirlds.common.system.transaction.SystemTransactionType.SYS_TRANS_BITS_PER_SECOND;
+import static com.swirlds.common.system.transaction.SystemTransactionType.SYS_TRANS_PING_MICROSECONDS;
+import static com.swirlds.common.system.transaction.SystemTransactionType.SYS_TRANS_STATE_SIG;
 import static com.swirlds.common.test.io.SerializationUtils.serializeDeserialize;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -62,7 +62,7 @@ class TransactionSerializationTest {
 
 	@ParameterizedTest
 	@ValueSource(ints = { 0, 1, 2, 10, 64 })
-	void SignatureSerializeDeserializeTest(int sigSize) throws IOException {
+	void SignatureSerializeDeserializeTest(final int sigSize) throws IOException {
 		byte[] nbyte = null;
 		if (sigSize > 0) {
 			nbyte = new byte[sigSize];
@@ -81,8 +81,8 @@ class TransactionSerializationTest {
 
 
 		assertEquals(systemTransactionSignature, deserialized);
-		assertEquals(systemTransactionSignature.getTransactionType(), SYS_TRANS_STATE_SIG);
-		assertEquals(deserialized.getTransactionType(), SYS_TRANS_STATE_SIG);
+		assertEquals(systemTransactionSignature.getType(), SYS_TRANS_STATE_SIG);
+		assertEquals(deserialized.getType(), SYS_TRANS_STATE_SIG);
 
 		TestExpectedSerializationLength(systemTransactionSignature, true);
 		TestExpectedSerializationLength(deserialized, true);
@@ -94,7 +94,7 @@ class TransactionSerializationTest {
 
 	@ParameterizedTest
 	@ValueSource(ints = { 0, 1, 2, 10, 64, 100 })
-	void BitsSecondSerializeDeserializeTest(int nodeAmount) throws IOException {
+	void BitsSecondSerializeDeserializeTest(final int nodeAmount) throws IOException {
 		long[] numbers = null;
 		if (nodeAmount > 0) {
 			numbers = new long[nodeAmount];
@@ -103,8 +103,9 @@ class TransactionSerializationTest {
 			}
 		}
 
-		SystemTransactionBitsPerSecond systemTransactionBitsPerSecond = new SystemTransactionBitsPerSecond(numbers);
-		SystemTransactionBitsPerSecond deserialized = serializeDeserialize(systemTransactionBitsPerSecond);
+		final SystemTransactionBitsPerSecond systemTransactionBitsPerSecond = new SystemTransactionBitsPerSecond(
+				numbers);
+		final SystemTransactionBitsPerSecond deserialized = serializeDeserialize(systemTransactionBitsPerSecond);
 
 		assertArrayEquals(systemTransactionBitsPerSecond.getAvgBitsPerSecSent(), deserialized.getAvgBitsPerSecSent());
 		assertEquals(systemTransactionBitsPerSecond.isSystem(), deserialized.isSystem());
@@ -114,8 +115,8 @@ class TransactionSerializationTest {
 				deserialized.getMinimumSupportedVersion());
 
 		assertEquals(systemTransactionBitsPerSecond, deserialized);
-		assertEquals(systemTransactionBitsPerSecond.getTransactionType(), SYS_TRANS_BITS_PER_SECOND);
-		assertEquals(deserialized.getTransactionType(), SYS_TRANS_BITS_PER_SECOND);
+		assertEquals(systemTransactionBitsPerSecond.getType(), SYS_TRANS_BITS_PER_SECOND);
+		assertEquals(SYS_TRANS_BITS_PER_SECOND, deserialized.getType());
 
 		TestExpectedSerializationLength(systemTransactionBitsPerSecond, true);
 		TestExpectedSerializationLength(deserialized, true);
@@ -126,7 +127,7 @@ class TransactionSerializationTest {
 
 	@ParameterizedTest
 	@ValueSource(ints = { 0, 1, 2, 10, 64, 100 })
-	void PingSerializeDeserializeTest(int nodeAmount) throws IOException {
+	void PingSerializeDeserializeTest(final int nodeAmount) throws IOException {
 		int[] numbers = null;
 		if (nodeAmount > 0) {
 			numbers = new int[nodeAmount];
@@ -134,8 +135,8 @@ class TransactionSerializationTest {
 				numbers[i] = random.nextInt();
 			}
 		}
-		SystemTransactionPing systemTransactionPing = new SystemTransactionPing(numbers);
-		SystemTransactionPing deserialized = serializeDeserialize(systemTransactionPing);
+		final SystemTransactionPing systemTransactionPing = new SystemTransactionPing(numbers);
+		final SystemTransactionPing deserialized = serializeDeserialize(systemTransactionPing);
 
 		assertArrayEquals(systemTransactionPing.getAvgPingMilliseconds(), deserialized.getAvgPingMilliseconds());
 		assertEquals(systemTransactionPing.isSystem(), deserialized.isSystem());
@@ -144,8 +145,8 @@ class TransactionSerializationTest {
 		assertEquals(systemTransactionPing.getMinimumSupportedVersion(), deserialized.getMinimumSupportedVersion());
 
 		assertEquals(systemTransactionPing, deserialized);
-		assertEquals(systemTransactionPing.getTransactionType(), SYS_TRANS_PING_MICROSECONDS);
-		assertEquals(deserialized.getTransactionType(), SYS_TRANS_PING_MICROSECONDS);
+		assertEquals(systemTransactionPing.getType(), SYS_TRANS_PING_MICROSECONDS);
+		assertEquals(SYS_TRANS_PING_MICROSECONDS, deserialized.getType());
 
 		TestExpectedSerializationLength(systemTransactionPing, true);
 		TestExpectedSerializationLength(deserialized, true);
@@ -156,19 +157,19 @@ class TransactionSerializationTest {
 
 	@ParameterizedTest
 	@ValueSource(ints = { 1, 2, 10, 64 })
-	void ApplicationWithoutSignatures(int contentSize) throws IOException {
+	void ApplicationWithoutSignatures(final int contentSize) throws IOException {
 		byte[] nbyte = null;
 		if (contentSize > 0) {
 			nbyte = new byte[contentSize];
 			random.nextBytes(nbyte);
 		}
 
-		SwirldTransaction applicationTransaction;
+		final SwirldTransaction applicationTransaction;
 		if (contentSize == 0) {
 			//should throw NPE error
 			try {
 				applicationTransaction = new SwirldTransaction(nbyte);
-			} catch (NullPointerException e) {
+			} catch (final NullPointerException e) {
 				assertEquals("contents", e.getMessage());
 				return;
 			}
@@ -176,7 +177,7 @@ class TransactionSerializationTest {
 			applicationTransaction = new SwirldTransaction(nbyte);
 		}
 
-		SwirldTransaction deserialized = serializeDeserialize(applicationTransaction);
+		final SwirldTransaction deserialized = serializeDeserialize(applicationTransaction);
 		assertEquals(applicationTransaction, deserialized);
 
 		TestExpectedSerializationLength(applicationTransaction, true);
@@ -188,20 +189,20 @@ class TransactionSerializationTest {
 
 	@ParameterizedTest
 	@ValueSource(ints = { 1, 1024 })
-	void ApplicationWithSignatures(int contentSize) throws IOException {
+	void ApplicationWithSignatures(final int contentSize) throws IOException {
 		byte[] nbyte = null;
 		if (contentSize > 0) {
 			nbyte = new byte[contentSize];
 			random.nextBytes(nbyte);
 		}
-		SignaturePool signaturePool = new SignaturePool(1024, 4096, true);
+		final SignaturePool signaturePool = new SignaturePool(1024, 4096, true);
 
-		SwirldTransaction applicationTransaction;
+		final SwirldTransaction applicationTransaction;
 		if (contentSize == 0) {
 			//should throw NPE error
 			try {
 				applicationTransaction = new SwirldTransaction(nbyte);
-			} catch (NullPointerException e) {
+			} catch (final NullPointerException e) {
 				assertEquals("contents", e.getMessage());
 				return;
 			}
@@ -221,7 +222,8 @@ class TransactionSerializationTest {
 		TestExpectedSerializationLength(applicationTransaction, false);
 	}
 
-	static void TestExpectedSerializationLength(SerializableWithKnownLength transaction, boolean writeClassId)
+	static void TestExpectedSerializationLength(final SerializableWithKnownLength transaction,
+			final boolean writeClassId)
 			throws IOException {
 		try (final ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
 			try (final SerializableDataOutputStream dos = new SerializableDataOutputStream(bos)) {

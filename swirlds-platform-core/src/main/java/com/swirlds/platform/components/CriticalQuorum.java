@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.event.creation.ParentBasedCreationRule;
 import com.swirlds.platform.observers.EventAddedObserver;
 

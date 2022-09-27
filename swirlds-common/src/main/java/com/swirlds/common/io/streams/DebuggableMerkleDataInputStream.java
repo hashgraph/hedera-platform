@@ -21,9 +21,9 @@ import com.swirlds.common.io.streams.internal.SerializationOperation;
 import com.swirlds.common.io.streams.internal.SerializationStack;
 import com.swirlds.common.merkle.MerkleNode;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -606,7 +606,7 @@ public class DebuggableMerkleDataInputStream extends MerkleDataInputStream {
 	 */
 	@Override
 	public <T extends MerkleNode> T readMerkleTree(
-			final File directory,
+			final Path directory,
 			final int maxNumberOfNodes) throws IOException {
 
 		startOperation(SerializationOperation.READ_MERKLE_TREE);
@@ -622,7 +622,7 @@ public class DebuggableMerkleDataInputStream extends MerkleDataInputStream {
 	 */
 	@Override
 	protected void readNextNode(
-			final File directory,
+			final Path directory,
 			final Map<Long /* class ID */, Integer /* version */> deserializedVersions) throws IOException {
 		startOperation(SerializationOperation.READ_MERKLE_NODE);
 		try {

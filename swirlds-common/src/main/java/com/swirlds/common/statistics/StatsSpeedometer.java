@@ -25,7 +25,7 @@ import com.swirlds.common.statistics.internal.StatsBuffer;
  * <p>
  * The timer starts at instantiation, and can be reset with the reset() method.
  *
- * @deprecated Use {@link com.swirlds.common.metrics.SpeedometerMetric} instead of this class with {@link StatEntry}
+ * @deprecated Use {@link com.swirlds.common.metrics.SpeedometerMetric} instead
  */
 @Deprecated(forRemoval = true)
 public class StatsSpeedometer implements StatsBuffered {

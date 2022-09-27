@@ -19,8 +19,8 @@ package com.swirlds.common.io;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 /**
  * <p>
@@ -30,7 +30,7 @@ public interface ExternalSelfSerializable extends SerializableDet {
 
 	/**
 	 * Serialize data both to the stream and to a directory. The data serialized to the stream
-	 * must be sufficient for {@link #deserialize(SerializableDataInputStream, File, int)}
+	 * must be sufficient for {@link #deserialize(SerializableDataInputStream, Path, int)}
 	 * to fully reconstruct the object. Any data written to disk MUST be written to a file that
 	 * is contained by the provided directory.
 	 *
@@ -44,18 +44,18 @@ public interface ExternalSelfSerializable extends SerializableDet {
 	 */
 	void serialize(
 			SerializableDataOutputStream out,
-			File outputDirectory) throws IOException;
+			Path outputDirectory) throws IOException;
 
 	/**
 	 * Reconstruct this object using the data serialized by
-	 * {@link #serialize(SerializableDataOutputStream, File)}.
+	 * {@link #serialize(SerializableDataOutputStream, Path)}.
 	 * This method may load additional data from the provided directory.
 	 *
 	 * @param in
 	 * 		The input stream.
 	 * @param inputDirectory
 	 * 		a location on disk where data can be read. Corresponds to the directory passed to
-	 *        {@link #serialize(SerializableDataOutputStream, File)}. When reading a saved state,
+	 *        {@link #serialize(SerializableDataOutputStream, Path)}. When reading a saved state,
 	 * 		this is the same directory that holds the signed state file.
 	 * @param version
 	 * 		The version at which this object was serialized. Guaranteed to be greater or equal to the
@@ -65,7 +65,7 @@ public interface ExternalSelfSerializable extends SerializableDet {
 	 */
 	void deserialize(
 			SerializableDataInputStream in,
-			File inputDirectory,
+			Path inputDirectory,
 			int version) throws IOException;
 
 }

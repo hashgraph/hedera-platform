@@ -24,7 +24,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Iterator;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CountDownLatch;
@@ -33,8 +32,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.VIRTUAL_MERKLE_STATS;
@@ -159,8 +156,6 @@ public class VirtualPipeline {
 	 */
 	private final AtomicInteger flushBacklog = new AtomicInteger(0);
 
-	private final Lock hashLock;
-
 	/**
 	 * Create a new pipeline for a family of fast copies on a virtual root.
 	 */
@@ -169,7 +164,6 @@ public class VirtualPipeline {
 		unhashedCopies = new ConcurrentLinkedDeque<>();
 
 		alive = true;
-		hashLock = new ReentrantLock();
 		executorService = Executors.newSingleThreadExecutor(new ThreadConfiguration()
 				.setComponent(PIPELINE_COMPONENT)
 				.setThreadName(PIPELINE_THREAD_NAME)
@@ -246,7 +240,9 @@ public class VirtualPipeline {
 
 		undestroyedCopies.getAndIncrement();
 		copies.add(copy);
-		unhashedCopies.add(copy);
+		if (!copy.isHashed()) {
+			unhashedCopies.add(copy);
+		}
 		mostRecentCopy.set(copy);
 		synchronized (this) {
 			if (alive) {
@@ -304,28 +300,25 @@ public class VirtualPipeline {
 	public void hashCopy(final VirtualRoot copy) {
 		validatePipelineRegistration(copy);
 
-		hashLock.lock();
-		try {
-			if (copy.isHashed()) {
-				return;
+		for (;;) {
+			VirtualRoot unhashedCopy = unhashedCopies.peekFirst();
+			if (unhashedCopy == null) {
+				break;
 			}
-
-			final Iterator<VirtualRoot> iterator = unhashedCopies.iterator();
-
-			while (iterator.hasNext()) {
-				final VirtualRoot unhashedCopy = iterator.next();
-				iterator.remove();
-				unhashedCopy.computeHash();
-				if (unhashedCopy == copy) {
-					break;
+			synchronized (unhashedCopy) {
+				if (copy.isHashed()) {
+					return;
 				}
+				if (unhashedCopy.isHashed()) {
+					LOG.error(EXCEPTION.getMarker(), "\"unhashed\" virtual map copy has a hash!");
+				} else {
+					unhashedCopy.computeHash();
+				}
+				unhashedCopies.remove(unhashedCopy);
 			}
-
-			if (!copy.isHashed()) {
-				throw new IllegalStateException("failed to hash copy");
-			}
-		} finally {
-			hashLock.unlock();
+		}
+		if (!copy.isHashed()) {
+			throw new IllegalStateException("failed to hash copy");
 		}
 	}
 
@@ -489,7 +482,7 @@ public class VirtualPipeline {
 		boolean flushBlocked = false;
 
 		// iterate from the oldest copy to the newest
-		while (next != null) {
+		while (next != null && !Thread.currentThread().isInterrupted()) {
 			final VirtualRoot copy = next.getValue();
 
 			if (shouldFlush(copy)) {

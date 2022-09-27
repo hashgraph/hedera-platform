@@ -19,7 +19,7 @@ package com.swirlds.common.internal;
 import com.swirlds.common.system.address.Address;
 import com.swirlds.common.system.address.AddressBook;
 
-import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -32,14 +32,14 @@ public class ApplicationDefinition {
 	private final String[] appParameters;
 	private final String appJarFileName;
 	private final String mainClassName;
-	private final File appJarPath;
+	private final Path appJarPath;
 	private final AddressBook addressBook;
 
 	private byte[] masterKey;
 	private byte[] swirldId;
 
 	public ApplicationDefinition(final String swirldName, final String[] appParameters, final String appJarFileName,
-			final String mainClassName, final File appJarPath, final List<Address> bookData) {
+			final String mainClassName, final Path appJarPath, final List<Address> bookData) {
 		this.swirldName = swirldName;
 		this.appParameters = appParameters;
 		this.appJarFileName = appJarFileName;
@@ -68,7 +68,7 @@ public class ApplicationDefinition {
 		return mainClassName.substring(0, mainClassName.length() - 4);
 	}
 
-	public File getAppJarPath() {
+	public Path getAppJarPath() {
 		return appJarPath;
 	}
 

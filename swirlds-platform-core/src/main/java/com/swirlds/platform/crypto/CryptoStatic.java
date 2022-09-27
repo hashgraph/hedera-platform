@@ -31,10 +31,10 @@ import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 import javax.security.auth.x500.X500Principal;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.Path;
 import java.security.InvalidKeyException;
 import java.security.KeyPair;
 import java.security.KeyStore;
@@ -278,10 +278,10 @@ public final class CryptoStatic {
 	 * @throws KeyLoadingException
 	 * 		if the file is empty or another issue occurs while reading it
 	 */
-	public static KeyStore loadKeys(final File file, final char[] password)
+	public static KeyStore loadKeys(final Path file, final char[] password)
 			throws KeyStoreException, KeyLoadingException {
 		final KeyStore store = createEmptyTrustStore();
-		try (final FileInputStream fis = new FileInputStream(file)) {
+		try (final FileInputStream fis = new FileInputStream(file.toFile())) {
 			store.load(fis, password);
 			if (store.size() == 0) {
 				throw new KeyLoadingException("there are no valid keys or certificates in " + file);
@@ -323,7 +323,7 @@ public final class CryptoStatic {
 	 */
 	public static KeysAndCerts[] loadKeysAndCerts(
 			final AddressBook addressBook,
-			final File keysDirPath,
+			final Path keysDirPath,
 			final char[] password)
 			throws KeyStoreException, KeyLoadingException, UnrecoverableKeyException, NoSuchAlgorithmException {
 		final int n = addressBook.getSize();
@@ -336,8 +336,7 @@ public final class CryptoStatic {
 			names.add(name);
 		}
 
-		final KeyStore allPublic = loadKeys(
-				CommonUtils.canonicalFile(keysDirPath, PUBLIC_KEYS_FILE), password);
+		final KeyStore allPublic = loadKeys(keysDirPath.resolve(PUBLIC_KEYS_FILE), password);
 
 		final PublicStores publicStores = PublicStores.fromAllPublic(allPublic, names);
 
@@ -349,11 +348,7 @@ public final class CryptoStatic {
 				continue;
 			}
 			final String name = nameToAlias(addressBook.getAddress(i).getSelfName());
-			final KeyStore privateKS = loadKeys(
-					CommonUtils.canonicalFile(
-							keysDirPath,
-							getPrivateKeysFileName(name)),
-					password);
+			final KeyStore privateKS = loadKeys(keysDirPath.resolve(getPrivateKeysFileName(name)), password);
 
 			keysAndCerts[i] = KeysAndCerts.loadExisting(
 					name,

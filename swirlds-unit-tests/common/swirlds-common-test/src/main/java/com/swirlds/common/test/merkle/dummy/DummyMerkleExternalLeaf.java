@@ -22,10 +22,10 @@ import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
 import com.swirlds.common.test.merkle.util.MerkleTestUtils;
 
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -83,19 +83,19 @@ public class DummyMerkleExternalLeaf
 		return value;
 	}
 
-	private File getFile(final File directory) {
-		return directory.toPath().resolve(
-				"DummyMerkleExternalLeaf-" + seed + "-" + averageSize + "-" + standardDeviation).toFile();
+	private Path getFile(final Path directory) {
+		return directory.resolve(
+				"DummyMerkleExternalLeaf-" + seed + "-" + averageSize + "-" + standardDeviation);
 	}
 
 	@Override
-	public void serialize(final SerializableDataOutputStream out, final File outputDirectory) throws IOException {
+	public void serialize(final SerializableDataOutputStream out, final Path outputDirectory) throws IOException {
 		out.writeLong(seed);
 		out.writeInt(averageSize);
 		out.writeInt(standardDeviation);
 
 		try (final SerializableDataOutputStream fileOut =
-					 new SerializableDataOutputStream(new FileOutputStream(getFile(outputDirectory)))) {
+					 new SerializableDataOutputStream(new FileOutputStream(getFile(outputDirectory).toFile()))) {
 			fileOut.writeNormalisedString(generateValue());
 		}
 	}
@@ -103,14 +103,14 @@ public class DummyMerkleExternalLeaf
 	@Override
 	public void deserialize(
 			final SerializableDataInputStream in,
-			final File inputDirectory,
+			final Path inputDirectory,
 			final int version) throws IOException {
 		seed = in.readLong();
 		averageSize = in.readInt();
 		standardDeviation = in.readInt();
 
 		try (final SerializableDataInputStream fileIn =
-					 new SerializableDataInputStream(new FileInputStream(getFile(inputDirectory)))) {
+					 new SerializableDataInputStream(new FileInputStream(getFile(inputDirectory).toFile()))) {
 
 			assertEquals(generateValue(), fileIn.readNormalisedString(Integer.MAX_VALUE),
 					"deserialized value should match");

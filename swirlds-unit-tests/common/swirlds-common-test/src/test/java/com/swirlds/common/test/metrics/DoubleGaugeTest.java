@@ -17,9 +17,14 @@
 package com.swirlds.common.test.metrics;
 
 import com.swirlds.common.metrics.DoubleGauge;
+import com.swirlds.common.metrics.Metric;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -44,7 +49,8 @@ class DoubleGaugeTest {
 		assertEquals(DESCRIPTION, gauge.getDescription(), "The description was not set correctly in the constructor");
 		assertEquals(FORMAT, gauge.getFormat(), "The format was not set correctly in the constructor");
 		assertEquals(0.0, gauge.get(), EPSILON, "The value was not initialized correctly");
-		assertEquals(0.0, gauge.getValue(), EPSILON, "The value was not initialized correctly");
+		assertEquals(0.0, gauge.get(VALUE), EPSILON, "The value was not initialized correctly");
+		assertEquals(List.of(VALUE), gauge.getValueTypes(), "ValueTypes should be [VALUE]");
 	}
 
 	@Test
@@ -70,7 +76,8 @@ class DoubleGaugeTest {
 		assertEquals(DESCRIPTION, gauge.getDescription(), "The description was not set correctly in the constructor");
 		assertEquals(FORMAT, gauge.getFormat(), "The format was not set correctly in the constructor");
 		assertEquals(Math.PI, gauge.get(), EPSILON, "The value was not initialized correctly");
-		assertEquals(Math.PI, gauge.getValue(), EPSILON, "The value was not initialized correctly");
+		assertEquals(Math.PI, gauge.get(VALUE), EPSILON, "The value was not initialized correctly");
+		assertEquals(List.of(VALUE), gauge.getValueTypes(), "ValueTypes should be [VALUE]");
 	}
 
 	@Test
@@ -96,14 +103,45 @@ class DoubleGaugeTest {
 
 		// then
 		assertEquals(Math.E, gauge.get(), EPSILON, "Value should be " + Math.E);
-		assertEquals(Math.E, gauge.getValue(), EPSILON, "Value should be " + Math.E);
+		assertEquals(Math.E, gauge.get(VALUE), EPSILON, "Value should be " + Math.E);
 
 		// when
 		gauge.set(Math.sqrt(2.0));
 
 		// then
 		assertEquals(Math.sqrt(2.0), gauge.get(), EPSILON, "Value should be " + Math.sqrt(2.0));
-		assertEquals(Math.sqrt(2.0), gauge.getValue(), EPSILON, "Value should be " + Math.sqrt(2.0));
+		assertEquals(Math.sqrt(2.0), gauge.get(VALUE), EPSILON, "Value should be " + Math.sqrt(2.0));
 	}
 
+	@Test
+	void testSnapshot() {
+		// given
+		final DoubleGauge gauge = new DoubleGauge(CATEGORY, NAME, DESCRIPTION, FORMAT, Math.PI);
+
+		// when
+		final List<Pair<Metric.ValueType, Object>> snapshot = gauge.takeSnapshot();
+
+		// then
+		assertEquals(Math.PI, gauge.get(), EPSILON, "Value should be " + Math.PI);
+		assertEquals(Math.PI, gauge.get(VALUE), EPSILON, "Value should be " + Math.PI);
+		assertEquals(List.of(Pair.of(VALUE, Math.PI)), snapshot, "Snapshot is not correct");
+	}
+
+	@Test
+	void testInvalidGets() {
+		// given
+		final DoubleGauge gauge = new DoubleGauge(CATEGORY, NAME, DESCRIPTION, FORMAT, Math.PI);
+
+		// then
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(null),
+				"Calling get() with null should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.COUNTER),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.MIN),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.MAX),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+		assertThrows(IllegalArgumentException.class, () -> gauge.get(Metric.ValueType.STD_DEV),
+				"Calling get() with an unsupported MetricType should throw an IAE");
+	}
 }

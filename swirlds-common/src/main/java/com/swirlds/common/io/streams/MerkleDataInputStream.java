@@ -28,10 +28,10 @@ import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.exceptions.IllegalChildCountException;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
@@ -92,7 +92,7 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 	 * 		version of this leaf
 	 */
 	private void finishReadingLeaf(
-			final File directory,
+			final Path directory,
 			final MerkleLeaf node,
 			final int version) throws IOException {
 		((ExternalSelfSerializable) node).deserialize(this, directory, version);
@@ -110,7 +110,7 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 	 * 		version of this internal node
 	 */
 	private void finishReadingInternal(
-			final File directory,
+			final Path directory,
 			final MerkleInternal node,
 			final int version) throws IOException {
 
@@ -141,7 +141,7 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 	 * 		versions of deserialized nodes
 	 */
 	protected void readNextNode(
-			final File directory,
+			final Path directory,
 			final Map<Long /* class ID */, Integer /* version */> deserializedVersions) throws IOException {
 		final long classId = readLong();
 		recordClassId(classId);
@@ -176,15 +176,15 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 	 * Perform basic sanity checks on the output directory.
 	 */
 	@SuppressWarnings("DuplicatedCode")
-	private static void validateDirectory(final File directory) {
+	private static void validateDirectory(final Path directory) {
 		throwArgNull(directory, "directory");
-		if (!directory.exists()) {
+		if (!Files.exists(directory)) {
 			throw new IllegalArgumentException("directory " + directory + " does not exist");
 		}
-		if (!directory.isDirectory()) {
+		if (!Files.isDirectory(directory)) {
 			throw new IllegalArgumentException("'directory' " + directory + " is not a directory");
 		}
-		if (!Files.isReadable(directory.toPath())) {
+		if (!Files.isReadable(directory)) {
 			throw new IllegalArgumentException("invalid read permissions for directory " + directory);
 		}
 	}
@@ -203,7 +203,7 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
 	 * 		thrown when version or the options or nodes count are invalid
 	 */
 	public <T extends MerkleNode> T readMerkleTree(
-			final File directory,
+			final Path directory,
 			final int maxNumberOfNodes) throws IOException {
 
 		validateDirectory(directory);

@@ -18,11 +18,11 @@ package com.swirlds.platform.state;
 
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.SwirldState2;
 import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
-import com.swirlds.platform.ConsensusRound;
-import com.swirlds.platform.EventImpl;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.SettingsProvider;
-import com.swirlds.platform.components.SignatureExpander;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
 import com.swirlds.platform.eventhandling.EventTransactionPool;
@@ -39,10 +39,10 @@ import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.platform.state.SwirldStateManagerUtils.fastCopy;
 
 /**
- * <p>Manages all interactions with the 3 state objects required by {@link SwirldState.SwirldState2}.</p>
+ * <p>Manages all interactions with the state object required by {@link SwirldState2}.</p>
  *
- * <p>Two threads modify states in this class: pre-consensus event handler and consensus event handler. Transactions
- * are submitted by a different thread. Other threads can access parts of the states by calling
+ * <p>Two threads interact with states in this class: pre-consensus event handler and consensus event handler.
+ * Transactions are submitted by a different thread. Other threads can access the states by calling
  * {@link #getCurrentSwirldState()} and {@link #getConsensusState()}. Sync threads access state to check if there is
  * an active freeze period. Careful attention must be paid to changes in this class regarding locking and
  * synchronization in this class and its utility classes.</p>
@@ -67,15 +67,15 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	/** Handle transactions by applying them to a state */
 	private final TransactionHandler transactionHandler;
 
-	/** Expands signatures on pre-consensus transactions. */
-	private final SignatureExpander signatureExpander;
+	/** Handles system transactions */
+	private final SystemTransactionHandler systemTransactionHandler;
 
-	// Used of creating mock instances in unit testing
+	// Used for creating mock instances in unit testing
 	public SwirldStateManagerDouble() {
 		stats = null;
 		transactionPool = null;
+		systemTransactionHandler = null;
 		transactionHandler = null;
-		signatureExpander = null;
 	}
 
 	/**
@@ -91,8 +91,6 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 * 		a static settings provider
 	 * @param inFreeze
 	 * 		indicates if the system is currently in a freeze
-	 * @param signatureExpander
-	 * 		expands signatures on transactions
 	 * @param state
 	 * 		the genesis state
 	 */
@@ -102,12 +100,11 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 			final SwirldStateStats stats,
 			final SettingsProvider settings,
 			final BooleanSupplier inFreeze,
-			final SignatureExpander signatureExpander,
 			final State state) {
+		this.systemTransactionHandler = systemTransactionHandler;
 		this.stats = stats;
-		this.signatureExpander = signatureExpander;
 		this.transactionPool = new EventTransactionPool(settings, inFreeze);
-		this.transactionHandler = new TransactionHandler(selfId, systemTransactionHandler, stats);
+		this.transactionHandler = new TransactionHandler(selfId, stats);
 		initialState(state);
 	}
 
@@ -123,35 +120,27 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void handlePreConsensusEvent(final EventImpl event) {
+	public void preHandle(final EventImpl event) {
 		final long startTime = System.nanoTime();
 
-		// The event may have reached consensus while waiting in the queue.
-		// Use consensus time if available. Otherwise, use an estimated time.
-		Instant consensusTime = event.getConsensusTimestamp();
-		if (consensusTime == null) {
-			consensusTime = event.getEstimatedTime();
-		}
-
-		// The consensus thread updates the latestImmutableState reference when a fast copy is made and releases the
-		// old state. This could cause the old state to be destroyed before or during pre-consensus handling. So
-		// we must continue to get the reference until we get one we can reserve.
 		State immutableState = latestImmutableState.get();
 		while (!immutableState.tryReserve()) {
 			immutableState = latestImmutableState.get();
 		}
-
-		// Say that this event is not consensus, even if it is, to keep the contract that every
-		// transaction is handled twice, once with isConsensus = false and once with isConsensus = true
-		transactionHandler.handleEventTransactions(
-				event,
-				consensusTime,
-				false,
-				immutableState,
-				true,
-				null
-		);
+		transactionHandler.preHandle(event, (SwirldState2) immutableState.getSwirldState());
 		immutableState.release();
+
+		stats.preHandleTime(startTime, System.nanoTime());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void handlePreConsensusEvent(final EventImpl event) {
+		final long startTime = System.nanoTime();
+
+		systemTransactionHandler.handleSystemTransactions(event);
 
 		stats.preConsensusHandleTime(startTime, System.nanoTime());
 	}
@@ -161,15 +150,12 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 */
 	@Override
 	public void handleConsensusRound(final ConsensusRound round) {
-		final State state = stateRef.get();
-		transactionHandler.handleConsensusRound(round, state, null);
+		transactionHandler.handleRound(round, stateRef.get());
+		systemTransactionHandler.handleSystemTransactions(round);
 	}
 
 	/**
-	 * Return the current state of the app. It changes frequently, so this needs to be called frequently. This method
-	 * also keeps track of which state was last returned, so that it can guarantee that that state will not be deleted.
-	 *
-	 * @return the current app state
+	 * {@inheritDoc}
 	 */
 	public SwirldState getCurrentSwirldState() {
 		return stateRef.get().getSwirldState();
@@ -196,7 +182,7 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	}
 
 	/**
-	 * Clears the transaction pool
+	 * {@inheritDoc}
 	 * <p>
 	 * NOTE: This will only clear current transactions, it will not prevent new transactions from being added while
 	 * clear is being called
@@ -292,14 +278,6 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 			s.getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
 			return s;
 		});
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void expandSignatures(final EventImpl event) {
-		signatureExpander.expandSignatures(event.getTransactions(), getConsensusState());
 	}
 
 	/**

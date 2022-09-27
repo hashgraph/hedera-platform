@@ -17,14 +17,19 @@
 package com.swirlds.common.metrics;
 
 import com.swirlds.common.utility.CommonUtils;
+import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.List;
 import java.util.concurrent.atomic.LongAdder;
+
+import static com.swirlds.common.metrics.Metric.ValueType.COUNTER;
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * A {@code Counter} can be used to count events and similar things.
  *
- * A {@code Counter} can be initialized in one of two modes: {@link CounterMode#INCREASE_ONLY} and
- * {@link  CounterMode#INCREASE_AND_DECREASE}. In {@code INCREASE_ONLY}-mode, the value of the {@code Counter}
+ * A {@code Counter} can be initialized in one of two modes: {@link Mode#INCREASE_ONLY} and
+ * {@link  Mode#INCREASE_AND_DECREASE}. In {@code INCREASE_ONLY}-mode, the value of the {@code Counter}
  * can only increase, and therefore it can never become negative. In {@code INCREASE_AND_DECREASE}-mode,
  * the value can increase and decrease and also become negative
  */
@@ -37,13 +42,13 @@ public class Counter extends Metric {
 	 *
 	 * A {@code Counter} can be strictly increasing only, or it can also be allowed to decrease
 	 */
-	public enum CounterMode { INCREASE_ONLY, INCREASE_AND_DECREASE }
+	public enum Mode { INCREASE_ONLY, INCREASE_AND_DECREASE }
 
 	private final LongAdder adder = new LongAdder();
 	private final boolean increaseOnly;
 
 	/**
-	 * Constructor of {@code Counter}. The mode of the {@code Counter} will be {@link CounterMode#INCREASE_ONLY}.
+	 * Constructor of {@code Counter}. The mode of the {@code Counter} will be {@link Mode#INCREASE_ONLY}.
 	 *
 	 * @param category
 	 * 		the kind of metric (metrics are grouped or filtered by this)
@@ -55,7 +60,7 @@ public class Counter extends Metric {
 	 * 		if one of the parameters is {@code null}
 	 */
 	public Counter(final String category, final String name, final String description) {
-		this(category, name, description, CounterMode.INCREASE_ONLY);
+		this(category, name, description, Mode.INCREASE_ONLY);
 	}
 
 	/**
@@ -72,9 +77,29 @@ public class Counter extends Metric {
 	 * @throws IllegalArgumentException
 	 * 		if one of the parameters is {@code null}
 	 */
-	public Counter(final String category, final String name, final String description, final CounterMode mode) {
+	public Counter(final String category, final String name, final String description, final Mode mode) {
 		super(category, name, description, "%d");
-		increaseOnly = CommonUtils.throwArgNull(mode, "mode") == CounterMode.INCREASE_ONLY;
+		increaseOnly = CommonUtils.throwArgNull(mode, "mode") == Mode.INCREASE_ONLY;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public List<ValueType> getValueTypes() {
+		return increaseOnly? Metric.COUNTER_TYPE : Metric.VALUE_TYPE;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Long get(final ValueType valueType) {
+		CommonUtils.throwArgNull(valueType, "valueType");
+		if ((valueType == COUNTER) || (valueType == VALUE)) {
+			return get();
+		}
+		throw new IllegalArgumentException("Unsupported ValueType");
 	}
 
 	/**
@@ -82,8 +107,8 @@ public class Counter extends Metric {
 	 */
 	@SuppressWarnings("removal")
 	@Override
-	public Long getValue() {
-		return get();
+	public List<Pair<ValueType, Object>> takeSnapshot() {
+		return List.of(Pair.of(increaseOnly? COUNTER : VALUE, get()));
 	}
 
 	/**
@@ -100,8 +125,8 @@ public class Counter extends Metric {
 	 *
 	 * @return the mode of this counter
 	 */
-	public CounterMode getMode() {
-		return increaseOnly? CounterMode.INCREASE_ONLY : CounterMode.INCREASE_AND_DECREASE;
+	public Mode getMode() {
+		return increaseOnly? Mode.INCREASE_ONLY : Mode.INCREASE_AND_DECREASE;
 	}
 
 	/**

@@ -17,13 +17,13 @@
 package com.swirlds.platform.event.linking;
 
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.sequence.map.SequenceMap;
+import com.swirlds.common.sequence.map.StandardSequenceMap;
 import com.swirlds.logging.LogMarker;
-import com.swirlds.platform.EventImpl;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEventDescriptor;
-import com.swirlds.platform.chatter.protocol.purgable.PurgableMap;
-import com.swirlds.platform.chatter.protocol.purgable.twomaps.PurgableDoubleMap;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.GossipEvent;
+import com.swirlds.platform.internal.EventImpl;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,15 +42,15 @@ public class OrphanBufferingLinker extends AbstractEventLinker {
 	private final ParentFinder parentFinder;
 	private final Queue<EventImpl> eventOutput;
 	private final Queue<EventImpl> newlyLinkedEvents;
-	private final PurgableMap<ParentDescriptor, Set<ChildEvent>> missingParents;
-	private final PurgableMap<ChatterEventDescriptor, ChildEvent> orphanMap;
+	private final SequenceMap<ParentDescriptor, Set<ChildEvent>> missingParents;
+	private final SequenceMap<ChatterEventDescriptor, ChildEvent> orphanMap;
 
 	public OrphanBufferingLinker(final ParentFinder parentFinder) {
 		this.parentFinder = parentFinder;
 		this.eventOutput = new ArrayDeque<>();
 		this.newlyLinkedEvents = new ArrayDeque<>();
-		this.orphanMap = new PurgableDoubleMap<>(ChatterEventDescriptor::getGeneration);
-		this.missingParents = new PurgableDoubleMap<>(ParentDescriptor::generation);
+		this.orphanMap = new StandardSequenceMap<>(ChatterEventDescriptor::getGeneration);
+		this.missingParents = new StandardSequenceMap<>(ParentDescriptor::generation);
 	}
 
 	private static void parentNoLongerMissing(final ChildEvent child, final Hash parentHash, final EventImpl parent) {
