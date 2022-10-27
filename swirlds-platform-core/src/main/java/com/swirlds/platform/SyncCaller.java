@@ -51,6 +51,7 @@ class SyncCaller implements Runnable {
 	/** the member ID for self */
 	private final NodeId selfId;
 	private final ReconnectHelper reconnectHelper;
+	private final PlatformMetrics platformMetrics;
 
 
 	/**
@@ -69,12 +70,13 @@ class SyncCaller implements Runnable {
 	 * 		0 for the first caller thread created by this platform, 1 for the next, etc
 	 */
 	public SyncCaller(final SwirldsPlatform platform, final AddressBook addressBook, final NodeId selfId,
-			final int callerNumber, final ReconnectHelper reconnectHelper) {
+			final int callerNumber, final ReconnectHelper reconnectHelper, final PlatformMetrics platformMetrics) {
 		this.platform = platform;
 		this.addressBook = addressBook;
 		this.selfId = selfId;
 		this.callerNumber = callerNumber;
 		this.reconnectHelper = reconnectHelper;
+		this.platformMetrics = platformMetrics;
 	}
 
 	/**
@@ -92,12 +94,12 @@ class SyncCaller implements Runnable {
 					sleepAfterSync();
 				} else {
 					failedAttempts++;
-					if (failedAttempts >= Settings.callerSkipsBeforeSleep) {
+					if (failedAttempts >= Settings.getInstance().getCallerSkipsBeforeSleep()) {
 						failedAttempts = 0;
 						try {
 							// Necessary to slow down the attempts after N failures
-							Thread.sleep(Settings.sleepCallerSkips);
-							platform.getStats().sleep1perSecond.cycle();
+							Thread.sleep(Settings.getInstance().getSleepCallerSkips());
+							platformMetrics.incrementSleep1perSecond();
 						} catch (final InterruptedException ex) {
 							Thread.currentThread().interrupt();
 							return;

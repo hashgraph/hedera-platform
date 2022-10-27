@@ -83,22 +83,50 @@ public class CycleDefinition {
 		);
 	}
 
+	/**
+	 * @return the category of this metric cycle
+	 */
 	public String getCategory() {
 		return category;
 	}
 
+	/**
+	 * @return the name used for all metrics in this cycle
+	 */
 	public String getName() {
 		return name;
 	}
 
+	/**
+	 * @param index
+	 * 		the index of the cycle interval, fist index is 0
+	 * @return name of this cycle interval
+	 */
 	public String getIntervalName(final int index) {
 		return intervalNames.get(index);
 	}
 
+	/**
+	 * @param index
+	 * 		the index of the cycle interval, fist index is 0
+	 * @return the full name of this cycle interval, including the cycle prefix
+	 */
+	public String getDisplayName(final int index) {
+		return name + "-" + getIntervalName(index);
+	}
+
+	/**
+	 * @param index
+	 * 		the index of the cycle interval, fist index is 0
+	 * @return description of this cycle interval
+	 */
 	public String getIntervalDescription(final int index) {
 		return intervalDesc.get(index);
 	}
 
+	/**
+	 * @return the number of intervals in this cycle
+	 */
 	public int getNumIntervals() {
 		return numIntervals;
 	}

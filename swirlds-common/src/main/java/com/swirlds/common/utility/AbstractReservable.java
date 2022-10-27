@@ -77,11 +77,13 @@ public abstract class AbstractReservable implements Reservable {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized void release() {
+	public synchronized boolean release() {
 		final int newReservationCount = reservationCount.updateAndGet(decrement);
 		if (newReservationCount == DESTROYED_REFERENCE_COUNT) {
 			onDestroy();
+			return true;
 		}
+		return false;
 	}
 
 	/**

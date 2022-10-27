@@ -188,12 +188,13 @@ public class FCHashMap<K, V> extends AbstractMap<K, V> implements FastCopyable {
 	 * Must not be called at the same time another thread is attempting to read from this copy.
 	 */
 	@Override
-	public synchronized void release() {
+	public synchronized boolean release() {
 		final boolean previouslyReleased = released.getAndSet(true);
 		if (previouslyReleased) {
 			throw new ReferenceCountException("this object has already been released");
 		}
 		doGarbageCollection();
+		return true;
 	}
 
 	/**

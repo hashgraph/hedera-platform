@@ -204,7 +204,7 @@ public class EventCreator {
 
 		final BaseEventUnhashedData unhashedData = new BaseEventUnhashedData(
 				EventUtils.getCreatorId(otherParent),
-				signer.sign(hashedData.getHash().getValue()));
+				signer.sign(hashedData.getHash().getValue()).getSignatureBytes());
 
 		return new EventImpl(hashedData, unhashedData, selfParent, otherParent);
 	}

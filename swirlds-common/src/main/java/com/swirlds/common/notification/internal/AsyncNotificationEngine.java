@@ -37,7 +37,7 @@ public class AsyncNotificationEngine extends AbstractNotificationEngine {
 	/**
 	 * the internal listener registry that associates a given type of {@link Listener} with a {@link Dispatcher}
 	 */
-	private Map<Class<? extends Listener>, Dispatcher<? extends Listener>> listenerRegistry;
+	private final Map<Class<? extends Listener<?>>, Dispatcher<? extends Listener<?>>> listenerRegistry;
 
 
 	/**
@@ -73,14 +73,16 @@ public class AsyncNotificationEngine extends AbstractNotificationEngine {
 	 */
 	@Override
 	public <L extends Listener<N>, N extends Notification> Future<NotificationResult<N>> dispatch(
-			final Class<L> listenerClass, final N notification) {
+			final Class<L> listenerClass,
+			final N notification,
+			final StandardFuture.CompletionCallback<NotificationResult<N>> notificationsCompletedCallback) {
 
 		checkArguments(listenerClass, notification);
 
 		final DispatchOrder dispatchOrder = dispatchOrder(listenerClass);
 		final DispatchMode dispatchMode = dispatchMode(listenerClass);
 
-		final StandardFuture<NotificationResult<N>> future = new StandardFuture<>();
+		final StandardFuture<NotificationResult<N>> future = new StandardFuture<>(notificationsCompletedCallback);
 
 		try {
 			invokeWithDispatcher(dispatchOrder, listenerClass, (dispatcher) -> {
@@ -103,7 +105,7 @@ public class AsyncNotificationEngine extends AbstractNotificationEngine {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public <L extends Listener> boolean register(final Class<L> listenerClass, final L callback) {
+	public <L extends Listener<?>> boolean register(final Class<L> listenerClass, final L callback) {
 
 		checkArguments(listenerClass, callback);
 
@@ -116,13 +118,21 @@ public class AsyncNotificationEngine extends AbstractNotificationEngine {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public <L extends Listener> boolean unregister(final Class<L> listenerClass, final L callback) {
+	public <L extends Listener<?>> boolean unregister(final Class<L> listenerClass, final L callback) {
 
 		checkArguments(listenerClass, callback);
 
 		final Dispatcher<L> dispatcher = ensureDispatcherExists(listenerClass);
 
 		return dispatcher.removeListener(callback);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void unregisterAll() {
+		listenerRegistry.clear();
 	}
 
 	private <L extends Listener<N>, N extends Notification> void checkArguments(final Class<L> listenerClass,
@@ -136,7 +146,7 @@ public class AsyncNotificationEngine extends AbstractNotificationEngine {
 		}
 	}
 
-	private <L extends Listener> void checkArguments(final Class<L> listenerClass, final L callback) {
+	private static <L extends Listener<?>> void checkArguments(final Class<L> listenerClass, final L callback) {
 		if (listenerClass == null) {
 			throw new IllegalArgumentException("listenerClass");
 		}
@@ -146,7 +156,7 @@ public class AsyncNotificationEngine extends AbstractNotificationEngine {
 		}
 	}
 
-	private <L extends Listener> Dispatcher<L> ensureDispatcherExists(final Class<L> listenerClass) {
+	private <L extends Listener<?>> Dispatcher<L> ensureDispatcherExists(final Class<L> listenerClass) {
 		@SuppressWarnings("unchecked") Dispatcher<L> dispatcher = (Dispatcher<L>) listenerRegistry.putIfAbsent(
 				listenerClass,
 				new Dispatcher<>(listenerClass));

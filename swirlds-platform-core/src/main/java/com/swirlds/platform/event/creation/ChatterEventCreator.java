@@ -140,7 +140,7 @@ public class ChatterEventCreator {
 
 		final BaseEventUnhashedData unhashedData = new BaseEventUnhashedData(
 				EventUtils.getCreatorId(otherParent),
-				signer.sign(hashedData.getHash().getValue()));
+				signer.sign(hashedData.getHash().getValue()).getSignatureBytes());
 		final GossipEvent gossipEvent = new GossipEvent(hashedData, unhashedData);
 		gossipEvent.buildDescriptor();
 		return gossipEvent;

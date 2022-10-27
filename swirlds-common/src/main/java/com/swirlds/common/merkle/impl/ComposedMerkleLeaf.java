@@ -102,8 +102,8 @@ public interface ComposedMerkleLeaf extends MerkleLeaf {
 	 * {@inheritDoc}
 	 */
 	@Override
-	default void release() {
-		getMerkleImplementation().release();
+	default boolean release() {
+		return getMerkleImplementation().release();
 	}
 
 	/**

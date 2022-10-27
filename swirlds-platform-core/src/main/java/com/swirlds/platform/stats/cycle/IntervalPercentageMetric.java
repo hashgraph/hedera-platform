@@ -16,27 +16,21 @@
 
 package com.swirlds.platform.stats.cycle;
 
-import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.utility.Units;
-import com.swirlds.platform.stats.atomic.AtomicIntPair;
-import org.apache.commons.lang3.tuple.Pair;
-
-import java.util.List;
-
-import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * Tracks the fraction of time spent in a single interval of a cycle
  */
 public class IntervalPercentageMetric extends PercentageMetric {
-	private final AtomicIntPair totalAndInterval;
 
-	public IntervalPercentageMetric(final CycleDefinition definition, final int intervalIndex) {
+	public IntervalPercentageMetric(final Metrics metrics, final CycleDefinition definition, final int intervalIndex) {
 		super(
+				metrics,
 				definition.getCategory(),
 				definition.getName() + "-" + definition.getIntervalName(intervalIndex),
-				definition.getIntervalDescription(intervalIndex));
-		totalAndInterval = new AtomicIntPair();
+				definition.getIntervalDescription(intervalIndex)
+		);
 	}
 
 	/**
@@ -48,38 +42,11 @@ public class IntervalPercentageMetric extends PercentageMetric {
 	 * 		the number of nanoseconds this interval lasted
 	 */
 	public void updateTime(final long cycleNanoTime, final long intervalNanoTime) {
-		totalAndInterval.accumulate(toMicros(cycleNanoTime), toMicros(intervalNanoTime));
+		super.update(toMicros(cycleNanoTime), toMicros(intervalNanoTime));
 	}
 
 	private int toMicros(final long nanos){
 		return (int) (nanos * Units.NANOSECONDS_TO_MICROSECONDS);
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public List<ValueType> getValueTypes() {
-		return Metric.VALUE_TYPE;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public Double get(final ValueType valueType) {
-		if (valueType == VALUE) {
-			return totalAndInterval.computeDouble(PercentageMetric::calculatePercentage);
-		}
-		throw new IllegalArgumentException("Unknown MetricType");
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@SuppressWarnings("removal")
-	@Override
-	public List<Pair<ValueType, Object>> takeSnapshot() {
-		return List.of(Pair.of(VALUE, totalAndInterval.computeDoubleAndReset(PercentageMetric::calculatePercentage)));
-	}
 }

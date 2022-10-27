@@ -98,11 +98,6 @@ public class Key implements SelfSerializable, FastCopyable {
 	}
 
 	@Override
-	public void release() {
-
-	}
-
-	@Override
 	public int getVersion() {
 		return ClassVersion.ORIGINAL;
 	}

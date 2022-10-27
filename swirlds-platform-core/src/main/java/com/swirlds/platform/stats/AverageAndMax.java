@@ -16,12 +16,10 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.statistics.StatEntry;
-
-import java.util.List;
+import com.swirlds.common.metrics.Metrics;
 
 /**
- * A statistic object to track an average number, without history. This class uses an {@link AtomicAverage} so it is both
+ * A metrics object to track an average number, without history. This class uses an {@link AtomicAverage} so it is both
  * thread safe and performant.
  */
 public class AverageAndMax {
@@ -30,6 +28,8 @@ public class AverageAndMax {
 	private final MaxStat maxStat;
 
 	/**
+	 * @param metrics
+	 * 		reference to the metrics-system
 	 * @param category
 	 * 		the kind of statistic (stats are grouped or filtered by this)
 	 * @param name
@@ -40,14 +40,17 @@ public class AverageAndMax {
 	 * 		a string that can be passed to String.format() to format the statistic for the average number
 	 */
 	public AverageAndMax(
+			final Metrics metrics,
 			final String category,
 			final String name,
 			final String desc,
 			final String averageFormat) {
-		this(category, name, desc, averageFormat, AverageStat.WEIGHT_SMOOTH);
+		this(metrics, category, name, desc, averageFormat, AverageStat.WEIGHT_SMOOTH);
 	}
 
 	/**
+	 * @param metrics
+	 * 		reference to the metrics-system
 	 * @param category
 	 * 		the kind of statistic (stats are grouped or filtered by this)
 	 * @param name
@@ -60,41 +63,29 @@ public class AverageAndMax {
 	 * 		the weight used to calculate the average
 	 */
 	public AverageAndMax(
+			final Metrics metrics,
 			final String category,
 			final String name,
 			final String desc,
 			final String averageFormat,
 			final double weight) {
 		averageStat = new AverageStat(
+				metrics,
 				category,
 				name,
 				desc,
 				averageFormat,
 				weight);
 		maxStat = new MaxStat(
+				metrics,
 				category,
 				name + "MAX",
 				"max value of " + name,
 				FORMAT_MAX);
 	}
 
-
 	public void update(final long value) {
 		averageStat.update(value);
 		maxStat.update(value);
-	}
-
-
-	public StatEntry getAverageStat() {
-		return averageStat.getStatEntry();
-	}
-
-
-	public StatEntry getMaxStat() {
-		return maxStat.getStatEntry();
-	}
-
-	public List<StatEntry> getAllEntries() {
-		return List.of(averageStat.getStatEntry(), maxStat.getStatEntry());
 	}
 }

@@ -133,7 +133,7 @@ public class SingleStreamIterator<T extends SelfSerializable> implements Iterato
 	/**
 	 * close current stream
 	 */
-	void closeStream() {
+	public void closeStream() {
 		try {
 			if (stream != null) {
 				stream.close();

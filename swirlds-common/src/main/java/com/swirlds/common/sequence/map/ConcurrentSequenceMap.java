@@ -20,7 +20,6 @@ import com.swirlds.common.sequence.map.internal.AbstractSequenceMap;
 import com.swirlds.common.threading.locks.IndexLock;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
@@ -37,47 +36,44 @@ import java.util.function.ToLongFunction;
  */
 public class ConcurrentSequenceMap<K, V> extends AbstractSequenceMap<K, V> {
 
-	private static final int DEFAULT_PARALLELISM = 1024;
+	private final AtomicLong firstSequenceNumberInWindow;
 
-	private final AtomicLong lowestAllowedSequenceNumber;
-	private final AtomicLong highestAllowedSequenceNumber;
+	private static final int MAX_PARALLELISM = 1024;
+	private final int parallelism;
 
 	/**
 	 * When inserting data into this data structure, it is critical that data is not inserted after the
 	 * data's sequence number has been purged (as this would lead to a memory leak). Whenever new data is inserted,
 	 * acquire a lock that prevents concurrent purging of that sequence number.
 	 */
-	private final IndexLock lock = new IndexLock(DEFAULT_PARALLELISM);
+	private final IndexLock lock;
+
 	private final Lock windowLock = new ReentrantLock();
 
 	/**
 	 * Construct a thread safe {@link SequenceMap}.
 	 *
-	 * @param getSequenceNumberFromKey
-	 * 		a method that extracts the sequence number from a key
-	 */
-	public ConcurrentSequenceMap(final ToLongFunction<K> getSequenceNumberFromKey) {
-		this(DEFAULT_LOWEST_ALLOWED_SEQUENCE_NUMBER, DEFAULT_HIGHEST_ALLOWED_SEQUENCE_NUMBER, getSequenceNumberFromKey);
-	}
-
-	/**
-	 * Construct a thread safe {@link SequenceMap}.
-	 *
-	 * @param lowestAllowedSequenceNumber
+	 * @param firstSequenceNumberInWindow
 	 * 		the lowest allowed sequence number
-	 * @param highestAllowedSequenceNumber
-	 * 		the highest allowed sequence number
+	 * @param sequenceNumberCapacity
+	 * 		the number of sequence numbers permitted to exist in this data structure. E.g. if
+	 * 		the lowest allowed sequence number is 100 and the capacity is 10, then values with
+	 * 		a sequence number between 100 and 109 (inclusive) will be allowed, and any value
+	 * 		with a sequence number outside that range will be rejected.
 	 * @param getSequenceNumberFromKey
 	 * 		a method that extracts the sequence number from a key
 	 */
 	public ConcurrentSequenceMap(
-			final long lowestAllowedSequenceNumber,
-			final long highestAllowedSequenceNumber,
+			final long firstSequenceNumberInWindow,
+			final int sequenceNumberCapacity,
 			final ToLongFunction<K> getSequenceNumberFromKey) {
 
-		super(lowestAllowedSequenceNumber, highestAllowedSequenceNumber, getSequenceNumberFromKey);
-		this.lowestAllowedSequenceNumber = new AtomicLong(lowestAllowedSequenceNumber);
-		this.highestAllowedSequenceNumber = new AtomicLong(highestAllowedSequenceNumber);
+		super(firstSequenceNumberInWindow, sequenceNumberCapacity, getSequenceNumberFromKey);
+
+		parallelism = Math.min(MAX_PARALLELISM, sequenceNumberCapacity);
+		lock = new IndexLock(parallelism);
+
+		this.firstSequenceNumberInWindow = new AtomicLong(firstSequenceNumberInWindow);
 	}
 
 	/**
@@ -116,6 +112,14 @@ public class ConcurrentSequenceMap<K, V> extends AbstractSequenceMap<K, V> {
 	 * {@inheritDoc}
 	 */
 	@Override
+	protected int getFullLockThreshold() {
+		return parallelism;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
 	protected void windowLock() {
 		windowLock.lock();
 	}
@@ -132,32 +136,16 @@ public class ConcurrentSequenceMap<K, V> extends AbstractSequenceMap<K, V> {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public long getLowestAllowedSequenceNumber() {
-		return lowestAllowedSequenceNumber.get();
+	public long getFirstSequenceNumberInWindow() {
+		return firstSequenceNumberInWindow.get();
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public long getHighestAllowedSequenceNumber() {
-		return highestAllowedSequenceNumber.get();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void setLowestAllowedSequenceNumber(final long sequenceNumber) {
-		lowestAllowedSequenceNumber.set(sequenceNumber);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void setHighestAllowedSequenceNumber(final long sequenceNumber) {
-		highestAllowedSequenceNumber.set(sequenceNumber);
+	protected void setFirstSequenceNumberInWindow(final long firstSequenceNumberInWindow) {
+		this.firstSequenceNumberInWindow.set(firstSequenceNumberInWindow);
 	}
 
 	/**
@@ -167,13 +155,4 @@ public class ConcurrentSequenceMap<K, V> extends AbstractSequenceMap<K, V> {
 	protected Map<K, V> buildDataMap() {
 		return new ConcurrentHashMap<>();
 	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected Map<Long, Set<K>> buildSequenceMap() {
-		return new ConcurrentHashMap<>();
-	}
-
 }

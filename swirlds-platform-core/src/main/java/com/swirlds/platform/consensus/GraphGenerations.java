@@ -69,4 +69,15 @@ public interface GraphGenerations {
 		return event.getHashedData().getGeneration() < getMinGenerationNonAncient();
 	}
 
+	/**
+	 * Checks if the supplied event is expired
+	 *
+	 * @param event
+	 * 		the event to check
+	 * @return true if it is expired, false if its not
+	 */
+	default boolean isExpired(final BaseEvent event) {
+		return event.getHashedData().getGeneration() < getMinRoundGeneration();
+	}
+
 }

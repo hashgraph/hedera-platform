@@ -15,11 +15,11 @@
  */
 package com.swirlds.platform.state.signed;
 
-import com.swirlds.common.Releasable;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.system.SoftwareVersion;
 import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.utility.ReferenceCounter;
 import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.MinGenInfo;
 import com.swirlds.platform.state.PlatformData;
@@ -27,16 +27,16 @@ import com.swirlds.platform.state.PlatformState;
 import com.swirlds.platform.state.State;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
+import static com.swirlds.logging.LogMarker.SIGNED_STATE;
 
 /**
  * This is a signed state, in a form that allows those outside the network to verify that it is a legitimate
@@ -53,52 +53,40 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
  * The signed state is also saved to disk, and is given to a new member joining the network, or to an old
  * member rejoining after a long absence.
  */
-public class SignedState implements Releasable, SignedStateInfo {
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
-	private static final Logger log = LogManager.getLogger();
+public class SignedState implements SignedStateInfo {
 
-	/** the signatures collected so far (including from self) */
+	private static final Logger LOG = LogManager.getLogger();
+
+	/**
+	 * the signatures collected so far (including from self)
+	 */
 	private SigSet sigSet;
 
-	/** specifies whether this state should be saved to disk */
-	private boolean shouldSaveToDisk;
-
-	/** Is this the last state saved before the freeze period */
+	/**
+	 * Is this the last state saved before the freeze period
+	 */
 	private boolean freezeState;
 
-	/** Indicates whether the state has been archived or not */
-	private boolean archived = false;
-
-	/** Indicates whether the state has been staged for archival yet */
-	private boolean markedForArchival = false;
+	/**
+	 * A reference count that prevents the state from being archived or deleted. Also known
+	 * as a "strong reservation".
+	 */
+	private final ReferenceCounter doNotArchiveOrDelete = new ReferenceCounter(this::archive);
 
 	/**
-	 * Counts the number of reservations for use.
-	 * When greater than 0 this state will not be archived or deleted.
+	 * A reference count that prevents the state from being deleted, but does not prevent the state from
+	 * being archived. Also known as a "weak reservation".
 	 */
-	private int reservations = 0;
+	private final ReferenceCounter doNotDelete = new ReferenceCounter(this::archiveOrDeleteInBackground);
 
 	/**
-	 * Counts the number of reservations that can tolerate the state being archived.
-	 * When greater than 0 this state will not be deleted.
+	 * True if this state has been deleted. Used to prevent the same state from being deleted more than once.
 	 */
-	private int weakReservations = 0;
+	private boolean deleted = false;
 
 	/**
-	 * True if the signed state has been deleted.
+	 * The root of the merkle state.
 	 */
-	private boolean released;
-
-	/**
-	 * Indicates whether this {@link SignedState} has been written to disk
-	 */
-	private boolean savedToDisk = false;
-
-	/**
-	 * True if this state has gathered sufficient signatures, otherwise false.
-	 */
-	private boolean complete;
-
 	private State state;
 
 	/**
@@ -107,15 +95,29 @@ public class SignedState implements Releasable, SignedStateInfo {
 	private AddressBook addressBook;
 
 	/**
+	 * The timestamp of when this object was created.
+	 */
+	private final Instant creationTimestamp = Instant.now();
+
+	/**
+	 * If true, then this state should eventually be written to disk.
+	 */
+	private boolean stateToSave;
+
+	/**
+	 * Signed states are deleted on this background thread.
+	 */
+	private SignedStateGarbageCollector signedStateGarbageCollector;
+
+	/**
 	 * Instantiate a signed state, storing the information passed as parameters in it. Also calculate and
 	 * store its hash, which can then be retrieved with getHash().
 	 *
 	 * @param state
 	 * 		a fast copy of the state resulting from all transactions in consensus order from all
 	 * 		events with received rounds up through the round this SignedState represents
-	 * @param lastRoundReceived
-	 * 		the last round number for which all the famous witnesses are known (i.e., for which the
-	 * 		fame of every witness has been decided).
+	 * @param round
+	 * 		the round of this signed state
 	 * @param numEventsCons
 	 * 		how many consensus events have there been throughout all of history, up through the
 	 * 		round
@@ -139,7 +141,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 	 */
 	public SignedState(
 			final State state,
-			final long lastRoundReceived,
+			final long round,
 			final long numEventsCons,
 			final Hash hashEventsCons,
 			final AddressBook addressBook,
@@ -149,8 +151,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 			final List<MinGenInfo> minGenInfo,
 			final SoftwareVersion softwareVersion) {
 
-		this.state = state;
-		state.reserve();
+		this(state);
 
 		final PlatformState platformState = new PlatformState();
 		final PlatformData platformData = new PlatformData();
@@ -158,7 +159,7 @@ public class SignedState implements Releasable, SignedStateInfo {
 		state.setPlatformState(platformState);
 		platformState.setPlatformData(platformData);
 
-		platformData.setRound(lastRoundReceived);
+		platformData.setRound(round);
 		platformData.setNumEventsCons(numEventsCons);
 		platformData.setHashEventsCons(hashEventsCons);
 		platformData.setEvents(events);
@@ -173,20 +174,27 @@ public class SignedState implements Releasable, SignedStateInfo {
 		sigSet = new SigSet(addressBook);
 	}
 
-	/**
-	 * Zero-arg constructor for signed state.
-	 */
-	public SignedState() {
-		super();
-	}
-
 	public SignedState(final State state) {
 		state.reserve();
+
+		// This reservation is released when doNotArchiveOrDelete fully counts down
+		doNotDelete.reserve();
+
 		this.state = state;
 	}
 
+	/**
+	 * Set a garbage collector, used to delete states on a background thread.
+	 */
+	public synchronized void setGarbageCollector(final SignedStateGarbageCollector signedStateGarbageCollector) {
+		this.signedStateGarbageCollector = signedStateGarbageCollector;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public long getLastRoundReceived() {
+	public long getRound() {
 		return state.getPlatformState().getPlatformData().getRound();
 	}
 
@@ -227,21 +235,6 @@ public class SignedState implements Releasable, SignedStateInfo {
 	}
 
 	/**
-	 * @return whether this signed state should be saved to disk
-	 */
-	boolean shouldSaveToDisk() {
-		return shouldSaveToDisk;
-	}
-
-	/**
-	 * @param shouldSaveToDisk
-	 * 		whether this signed state should be saved to disk
-	 */
-	public void setShouldSaveToDisk(final boolean shouldSaveToDisk) {
-		this.shouldSaveToDisk = shouldSaveToDisk;
-	}
-
-	/**
 	 * @return is this the last state saved before the freeze period
 	 */
 	public boolean isFreezeState() {
@@ -249,145 +242,124 @@ public class SignedState implements Releasable, SignedStateInfo {
 	}
 
 	/**
-	 * Get whether this signed state has been written to disk.
-	 *
-	 * @return true if this {@link SignedState} has been written to disk, false otherwise
-	 */
-	public synchronized boolean isSavedToDisk() {
-		return savedToDisk;
-	}
-
-	/**
-	 * Sets whether this signed state has been written to disk.
-	 *
-	 * @param savedToDisk
-	 * 		indicates whether or not this {@link SignedState} has been written to disk
-	 */
-	public synchronized void setSavedToDisk(final boolean savedToDisk) {
-		this.savedToDisk = savedToDisk;
-	}
-
-	/**
-	 * Delete the SignedState if the it is not reserved for use. Always call this method when deleting a signed state.
-	 * It is never safe to directly delete a signed state via {@link SignedState#release}.
-	 *
-	 * @return true if deleted, false otherwise
-	 */
-	public synchronized boolean tryDelete() {
-		if (isDestroyed()) {
-			log.warn(EXCEPTION.getMarker(), "State for round '{}' already deleted!", this::getLastRoundReceived);
-			return true;
-		}
-		if (reservations == 0 && weakReservations == 0) {
-			try {
-				release();
-			} catch (final Exception e) {
-				log.error(EXCEPTION.getMarker(),
-						"Exception while deleting saved state:", e);
-			}
-			return true;
-		} else {
-			return false;
-		}
-	}
-
-	/**
-	 * Check if this state has been marked for archival.
-	 */
-	public boolean isMarkedForArchival() {
-		return markedForArchival;
-	}
-
-	/**
-	 * Mark this state as having been added to the archival queue.
-	 */
-	public void markForArchival() {
-		markedForArchival = true;
-	}
-
-	/**
-	 * Delete the SignedState if the it is not reserved for use. This method should implement any cleanup that won't
-	 * be done automatically by the Garbage Collector,like calling the delete() method on any saved SwirldState object
-	 *
-	 * @return true if deleted, false otherwise
-	 */
-	public synchronized boolean tryArchive() {
-		if (isDestroyed()) {
-			archived = true;
-			return true;
-		}
-		if (archived) {
-			log.warn(EXCEPTION.getMarker(), "State already archived!");
-			return true;
-		}
-		if (reservations == 0) {
-			try {
-				state.getSwirldState().archive();
-			} catch (final Exception e) {
-				log.error(EXCEPTION.getMarker(),
-						"Exception while archiving saved state:", e);
-			}
-			archived = true;
-			return true;
-		} else {
-			return false;
-		}
-	}
-
-	/**
 	 * Reserves the SignedState for use. While reserved, this SignedState cannot be
 	 * deleted or archived, so it is very important to call releaseState() on it when done.
 	 */
-	public synchronized void reserveState() {
-		if (isDestroyed()) {
-			throw new RuntimeException("State can not be reserved after it has been deleted.");
-		}
-		reservations++;
-	}
-
-	/**
-	 * Releases a reservation previously obtained in tryReserve()
-	 */
-	public synchronized void releaseState() {
-		if (reservations == 0) {
-			throw new RuntimeException("releaseState() called too many times.");
-		}
-		reservations--;
+	public void reserveState() {
+		doNotArchiveOrDelete.reserve();
 	}
 
 	/**
 	 * Reserves a state for use. While reserved this state may not be deleted but it may be archived.
 	 * It is very important to call weakReleaseState() on it when done.
 	 */
-	public synchronized void weakReserveState() {
-		if (isDestroyed()) {
-			throw new RuntimeException("State can not be reserved after it has been deleted.");
-		}
-		weakReservations++;
+	public void weakReserveState() {
+		doNotDelete.reserve();
+	}
+
+	/**
+	 * Releases a reservation previously obtained in reserveState()
+	 */
+	public void releaseState() {
+		doNotArchiveOrDelete.release();
 	}
 
 	/**
 	 * Release an archival reservation.
 	 */
-	public synchronized void weakReleaseState() {
-		if (weakReservations == 0) {
-			throw new RuntimeException("releaseArchival() called too many times.");
+	public void weakReleaseState() {
+		doNotDelete.release();
+	}
+
+	/**
+	 * Add this state to the queue to be deleted/archived on a background thread.
+	 */
+	private void archiveOrDeleteInBackground() {
+		if (signedStateGarbageCollector == null ||
+				!signedStateGarbageCollector.executeOnGarbageCollectionThread(this::archiveOrDelete)) {
+			LOG.warn(SIGNED_STATE.getMarker(),
+					"unable to enqueue state for deletion/archival, " +
+							"will delete/archive state on calling thread {}", Thread.currentThread().getName());
+			synchronized (this) {
+				archiveOrDelete();
+			}
 		}
-		weakReservations--;
+	}
+
+	/**
+	 * Called when the {@link #doNotArchiveOrDelete} counter is fully released.
+	 */
+	private void archive() {
+		// Release the reference count taken in the constructor. Deletion is still prevented
+		// if there are weak reservations being held.
+		final boolean willBeDeleted = doNotDelete.release();
+
+		if (!willBeDeleted) {
+			// Only send a task to the background handle thread if this object is not yet ready to be deleted.
+			// If it is time to be deleted, the delete method will enqueue the task, and we don't need to
+			// duplicate the effort.
+			archiveOrDeleteInBackground();
+		}
+	}
+
+	/**
+	 * <p>
+	 * Perform archival/deletion on this signed state.
+	 * </p>
+	 *
+	 * <p>
+	 * Under normal operation, this method will only be called on the single-threaded background
+	 * archive/deletion handler. However, if the queue fills up then a different thread may attempt
+	 * to simultaneously call this method. Because of that, this method must be synchronized.
+	 * </p>
+	 */
+	private synchronized void archiveOrDelete() {
+		final Instant start = Instant.now();
+
+		if (doNotDelete.isDestroyed()) {
+			if (!deleted) {
+				try {
+					deleted = true;
+
+					state.release();
+
+					if (signedStateGarbageCollector != null) {
+						signedStateGarbageCollector.reportDeleteTime(Duration.between(start, Instant.now()));
+					}
+				} catch (final Throwable ex) {
+					LOG.error(EXCEPTION.getMarker(),
+							"exception while attempting to delete signed state", ex);
+				}
+			}
+		} else {
+			final SwirldState swirldState = state.getSwirldState();
+			if (swirldState != null) {
+				try {
+					swirldState.archive();
+
+					if (signedStateGarbageCollector != null) {
+						signedStateGarbageCollector.reportArchiveTime(Duration.between(start, Instant.now()));
+					}
+				} catch (final Throwable ex) {
+					LOG.error(EXCEPTION.getMarker(),
+							"exception while attempting to archive signed state", ex);
+				}
+			}
+		}
 	}
 
 	/**
 	 * Get the number of strong reservations.
 	 */
 	public synchronized int getReservations() {
-		return reservations;
+		return doNotArchiveOrDelete.getReservationCount();
 	}
 
 	/**
 	 * Get the number of weak reservations.
 	 */
 	public synchronized int getWeakReservations() {
-		return weakReservations;
+		return doNotDelete.getReservationCount();
 	}
 
 	/**
@@ -427,27 +399,11 @@ public class SignedState implements Releasable, SignedStateInfo {
 	 */
 	@Override
 	public String toString() {
-		return new ToStringBuilder(this, ToStringStyle.MULTI_LINE_STYLE)
-				.append("sigSet", sigSet)
-				.append("state", state)
-				.toString();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean isDestroyed() {
-		return released;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void release() {
-		released = true;
-		state.release();
+		return String.format("SS(round: %d, sigs: %d/%s, hash: %s)",
+				getRound(),
+				(sigSet == null ? 0 : sigSet.getStakeCollected()),
+				(addressBook == null ? "?" : addressBook.getTotalStake()),
+				state.getHash());
 	}
 
 	/**
@@ -460,43 +416,19 @@ public class SignedState implements Releasable, SignedStateInfo {
 	}
 
 	/**
+	 * The wall clock time when this SignedState object was instantiated.
+	 */
+	public Instant getCreationTimestamp() {
+		return creationTimestamp;
+	}
+
+	/**
 	 * Get the root node of the application's state
 	 *
 	 * @return the root node of the application's state.
 	 */
 	public SwirldState getSwirldState() {
 		return state.getSwirldState();
-	}
-
-	/**
-	 * Get the hash of the state's merkle tree
-	 *
-	 * @return the hash of the state's merkle tree.
-	 */
-	public Hash getStateHash() {
-		return state.getHash();
-	}
-
-	/**
-	 * Get the hash of the state.
-	 *
-	 * @return the hash
-	 * @deprecated we should not be directly touching the bytes of a hash
-	 */
-	@Deprecated
-	public byte[] getStateHashBytes() {
-		return state.getHash().getValue();
-	}
-
-	/**
-	 * Get the hash of the swirld state.
-	 *
-	 * @return the hash
-	 * @deprecated we should not be directly touching the bytes of a hash
-	 */
-	@Deprecated
-	public byte[] getSwirldStateHashBytes() {
-		return state.getSwirldState().getHash().getValue();
 	}
 
 	/**
@@ -555,26 +487,23 @@ public class SignedState implements Releasable, SignedStateInfo {
 	}
 
 	/**
+	 * Return the round generation of the oldest round in this state
+	 *
+	 * @return the generation of the oldest round
+	 */
+	public long getMinRoundGeneration() {
+		return getMinGenInfo().stream().findFirst().orElseThrow(
+						() -> new IllegalStateException("No MinGen info found in state"))
+				.minimumGeneration();
+	}
+
+	/**
 	 * Get the timestamp of the last transaction added to this state.
 	 *
 	 * @return the timestamp of the last transaction added to this state
 	 */
 	public Instant getLastTransactionTimestamp() {
 		return state.getPlatformState().getPlatformData().getLastTransactionTimestamp();
-	}
-
-	/**
-	 * Return true if this state has gathered enough signatures.
-	 */
-	public boolean isComplete() {
-		return complete;
-	}
-
-	/**
-	 * Specify if this state has gathered enough signatures.
-	 */
-	public void markAsComplete() {
-		this.complete = true;
 	}
 
 	/**
@@ -597,5 +526,24 @@ public class SignedState implements Releasable, SignedStateInfo {
 			}
 			setSigSet(newSigSet);
 		}
+	}
+
+	/**
+	 * Check if this is a state that needs to be eventually written to disk.
+	 *
+	 * @return true if this state eventually needs to be written to disk
+	 */
+	public boolean isStateToSave() {
+		return stateToSave;
+	}
+
+	/**
+	 * Set if this state eventually needs to be written to disk.
+	 *
+	 * @param stateToSave
+	 * 		true if this state eventually needs to be written to disk
+	 */
+	public void setStateToSave(final boolean stateToSave) {
+		this.stateToSave = stateToSave;
 	}
 }

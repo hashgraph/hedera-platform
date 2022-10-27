@@ -186,13 +186,14 @@ public class Lesson<T> implements Releasable, SelfSerializable {
 	 */
 	@SuppressWarnings("unchecked")
 	@Override
-	public void release() {
+	public boolean release() {
 		if (lessonType == LEAF_NODE_DATA && learnerView != null) {
 			final T node = ((LeafDataLesson<T>) subLesson).getLeaf();
 			if (node != null) {
 				learnerView.releaseNode(node);
 			}
 		}
+		return true;
 	}
 
 	/**

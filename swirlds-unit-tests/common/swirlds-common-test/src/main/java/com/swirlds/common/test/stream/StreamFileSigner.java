@@ -80,7 +80,7 @@ public class StreamFileSigner implements Signer {
 	 * @return the signature (or null if any errors)
 	 */
 	@Override
-	public byte[] sign(byte[] data) {
+	public com.swirlds.common.crypto.Signature sign(byte[] data) {
 		Signature signature;
 		try {
 			signature = Signature.getInstance(SIG_ALGORITHM, SIG_PROVIDER);
@@ -93,12 +93,12 @@ public class StreamFileSigner implements Signer {
 			log.debug(LOGM_OBJECT_STREAM,
 					"StreamFileSigner.sign :: generate signature: {}",
 					() -> hex(result));
-			return result;
+			return new com.swirlds.common.crypto.Signature(SignatureType.RSA, result);
 		} catch (NoSuchAlgorithmException | NoSuchProviderException
 				| InvalidKeyException | SignatureException e) {
 			log.error(LOGM_EXCEPTION, "ERROR: StreamFileSigner.sign :: ", e);
 		}
-		return new byte[SignatureType.RSA.signatureLength()];
+		return new com.swirlds.common.crypto.Signature(SignatureType.RSA,new byte[SignatureType.RSA.signatureLength()]);
 	}
 
 	public PublicKey getPublicKey() {

@@ -52,12 +52,13 @@ public class RuntimeObjectRecord implements Releasable {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized void release() {
+	public synchronized boolean release() {
 		throwIfDestroyed();
 		released = true;
 		if (cleanupAction != null) {
 			cleanupAction.accept(this);
 		}
+		return true;
 	}
 
 	/**

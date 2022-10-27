@@ -17,11 +17,12 @@
 package com.swirlds.common.system;
 
 import com.swirlds.common.Console;
-import com.swirlds.common.InvalidSignedStateListener;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.metrics.Metric;
-import com.swirlds.common.statistics.Statistics;
+import com.swirlds.common.metrics.MetricConfig;
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.stream.Signer;
 import com.swirlds.common.system.address.Address;
 import com.swirlds.common.system.address.AddressBook;
@@ -37,37 +38,21 @@ import java.time.Instant;
 public interface Platform extends Signer {
 
 	/**
-	 * Add new entry to Application statistics
+	 * Checks if a {@link Metric} with the category and name as specified in the config-object exists and
+	 * returns it. If there is no such {@code Metric}, a new one is created and returned.
 	 *
-	 * @param newEntry
-	 * 		the new entry
-	 * @deprecated use {@link Platform#addAppMetrics(Metric...)} instead
+	 * @param config
+	 * 		the configuration of the {@code Metric}
+	 * @param <T>
+	 * 		class of the {@code Metric} that will be returned
+	 * @return the registered {@code Metric} (either existing or newly generated)
+	 * @throws IllegalArgumentException
+	 * 		if {@code config} is {@code null}
+	 * @throws IllegalStateException
+	 * 		if a {@code Metric} with the same category and name exists,
+	 * 		but has a different type
 	 */
-	@Deprecated(forRemoval = true)
-	void addAppStatEntry(final Metric newEntry);
-
-	/**
-	 * Add new metrics to Application statistics
-	 *
-	 * @param metrics
-	 * 		the new metrics
-	 * @throws IllegalArgumentException if {@code metrics} is {@code null}
-	 */
-	void addAppMetrics(final Metric... metrics);
-
-	/**
-	 * Registers a listener to be notified each time an invalid state signature is received from a remote peer.
-	 *
-	 * @param listener
-	 * 		the listener to be registered
-	 */
-	void addSignedStateListener(final InvalidSignedStateListener listener);
-
-	/**
-	 * Initialize application statistics after adding entries
-	 */
-	void appStatInit();
-
+	<T extends Metric> T getOrCreateMetric(final MetricConfig<T, ?> config);
 
 	/**
 	 * Create a new window with a text console, of the recommended size and location, including the Swirlds
@@ -109,7 +94,7 @@ public interface Platform extends Signer {
 	/**
 	 * Find a rough estimate of what consensus timestamp a transaction would eventually have, if it were
 	 * created right now through a call to createTransaction().
-	 *
+	 * <p>
 	 * A real-time app, such as a game, will typically redraw the screen by first calling estTime(), then
 	 * rendering everything to the screen reflecting the predicted state as it will be at this time.
 	 *
@@ -215,11 +200,11 @@ public interface Platform extends Signer {
 	<T extends SwirldState> T getState();
 
 	/**
-	 * Get the statistics of current node
+	 * Get a reference to the metrics-system of the current node
 	 *
-	 * @return statistics of current node
+	 * @return the reference to the metrics-system
 	 */
-	Statistics getStats();
+	Metrics getMetrics();
 
 	/**
 	 * Get the ID of the current swirld. A given app can be used to create many different swirlds (also
@@ -297,7 +282,7 @@ public interface Platform extends Signer {
 	 * @return the signature (or null if any errors)
 	 */
 	@Override
-	byte[] sign(byte[] data);
+	Signature sign(byte[] data);
 
 	/**
 	 * @return consensusTimestamp of the last signed state
@@ -306,9 +291,9 @@ public interface Platform extends Signer {
 
 	/**
 	 * Returns the latest signed {#link SwirldState} signed by members with more than 1/3 of total stake.
-	 *
+	 * <p>
 	 * The {#link SwirldState} is returned in a {#link AutoCloseableWrapper} that <b>must</b> be use with
-	 * a try-with-resources
+	 * a try-with-resources.
 	 *
 	 * @param <T>
 	 * 		A type extending from {#link SwirldState}

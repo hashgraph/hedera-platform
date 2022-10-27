@@ -141,14 +141,6 @@ public class RandomExtended extends Random implements SelfSerializable, FastCopy
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void release() {
-
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
 	public void serialize(SerializableDataOutputStream out) throws IOException {
 		out.writeLong(seed);
 	}

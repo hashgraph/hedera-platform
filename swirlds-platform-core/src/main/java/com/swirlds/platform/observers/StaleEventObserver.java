@@ -20,6 +20,14 @@ import com.swirlds.platform.internal.EventImpl;
 
 /**
  * An observer that is notified when an event becomes stale.
+ *
+ * Stale events do not reach consensus, and their transactions are never handled. The agreement is guaranteed: if
+ * one computer decides that an event is stale, then any other computer that has that event will eventually agree
+ * that it’s stale.
+ * And some computers might never receive the event at all. If one computer decides an event is “consensus”, then
+ * any other computer with that event will eventually decide that it is consensus. And every computer will either
+ * receive that event or will do a reconnect where it receives a state that includes the effects of handling that
+ * event.
  */
 @FunctionalInterface
 public interface StaleEventObserver extends EventObserver {

@@ -53,12 +53,6 @@ public class StateSettings extends SubSetting {
 	public int saveStatePeriod = 0;
 
 	/**
-	 * Keep at least this many of the old complete signed states.
-	 * (1 to keep only the most recent, 0 to not sign states)
-	 */
-	public int signedStateKeep = 10; // 10 is good for signedStateFreq==1, or <10 if it's >1
-
-	/**
 	 * Keep at least this many of the old complete signed states on disk. This should be at least 2 so that
 	 * we don't delete an old state while a new one is in the process of writing to disk. set to 0 to not
 	 * keep any states to disk.
@@ -78,11 +72,6 @@ public class StateSettings extends SubSetting {
 	 * and will never reach consensus and never have their transactions handled.
 	 */
 	public int roundsNonAncient = 26;
-
-	/**
-	 * Enabling the process of recovering signed state by playing back event files
-	 */
-	public boolean enableStateRecovery = false;
 
 	/**
 	 * If true, save the state to disk when an ISS is detected. May negatively affect the performance
@@ -121,15 +110,13 @@ public class StateSettings extends SubSetting {
 	 */
 	public int stateDeletionErrorLogFrequencySeconds = 60;
 
+	/**
+	 * When enabled, hashes for the nodes are logged per round.
+	 */
+	public boolean enableHashStreamLogging = true;  // NOSONAR: Value is modified and updated by reflection.
+
 	public StateSettings() {
 
-	}
-
-	public StateSettings(int saveStatePeriod, int signedStateKeep, int signedStateDisk, int roundsNonAncient) {
-		this.saveStatePeriod = saveStatePeriod;
-		this.signedStateKeep = signedStateKeep;
-		this.signedStateDisk = signedStateDisk;
-		this.roundsNonAncient = roundsNonAncient;
 	}
 
 	/**
@@ -149,40 +136,12 @@ public class StateSettings extends SubSetting {
 	}
 
 	/**
-	 * getter for the number of old complete signed states to be kept
-	 *
-	 * @return number of old complete signed states
-	 */
-	public int getSignedStateKeep() {
-		return signedStateKeep;
-	}
-
-	/**
 	 * getter for the number of old complete signed states to be kept on disk
 	 *
 	 * @return the number of old complete signed states to be kept on disk
 	 */
 	public int getSignedStateDisk() {
 		return signedStateDisk;
-	}
-
-	/**
-	 * getter if recovering signed state by playing back event files is enabled
-	 *
-	 * @return true if state recovery is enabled
-	 */
-	public boolean isEnableStateRecovery() {
-		return enableStateRecovery;
-	}
-
-	/**
-	 * setter for enabling signed state recovery by playing back event files
-	 *
-	 * @param enableStateRecovery
-	 * 		if true then state recovery will be enabled, if false then it will be disabled
-	 */
-	public void setEnableStateRecovery(boolean enableStateRecovery) {
-		this.enableStateRecovery = enableStateRecovery;
 	}
 
 	/**

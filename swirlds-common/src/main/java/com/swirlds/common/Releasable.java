@@ -27,9 +27,12 @@ public interface Releasable {
 
 	/**
 	 * Called when this object is no longer needed.
+	 *
+	 * @return true if this call to release() caused the object to become destroyed
 	 */
-	default void release() {
+	default boolean release() {
 		// override if needed
+		return false;
 	}
 
 	/**

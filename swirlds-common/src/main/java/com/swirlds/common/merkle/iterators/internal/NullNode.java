@@ -64,7 +64,7 @@ public class NullNode implements MerkleLeaf {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void release() {
+	public boolean release() {
 		throw new UnsupportedOperationException();
 	}
 

@@ -18,7 +18,7 @@ package com.swirlds.platform.state;
 
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRule;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
-import com.swirlds.platform.stats.SwirldStateStats;
+import com.swirlds.platform.metrics.SwirldStateMetrics;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -46,7 +46,7 @@ public final class SwirldStateManagerUtils {
 	 * 		object to record stats in
 	 * @return the newly created state copy
 	 */
-	public static State fastCopy(final State state, final SwirldStateStats stats) {
+	public static State fastCopy(final State state, final SwirldStateMetrics stats) {
 		final long copyStart = System.nanoTime();
 
 		// Create a fast copy

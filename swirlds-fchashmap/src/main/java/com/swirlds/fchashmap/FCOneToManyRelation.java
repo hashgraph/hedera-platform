@@ -109,11 +109,12 @@ public class FCOneToManyRelation<K, V> implements FastCopyable {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void release() {
+	public boolean release() {
 		throwIfDestroyed();
 		associationMap.release();
 		associationCountMap.release();
 		released = true;
+		return true;
 	}
 
 	/**

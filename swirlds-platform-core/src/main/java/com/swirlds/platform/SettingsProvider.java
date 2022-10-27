@@ -68,11 +68,6 @@ public interface SettingsProvider {
 	int getTransactionMaxBytes();
 
 	/**
-	 * @see com.swirlds.platform.state.StateSettings#signedStateKeep
-	 */
-	int getSignedStateKeep();
-
-	/**
 	 * @see Settings#signedStateFreq
 	 */
 	int getSignedStateFreq();
@@ -146,5 +141,9 @@ public interface SettingsProvider {
 	 * @see Settings#sleepHeartbeat
 	 */
 	int sleepHeartbeatMillis();
+
+	String getPlaybackStreamFileDirectory();
+
+	String getPlaybackEndTimeStamp();
 
 }

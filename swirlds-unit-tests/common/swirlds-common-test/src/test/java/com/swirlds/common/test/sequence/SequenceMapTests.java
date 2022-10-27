@@ -19,11 +19,9 @@ package com.swirlds.common.test.sequence;
 import com.swirlds.common.sequence.map.ConcurrentSequenceMap;
 import com.swirlds.common.sequence.map.SequenceMap;
 import com.swirlds.common.sequence.map.StandardSequenceMap;
-import com.swirlds.common.test.AssertionUtils;
 import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.StoppableThread;
 import com.swirlds.common.threading.framework.config.StoppableThreadConfiguration;
-import org.checkerframework.checker.units.qual.A;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -45,16 +43,17 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static com.swirlds.common.test.AssertionUtils.completeBeforeTimeout;
+import static com.swirlds.common.test.RandomUtils.getRandomPrintSeed;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 @DisplayName("Sequence Map Tests")
 public class SequenceMapTests {
-
 
 	private record SequenceMapKey(int key, long sequence) {
 		@Override
@@ -76,7 +75,9 @@ public class SequenceMapTests {
 		}
 	}
 
-	private record MapBuilder(String name, BiFunction<Long, Long, SequenceMap<SequenceMapKey, Integer>> constructor) {
+	private record MapBuilder(
+			String name,
+			BiFunction<Long, Integer, SequenceMap<SequenceMapKey, Integer>> constructor) {
 		@Override
 		public String toString() {
 			return name;
@@ -86,16 +87,16 @@ public class SequenceMapTests {
 	static Stream<Arguments> testConfiguration() {
 		return Stream.of(
 				Arguments.of(new MapBuilder("standard",
-						(min, max) -> new StandardSequenceMap<>(min, max, SequenceMapKey::sequence))),
+						(min, capacity) -> new StandardSequenceMap<>(min, capacity, SequenceMapKey::sequence))),
 				Arguments.of(new MapBuilder("concurrent",
-						(min, max) -> new ConcurrentSequenceMap<>(min, max, SequenceMapKey::sequence)))
+						(min, capacity) -> new ConcurrentSequenceMap<>(min, capacity, SequenceMapKey::sequence)))
 		);
 	}
 
 	private static boolean isKeyPresent(final SequenceMap<SequenceMapKey, Integer> map, final Long sequenceNumber) {
 		return sequenceNumber != null
-				&& sequenceNumber >= map.getLowestAllowedSequenceNumber()
-				&& sequenceNumber <= map.getHighestAllowedSequenceNumber();
+				&& sequenceNumber >= map.getFirstSequenceNumberInWindow()
+				&& sequenceNumber <= map.getLastSequenceNumberInWindow();
 	}
 
 	/**
@@ -156,8 +157,8 @@ public class SequenceMapTests {
 		if (size == 0) {
 			// For the sake of sanity, we don't want to attempt to use the default values for these
 			// variables under any conditions.
-			smallestSequenceNumber = map.getLowestAllowedSequenceNumber();
-			largestSequenceNumber = map.getHighestAllowedSequenceNumber();
+			smallestSequenceNumber = map.getFirstSequenceNumberInWindow();
+			largestSequenceNumber = map.getLastSequenceNumberInWindow();
 		}
 
 
@@ -198,14 +199,16 @@ public class SequenceMapTests {
 		}
 	}
 
+	// TODO negative sequence number tests
+
 	@ParameterizedTest
 	@MethodSource("testConfiguration")
 	@DisplayName("Simple Access Test")
 	void simpleAccessTest(final MapBuilder mapBuilder) {
-		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, Long.MAX_VALUE);
-
 		// The number of things inserted into the map
 		final int size = 100;
+
+		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, size);
 
 		// The number of keys for each sequence number
 		final int keysPerSeq = 5;
@@ -227,34 +230,147 @@ public class SequenceMapTests {
 				key -> -key);
 	}
 
+	// TODO start at high positive number
 
 	@ParameterizedTest
 	@MethodSource("testConfiguration")
-	@DisplayName("purge() Test")
-	void purgeTest(final MapBuilder mapBuilder) {
-		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, Long.MAX_VALUE);
-		assertEquals(0, map.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-
-		// The number of things inserted into the map
+	@DisplayName("Positive Start Access Test")
+	void positiveStartAccessTest(final MapBuilder mapBuilder) {
 		final int size = 100;
+		final int start = 50;
 
 		// The number of keys for each sequence number
 		final int keysPerSeq = 5;
+
+		final SequenceMap<SequenceMapKey, Integer> map =
+				mapBuilder.constructor.apply((long) (start / keysPerSeq), size);
+
+		for (int offset = 0; offset < size; offset++) {
+
+			final int key = start + offset;
+
+			map.put(new SequenceMapKey(key, key / keysPerSeq), -key);
+			assertEquals(offset + 1, map.getSize(), "unexpected size");
+		}
+
+		validateMapContents(map, -size, 2 * size,
+				key -> {
+					if (key >= start && key < start + size) {
+						return (long) key / keysPerSeq;
+					} else {
+						// key is not present
+						return null;
+					}
+				},
+				key -> -key);
+	}
+
+	@ParameterizedTest
+	@MethodSource("testConfiguration")
+	@DisplayName("Negative Start Access Test")
+	void negativeStartAccessTest(final MapBuilder mapBuilder) {
+		// The number of things inserted into the map
+		final int size = 100;
+		final int start = -50;
+
+		// The number of keys for each sequence number
+		final int keysPerSeq = 5;
+
+		final SequenceMap<SequenceMapKey, Integer> map =
+				mapBuilder.constructor.apply((long) (start / keysPerSeq), size);
+
+
+		for (int offset = 0; offset < size; offset++) {
+
+			final int key = start + offset;
+
+			map.put(new SequenceMapKey(key, key / keysPerSeq), -key);
+			assertEquals(offset + 1, map.getSize(), "unexpected size");
+		}
+
+		validateMapContents(map, -size, 2 * size,
+				key -> {
+					if (key >= start && key < start + size) {
+						return (long) key / keysPerSeq;
+					} else {
+						// key is not present
+						return null;
+					}
+				},
+				key -> -key);
+	}
+
+	@ParameterizedTest
+	@MethodSource("testConfiguration")
+	@DisplayName("Single Shift Test")
+	void singleShiftTest(final MapBuilder mapBuilder) {
+		// The number of things inserted into the map
+		final int size = 100;
+		// The number of keys for each sequence number
+		final int keysPerSeq = 5;
+		final int capacity = size / keysPerSeq;
+
+		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, capacity);
+		assertEquals(0, map.getFirstSequenceNumberInWindow(), "unexpected lower bound");
+
 
 		for (int i = 0; i < size; i++) {
 			map.put(new SequenceMapKey(i, i / keysPerSeq), -i);
 			assertEquals(i + 1, map.getSize(), "unexpected size");
 		}
 
-		map.purge(size / 2 / keysPerSeq);
-		assertEquals(size / 2 / keysPerSeq, map.getLowestAllowedSequenceNumber(),
+		map.shiftWindow(size / 2 / keysPerSeq);
+
+		assertEquals(size / 2 / keysPerSeq, map.getFirstSequenceNumberInWindow(),
 				"unexpected lower bound");
-		assertEquals(Long.MAX_VALUE, map.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+		assertEquals(size / 2 / keysPerSeq + capacity - 1, map.getLastSequenceNumberInWindow(),
+				"unexpected upper bound");
+
 		assertEquals(size / 2, map.getSize(), "unexpected size");
 
-		validateMapContents(map, 0, 2 * size,
+		validateMapContents(map, -size, 2 * size,
 				key -> {
-					if (key < size) {
+					if (key >= 0 && key < size) {
+						return (long) key / keysPerSeq;
+					} else {
+						// key is not present
+						return null;
+					}
+				},
+				key -> -key);
+	}
+
+	@ParameterizedTest
+	@MethodSource("testConfiguration")
+	@DisplayName("Single Shift Test")
+	void bigShiftTest(final MapBuilder mapBuilder) {
+		// The number of things inserted into the map
+		final int size = 100_000;
+		// The number of keys for each sequence number
+		final int keysPerSeq = 5;
+		final int capacity = size / keysPerSeq;
+
+		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, capacity);
+		assertEquals(0, map.getFirstSequenceNumberInWindow(), "unexpected lower bound");
+
+
+		for (int i = 0; i < size; i++) {
+			map.put(new SequenceMapKey(i, i / keysPerSeq), -i);
+			assertEquals(i + 1, map.getSize(), "unexpected size");
+		}
+
+		map.shiftWindow(size / 2 / keysPerSeq);
+
+		assertEquals(size / 2 / keysPerSeq, map.getFirstSequenceNumberInWindow(),
+				"unexpected lower bound");
+		assertEquals(size / 2 / keysPerSeq + capacity - 1, map.getLastSequenceNumberInWindow(),
+				"unexpected upper bound");
+
+		assertEquals(size / 2, map.getSize(), "unexpected size");
+
+		validateMapContents(map, -size, 2 * size,
+				key -> {
+					if (key >= 0 && key < size) {
 						return (long) key / keysPerSeq;
 					} else {
 						// key is not present
@@ -268,11 +384,12 @@ public class SequenceMapTests {
 	@MethodSource("testConfiguration")
 	@DisplayName("purge() With Callback Test")
 	void purgeWithCallbackTest(final MapBuilder mapBuilder) {
-		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, Long.MAX_VALUE);
-		assertEquals(0, map.getLowestAllowedSequenceNumber(), "unexpected lower bound");
 
 		// The number of things inserted into the map
 		final int size = 100;
+
+		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, size);
+		assertEquals(0, map.getFirstSequenceNumberInWindow(), "unexpected lower bound");
 
 		// The number of keys for each sequence number
 		final int keysPerSeq = 5;
@@ -283,7 +400,7 @@ public class SequenceMapTests {
 		}
 
 		final Set<Integer> purgedKeys = new HashSet<>();
-		map.purge(size / 2 / keysPerSeq, (key, value) -> {
+		map.shiftWindow(size / 2 / keysPerSeq, (key, value) -> {
 			assertTrue(key.sequence < size / 2 / keysPerSeq, "key should not be purged");
 			assertEquals(key.key / keysPerSeq, key.sequence, "unexpected sequence number for key");
 			assertEquals(value, -key.key, "unexpected value");
@@ -292,7 +409,7 @@ public class SequenceMapTests {
 
 		assertEquals(size / 2, purgedKeys.size(), "unexpected number of keys purged");
 
-		assertEquals(size / 2 / keysPerSeq, map.getLowestAllowedSequenceNumber(),
+		assertEquals(size / 2 / keysPerSeq, map.getFirstSequenceNumberInWindow(),
 				"unexpected lower bound");
 		assertEquals(size / 2, map.getSize(), "unexpected size");
 
@@ -319,10 +436,10 @@ public class SequenceMapTests {
 		final int keysPerSeq = 5;
 
 		final SequenceMap<SequenceMapKey, Integer> map =
-				mapBuilder.constructor.apply(5L, 10L);
+				mapBuilder.constructor.apply(5L, 5);
 
-		assertEquals(5, map.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-		assertEquals(10, map.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+		assertEquals(5, map.getFirstSequenceNumberInWindow(), "unexpected lower bound");
+		assertEquals(9, map.getLastSequenceNumberInWindow(), "unexpected upper bound");
 
 		for (int i = 0; i < size; i++) {
 			map.put(new SequenceMapKey(i, i / keysPerSeq), -i);
@@ -337,42 +454,43 @@ public class SequenceMapTests {
 	@MethodSource("testConfiguration")
 	@DisplayName("Shifting Window Test")
 	void shiftingWindowTest(final MapBuilder mapBuilder) {
+		final Random random = getRandomPrintSeed();
+
 		final int size = 100;
+		final int capacity = 5;
 
 		// The number of keys for each sequence number
 		final int keysPerSeq = 5;
 
 		// The lowest permitted sequence number
-		int lowerBound = 0;
-
-		// The highest permitted sequence number
-		int upperBound = size / keysPerSeq;
+		int initialLowerBound = -10;
+		int lowerBound = initialLowerBound;
 
 		final SequenceMap<SequenceMapKey, Integer> map =
-				mapBuilder.constructor.apply((long) lowerBound, (long) upperBound);
+				mapBuilder.constructor.apply((long) lowerBound, capacity);
 
 		for (int iteration = 0; iteration < 10; iteration++) {
-			if (iteration % 2 == 0) {
-				// shift the lower bound
-				lowerBound += size / 2 / keysPerSeq;
-				map.purge(lowerBound);
-			} else {
-				// shift the upper bound
-				upperBound += size / 2 / keysPerSeq;
-				map.expand(upperBound);
-			}
+			// shift the lower bound
+			lowerBound += random.nextInt(0, 20);
+			map.shiftWindow(lowerBound);
 
-			assertEquals(lowerBound, map.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-			assertEquals(upperBound, map.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+			assertEquals(lowerBound, map.getFirstSequenceNumberInWindow(), "unexpected lower bound");
+			assertEquals(capacity,
+					map.getLastSequenceNumberInWindow() - map.getFirstSequenceNumberInWindow() + 1,
+					"unexpected capacity");
 
 			// Add a bunch of values. Values outside the window should be ignored.
-			for (int i = lowerBound * keysPerSeq - 100; i < upperBound * keysPerSeq + 100; i++) {
+			for (int i = lowerBound * keysPerSeq - 100;
+				 i < map.getLastSequenceNumberInWindow() * keysPerSeq + 100;
+				 i++) {
+
 				map.put(new SequenceMapKey(i, i / keysPerSeq), -i);
 			}
 
-			validateMapContents(map, 0, upperBound * keysPerSeq + size,
+			validateMapContents(map, -size,
+					(int) (map.getLastSequenceNumberInWindow() * keysPerSeq + size),
 					key -> {
-						if (key >= 0) {
+						if (key / keysPerSeq >= initialLowerBound) {
 							return (long) key / keysPerSeq;
 						} else {
 							// key is not present
@@ -385,6 +503,28 @@ public class SequenceMapTests {
 
 	@ParameterizedTest
 	@MethodSource("testConfiguration")
+	@DisplayName("One Directional Shift Test")
+	void oneDirectionalShiftTest(final MapBuilder mapBuilder) {
+		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(-10L, 10);
+
+		// Shifting in the positive direction should not cause problems
+		map.shiftWindow(-5);
+		map.shiftWindow(0);
+		map.shiftWindow(5);
+		map.shiftWindow(10);
+		map.shiftWindow(15);
+		map.shiftWindow(20);
+
+		// Shifting by 0 is legal
+		map.shiftWindow(20);
+
+		// Shifting in the negative direction is not permitted
+		assertThrows(IllegalStateException.class, () -> map.shiftWindow(15),
+				"should not be able to shift in the negative direction");
+	}
+
+	@ParameterizedTest
+	@MethodSource("testConfiguration")
 	@DisplayName("clear() Test")
 	void clearTest(final MapBuilder mapBuilder) {
 
@@ -393,63 +533,59 @@ public class SequenceMapTests {
 
 		// The lowest permitted sequence number
 		final int lowerBound = 50;
-
-		// The highest permitted sequence number
-		final int upperBound = 100;
+		final int capacity = 5;
 
 		final SequenceMap<SequenceMapKey, Integer> map =
-				mapBuilder.constructor.apply((long) lowerBound, (long) upperBound);
+				mapBuilder.constructor.apply((long) lowerBound, capacity);
 
-		assertEquals(lowerBound, map.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-		assertEquals(upperBound, map.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+		assertEquals(lowerBound, map.getFirstSequenceNumberInWindow(), "unexpected lower bound");
 
-		for (int i = 0; i < upperBound * keysPerSeq + 100; i++) {
+		for (int i = 0; i < map.getLastSequenceNumberInWindow() * keysPerSeq + 100; i++) {
 			map.put(new SequenceMapKey(i, i / 5), -i);
 		}
 
-		validateMapContents(map, 0, upperBound * keysPerSeq + 100,
+		validateMapContents(map, 0,
+				(int) (map.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> (long) key / keysPerSeq,
 				key -> -key);
 
 		// Shift the window.
 		final int newLowerBound = lowerBound + 10;
-		final int newUpperBound = upperBound + 10;
-		map.purge(newLowerBound);
-		map.expand(newUpperBound);
+		map.shiftWindow(newLowerBound);
 
-		assertEquals(newLowerBound, map.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-		assertEquals(newUpperBound, map.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+		assertEquals(newLowerBound, map.getFirstSequenceNumberInWindow(), "unexpected lower bound");
 
-		for (int i = 0; i < newUpperBound * keysPerSeq + 100; i++) {
+		for (int i = 0; i < map.getLastSequenceNumberInWindow() * keysPerSeq + 100; i++) {
 			map.put(new SequenceMapKey(i, i / 5), -i);
 		}
 
-		validateMapContents(map, 0, newUpperBound * keysPerSeq + 100,
+		validateMapContents(map, 0,
+				(int) (map.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> (long) key / keysPerSeq,
 				key -> -key);
 
 		map.clear();
 
 		// should revert to original bounds
-		assertEquals(lowerBound, map.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-		assertEquals(upperBound, map.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+		assertEquals(lowerBound, map.getFirstSequenceNumberInWindow(), "unexpected lower bound");
 
 		assertEquals(0, map.getSize(), "map should be empty");
 
-		validateMapContents(map, 0, upperBound * keysPerSeq + 100,
+		validateMapContents(map, 0,
+				(int) (map.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> null, // no values permitted
 				key -> -key);
 
 		// Reinserting values should work the same way as when the map was "fresh"
-		for (int i = 0; i < upperBound * keysPerSeq + 100; i++) {
+		for (int i = 0; i < map.getLastSequenceNumberInWindow() * keysPerSeq + 100; i++) {
 			map.put(new SequenceMapKey(i, i / 5), -i);
 		}
 
-		validateMapContents(map, 0, upperBound * keysPerSeq + 100,
+		validateMapContents(map, 0,
+				(int) (map.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> (long) key / keysPerSeq,
 				key -> -key);
 	}
-
 
 	@ParameterizedTest
 	@MethodSource("testConfiguration")
@@ -460,12 +596,10 @@ public class SequenceMapTests {
 
 		// The lowest permitted sequence number
 		final int lowerBound = 0;
-
-		// The highest permitted sequence number
-		final int upperBound = 100;
+		final int capacity = 20;
 
 		final SequenceMap<SequenceMapKey, Integer> map =
-				mapBuilder.constructor.apply((long) lowerBound, (long) upperBound);
+				mapBuilder.constructor.apply((long) lowerBound, capacity);
 
 		// removing values from an empty map shouldn't cause problems
 		assertNull(map.remove(new SequenceMapKey(-100, 0)), "value should not be in map");
@@ -475,7 +609,8 @@ public class SequenceMapTests {
 
 		// Validate removal of an existing value
 		assertEquals(0, map.getSize(), "map should be empty");
-		validateMapContents(map, 0, upperBound * keysPerSeq + 100,
+		validateMapContents(map, 0,
+				(int) (map.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> null, // no values should be present
 				key -> -key);
 
@@ -483,7 +618,8 @@ public class SequenceMapTests {
 		assertEquals(-10, map.remove(new SequenceMapKey(10, 2)), "unexpected value");
 
 		assertEquals(0, map.getSize(), "map should be empty");
-		validateMapContents(map, 0, upperBound * keysPerSeq + 100,
+		validateMapContents(map, 0,
+				(int) (map.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> null, // no values should be present
 				key -> -key);
 
@@ -492,7 +628,8 @@ public class SequenceMapTests {
 		assertEquals(-10, map.get(new SequenceMapKey(10, 2)), "unexpected value");
 
 		assertEquals(1, map.getSize(), "map should contain one thing");
-		validateMapContents(map, 0, upperBound * keysPerSeq + 100,
+		validateMapContents(map, 0,
+				(int) (map.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> {
 					if (key == 10) {
 						return 2L;
@@ -512,17 +649,17 @@ public class SequenceMapTests {
 
 		// The lowest permitted sequence number
 		final int lowerBound = 0;
-
-		// The highest permitted sequence number
-		final int upperBound = 100;
+		final int capacity = 20;
 
 		final SequenceMap<SequenceMapKey, Integer> map =
-				mapBuilder.constructor.apply((long) lowerBound, (long) upperBound);
+				mapBuilder.constructor.apply((long) lowerBound, capacity);
 
-		assertNull(map.put(new SequenceMapKey(10, 2), -10), "no value should currently be in map");
+		assertNull(map.put(new SequenceMapKey(10, 2), -10),
+				"no value should currently be in map");
 
 		assertEquals(1, map.getSize(), "map should contain one thing");
-		validateMapContents(map, 0, upperBound * keysPerSeq + 100,
+		validateMapContents(map, 0,
+				(int) (map.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> {
 					if (key == 10) {
 						return 2L;
@@ -536,7 +673,8 @@ public class SequenceMapTests {
 				"previous value should be returned");
 
 		assertEquals(1, map.getSize(), "map should contain one thing");
-		validateMapContents(map, 0, upperBound * keysPerSeq + 100,
+		validateMapContents(map, 0,
+				(int) (map.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> {
 					if (key == 10) {
 						return 2L;
@@ -556,12 +694,13 @@ public class SequenceMapTests {
 
 		// The lowest permitted sequence number
 		final int lowerBound = 0;
+		final int capacity = 20;
 
 		// The highest permitted sequence number
 		final int upperBound = 100;
 
 		final SequenceMap<SequenceMapKey, Integer> map =
-				mapBuilder.constructor.apply((long) lowerBound, (long) upperBound);
+				mapBuilder.constructor.apply((long) lowerBound, capacity);
 
 		// Value that is in a legal range and not present
 		assertEquals(-10, map.computeIfAbsent(new SequenceMapKey(10, 2), key -> -key.key),
@@ -626,15 +765,16 @@ public class SequenceMapTests {
 
 		// The lowest permitted sequence number
 		final int lowerBound = 0;
+		final int capacity = 20;
 
 		// The highest permitted sequence number
 		final int upperBound = 100;
 
 		final SequenceMap<SequenceMapKey, Integer> map =
-				mapBuilder.constructor.apply((long) lowerBound, (long) upperBound);
+				mapBuilder.constructor.apply((long) lowerBound, capacity);
 
 		// Value that is in a legal range and not present
-		assertNull(map.putIfAbsent(new SequenceMapKey(10, 2), -10),
+		assertTrue(map.putIfAbsent(new SequenceMapKey(10, 2), -10),
 				"value is not yet in the map");
 
 		assertEquals(1, map.getSize(), "unexpected size");
@@ -649,9 +789,9 @@ public class SequenceMapTests {
 				key -> -key);
 
 		// Values that are in an illegal range
-		assertNull(map.putIfAbsent(new SequenceMapKey(-1000, -1000), 1000),
+		assertFalse(map.putIfAbsent(new SequenceMapKey(-1000, -1000), 1000),
 				"incorrect value returned");
-		assertNull(map.putIfAbsent(new SequenceMapKey(1000, 1000), -1000),
+		assertFalse(map.putIfAbsent(new SequenceMapKey(1000, 1000), -1000),
 				"incorrect value returned");
 
 		assertEquals(1, map.getSize(), "unexpected size");
@@ -667,7 +807,7 @@ public class SequenceMapTests {
 
 		// Value that is already present
 		map.put(new SequenceMapKey(20, 4), -20);
-		assertEquals(-20, map.putIfAbsent(new SequenceMapKey(20, 2), 1234),
+		assertFalse(map.putIfAbsent(new SequenceMapKey(20, 2), 1234),
 				"incorrect value returned");
 
 		assertEquals(2, map.getSize(), "unexpected size");
@@ -688,7 +828,7 @@ public class SequenceMapTests {
 	@MethodSource("testConfiguration")
 	@DisplayName("removeSequenceNumber() Test")
 	void removeSequenceNumberTest(final MapBuilder mapBuilder) {
-		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, Long.MAX_VALUE);
+		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, 100);
 
 		// The number of things inserted into the map
 		final int size = 100;
@@ -713,8 +853,8 @@ public class SequenceMapTests {
 				key -> -key);
 
 		// Remove sequence numbers that are not in the map
-		map.removeSequenceNumber(-1000);
-		map.removeSequenceNumber(1000);
+		map.removeValuesWithSequenceNumber(-1000);
+		map.removeValuesWithSequenceNumber(1000);
 		validateMapContents(map, -size, 2 * size,
 				key -> {
 					if (key >= 0 && key < size) {
@@ -727,7 +867,7 @@ public class SequenceMapTests {
 				key -> -key);
 
 		// Remove a sequence number that is in the map
-		map.removeSequenceNumber(1);
+		map.removeValuesWithSequenceNumber(1);
 
 		validateMapContents(map, -size, 2 * size,
 				key -> {
@@ -745,7 +885,7 @@ public class SequenceMapTests {
 				key -> -key);
 
 		// Removing the same sequence number a second time shouldn't have any ill effects
-		map.removeSequenceNumber(1);
+		map.removeValuesWithSequenceNumber(1);
 
 		validateMapContents(map, -size, 2 * size,
 				key -> {
@@ -791,7 +931,7 @@ public class SequenceMapTests {
 	@MethodSource("testConfiguration")
 	@DisplayName("removeSequenceNumber() With Callback Test")
 	void removeSequenceNumberWithCallbackTest(final MapBuilder mapBuilder) {
-		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, Long.MAX_VALUE);
+		final SequenceMap<SequenceMapKey, Integer> map = mapBuilder.constructor.apply(0L, 100);
 
 		// The number of things inserted into the map
 		final int size = 100;
@@ -816,8 +956,8 @@ public class SequenceMapTests {
 				key -> -key);
 
 		// Remove sequence numbers that are not in the map
-		map.removeSequenceNumber(-1000, (key, value) -> fail("should not be called"));
-		map.removeSequenceNumber(1000, (key, value) -> fail("should not be called"));
+		map.removeValuesWithSequenceNumber(-1000, (key, value) -> fail("should not be called"));
+		map.removeValuesWithSequenceNumber(1000, (key, value) -> fail("should not be called"));
 		validateMapContents(map, -size, 2 * size,
 				key -> {
 					if (key >= 0 && key < size) {
@@ -831,7 +971,7 @@ public class SequenceMapTests {
 
 		// Remove a sequence number that is in the map
 		final Set<Integer> removedKeys = new HashSet<>();
-		map.removeSequenceNumber(1, (key, value) -> {
+		map.removeValuesWithSequenceNumber(1, (key, value) -> {
 			assertEquals(1, key.sequence, "key should not be removed");
 			assertEquals(key.key / keysPerSeq, key.sequence, "unexpected sequence number for key");
 			assertEquals(value, -key.key, "unexpected value");
@@ -855,7 +995,7 @@ public class SequenceMapTests {
 				key -> -key);
 
 		// Removing the same sequence number a second time shouldn't have any ill effects
-		map.removeSequenceNumber(1, (key, value) -> fail("should not be called"));
+		map.removeValuesWithSequenceNumber(1, (key, value) -> fail("should not be called"));
 
 		validateMapContents(map, -size, 2 * size,
 				key -> {
@@ -903,11 +1043,11 @@ public class SequenceMapTests {
 		final Random random = new Random();
 
 		final AtomicInteger lowerBound = new AtomicInteger(0);
-		final AtomicInteger upperBound = new AtomicInteger(100);
+		final int capacity = 5;
 
 		final SequenceMap<SequenceMapKey, Integer> map = new ConcurrentSequenceMap<>(
 				lowerBound.get(),
-				upperBound.get(),
+				capacity,
 				SequenceMapKey::sequence);
 
 		final AtomicBoolean error = new AtomicBoolean();
@@ -922,10 +1062,11 @@ public class SequenceMapTests {
 
 					// Verify that no data is present that should not be present
 					for (int sequenceNumber = lowerBound.get() - 100;
-						 sequenceNumber < upperBound.get() + 100;
+						 sequenceNumber < map.getLastSequenceNumberInWindow() + 100;
 						 sequenceNumber++) {
 
-						if (sequenceNumber < lowerBound.get() || sequenceNumber > upperBound.get()) {
+						if (sequenceNumber < lowerBound.get()
+								|| sequenceNumber > map.getLastSequenceNumberInWindow()) {
 							final List<SequenceMapKey> keys = map.getKeysWithSequenceNumber(sequenceNumber);
 							assertEquals(0, keys.size(), "no keys should be present for this round");
 						}
@@ -933,9 +1074,7 @@ public class SequenceMapTests {
 
 					// shift the window
 					lowerBound.getAndAdd(5);
-					upperBound.getAndAdd(5);
-					map.purge(lowerBound.get());
-					map.expand(upperBound.get());
+					map.shiftWindow(lowerBound.get());
 				})
 				.build(true);
 
@@ -951,7 +1090,8 @@ public class SequenceMapTests {
 
 						final double choice = random.nextDouble();
 						final int sequenceNumber =
-								random.nextInt(lowerBound.get() - 50, upperBound.get() + 50);
+								random.nextInt(lowerBound.get() - 50,
+										(int) (map.getLastSequenceNumberInWindow() + 50));
 
 						if (choice < 0.5) {
 							// attempt to delete a value
@@ -966,7 +1106,7 @@ public class SequenceMapTests {
 
 						} else {
 							// very rarely, delete an entire sequence number
-							map.removeSequenceNumber(sequenceNumber);
+							map.removeValuesWithSequenceNumber(sequenceNumber);
 						}
 					})
 					.build(true));

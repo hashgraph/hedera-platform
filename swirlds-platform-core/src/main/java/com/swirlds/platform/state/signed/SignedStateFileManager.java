@@ -28,7 +28,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 import static com.swirlds.common.io.utility.FileUtils.deleteDirectoryAndLog;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
@@ -50,6 +53,14 @@ public class SignedStateFileManager {
 	private final Runnable freezeComplete;
 
 	/**
+	 * The timestamp of the signed state that was most recently written to disk, or null if no timestamp was
+	 * recently written to disk.
+	 */
+	private Instant previousSavedStateTimestamp;
+
+	private final AtomicLong lastRoundSavedToDisk = new AtomicLong(-1);
+
+	/**
 	 * The ID of this node.
 	 */
 	private final NodeId selfId;
@@ -64,6 +75,9 @@ public class SignedStateFileManager {
 	 */
 	private final String swirldName;
 
+	/**
+	 * A background queue of tasks.
+	 */
 	private final QueueThread<Runnable> taskQueue;
 
 	/**
@@ -90,9 +104,9 @@ public class SignedStateFileManager {
 		this.freezeComplete = freezeComplete;
 
 		this.taskQueue = new QueueThreadConfiguration<Runnable>()
-				.setCapacity(Settings.state.stateSavingQueueSize)
+				.setCapacity(Settings.getInstance().getState().stateSavingQueueSize)
 				.setMaxBufferSize(1)
-				.setPriority(Settings.threadPriorityNonSync)
+				.setPriority(Settings.getInstance().getThreadPriorityNonSync())
 				.setNodeId(selfId.getId())
 				.setComponent(PLATFORM_THREAD_POOL_NAME)
 				.setThreadName("signed-state-file-manager")
@@ -129,7 +143,7 @@ public class SignedStateFileManager {
 		NotificationFactory.getEngine().dispatch(
 				StateWriteToDiskCompleteListener.class,
 				new StateWriteToDiskCompleteNotification(
-						signedState.getLastRoundReceived(),
+						signedState.getRound(),
 						signedState.getConsensusTimestamp(),
 						signedState.getSwirldState(),
 						savedStateDirectory,
@@ -155,33 +169,35 @@ public class SignedStateFileManager {
 	 * @param taskDescription
 	 * 		a human-readable description of the operation being performed
 	 * @param finishedCallback
-	 * 		a function that is called after state writing is complete (called even if state writing fails),
-	 * 		ignored if null
+	 * 		a function that is called after state writing is complete. Is passed true if writing succeeded, else is
+	 * 		passed false.
 	 * @return true if it will be written to disk, false otherwise
 	 */
 	private boolean saveSignedStateToDisk(
 			final SignedState signedState,
 			final Path directory,
 			final String taskDescription,
-			final Runnable finishedCallback) {
+			final Consumer<Boolean> finishedCallback) {
 
 		signedState.weakReserveState();
 
 		final boolean accepted = taskQueue.offer(() -> {
+			boolean success = false;
 			try {
 				writeSignedStateToDisk(directory, signedState, taskDescription);
 				notifySavedStateListeners(signedState, directory);
-				if (signedState.isFreezeState()) {
-					freezeComplete.run();
-				}
+				success = true;
 			} catch (final Throwable e) {
 				LOG.error(EXCEPTION.getMarker(),
 						"Unable to write signed state to disk for round {} to {}.",
-						signedState.getLastRoundReceived(), directory, e);
+						signedState.getRound(), directory, e);
 			} finally {
+				if (signedState.isFreezeState()) {
+					freezeComplete.run();
+				}
 				signedState.weakReleaseState();
 				if (finishedCallback != null) {
-					finishedCallback.run();
+					finishedCallback.accept(success);
 				}
 			}
 		});
@@ -189,30 +205,33 @@ public class SignedStateFileManager {
 		if (!accepted) {
 			signedState.weakReleaseState();
 			if (finishedCallback != null) {
-				finishedCallback.run();
+				finishedCallback.accept(false);
 			}
 			LOG.error(STATE_TO_DISK.getMarker(),
 					"Unable to save signed state to disk for round {} due to backlog of " +
 							"operations in the SignedStateManager task queue.",
-					signedState.getLastRoundReceived());
+					signedState.getRound());
 		}
-
 		return accepted;
 	}
 
 	/**
-	 * Save a signed state to disk. This method will called periodically under standard operations.
+	 * Save a signed state to disk. This method will be called periodically under standard operations.
 	 *
 	 * @param signedState
 	 * 		the signed state to be written to disk.
-	 * @return true if it will be written to disk, false otherwise
 	 */
 	public boolean saveSignedStateToDisk(final SignedState signedState) {
 		return saveSignedStateToDisk(
 				signedState,
-				getSignedStateDir(signedState.getLastRoundReceived()),
+				getSignedStateDir(signedState.getRound()),
 				"periodic snapshot",
-				this::deleteOldStates);
+				success -> {
+					if (success) {
+						lastRoundSavedToDisk.set(signedState.getRound());
+						deleteOldStates();
+					}
+				});
 	}
 
 	/**
@@ -223,14 +242,13 @@ public class SignedStateFileManager {
 	 *
 	 * @param signedState
 	 * 		the signed state to be saved which has an ISS
-	 * @return true if it will be written to disk, false otherwise
 	 */
-	public boolean saveIssStateToDisk(final SignedState signedState) {
-		return saveSignedStateToDisk(
+	public void saveIssStateToDisk(final SignedState signedState) {
+		saveSignedStateToDisk(
 				signedState,
 				getSignedStatesBaseDirectory()
 						.resolve("iss")
-						.resolve(String.format("node%d_round%d", selfId.getId(), signedState.getLastRoundReceived())),
+						.resolve(String.format("node%d_round%d", selfId.getId(), signedState.getRound())),
 				"emergency ISS dump",
 				null);
 	}
@@ -240,20 +258,18 @@ public class SignedStateFileManager {
 	 *
 	 * @param signedState
 	 * 		the state to save
-	 * @return true if it will be written to disk, false otherwise
 	 */
-	public boolean saveFatalStateToDisk(final SignedState signedState) throws InterruptedException {
+	public void saveFatalStateToDisk(final SignedState signedState) throws InterruptedException {
 		final CountDownLatch latch = new CountDownLatch(1);
-		final boolean accepted = saveSignedStateToDisk(
+		saveSignedStateToDisk(
 				signedState,
 				getSignedStatesBaseDirectory()
 						.resolve("fatal")
-						.resolve(String.format("node%d_round%d", selfId.getId(), signedState.getLastRoundReceived())),
+						.resolve(String.format("node%d_round%d", selfId.getId(), signedState.getRound())),
 				"emergency dump after fatal exception",
-				latch::countDown);
+				success -> latch.countDown());
 
 		latch.await();
-		return accepted;
 	}
 
 	/**
@@ -268,13 +284,78 @@ public class SignedStateFileManager {
 	}
 
 	/**
+	 * The first round after genesis should be saved to disk and every round which is about saveStatePeriod
+	 * seconds after the previous one should be saved. This will not always be exactly saveStatePeriod seconds
+	 * after the previous one, but it will be predictable at what time each a state will be saved
+	 *
+	 * @param signedState
+	 * 		the state in question
+	 * @param previousTimestamp
+	 * 		the timestamp of the previous state that was saved to disk, or null if no previous
+	 * 		state was saved to disk
+	 * @return true if the state should be written to disk
+	 */
+	private static boolean shouldSaveToDisk(final SignedState signedState, final Instant previousTimestamp) {
+		if (signedState.isFreezeState()) {
+			// the state right before a freeze should be written to disk
+			return true;
+		}
+
+		final int saveStatePeriod = Settings.getInstance().getState().getSaveStatePeriod();
+		if (saveStatePeriod <= 0) {
+			// state saving is disabled
+			return false;
+		}
+
+		if (previousTimestamp == null) {
+			// the first round should be saved
+			return true;
+		}
+
+		return (signedState.getConsensusTimestamp().getEpochSecond() / saveStatePeriod) >
+				(previousTimestamp.getEpochSecond() / saveStatePeriod);
+	}
+
+	/**
+	 * Determine if a signed state should eventually be written to disk. If the state
+	 * should eventually be written, the state's {@link SignedState#isStateToSave()} flag
+	 * will be set to true.
+	 *
+	 * @param signedState
+	 * 		the signed state in question
+	 */
+	public void determineIfStateShouldBeSaved(final SignedState signedState) {
+		if (shouldSaveToDisk(signedState, previousSavedStateTimestamp)) {
+
+			LOG.info(STATE_TO_DISK.getMarker(),
+					"Signed state from round {} created, " +
+							"will eventually be written to disk once sufficient signatures are collected",
+					signedState.getRound());
+
+			previousSavedStateTimestamp = signedState.getConsensusTimestamp();
+			signedState.setStateToSave(true);
+		}
+	}
+
+	/**
+	 * This should be called at boot time when a signed state is read from the disk.
+	 *
+	 * @param signedState
+	 * 		the signed state that was read from file at boot time
+	 */
+	public synchronized void registerSignedStateFromDisk(final SignedState signedState) {
+		previousSavedStateTimestamp = signedState.getConsensusTimestamp();
+		lastRoundSavedToDisk.set(signedState.getRound());
+	}
+
+	/**
 	 * Purge old states on the disk.
 	 */
 	private synchronized void deleteOldStates() {
 		final SavedStateInfo[] savedStates = getSavedStateFiles(mainClassName, selfId, swirldName);
 
 		// States are returned newest to oldest. So delete from the end of the list to delete the oldest states.
-		for (int index = savedStates.length - 1; index >= Settings.state.getSignedStateDisk(); index--) {
+		for (int index = savedStates.length - 1; index >= Settings.getInstance().getState().getSignedStateDisk(); index--) {
 			final SavedStateInfo savedStateInfo = savedStates[index];
 			try {
 				deleteDirectoryAndLog(savedStateInfo.getDir());
@@ -282,5 +363,14 @@ public class SignedStateFileManager {
 				// Intentionally ignored, deleteDirectoryAndLog will log any exceptions that happen
 			}
 		}
+	}
+
+	/**
+	 * Get the last round that was saved to disk.
+	 *
+	 * @return the last round that was saved to disk, or -1 if no round was recently saved to disk
+	 */
+	public long getLastRoundSavedToDisk() {
+		return lastRoundSavedToDisk.get();
 	}
 }

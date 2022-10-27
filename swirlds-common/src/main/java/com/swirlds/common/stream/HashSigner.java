@@ -17,6 +17,7 @@
 package com.swirlds.common.stream;
 
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.crypto.Signature;
 
 /**
  * Capable of signing a {@link Hash}
@@ -28,5 +29,5 @@ public interface HashSigner {
 	 * 		the hash to sign
 	 * @return the signature for the hash provided
 	 */
-	byte[] sign(Hash hash);
+	Signature sign(Hash hash);
 }

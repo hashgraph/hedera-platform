@@ -26,6 +26,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static com.swirlds.common.utility.StackTrace.getStackTrace;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 /**
@@ -39,10 +40,22 @@ public class StandardFuture<T> implements Future<T> {
 	private static final Logger LOG = LogManager.getLogger(StandardFuture.class);
 
 	private final CountDownLatch latch;
+	private final CompletionCallback<T> completionCallback;
 	private final CancellationCallback cancellationCallback;
 	private T value;
 	private boolean cancelled;
 	private Throwable exception;
+
+	/**
+	 * A callback for when the future has been completed.
+	 *
+	 * @param <T>
+	 * 		the type of object held by the future
+	 */
+	@FunctionalInterface
+	public interface CompletionCallback<T> {
+		void futureIsComplete(final T value);
+	}
 
 	/**
 	 * A callback for when the future is cancelled.
@@ -68,6 +81,7 @@ public class StandardFuture<T> implements Future<T> {
 	public StandardFuture() {
 		latch = new CountDownLatch(1);
 		cancellationCallback = null;
+		completionCallback = null;
 	}
 
 	/**
@@ -80,6 +94,7 @@ public class StandardFuture<T> implements Future<T> {
 	public StandardFuture(final T value) {
 		latch = null;
 		cancellationCallback = null;
+		completionCallback = null;
 		this.value = value;
 	}
 
@@ -90,8 +105,34 @@ public class StandardFuture<T> implements Future<T> {
 	 * 		if not null, this method will be called if the future is cancelled
 	 */
 	public StandardFuture(final CancellationCallback cancellationCallback) {
-		latch = new CountDownLatch(1);
+		this(null, cancellationCallback);
+	}
+
+	/**
+	 * Create a new {@link Future}.
+	 *
+	 * @param completionCallback
+	 * 		if not null, this method will be called if the future is completed
+	 */
+	public StandardFuture(final CompletionCallback<T> completionCallback) {
+		this(completionCallback, null);
+	}
+
+	/**
+	 * Create a new {@link Future}.
+	 *
+	 * @param completionCallback
+	 * 		if not null, this method will be called if the future is completed
+	 * @param cancellationCallback
+	 * 		if not null, this method will be called if the future is cancelled
+	 */
+	public StandardFuture(
+			final CompletionCallback<T> completionCallback,
+			final CancellationCallback cancellationCallback) {
+
+		this.latch = new CountDownLatch(1);
 		this.cancellationCallback = cancellationCallback;
+		this.completionCallback = completionCallback;
 	}
 
 	/**
@@ -238,17 +279,23 @@ public class StandardFuture<T> implements Future<T> {
 	 */
 	public synchronized void complete(final T value) {
 		if (isDone()) {
-			LOG.warn(EXCEPTION.getMarker(), "Future has already been completed, can not complete again");
-			return;
-		}
-		if (cancelled) {
-			LOG.warn(EXCEPTION.getMarker(), "Future has already been cancelled, can't complete");
+			if (cancelled) {
+				LOG.warn(EXCEPTION.getMarker(), "Future has already been cancelled, can't complete " +
+						"(provided value = {})\n{}", value, getStackTrace());
+			} else {
+				LOG.warn(EXCEPTION.getMarker(),
+						"Future has already been completed can not complete again " +
+								"(current value = {}, provided value = {})\n{}", this.value, value, getStackTrace());
+			}
 			return;
 		}
 
 		this.value = value;
 		assert latch != null;
 		latch.countDown();
+		if (completionCallback != null) {
+			completionCallback.futureIsComplete(value);
+		}
 	}
 
 	/**
@@ -257,20 +304,21 @@ public class StandardFuture<T> implements Future<T> {
 	@Override
 	public synchronized boolean cancel(final boolean mayInterruptIfRunning) {
 		if (isDone()) {
-			LOG.warn(EXCEPTION.getMarker(), "Future has already been completed, can not cancel");
-			return false;
-		}
-		if (cancelled) {
-			LOG.warn(EXCEPTION.getMarker(), "Future has already been cancelled");
+			if (cancelled) {
+				LOG.warn(EXCEPTION.getMarker(), "Future has already been cancelled\n{}", getStackTrace());
+			} else {
+				LOG.warn(EXCEPTION.getMarker(), "Future has already been completed, can not cancel " +
+						"(current value = {})\n{}", value, getStackTrace());
+			}
 			return false;
 		}
 
-		if (cancellationCallback != null) {
-			cancellationCallback.futureIsCancelled(mayInterruptIfRunning, null);
-		}
 		cancelled = true;
 		if (latch != null) {
 			latch.countDown();
+		}
+		if (cancellationCallback != null) {
+			cancellationCallback.futureIsCancelled(mayInterruptIfRunning, null);
 		}
 
 		return true;
@@ -307,11 +355,12 @@ public class StandardFuture<T> implements Future<T> {
 	 */
 	public synchronized void cancelWithError(final boolean mayInterruptIfRunning, final Throwable error) {
 		if (isDone()) {
-			LOG.warn(EXCEPTION.getMarker(), "Future has already been completed, can not cancel");
-			return;
-		}
-		if (cancelled) {
-			LOG.warn(EXCEPTION.getMarker(), "Future has already been cancelled");
+			if (cancelled) {
+				LOG.warn(EXCEPTION.getMarker(), "Future has already been cancelled\n{}", getStackTrace());
+			} else {
+				LOG.warn(EXCEPTION.getMarker(), "Future has already been completed, can not cancel " +
+						"(current value = {})\n{}", value, getStackTrace());
+			}
 			return;
 		}
 

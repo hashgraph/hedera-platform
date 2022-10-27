@@ -77,7 +77,7 @@ public final class SignedStateFileUtils {
 	 * @return the base directory for all signed state files
 	 */
 	public static Path getSignedStatesBaseDirectory() {
-		return getAbsolutePath(Settings.state.savedStateDirectory);
+		return getAbsolutePath(Settings.getInstance().getState().savedStateDirectory);
 	}
 
 	/**

@@ -21,7 +21,7 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
 import com.swirlds.common.crypto.RunningHashable;
 import com.swirlds.common.crypto.SerializableHashable;
-import com.swirlds.common.system.Platform;
+import com.swirlds.common.system.NodeId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -78,8 +78,10 @@ public class EventStreamManager<T extends StreamAligned & Timestamped & RunningH
 	private final Predicate<T> isLastEventInFreezeCheck;
 
 	/**
-	 * @param platform
-	 * 		the platform which initializes this EventStreamManager instance
+	 * @param selfId
+	 * 		the id of this node
+	 * @param signer
+	 * 		an object that can sign things
 	 * @param nodeName
 	 * 		name of this node
 	 * @param enableEventStreaming
@@ -97,8 +99,10 @@ public class EventStreamManager<T extends StreamAligned & Timestamped & RunningH
 	 * @throws IOException
 	 * 		is thrown when fails to create directory for event streaming
 	 */
-	public EventStreamManager(final Platform platform,
-			final String nodeName, final boolean enableEventStreaming,
+	public EventStreamManager(final NodeId selfId,
+			final Signer signer,
+			final String nodeName,
+			final boolean enableEventStreaming,
 			final String eventsLogDir,
 			final long eventsLogPeriod,
 			final int eventStreamQueueCapacity,
@@ -111,7 +115,7 @@ public class EventStreamManager<T extends StreamAligned & Timestamped & RunningH
 			streamFileWriter = new TimestampStreamFileWriter<>(
 					eventStreamDir,
 					eventsLogPeriod * SECONDS_TO_MILLISECONDS,
-					platform,
+					signer,
 					/** when event streaming is started after reconnect, or at state recovering,
 					 * startWriteAtCompleteWindow should be set to be true; when event streaming is started after
 					 * restart, it should be set to be false */
@@ -119,7 +123,7 @@ public class EventStreamManager<T extends StreamAligned & Timestamped & RunningH
 					EventStreamType.EVENT);
 
 			writeQueueThread = new QueueThreadObjectStreamConfiguration<T>()
-					.setNodeId(platform.getSelfId().getId())
+					.setNodeId(selfId.getId())
 					.setComponent("event-stream")
 					.setThreadName("write-queue")
 					.setForwardTo(streamFileWriter)
@@ -131,7 +135,7 @@ public class EventStreamManager<T extends StreamAligned & Timestamped & RunningH
 		final RunningHashCalculatorForStream<T> runningHashCalculator = new RunningHashCalculatorForStream<>();
 		hashCalculator = new HashCalculatorForStream<>(runningHashCalculator);
 		hashQueueThread = new QueueThreadObjectStreamConfiguration<T>()
-				.setNodeId(platform.getSelfId().getId())
+				.setNodeId(selfId.getId())
 				.setComponent("event-stream")
 				.setThreadName("hash-queue")
 				.setForwardTo(hashCalculator)
@@ -143,6 +147,16 @@ public class EventStreamManager<T extends StreamAligned & Timestamped & RunningH
 		multiStream.setRunningHash(initialHash);
 
 		this.isLastEventInFreezeCheck = isLastEventInFreezeCheck;
+	}
+
+	/**
+	 * Closes the multistream.
+	 *
+	 * IMPORTANT: For unit test purposes only.
+	 */
+	public void stop() {
+		streamFileWriter.close();
+		multiStream.close();
 	}
 
 	/**

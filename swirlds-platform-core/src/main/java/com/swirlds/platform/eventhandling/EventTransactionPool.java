@@ -24,13 +24,12 @@ import com.swirlds.platform.components.TransThrottleSyncAndCreateRule;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
 import com.swirlds.platform.components.TransactionPool;
 import com.swirlds.platform.components.TransactionSupplier;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
 import java.util.function.BooleanSupplier;
 
-import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.PASS;
 import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse.SYNC_AND_CREATE;
 
@@ -39,19 +38,32 @@ import static com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResp
  * event to be created.
  */
 public class EventTransactionPool implements TransactionPool, TransactionSupplier, TransThrottleSyncAndCreateRule {
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
-	private static final Logger LOG = LogManager.getLogger();
 
-	/** list of transactions by self waiting to be put into an event */
-	protected final LinkedList<ConsensusTransactionImpl> transEvent = new LinkedList<>();
+	/**
+	 * A list of transactions created by this node waiting to be put into a self-event.
+	 */
+	protected final Queue<ConsensusTransactionImpl> transEvent = new LinkedList<>();
 
-	/** the number of user transactions in the transEvent list */
+	/**
+	 * A list of high-priority transactions created by this node waiting to be put into a self-event.
+	 * Transactions in this queue are always inserted into an event before transactions waiting in
+	 * {@link #transEvent}.
+	 */
+	protected final Queue<ConsensusTransactionImpl> priorityTransEvent = new LinkedList<>();
+
+	/**
+	 * the number of user transactions in the transEvent/priorityTransEvent lists
+	 */
 	protected volatile int numUserTransEvent = 0;
 
-	/** the number of signature system transactions in the transEvent list */
+	/**
+	 * the number of signature system transactions in the transEvent/priorityTransEvent lists
+	 */
 	protected volatile int numSignatureTransEvent = 0;
 
-	/** Indicates if the system is currently in a freeze. */
+	/**
+	 * Indicates if the system is currently in a freeze.
+	 */
 	private final BooleanSupplier inFreeze;
 
 	protected final SettingsProvider settings;
@@ -76,6 +88,29 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 	}
 
 	/**
+	 * Get the next transaction that should be inserted into an event, or null if there is no available transaction.
+	 *
+	 * @param currentEventSize
+	 * 		the current size in bytes of the event being constructed
+	 * @return the next transaction, or null if no transaction is available
+	 */
+	@SuppressWarnings("ConstantConditions")
+	private ConsensusTransactionImpl getNextTransaction(final int currentEventSize) {
+
+		final int maxSize = settings.getMaxTransactionBytesPerEvent() - currentEventSize;
+
+		if (!priorityTransEvent.isEmpty() && priorityTransEvent.peek().getSerializedLength() <= maxSize) {
+			return priorityTransEvent.poll();
+		}
+
+		if (!transEvent.isEmpty() && transEvent.peek().getSerializedLength() <= maxSize) {
+			return transEvent.poll();
+		}
+
+		return null;
+	}
+
+	/**
 	 * Removes as many transactions from the list waiting to be in an event that can fit (FIFO ordering), and returns
 	 * them as an array, along with a boolean indicating if the array of transactions returned contains a freeze state
 	 * signature transaction.
@@ -83,31 +118,29 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 	@Override
 	public synchronized ConsensusTransactionImpl[] getTransactions() {
 		// Early return due to no transactions waiting
-		if (transEvent.isEmpty()) {
+		if (transEvent.isEmpty() && priorityTransEvent.isEmpty()) {
 			return new ConsensusTransactionImpl[0];
 		}
 
-		final LinkedList<ConsensusTransactionImpl> selectedTrans = new LinkedList<>();
+		final List<ConsensusTransactionImpl> selectedTrans = new LinkedList<>();
 		int currEventSize = 0;
 
-		while (currEventSize < settings.getMaxTransactionBytesPerEvent() && !transEvent.isEmpty()) {
-			final ConsensusTransaction trans = transEvent.peek();
+		while (true) {
+			final ConsensusTransactionImpl transaction = getNextTransaction(currEventSize);
 
-			if (trans != null) {
-				// This event already contains transactions
-				// The next transaction is larger than the remaining space in the event
-				if (trans.getSerializedLength() > (settings.getMaxTransactionBytesPerEvent() - currEventSize)) {
-					break;
-				}
+			if (transaction == null) {
+				// No transaction of suitable size is available
+				break;
+			}
 
-				currEventSize += trans.getSerializedLength();
-				selectedTrans.offer(transEvent.poll());
-				if (!trans.isSystem()) {
-					numUserTransEvent--;
-				} else {
-					if (isSignatureTrans(trans)) {
-						numSignatureTransEvent--;
-					}
+			currEventSize += transaction.getSerializedLength();
+			selectedTrans.add(transaction);
+
+			if (!transaction.isSystem()) {
+				numUserTransEvent--;
+			} else {
+				if (isSignatureTrans(transaction)) {
+					numSignatureTransEvent--;
 				}
 			}
 		}
@@ -138,6 +171,7 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 	/**
 	 * {@inheritDoc}
 	 */
+	@SuppressWarnings("ConstantConditions")
 	@Override
 	public EventCreationRuleResponse shouldCreateEvent() {
 		if (numSignatureTransEvent() > 0 && inFreeze.getAsBoolean()) {
@@ -159,60 +193,71 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 		}
 	}
 
+	public boolean submitTransaction(final ConsensusTransactionImpl transaction) {
+		return submitTransaction(transaction, false);
+	}
+
 	/**
-	 * Add the given transaction to the list. If it is full, it does nothing and returns false immediately.
+	 * Add the given transaction to the list of transactions to be submitted to the network.
+	 * If the queue is full, it does nothing and returns false immediately.
 	 *
-	 * @param trans
+	 * @param transaction
 	 * 		The transaction. It must have been created by self.
+	 * @param priority
+	 * 		if true, then this transaction will be submitted before other waiting transactions that are
+	 * 		not marked with the priority flag. Use with moderation, adding too many priority transactions
+	 * 		(i.e. thousands per second) may disrupt the ability of the platform to perform some core functionalities.
 	 * @return true if successful
 	 */
-	public synchronized boolean submitTransaction(final ConsensusTransactionImpl trans) {
-		// Always submit system transactions
-		if (!trans.isSystem() && transEvent.size() > settings.getThrottleTransactionQueueSize()) {
+	@SuppressWarnings("ConstantConditions")
+	public synchronized boolean submitTransaction(
+			final ConsensusTransactionImpl transaction,
+			final boolean priority) {
+
+		// Always submit system transactions. If it's not a system transaction, then only submit it if we
+		// don't violate queue size capacity restrictions.
+		if (!transaction.isSystem() &&
+				(transEvent.size() + priorityTransEvent.size()) > settings.getThrottleTransactionQueueSize()) {
 			return false;
 		}
 
-		// this will be true, unless a bad error has occurred
-		return offerToEventQueue(trans);
+		if (!transaction.isSystem()) {
+			numUserTransEvent++;
+		} else if (isSignatureTrans(transaction)) {
+			numSignatureTransEvent++;
+		}
+
+		if (priority) {
+			priorityTransEvent.add(transaction);
+		} else {
+			transEvent.add(transaction);
+		}
+
+		return true;
 	}
 
-	/**
-	 * This method should only ever be called after ensuring the transaction is either a system transaction or
-	 * that the transEvent size is less than {@link SettingsProvider#getThrottleTransactionQueueSize}.
-	 *
-	 * @param trans
-	 * 		the transaction to add
-	 * @return true if the transaction was added to the queue
-	 */
-	protected synchronized boolean offerToEventQueue(final ConsensusTransactionImpl trans) {
-		final boolean ans = transEvent.offer(trans);
-		if (ans) {
-			if (!trans.isSystem()) {
-				numUserTransEvent++;
-			} else {
-				if (isSignatureTrans(trans)) {
-					numSignatureTransEvent++;
-				}
-			}
-		} else {
-			LOG.error(EXCEPTION.getMarker(), "transEvent queue was shorter " +
-					"than Settings.throttleTransactionQueueSize, yet offer returned false");
-		}
-		return ans;
-	}
 
 	/**
 	 * get the number of transactions in the transEvent queue
 	 *
 	 * @return the number of transactions
 	 */
-	public synchronized int getEventSize() {
+	public synchronized int getTransEventSize() {
 		return transEvent.size();
+	}
+
+	/**
+	 * get the number of transactions in the priorityTransEvent queue
+	 *
+	 * @return the number of transactions
+	 */
+	public synchronized int getPriorityTransEventSize() {
+		return priorityTransEvent.size();
 	}
 
 	/** return a single string giving the number of transactions in transEvent */
 	public synchronized String status() {
-		return "transEvent size =" + transEvent.size();
+		return "transEvent size =" + (transEvent.size() + priorityTransEvent.size());
 	}
 
 	/**
@@ -220,6 +265,7 @@ public class EventTransactionPool implements TransactionPool, TransactionSupplie
 	 */
 	public synchronized void clear() {
 		transEvent.clear();
+		priorityTransEvent.clear();
 		numUserTransEvent = 0;
 		numSignatureTransEvent = 0;
 	}

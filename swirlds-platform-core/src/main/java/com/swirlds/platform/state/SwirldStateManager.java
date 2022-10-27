@@ -23,11 +23,11 @@ import com.swirlds.common.system.transaction.internal.ConsensusTransactionImpl;
 import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 import com.swirlds.common.utility.Clearable;
-import com.swirlds.platform.internal.ConsensusRound;
-import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.FreezePeriodChecker;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRule;
 import com.swirlds.platform.eventhandling.EventTransactionPool;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.signed.LoadableFromSignedState;
 
 /**
@@ -154,7 +154,21 @@ public interface SwirldStateManager extends FreezePeriodChecker, TransThrottleSy
 	 * @param transaction
 	 * 		the transaction to submit
 	 */
-	boolean submitTransaction(final ConsensusTransactionImpl transaction);
+	default boolean submitTransaction(final ConsensusTransactionImpl transaction) {
+		return submitTransaction(transaction, false);
+	}
+
+	/**
+	 * Submits a self transaction (i.e. a transaction created by this node and put into a self event).
+	 * Implementations must submit this transaction for network propagation in {@link EventTransactionPool}.
+	 *
+	 * @param transaction
+	 * 		the transaction to submit
+	 * @param priority
+	 * 		if true, then this transaction will be added to a future event before other
+	 * 		non-priority transactions
+	 */
+	boolean submitTransaction(ConsensusTransactionImpl transaction, boolean priority);
 
 	/**
 	 * Called during recovery. Updates the dual state status to clear any possible inconsistency between freezeTime

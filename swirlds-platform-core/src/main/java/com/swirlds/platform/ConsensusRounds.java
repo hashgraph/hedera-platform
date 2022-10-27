@@ -20,12 +20,10 @@ import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.consensus.RoundNumberProvider;
-import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.MinGenInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -208,22 +206,6 @@ class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
 	}
 
 	/**
-	 * Get an array of all the events in the hashgraph.
-	 *
-	 * @return An array of events
-	 */
-	EventImpl[] getAllEvents() {
-		ArrayList<EventImpl> all = new ArrayList<>();
-		for (long r = minRound.get(); r <= maxRound.get(); r++) {
-			RoundInfo info = rounds.get(r); // each element of rounds has its own lock
-			if (info != null) {
-				all.addAll(info.allEvents); // allEvents has its own lock
-			}
-		}
-		return all.toArray(new EventImpl[0]);
-	}
-
-	/**
 	 * Update the max round generation
 	 *
 	 * Executed only on consensus thread.
@@ -252,7 +234,7 @@ class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
 	 * Executed only on consensus thread.
 	 */
 	private void updateMinGenNonAncient() {
-		final long nonAncientRound = Settings.state.getOldestNonAncientRound(fameDecidedBelow.get());
+		final long nonAncientRound = Settings.getInstance().getState().getOldestNonAncientRound(fameDecidedBelow.get());
 		final RoundInfo ri = rounds.get(nonAncientRound);
 		if (ri == null) {
 			// should never happen

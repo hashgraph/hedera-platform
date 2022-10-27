@@ -17,6 +17,7 @@
 package com.swirlds.platform;
 
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.exceptions.InvalidNodeIdException;
 import com.swirlds.common.stream.EventStreamManager;
 import com.swirlds.common.system.NodeId;
@@ -37,10 +38,10 @@ import com.swirlds.platform.eventhandling.PreConsensusEventHandler;
 import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.network.ConnectionTracker;
 import com.swirlds.platform.network.unidirectional.SharedConnectionLocks;
+import com.swirlds.platform.state.SwirldStateManager;
 import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.state.signed.SignedStateFileManager;
 import com.swirlds.platform.state.signed.SignedStateManager;
-import com.swirlds.platform.state.SwirldStateManager;
 import com.swirlds.platform.sync.ShadowGraph;
 import com.swirlds.platform.sync.ShadowGraphSynchronizer;
 import com.swirlds.platform.sync.SimultaneousSyncThrottle;
@@ -83,7 +84,7 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager, C
 	 * {@inheritDoc}
 	 */
 	@Override
-	public abstract byte[] sign(byte[] data);
+	public abstract Signature sign(byte[] data);
 
 	/**
 	 * get the FreezeManager used by this platform
@@ -105,14 +106,6 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager, C
 	 * @return the SignedStateFileManager
 	 */
 	abstract SignedStateFileManager getSignedStateFileManager();
-
-	/**
-	 * Get the Statistics object that monitors and reports on the network and syncing.
-	 *
-	 * @return the Statistics object associated with this Platform.
-	 */
-	@Override
-	public abstract Statistics getStats();
 
 	/**
 	 * Get the round number of the last event recovered from event stream file
@@ -201,14 +194,6 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager, C
 	 */
 	abstract void checkPlatformStatus();
 
-	/**
-	 * Get the ApplicationStatistics object that has user-added statistics monitoring entries
-	 *
-	 * @return the ApplicationStatistics object associated with this platform
-	 * @see ApplicationStatistics
-	 */
-	public abstract ApplicationStatistics getAppStats();
-
 	public abstract SwirldMain getAppMain();
 
 	/**
@@ -220,17 +205,23 @@ public abstract class AbstractPlatform implements Platform, SwirldMainManager, C
 	 * 		the new system transaction to be included in a future Event
 	 * @return true if successful, false otherwise
 	 */
-	public abstract boolean createSystemTransaction(final SystemTransaction systemTransaction);
+	public boolean createSystemTransaction(final SystemTransaction systemTransaction) {
+		return createSystemTransaction(systemTransaction, false);
+	}
 
 	/**
-	 * Record a statistics value in the Statistics object
+	 * Stores a new system transaction that will be added to an event in the future. This is currently
+	 * called by SignedStateMgr.newSelfSigned() to create the system transaction in which self signs a new
+	 * signed state.
 	 *
-	 * @param statsType
-	 * 		type of this stats
-	 * @param value
-	 * 		value to be recorded
+	 * @param systemTransaction
+	 * 		the new system transaction to be included in a future Event
+	 * @param priority
+	 * 		if true, then this transaction will be added to a future event before other
+	 * 		non-priority transactions
+	 * @return true if successful, false otherwise
 	 */
-	public abstract void recordStatsValue(SwirldsPlatform.StatsType statsType, double value);
+	public abstract boolean createSystemTransaction(final SystemTransaction systemTransaction, final boolean priority);
 
 	/**
 	 * Get the Address Book

@@ -26,15 +26,15 @@ import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.utility.Clearable;
+import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.internal.ConsensusRound;
 import com.swirlds.platform.internal.EventImpl;
-import com.swirlds.platform.SettingsProvider;
+import com.swirlds.platform.metrics.ConsensusHandlingMetrics;
 import com.swirlds.platform.observers.ConsensusRoundObserver;
 import com.swirlds.platform.state.MinGenInfo;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.SwirldStateManager;
 import com.swirlds.platform.state.signed.SignedState;
-import com.swirlds.platform.stats.ConsensusHandlingStats;
 import com.swirlds.platform.stats.CycleTimingStat;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -69,7 +69,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable 
 	/** Stores consensus events and round generations that need to be saved in state */
 	private final SignedStateEventsAndGenerations eventsAndGenerations;
 	private final SettingsProvider settings;
-	private final ConsensusHandlingStats stats;
+	private final ConsensusHandlingMetrics consensusHandlingMetrics;
 
 	/**
 	 * The address book of every known member in the swirld.
@@ -120,7 +120,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable 
 	 * 		a provider of static settings
 	 * @param swirldStateManager
 	 * 		the swirld state manager to send events to
-	 * @param stats
+	 * @param consensusHandlingMetrics
 	 * 		statistics updated by {@link ConsensusRoundHandler}
 	 * @param eventStreamManager
 	 * 		the event stream manager to send consensus events to
@@ -137,7 +137,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable 
 			final long selfId,
 			final SettingsProvider settings,
 			final SwirldStateManager swirldStateManager,
-			final ConsensusHandlingStats stats,
+			final ConsensusHandlingMetrics consensusHandlingMetrics,
 			final EventStreamManager<EventImpl> eventStreamManager,
 			final AddressBook addressBook,
 			final BlockingQueue<SignedState> stateHashSignQueue,
@@ -146,14 +146,14 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable 
 
 		this.settings = settings;
 		this.swirldStateManager = swirldStateManager;
-		this.stats = stats;
+		this.consensusHandlingMetrics = consensusHandlingMetrics;
 		this.eventStreamManager = eventStreamManager;
 		this.addressBook = addressBook;
 		this.stateHashSignQueue = stateHashSignQueue;
 		this.softwareVersion = softwareVersion;
 		this.enterFreezePeriod = enterFreezePeriod;
 		eventsAndGenerations = new SignedStateEventsAndGenerations(settings.getStateSettings());
-		final ConsensusQueue queue = new ConsensusQueue(stats, settings.getMaxEventQueueForCons());
+		final ConsensusQueue queue = new ConsensusQueue(consensusHandlingMetrics, settings.getMaxEventQueueForCons());
 		queueThread = new QueueThreadConfiguration<ConsensusRound>()
 				.setNodeId(selfId)
 				.setHandler(this::applyConsensusRoundToState)
@@ -204,7 +204,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable 
 	private void clearStateHashSignQueueThread() {
 		SignedState signedState = stateHashSignQueue.poll();
 		while (signedState != null) {
-			signedState.release();
+			signedState.releaseState();
 			signedState = stateHashSignQueue.poll();
 		}
 	}
@@ -300,7 +300,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable 
 			return;
 		}
 
-		final CycleTimingStat consensusTimingStat = stats.getConsCycleStat();
+		final CycleTimingStat consensusTimingStat = consensusHandlingMetrics.getConsCycleStat();
 		consensusTimingStat.startCycle();
 
 		propagateConsensusData(round);
@@ -375,15 +375,14 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable 
 	}
 
 	private boolean timeToSignState(final long roundNum) {
-		return settings.getSignedStateKeep() > 0 // we are keeping states
-				&& settings.getSignedStateFreq() > 0 // and we are signing states
+		return settings.getSignedStateFreq() > 0 // and we are signing states
 
 				// the first round should be signed and every Nth should be signed, where N is signedStateFreq
 				&& (roundNum == 1 || roundNum % settings.getSignedStateFreq() == 0);
 	}
 
 	private void createSignedState(final ConsensusRound round, final Instant ssConsTime) throws InterruptedException {
-		final CycleTimingStat ssTimingStat = stats.getNewSignedStateCycleStat();
+		final CycleTimingStat ssTimingStat = consensusHandlingMetrics.getNewSignedStateCycleStat();
 		ssTimingStat.startCycle();
 
 		// create a new signed state, sign it, and send out a new transaction with the signature

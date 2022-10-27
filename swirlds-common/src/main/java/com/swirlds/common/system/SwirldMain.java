@@ -17,8 +17,6 @@ package com.swirlds.common.system;
 
 import com.swirlds.common.system.address.AddressBook;
 
-import java.time.Instant;
-
 /**
  * To implement a swirld, create a class that implements SwirldMain. Its constructor should have no
  * parameters, and its run() method should run until the user quits the swirld.
@@ -117,18 +115,4 @@ public interface SwirldMain extends Runnable {
 	 * @return the current version
 	 */
 	SoftwareVersion getSoftwareVersion();
-
-	/**
-	 * Called any time a new {@link SwirldState} is signed by nodes with more than 2/3 of the stake. If this method
-	 * call is still ongoing while a new SwirldState is signed, it will be skipped until it has finished.
-	 *
-	 * @param state
-	 * 		A fast copy of the {@link SwirldState} which was signed
-	 * @param consensusTimeStamp
-	 * 		The consensus timestamp of this state
-	 * @param roundNumber
-	 * 		The last consensus round handled by this state
-	 */
-	default void newSignedState(SwirldState state, Instant consensusTimeStamp, long roundNumber) {
-	}
 }

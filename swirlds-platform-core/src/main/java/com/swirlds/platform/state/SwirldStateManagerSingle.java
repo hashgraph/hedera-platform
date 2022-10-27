@@ -35,7 +35,8 @@ import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.eventhandling.SwirldStateSingleTransactionPool;
 import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.signed.SignedState;
-import com.swirlds.platform.stats.SwirldStateStats;
+import com.swirlds.platform.metrics.ConsensusMetrics;
+import com.swirlds.platform.metrics.SwirldStateMetrics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -98,8 +99,11 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	/** This node's id. */
 	private final NodeId selfId;
 
-	/** Stats relevant to SwirldState operations. */
-	private final SwirldStateStats stats;
+	/** Metrics relevant to SwirldState operations. */
+	private final SwirldStateMetrics stats;
+
+	/** Metrics related to consensus */
+	private final ConsensusMetrics consensusMetrics;
 
 	/** Contains self transactions in several queues to be applied to the various states. */
 	private final SwirldStateSingleTransactionPool transactionPool;
@@ -175,6 +179,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	public SwirldStateManagerSingle() {
 		selfId = null;
 		stats = null;
+		consensusMetrics = null;
 		consEstimateSupplier = null;
 		shuffler = null;
 		shuffleBarrier = null;
@@ -195,8 +200,10 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	 * 		this node's id
 	 * @param systemTransactionHandler
 	 * 		the handler for system transactions
-	 * @param stats
-	 * 		statistics relevant to this class
+	 * @param swirldStateMetrics
+	 * 		metrics related to SwirldState
+	 * @param consensusMetrics
+	 * 		metrics related to consensus
 	 * @param settings
 	 * 		a static settings provider
 	 * @param consEstimateSupplier
@@ -209,13 +216,15 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	public SwirldStateManagerSingle(
 			final NodeId selfId,
 			final SystemTransactionHandler systemTransactionHandler,
-			final SwirldStateStats stats,
+			final SwirldStateMetrics swirldStateMetrics,
+			final ConsensusMetrics consensusMetrics,
 			final SettingsProvider settings,
 			final Supplier<Instant> consEstimateSupplier,
 			final BooleanSupplier inFreeze,
 			final State initialState) {
 		this.selfId = selfId;
-		this.stats = stats;
+		this.stats = swirldStateMetrics;
+		this.consensusMetrics = consensusMetrics;
 		this.settings = settings;
 		this.consEstimateSupplier = consEstimateSupplier;
 		this.systemTransactionHandler = systemTransactionHandler;
@@ -335,7 +344,11 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 			return;
 		}
 		// time was estimated before, but we update it again here to estimate with the latest information
-		event.estimateTime(selfId, stats.getAvgSelfCreatedTimestamp(), stats.getAvgOtherReceivedTimestamp());
+		event.estimateTime(
+				selfId,
+				consensusMetrics.getAvgSelfCreatedTimestamp(),
+				consensusMetrics.getAvgOtherReceivedTimestamp()
+		);
 	}
 
 	/**
@@ -690,13 +703,13 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean submitTransaction(final ConsensusTransactionImpl transaction) {
+	public boolean submitTransaction(final ConsensusTransactionImpl transaction, final boolean priority) {
 		// pre-handle application transactions now because they will be
 		// handled even before being put into an event
 		if (!transaction.isSystem()) {
 			transactionHandler.preHandle(transaction, (SwirldState1) stateCons.getState().getSwirldState());
 		}
-		return transactionPool.submitTransaction(transaction);
+		return transactionPool.submitTransaction(transaction, priority);
 	}
 
 	/**

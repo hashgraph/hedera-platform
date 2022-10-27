@@ -17,105 +17,41 @@
 package com.swirlds.common.metrics;
 
 import com.swirlds.common.internal.SettingsCommon;
-import com.swirlds.common.statistics.StatsBuffered;
-import com.swirlds.common.statistics.StatsRunningAverage;
-import com.swirlds.common.utility.CommonUtils;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+
+import java.util.EnumSet;
+
+import static com.swirlds.common.metrics.Metric.ValueType.MAX;
+import static com.swirlds.common.metrics.Metric.ValueType.MIN;
+import static com.swirlds.common.metrics.Metric.ValueType.STD_DEV;
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * This class maintains a running average of some numeric value. It is exponentially weighted in time, with
  * a given half life. If it is always given the same value, then that value will be the average, regardless
  * of the timing.
  */
-public class RunningAverageMetric extends AbstractDistributionMetric {
-
-	private final Clock clock;
-
-	@SuppressWarnings("removal")
-	private StatsRunningAverage runningAverage;
+public interface RunningAverageMetric extends Metric {
 
 	/**
-	 * Constructor of {@code RunningAverageMetric}
-	 *
-	 * @param category
-	 * 		the kind of metric (stats are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the statistic
-	 * @param description
-	 * 		a one-sentence description of the statistic
-	 * @param format
-	 * 		a string that can be passed to String.format() to format the statistic
-	 * @param halfLife
-	 * 		the halfLife of the running average
-	 * @throws IllegalArgumentException if one of the parameters is {@code null}
+	 * {@inheritDoc}
 	 */
-	@SuppressWarnings("removal")
-	public RunningAverageMetric(
-			final String category,
-			final String name,
-			final String description,
-			final String format,
-			final double halfLife) {
-		this(category, name, description, format, halfLife, Clock.DEFAULT);
-	}
-
-	/**
-	 * Constructor of {@code RunningAverageMetric} with a half-life as defined in {@link SettingsCommon#halfLife}.
-	 *
-	 * @param category
-	 * 		the kind of metric (stats are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the statistic
-	 * @param description
-	 * 		a one-sentence description of the statistic
-	 * @param format
-	 * 		a string that can be passed to String.format() to format the statistic
-	 * @throws IllegalArgumentException if one of the parameters is {@code null}
-	 */
-	@SuppressWarnings("removal")
-	public RunningAverageMetric(
-			final String category,
-			final String name,
-			final String description,
-			final String format) {
-		this(category, name, description, format, SettingsCommon.halfLife, Clock.DEFAULT);
-	}
-
-	/**
-	 * This constructor should only be used for testing.
-	 *
-	 * @deprecated This constructor should only be used for testing and will become non-public at some point.
-	 */
-	@SuppressWarnings("removal")
-	@Deprecated (forRemoval = true)
-	public RunningAverageMetric(
-			final String category,
-			final String name,
-			final String description,
-			final String format,
-			final double halfLife,
-			final Clock clock) {
-		super(category, name, description, format, halfLife);
-		this.clock = CommonUtils.throwArgNull(clock, "clock");
-		this.runningAverage = new StatsRunningAverage(halfLife, clock);
+	default EnumSet<ValueType> getValueTypes() {
+		return EnumSet.of(VALUE, MAX, MIN, STD_DEV);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	@SuppressWarnings("removal")
 	@Override
-	public void init() {
-		runningAverage = new StatsRunningAverage(halfLife, clock);
-	}
+	Double get(final ValueType valueType);
 
 	/**
-	 * {@inheritDoc}
+	 * Getter of the {@code halfLife}
+	 *
+	 * @return the {@code halfLife}
 	 */
-	@SuppressWarnings("removal")
-	@Override
-	public StatsBuffered getStatsBuffered() {
-		return runningAverage;
-	}
+	double getHalfLife();
 
 	/**
 	 * Incorporate "value" into the running average. If it is the same on every call, then the average will
@@ -131,9 +67,7 @@ public class RunningAverageMetric extends AbstractDistributionMetric {
 	 * @param value
 	 * 		the value to incorporate into the running average
 	 */
-	public void recordValue(final double value) {
-		runningAverage.recordValue(value);
-	}
+	void update(final double value);
 
 	/**
 	 * Get the average of recent calls to recordValue(). This is an exponentially-weighted average of recent
@@ -141,8 +75,127 @@ public class RunningAverageMetric extends AbstractDistributionMetric {
 	 *
 	 * @return the running average as of the last time recordValue was called
 	 */
-	@Override
-	public double get() {
-		return runningAverage.getWeightedMean();
+	double get();
+
+	/**
+	 * Configuration of a {@link RunningAverageMetric}
+	 */
+	final class Config extends MetricConfig<RunningAverageMetric, RunningAverageMetric.Config> {
+
+		private final double halfLife;
+
+		/**
+		 * Constructor of {@code RunningAverageMetric.Config}
+		 *
+		 * The {@code halfLife} is by default set to {@code SettingsCommon.halfLife}.
+		 *
+		 * @param category
+		 * 		the kind of metric (stats are grouped or filtered by this)
+		 * @param name
+		 * 		a short name for the statistic
+		 * @throws IllegalArgumentException
+		 * 		if one of the parameters is {@code null}
+		 */
+		public Config(final String category, final String name) {
+			super(category, name, FloatFormats.FORMAT_11_3);
+			this.halfLife = SettingsCommon.halfLife;
+		}
+
+		private Config(
+				final String category,
+				final String name,
+				final String description,
+				final String unit,
+				final String format,
+				final double halfLife) {
+
+			super(category, name, description, unit, format);
+			this.halfLife = halfLife;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public RunningAverageMetric.Config withDescription(final String description) {
+			return new RunningAverageMetric.Config(
+					getCategory(), getName(), description, getUnit(), getFormat(), getHalfLife()
+			);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public RunningAverageMetric.Config withUnit(final String unit) {
+			return new RunningAverageMetric.Config(
+					getCategory(), getName(), getDescription(), unit, getFormat(), getHalfLife()
+			);
+		}
+
+		/**
+		 * Sets the {@link Metric#getFormat() Metric.format} in fluent style.
+		 *
+		 * @param format
+		 * 		the format-string
+		 * @return a new configuration-object with updated {@code format}
+		 * @throws IllegalArgumentException
+		 * 		if {@code format} is {@code null} or consists only of whitespaces
+		 */
+		public RunningAverageMetric.Config withFormat(final String format) {
+			return new RunningAverageMetric.Config(
+					getCategory(), getName(), getDescription(), getUnit(), format, getHalfLife()
+			);
+		}
+
+		/**
+		 * Getter of the {@code halfLife}.
+		 *
+		 * @return the {@code halfLife}
+		 */
+		public double getHalfLife() {
+			return halfLife;
+		}
+
+		/**
+		 * Fluent-style setter of the {@code halfLife}.
+		 *
+		 * @param halfLife
+		 * 		the {@code halfLife}
+		 * @return a new configuration-object with updated {@code halfLife}
+		 */
+		public RunningAverageMetric.Config withHalfLife(final double halfLife) {
+			return new RunningAverageMetric.Config(
+					getCategory(), getName(), getDescription(), getUnit(), getFormat(), halfLife
+			);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		Class<RunningAverageMetric> getResultClass() {
+			return RunningAverageMetric.class;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		RunningAverageMetric create(final MetricsFactory factory) {
+			return factory.createRunningAverageMetric(this);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public String toString() {
+			return new ToStringBuilder(this)
+					.appendSuper(super.toString())
+					.append("halfLife", halfLife)
+					.toString();
+		}
 	}
+
 }

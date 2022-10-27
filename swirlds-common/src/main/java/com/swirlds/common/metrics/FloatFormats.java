@@ -46,6 +46,8 @@ public final class FloatFormats {
 	public static final String FORMAT_16_0 = "%,16.0f";
 	public static final String FORMAT_16_2 = "%,16.2f";
 	public static final String FORMAT_17_1 = "%,17.1f";
+	public static final String FORMAT_DECIMAL_0 = "%,.0f";
+	public static final String FORMAT_DECIMAL_3 = "%,.3f";
 
 	private FloatFormats() {
 	}

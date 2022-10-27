@@ -217,9 +217,10 @@ public class FCInvertibleHashMap<K, V> extends AbstractMap<K, V> implements Fast
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized void release() {
+	public synchronized boolean release() {
 		map.release();
 		inverseRelation.release();
+		return true;
 	}
 
 	/**

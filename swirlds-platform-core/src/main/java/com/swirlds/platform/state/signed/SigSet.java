@@ -49,22 +49,15 @@ public class SigSet implements FastCopyable, SelfSerializable {
 	private volatile long stakeCollected = 0;
 	/** the number of members, each of which can sign */
 	private int numMembers;
-	/** have members with more than 2/3 of the total stake signed? */
+	/** have members with more than 1/2 of the total stake signed? */
 	private volatile boolean complete = false;
 	/** array element i is the signature for the member with ID i */
 	private AtomicReferenceArray<SigInfo> sigInfos;
 	/** the address book in force at the time of this state */
 	private final AddressBook addressBook;
 
-	/**
-	 * False until complete and has been processed as a newly completed SigSet
-	 */
-	private boolean markedAsNewlyComplete = false;
-
-	private boolean immutable;
-
 	/** get array where element i is the signature for the member with ID i */
-	SigInfo[] getSigInfosCopy() {
+	private SigInfo[] getSigInfosCopy() {
 		SigInfo[] a = new SigInfo[numMembers];
 		for (int i = 0; i < a.length; i++) {
 			a[i] = sigInfos.get(i);
@@ -113,8 +106,14 @@ public class SigSet implements FastCopyable, SelfSerializable {
 		calculateComplete();
 	}
 
+	/**
+	 * Although &ge;1/3 is sufficient proof that at least 1 honest node has signed this state, in the presence
+	 * of ISS bugs a &gt;1/2 threshold makes it very difficult to accidentally produce two different completely
+	 * signed states from the same round.(Although this is not impossible in the theoretical sense,
+	 * given that a malicious nodes could sign multiple versions of the state.)
+	 */
 	private void calculateComplete() {
-		complete = Utilities.isStrongMinority(stakeCollected, addressBook.getTotalStake());
+		complete = Utilities.isMajority(stakeCollected, addressBook.getTotalStake());
 	}
 
 	/**
@@ -129,25 +128,10 @@ public class SigSet implements FastCopyable, SelfSerializable {
 	}
 
 	/**
-	 * @return does this contain signatures from members with at least 1/3 of the total stake?
+	 * @return does this contain signatures from members with greater than 1/2 of the total stake?
 	 */
 	public boolean isComplete() {
 		return complete;
-	}
-
-	/**
-	 * Once this SigSet is complete, this function will return true the first time it is called
-	 * and false afterwards. Used to handle SigSets that have just become complete.
-	 *
-	 * @return true if this SigSet is complete and this function is called for the first time after it is complete,
-	 * 		false otherwise
-	 */
-	public boolean isNewlyComplete() {
-		if (complete && !markedAsNewlyComplete) {
-			markedAsNewlyComplete = true;
-			return true;
-		}
-		return false;
 	}
 
 	/**
@@ -208,13 +192,6 @@ public class SigSet implements FastCopyable, SelfSerializable {
 			}
 		}
 
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void release() {
 	}
 
 	/**
@@ -335,14 +312,6 @@ public class SigSet implements FastCopyable, SelfSerializable {
 	@Override
 	public int getMinimumSupportedVersion() {
 		return ClassVersion.MIGRATE_TO_SERIALIZABLE;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean isImmutable() {
-		return this.immutable;
 	}
 }
 

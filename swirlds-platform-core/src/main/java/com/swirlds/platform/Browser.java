@@ -26,6 +26,8 @@ import com.swirlds.common.internal.ConfigurationException;
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.settings.TemporaryFileSettingsFactory;
 import com.swirlds.common.merkle.synchronization.settings.ReconnectSettingsFactory;
+import com.swirlds.common.metrics.Metrics;
+import com.swirlds.common.metrics.platform.PlatformMetricsFactory;
 import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskCompleteListener;
 import com.swirlds.common.notification.listeners.StateLoadedFromDiskNotification;
@@ -107,7 +109,6 @@ import static com.swirlds.logging.LogMarker.CERTIFICATES;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.JVM_PAUSE_WARN;
 import static com.swirlds.logging.LogMarker.STARTUP;
-import static com.swirlds.platform.Settings.JVMPauseDetectorSleepMs;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
 import static com.swirlds.platform.state.address.AddressBookUtils.getOwnHostCount;
 import static com.swirlds.platform.system.SystemExitReason.NODE_ADDRESS_MISMATCH;
@@ -219,7 +220,7 @@ public abstract class Browser {
 									}
 									break;
 								case "-log":
-									Settings.logPath = getAbsolutePath(arg);
+									Settings.getInstance().setLogPath(getAbsolutePath(arg));
 									break;
 							}
 						}
@@ -237,10 +238,10 @@ public abstract class Browser {
 		// Initialize the log4j2 configuration and logging subsystem if a log4j2.xml file is present in the current
 		// working directory
 		try {
-			if (Files.exists(Settings.logPath)) {
+			if (Files.exists(Settings.getInstance().getLogPath())) {
 				final LoggerContext context = (LoggerContext) LogManager
 						.getContext(false);
-				context.setConfigLocation(Settings.logPath.toUri());
+				context.setConfigLocation(Settings.getInstance().getLogPath().toUri());
 			}
 		} catch (final Exception e) {
 			LogManager.getLogger(Browser.class).fatal("Unable to load log context", e);
@@ -299,7 +300,7 @@ public abstract class Browser {
 			// Also, if the settings.txt file exists, then after reading it and changing the settings, write
 			// all the current settings to settingsUsed.txt, some of which might have been changed by
 			// settings.txt
-			Settings.loadSettings();
+			Settings.getInstance().loadSettings();
 
 			//Provide swirlds.common the settings it needs via the SettingsCommon class
 			populateSettingsCommon();
@@ -313,14 +314,14 @@ public abstract class Browser {
 
 			try {
 
-				if (Files.exists(Settings.configPath)) {
+				if (Files.exists(Settings.getInstance().getConfigPath())) {
 					CommonUtils.tellUserConsole(
 							"Reading the configuration from the file:   "
-									+ Settings.configPath);
+									+ Settings.getInstance().getConfigPath());
 				} else {
 					CommonUtils.tellUserConsole(
 							"A config.txt file could be created here:   "
-									+ Settings.configPath);
+									+ Settings.getInstance().getConfigPath());
 					return;
 				}
 				// instantiate all Platform objects, which each instantiates a Statistics object
@@ -331,8 +332,8 @@ public abstract class Browser {
 				// if the settings.txt file exists, then write the settingsUsed.txt file.
 				// if it doesn't exist, then we will never reach this point, so we won't create
 				// settingsUsed.txt.
-				if (Settings.settingsTxtExists()) {
-					Settings.writeSettingsUsed();
+				if (Files.exists(Settings.getInstance().getSettingsPath())) {
+					Settings.getInstance().writeSettingsUsed();
 				}
 
 				// create the browser window, which uses those Statistics objects
@@ -350,7 +351,7 @@ public abstract class Browser {
 						() -> (Arrays.toString(Network.getOwnAddresses2())));
 
 				// port forwarding
-				if (Settings.doUpnp) {
+				if (Settings.getInstance().isDoUpnp()) {
 					final List<PortMapping> portsToBeMapped = new LinkedList<>();
 					synchronized (Browser.platforms) {
 						for (final Platform p : platforms) {
@@ -385,14 +386,14 @@ public abstract class Browser {
 	}
 
 	/**
-	 * Instantiate and start the deadlock detector timer, if enabled via the {@link Settings#deadlockCheckPeriod}
+	 * Instantiate and start the deadlock detector timer, if enabled via the {@link Settings#getDeadlockCheckPeriod()}
 	 * setting.
 	 */
 	private static void startDeadlockDetector() {
 		// Once a second, check for deadlocks (which only takes 1 ms).
 		// If there is a deadlock, print all the deadlocked threads to the console, then log them.
 		final Timer deadlockDetectorTimer;
-		if (Settings.deadlockCheckPeriod > 0) { // if it's -1, then never check and don't create the thread
+		if (Settings.getInstance().getDeadlockCheckPeriod() > 0) { // if it's -1, then never check and don't create the thread
 			deadlockDetectorTimer = new Timer("deadlock detector timer", true);
 			deadlockDetectorTimer.schedule(new TimerTask() {
 				@Override
@@ -404,45 +405,45 @@ public abstract class Browser {
 						log.error(EXCEPTION.getMarker(), err);
 					}
 				}
-			}, 0, Settings.deadlockCheckPeriod); // check for deadlocks periodically, starting now
+			}, 0, Settings.getInstance().getDeadlockCheckPeriod()); // check for deadlocks periodically, starting now
 		}
 	}
 
 	/**
-	 * Instantiate and start the thread dump generator, if enabled via the {@link Settings#threadDumpPeriodMs}
+	 * Instantiate and start the thread dump generator, if enabled via the {@link Settings#getThreadDumpPeriodMs()}
 	 * setting.
 	 */
 	private static void startThreadDumpGenerator() {
-		if (Settings.threadDumpPeriodMs > 0) {
-			final Path dir = getAbsolutePath(Settings.threadDumpLogDir);
+		if (Settings.getInstance().getThreadDumpPeriodMs() > 0) {
+			final Path dir = getAbsolutePath(Settings.getInstance().getThreadDumpLogDir());
 			if (!Files.exists(dir)) {
 				rethrowIO(() -> Files.createDirectories(dir));
 			}
-			ThreadDumpGenerator.generateThreadDumpAtIntervals(Settings.threadDumpPeriodMs);
+			ThreadDumpGenerator.generateThreadDumpAtIntervals(Settings.getInstance().getThreadDumpPeriodMs());
 		}
 	}
 
 	/**
-	 * Instantiate and start the JVMPauseDetectorThread, if enabled via the {@link Settings#JVMPauseDetectorSleepMs}
+	 * Instantiate and start the JVMPauseDetectorThread, if enabled via the {@link Settings#getJVMPauseDetectorSleepMs()}
 	 * setting.
 	 */
 	private static void startJVMPauseDetectorThread() {
-		if (JVMPauseDetectorSleepMs > 0) {
+		if (Settings.getInstance().getJVMPauseDetectorSleepMs() > 0) {
 			final JVMPauseDetectorThread jvmPauseDetectorThread = new JVMPauseDetectorThread(
 					(pauseTimeMs, allocTimeMs) -> {
-						if (pauseTimeMs > Settings.JVMPauseReportMs) {
+						if (pauseTimeMs > Settings.getInstance().getJVMPauseReportMs()) {
 							log.warn(JVM_PAUSE_WARN.getMarker(),
 									"jvmPauseDetectorThread detected JVM paused for {} ms, allocation pause {} ms",
 									pauseTimeMs, allocTimeMs);
 						}
-					}, JVMPauseDetectorSleepMs);
+					}, Settings.getInstance().getJVMPauseDetectorSleepMs());
 			jvmPauseDetectorThread.start();
 			log.debug(STARTUP.getMarker(), "jvmPauseDetectorThread started");
 		}
 	}
 
 	/**
-	 * Parses the configuration file specified by the {@link Settings#configPath} setting, configures all appropriate
+	 * Parses the configuration file specified by the {@link Settings#getConfigPath()} setting, configures all appropriate
 	 * system settings, and returns a generic {@link ApplicationDefinition}.
 	 *
 	 * @param localNodesToStart
@@ -454,7 +455,7 @@ public abstract class Browser {
 	 * @throws SocketException
 	 * 		if there are any errors getting the addresses
 	 * @throws ConfigurationException
-	 * 		if the configuration file specified by {@link Settings#configPath} does not exist
+	 * 		if the configuration file specified by {@link Settings#getConfigPath()} does not exist
 	 */
 	public static ApplicationDefinition loadConfigFile(final Set<Integer> localNodesToStart)
 			throws UnknownHostException, SocketException, ConfigurationException {
@@ -477,13 +478,13 @@ public abstract class Browser {
 				.synchronizedList(new ArrayList<>());
 
 		// Load config.txt file, parse application jar file name, main class name, address book, and parameters
-		if (!Files.exists(Settings.configPath)) {
+		if (!Files.exists(Settings.getInstance().getConfigPath())) {
 			log.error(EXCEPTION.getMarker(),
 					"ERROR: Browser.startPlatforms called on non-existent config.txt");
 			throw new ConfigurationException("ERROR: Browser.startPlatforms called on non-existent config.txt");
 		}
 
-		try (final Scanner scanner = new Scanner(Settings.configPath, StandardCharsets.UTF_8.name())) {
+		try (final Scanner scanner = new Scanner(Settings.getInstance().getConfigPath(), StandardCharsets.UTF_8.name())) {
 			while (scanner.hasNextLine()) {
 				String line = scanner.nextLine();
 				final int pos = line.indexOf("#");
@@ -519,7 +520,7 @@ public abstract class Browser {
 								break;
 							}
 							// this is a real .jar file, so load from data/apps/
-							appJarPath = Settings.appsDirPath.resolve(appJarFilename);
+							appJarPath = Settings.getInstance().getAppsDirPath().resolve(appJarFilename);
 							mainClassname = "";
 							try (final JarFile jarFile = new JarFile(appJarPath.toFile())) {
 								final Manifest manifest = jarFile.getManifest();
@@ -582,33 +583,33 @@ public abstract class Browser {
 						case "tls":
 							// "TLS, ON" turns on TLS (or: true, 1, yes, t, y)
 							// "TLS, OFF" turns off TLS (or: false, 0, no, f, n)
-							Settings.useTLS = lineParameters.length < 2 || Utilities.parseBoolean(pars[1]);
+							Settings.getInstance().setUseTLS(lineParameters.length < 2 || Utilities.parseBoolean(pars[1]));
 							break;
 						case "maxsyncs": {
 							// maximum number of simultaneous syncs initiated by this member
 							// (the max that can be received will be this plus 1)
 							final int n = Integer.parseInt(pars[1]);
-							Settings.maxOutgoingSyncs = Math.max(n, 1);
+							Settings.getInstance().setMaxOutgoingSyncs(Math.max(n, 1));
 							break;
 						}
 						case "transactionmaxbytes": {
 							// maximum number of bytes allowed per transaction
 							final int n = Integer.parseInt(pars[1]);
-							Settings.transactionMaxBytes = Math.max(n, 100);
+							Settings.getInstance().setTransactionMaxBytes(Math.max(n, 100));
 							break;
 						}
 						case "iptos":
 							// IPv4 Type of Service (0 to 255, or -1 to not use IP_TOS)
-							Settings.socketIpTos = Integer.parseInt(pars[1]);
+							Settings.getInstance().setSocketIpTos(Integer.parseInt(pars[1]));
 							break;
 						case "savestateperiod":
-							Settings.state.saveStatePeriod = Integer.parseInt(pars[1]);
+							Settings.getInstance().getState().saveStatePeriod = Integer.parseInt(pars[1]);
 							break;
 						case "waitatstartup":
 							// "waitatstartup, ON" turns on TLS (or: true, 1, yes, t, y)
 							// "waitatstartup, OFF" turns off TLS (or: false, 0, no, f, n)
 							if (lineParameters.length >= 2) {
-								Settings.waitAtStartup = Utilities.parseBoolean(pars[1]);
+								Settings.getInstance().setWaitAtStartup(Utilities.parseBoolean(pars[1]));
 							} else {
 								CommonUtils.tellUserConsolePopup("Error", "waitAtStartup needs a parameter");
 							}
@@ -649,11 +650,9 @@ public abstract class Browser {
 	}
 
 	private static void createLocalPlatforms(final ApplicationDefinition appDefinition, final Crypto[] crypto,
-			final InfoSwirld infoSwirld, final SwirldAppLoader appLoader) {
+			final InfoSwirld infoSwirld, final SwirldAppLoader appLoader, final Metrics metrics) {
 
 		final AddressBook addressBook = appDefinition.getAddressBook();
-
-		final int fontSize = 12; // 14 is good for 4 windows
 
 		int ownHostIndex = 0;
 
@@ -673,8 +672,8 @@ public abstract class Browser {
 						NodeId.createMain(i),
 						// copy of the address book,
 						addressBook.copy(),
-						// suggested font size for windows created
-						fontSize,
+						// reference to the metrics system
+						metrics,
 						// name of the app's SwirldMain class
 						appDefinition.getMainClassName(),
 						// the name of this swirld
@@ -688,7 +687,7 @@ public abstract class Browser {
 				} catch (final SignedStateLoadingException e) {
 					log.error(EXCEPTION.getMarker(), "Saved state not loaded:", e);
 					// if requireStateLoad is on, we exit. if not, we just log it
-					if (Settings.requireStateLoad) {
+					if (Settings.getInstance().isRequireStateLoad()) {
 						SystemUtils.exitSystem(SystemExitReason.SAVED_STATE_NOT_LOADED);
 						return;
 					}
@@ -705,7 +704,7 @@ public abstract class Browser {
 
 				platformRunThreads[ownHostIndex] = new ThreadConfiguration()
 						.setDaemon(false)
-						.setPriority(Settings.threadPriorityNonSync)
+						.setPriority(Settings.getInstance().getThreadPriorityNonSync())
 						.setNodeId((long) ownHostIndex)
 						.setComponent(PLATFORM_THREAD_POOL_NAME)
 						.setThreadName("platformRun")
@@ -753,7 +752,7 @@ public abstract class Browser {
 
 		// If enabled, clean out the signed state directory. Needs to be done before the platform/state is started up,
 		// as we don't want to delete the temporary file directory if it ends up being put in the saved state directory.
-		if (Settings.state.cleanSavedStateDirectory) {
+		if (Settings.getInstance().getState().cleanSavedStateDirectory) {
 			SignedStateFileUtils.cleanStateDirectory(appDefinition.getMainClassName());
 		}
 
@@ -814,8 +813,21 @@ public abstract class Browser {
 		log.debug(STARTUP.getMarker(), "Done with registerConstructables, time taken {}ms",
 				System.currentTimeMillis() - start);
 
+		// Setup metrics system
+		final Metrics metrics = new Metrics(
+				Executors.newSingleThreadScheduledExecutor((Runnable r) -> new ThreadConfiguration()
+						.setPriority(Settings.getInstance().getThreadPriorityNonSync())
+						.setComponent(PLATFORM_THREAD_POOL_NAME)
+						.setThreadName("MetricsUpdater")
+						.setRunnable(r)
+						.build()
+				),
+				new PlatformMetricsFactory()
+		);
+		CryptoMetrics.registerMetrics(metrics);
+
 		// Create all instances for all nodes that should run locally
-		createLocalPlatforms(appDefinition, crypto, infoSwirld, appLoader);
+		createLocalPlatforms(appDefinition, crypto, infoSwirld, appLoader, metrics);
 
 		// Partially initialize the platforms before we dispatch the StateLoadedFromDiskNotification
 		for (final SwirldsPlatform platform : platforms) {
@@ -841,6 +853,8 @@ public abstract class Browser {
 
 		// Initialize JVMPauseDetectorThread, if enabled via settings
 		startJVMPauseDetectorThread();
+
+		metrics.startUpdaters();
 
 		log.debug(STARTUP.getMarker(), "Done with starting platforms");
 	}
@@ -890,33 +904,33 @@ public abstract class Browser {
 	}
 
 	protected static void populateSettingsCommon() {
-		SettingsCommon.maxTransactionCountPerEvent = Settings.maxTransactionCountPerEvent;
-		SettingsCommon.maxTransactionBytesPerEvent = Settings.maxTransactionBytesPerEvent;
-		SettingsCommon.maxAddressSizeAllowed = Settings.maxAddressSizeAllowed;
-		SettingsCommon.transactionMaxBytes = Settings.transactionMaxBytes;
-		SettingsCommon.halfLife = Settings.halfLife;
-		SettingsCommon.logStack = Settings.logStack;
-		SettingsCommon.showInternalStats = Settings.showInternalStats;
-		SettingsCommon.verboseStatistics = Settings.verboseStatistics;
-		SettingsCommon.enableBetaMirror = Settings.enableBetaMirror;
-		SettingsCommon.threadPriorityNonSync = Settings.threadPriorityNonSync;
-		SettingsCommon.csvFileName = Settings.csvFileName;
-		SettingsCommon.csvOutputFolder = Settings.csvOutputFolder;
-		SettingsCommon.csvAppend = Settings.csvAppend;
-		SettingsCommon.csvWriteFrequency = Settings.csvWriteFrequency;
+		SettingsCommon.maxTransactionCountPerEvent = Settings.getInstance().getMaxTransactionCountPerEvent();
+		SettingsCommon.maxTransactionBytesPerEvent = Settings.getInstance().getMaxTransactionBytesPerEvent();
+		SettingsCommon.maxAddressSizeAllowed = Settings.getInstance().getMaxAddressSizeAllowed();
+		SettingsCommon.transactionMaxBytes = Settings.getInstance().getTransactionMaxBytes();
+		SettingsCommon.halfLife = Settings.getInstance().getHalfLife();
+		SettingsCommon.logStack = Settings.getInstance().isLogStack();
+		SettingsCommon.showInternalStats = Settings.getInstance().isShowInternalStats();
+		SettingsCommon.verboseStatistics = Settings.getInstance().isVerboseStatistics();
+		SettingsCommon.enableBetaMirror = Settings.getInstance().isEnableBetaMirror();
+		SettingsCommon.threadPriorityNonSync = Settings.getInstance().getThreadPriorityNonSync();
+		SettingsCommon.csvFileName = Settings.getInstance().getCsvFileName();
+		SettingsCommon.csvOutputFolder = Settings.getInstance().getCsvOutputFolder();
+		SettingsCommon.csvAppend = Settings.getInstance().isCsvAppend();
+		SettingsCommon.csvWriteFrequency = Settings.getInstance().getCsvWriteFrequency();
 
-		CryptoFactory.configure(Settings.crypto);
-		ReconnectSettingsFactory.configure(Settings.reconnect);
-		FCHashMapSettingsFactory.configure(Settings.fcHashMap);
-		VirtualMapSettingsFactory.configure(Settings.virtualMap);
-		AddressBookSettingsFactory.configure(Settings.addressBook);
-		JasperDbSettingsFactory.configure(Settings.jasperDb);
-		TemporaryFileSettingsFactory.configure(Settings.temporaryFiles);
+		CryptoFactory.configure(Settings.getInstance().getCrypto());
+		ReconnectSettingsFactory.configure(Settings.getInstance().getReconnect());
+		FCHashMapSettingsFactory.configure(Settings.getInstance().getFcHashMap());
+		VirtualMapSettingsFactory.configure(Settings.getInstance().getVirtualMap());
+		AddressBookSettingsFactory.configure(Settings.getInstance().getAddressBook());
+		JasperDbSettingsFactory.configure(Settings.getInstance().getJasperDb());
+		TemporaryFileSettingsFactory.configure(Settings.getInstance().getTemporaryFiles());
 	}
 
 	static Crypto[] initNodeSecurity(final AddressBook addressBook) {
 		final ExecutorService cryptoThreadPool = Executors.newFixedThreadPool(
-				Settings.numCryptoThreads,
+				Settings.getInstance().getNumCryptoThreads(),
 				new ThreadConfiguration()
 						.setComponent("browser")
 						.setThreadName("crypto-verify")
@@ -924,17 +938,17 @@ public abstract class Browser {
 						.buildFactory()
 		);
 
-		final Path keysDirPath = Settings.keysDirPath;
+		final Path keysDirPath = Settings.getInstance().getKeysDirPath();
 		final KeysAndCerts[] keysAndCerts;
 		try {
-			if (Settings.loadKeysFromPfxFiles) {
+			if (Settings.getInstance().isLoadKeysFromPfxFiles()) {
 				try (final Stream<Path> list = Files.list(keysDirPath)) {
 					CommonUtils.tellUserConsole(
 							"Reading crypto keys from the files here:   " + list.filter(
 									path -> path.getFileName().endsWith("pfx")).toList());
 					log.debug(STARTUP.getMarker(), "About start loading keys");
 					keysAndCerts = CryptoStatic.loadKeysAndCerts(addressBook, keysDirPath,
-							Settings.crypto.getKeystorePassword().toCharArray());
+							Settings.getInstance().getCrypto().getKeystorePassword().toCharArray());
 					log.debug(STARTUP.getMarker(), "Done loading keys");
 				}
 			} else {
@@ -959,7 +973,7 @@ public abstract class Browser {
 			throw new CryptographyException(e);// will never reach this line due to exit above
 		}
 
-		final String msg = Settings.loadKeysFromPfxFiles
+		final String msg = Settings.getInstance().isLoadKeysFromPfxFiles()
 				? "Certificate loaded: {}"
 				: "Certificate generated: {}";
 		Arrays.stream(keysAndCerts).filter(Objects::nonNull).forEach(

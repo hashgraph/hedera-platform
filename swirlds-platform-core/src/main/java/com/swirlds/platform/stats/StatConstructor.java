@@ -17,7 +17,7 @@
 package com.swirlds.platform.stats;
 
 import com.swirlds.common.UniqueId;
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.metrics.StatEntry;
 
 import java.util.Arrays;
 import java.util.function.Supplier;
@@ -45,7 +45,7 @@ public class StatConstructor {
 	 * 		The Enum type to track
 	 * @return a StatEntry that tracks an enum value
 	 */
-	public static <T extends Enum<T> & UniqueId> StatEntry createEnumStat(
+	public static <T extends Enum<T> & UniqueId> StatEntry.Config createEnumStat(
 			final String name,
 			final String category,
 			final T[] enumValues,
@@ -70,15 +70,8 @@ public class StatConstructor {
 			return t.getId();
 		};
 
-		return new StatEntry(
-				category,
-				name,
-				desc.toString(),
-				"%d",
-				null,
-				null,
-				null,
-				statValueSupplier
-		);
+		return new StatEntry.Config(category, name, statValueSupplier)
+				.withDescription(desc.toString())
+				.withFormat("%d");
 	}
 }

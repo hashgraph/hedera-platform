@@ -22,9 +22,6 @@ import com.swirlds.common.sequence.set.internal.AbstractSequenceSet;
 
 import java.util.function.ToLongFunction;
 
-import static com.swirlds.common.sequence.map.SequenceMap.DEFAULT_HIGHEST_ALLOWED_SEQUENCE_NUMBER;
-import static com.swirlds.common.sequence.map.SequenceMap.DEFAULT_LOWEST_ALLOWED_SEQUENCE_NUMBER;
-
 /**
  * A lock free {@link SequenceSet}.
  *
@@ -36,31 +33,22 @@ public class StandardSequenceSet<T> extends AbstractSequenceSet<T> {
 	/**
 	 * Create a new lock free {@link SequenceSet}.
 	 *
-	 * @param getSequenceNumberFromEntry
-	 * 		given an entry, extract the sequence number
-	 */
-	public StandardSequenceSet(final ToLongFunction<T> getSequenceNumberFromEntry) {
-		this(DEFAULT_LOWEST_ALLOWED_SEQUENCE_NUMBER,
-				DEFAULT_HIGHEST_ALLOWED_SEQUENCE_NUMBER,
-				getSequenceNumberFromEntry);
-	}
-
-	/**
-	 * Create a new lock free {@link SequenceSet}.
-	 *
 	 * @param lowestAllowedSequenceNumber
 	 * 		the initial lowest permitted sequence in the set
-	 * @param highestAllowedSequenceNumber
-	 * 		the initial highest permitted sequence in the set
+	 * @param sequenceNumberCapacity
+	 * 		the number of sequence numbers permitted to exist in this data structure. E.g. if
+	 * 		the lowest allowed sequence number is 100 and the capacity is 10, then values with
+	 * 		a sequence number between 100 and 109 (inclusive) will be allowed, and any value
+	 * 		with a sequence number outside that range will be rejected.
 	 * @param getSequenceNumberFromEntry
 	 * 		given an entry, extract the sequence number
 	 */
 	public StandardSequenceSet(
 			final long lowestAllowedSequenceNumber,
-			final long highestAllowedSequenceNumber,
+			final int sequenceNumberCapacity,
 			final ToLongFunction<T> getSequenceNumberFromEntry) {
 
-		super(lowestAllowedSequenceNumber, highestAllowedSequenceNumber, getSequenceNumberFromEntry);
+		super(lowestAllowedSequenceNumber, sequenceNumberCapacity, getSequenceNumberFromEntry);
 	}
 
 	/**
@@ -69,11 +57,11 @@ public class StandardSequenceSet<T> extends AbstractSequenceSet<T> {
 	@Override
 	protected SequenceMap<T, Boolean> buildMap(
 			final long lowestAllowedSequenceNumber,
-			final long highestAllowedSequenceNumber,
+			final int sequenceNumberCapacity,
 			final ToLongFunction<T> getSequenceNumberFromEntry) {
 		return new StandardSequenceMap<>(
 				lowestAllowedSequenceNumber,
-				highestAllowedSequenceNumber,
+				sequenceNumberCapacity,
 				getSequenceNumberFromEntry);
 	}
 }

@@ -248,7 +248,7 @@ public class FCQueue<E extends FastCopyable & SerializableHashable>
 		}
 
 		watch.stop();
-		FCQueueStatistics.fcqHashExecutionMicros.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+		FCQueueStatistics.updateFcqHashExecutionMicros(watch.getTime(TimeUnit.MICROSECONDS));
 
 		return new ImmutableHash(hash);
 	}
@@ -336,7 +336,7 @@ public class FCQueue<E extends FastCopyable & SerializableHashable>
 
 		if (watch != null) {
 			watch.stop();
-			FCQueueStatistics.fcqAddExecutionMicros.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+			FCQueueStatistics.updateFcqAddExecutionMicros(watch.getTime(TimeUnit.MICROSECONDS));
 		}
 
 		return true;
@@ -398,7 +398,7 @@ public class FCQueue<E extends FastCopyable & SerializableHashable>
 
 		if (watch != null) {
 			watch.stop();
-			FCQueueStatistics.fcqRemoveExecutionMicros.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+			FCQueueStatistics.updateFcqRemoveExecutionMicros(watch.getTime(TimeUnit.MICROSECONDS));
 		}
 
 		return element;

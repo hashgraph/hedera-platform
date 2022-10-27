@@ -19,10 +19,11 @@ package com.swirlds.common.utility;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Provides a simple reusable thresholding mechanism to effectively apply rate limiting on arbitrary events. This
- * implementation groups the events by the underlying {@link Class} of the supplied elements.
+ * implementation groups the events by {@code Strings} that are extracted from the supplied elements.
  *
  * @param <E>
  * 		the type of element to be rate limited
@@ -32,17 +33,34 @@ public class ThresholdLimitingHandler<E> {
 	/** the threshold at which to begin suppression */
 	private final long threshold;
 
+	/** the function that extract the key from a given element */
+	private final Function<E, String> keyExtractor;
 	/** the state of each threshold counter for each element type */
-	private final Map<Class<E>, Long> state;
+	private final Map<String, Long> state;
+
+	/**
+	 * Constructor that initializes the underlying threshold.
+	 *
+	 * The {@code keyExtractor} groups the events by the underlying {@link Class} of the supplied elements.
+	 *
+	 * @param threshold
+	 * 		the threshold at which events are discarded
+	 */
+	public ThresholdLimitingHandler(final long threshold) {
+		this(threshold, ThresholdLimitingHandler::resolveElementClass);
+	}
 
 	/**
 	 * Constructor that initializes the underlying threshold.
 	 *
 	 * @param threshold
 	 * 		the threshold at which events are discarded
+	 * @param keyExtractor
+	 * 		function that extracts the key
 	 */
-	public ThresholdLimitingHandler(final long threshold) {
+	public ThresholdLimitingHandler(final long threshold, final Function<E, String> keyExtractor) {
 		this.threshold = threshold;
+		this.keyExtractor = keyExtractor;
 		this.state = new ConcurrentHashMap<>();
 	}
 
@@ -62,9 +80,9 @@ public class ThresholdLimitingHandler<E> {
 			throw new IllegalArgumentException("The element argument may not be a null value");
 		}
 
-		final Class<E> elClass = resolveElementClass(element);
+		final String key = keyExtractor.apply(element);
 
-		final long counter = state.compute(elClass, (k, oldValue) -> {
+		final long counter = state.compute(key, (k, oldValue) -> {
 			if (oldValue == null) {
 				return 1L;
 			}
@@ -91,10 +109,9 @@ public class ThresholdLimitingHandler<E> {
 			throw new IllegalArgumentException("The element argument may not be a null value");
 		}
 
-		final Class<E> elClass = resolveElementClass(element);
+		final String key = keyExtractor.apply(element);
 
-		state.putIfAbsent(elClass, 0L);
-		return state.get(elClass);
+		return state.getOrDefault(key, 0L);
 	}
 
 	/**
@@ -111,15 +128,15 @@ public class ThresholdLimitingHandler<E> {
 	 * 		the element for which the counter should be cleared
 	 */
 	public void reset(final E element) {
-		final Class<E> elClass = resolveElementClass(element);
+		final String key = keyExtractor.apply(element);
 
-		state.remove(elClass);
+		state.remove(key);
 	}
 
-	private Class<E> resolveElementClass(final E element) {
+	private static <E> String resolveElementClass(final E element) {
 		@SuppressWarnings("unchecked") final Class<E> elClass = (element != null) ? (Class<E>) element.getClass() :
 				null;
 
-		return elClass;
+		return "" + elClass;
 	}
 }

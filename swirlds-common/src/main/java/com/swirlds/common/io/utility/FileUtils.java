@@ -28,6 +28,7 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Iterator;
 import java.util.stream.Stream;
 
@@ -230,7 +231,7 @@ public final class FileUtils {
 	 * @param directory
 	 * 		the name of directory after it is renamed
 	 * @param tmpDirectory
-	 * 		the name of the temporary directory, if does not exist then is created
+	 * 		the name of the temporary directory, if it does not exist then it is created
 	 * @param operation
 	 * 		an operation that writes to a directory
 	 */
@@ -250,8 +251,9 @@ public final class FileUtils {
 
 			operation.accept(tmpDirectory);
 
-			Files.move(tmpDirectory, directory);
-
+			// Move needs to be atomic to guarantee that the folder only exists when its contents are complete.
+			// Otherwise, it's possible another thread will see a half-completed directory.
+			Files.move(tmpDirectory, directory, StandardCopyOption.ATOMIC_MOVE);
 		} catch (final Throwable ex) {
 			LOG.info(STATE_TO_DISK.getMarker(), "deleting temporary file due to exception");
 			throw ex;

@@ -54,13 +54,16 @@ public class SwirldStateSingleTransactionPool extends EventTransactionPool {
 		super(settings, inFreeze);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	@Override
-	public synchronized boolean submitTransaction(final ConsensusTransactionImpl trans) {
+	public synchronized boolean submitTransaction(final ConsensusTransactionImpl transaction, final boolean priority) {
 		final int t = settings.getThrottleTransactionQueueSize();
 
 		// In order to be submitted, the transaction must be a system transaction, or all the queues must have room.
-		if (!trans.isSystem() &&
-				(transEvent.size() > t
+		if (!transaction.isSystem() &&
+				(transEvent.size() + priorityTransEvent.size() > t
 						|| transCurr.size() > t
 						|| transCons.size() > t
 						|| transWork.size() > t)) {
@@ -68,10 +71,10 @@ public class SwirldStateSingleTransactionPool extends EventTransactionPool {
 		}
 
 		// this should stay true. The linked lists will never be full or return false.
-		final boolean ans = offerToEventQueue(trans)
-				&& transCurr.offer(trans)
-				&& transCons.offer(trans)
-				&& transWork.offer(trans);
+		final boolean ans = super.submitTransaction(transaction, priority) &&
+				transCurr.offer(transaction)
+				&& transCons.offer(transaction)
+				&& transWork.offer(transaction);
 
 		if (!ans) {
 			LOG.error(EXCEPTION.getMarker(),

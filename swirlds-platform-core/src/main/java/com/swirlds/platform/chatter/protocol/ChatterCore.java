@@ -16,10 +16,10 @@
 
 package com.swirlds.platform.chatter.protocol;
 
-import com.swirlds.common.sequence.Purgable;
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.Clock;
+import com.swirlds.common.metrics.Metrics;
+import com.swirlds.common.sequence.Shiftable;
 import com.swirlds.common.system.NodeId;
-import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.platform.chatter.ChatterSettings;
 import com.swirlds.platform.chatter.protocol.heartbeat.HeartbeatMessage;
 import com.swirlds.platform.chatter.protocol.heartbeat.HeartbeatSendReceive;
@@ -31,16 +31,20 @@ import com.swirlds.platform.chatter.protocol.messages.ChatterEventDescriptor;
 import com.swirlds.platform.chatter.protocol.output.MessageOutput;
 import com.swirlds.platform.chatter.protocol.output.PriorityOutputAggregator;
 import com.swirlds.platform.chatter.protocol.output.SendAction;
-import com.swirlds.platform.chatter.protocol.output.TimeDelay;
+import com.swirlds.platform.chatter.protocol.output.VariableTimeDelay;
 import com.swirlds.platform.chatter.protocol.output.queue.QueueOutputMain;
 import com.swirlds.platform.chatter.protocol.peer.CommunicationState;
 import com.swirlds.platform.chatter.protocol.peer.PeerGossipState;
 import com.swirlds.platform.chatter.protocol.peer.PeerInstance;
+import com.swirlds.platform.chatter.protocol.processing.ProcessingTimeMessage;
+import com.swirlds.platform.chatter.protocol.processing.ProcessingTimeSendReceive;
+import com.swirlds.platform.chatter.protocol.processing.ProcessingTimes;
+import com.swirlds.platform.state.signed.LoadableFromSignedState;
+import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.stats.AverageStat;
 import com.swirlds.platform.stats.PerSecondStat;
-import com.swirlds.platform.stats.PerSecondStatsProvider;
-import com.swirlds.platform.stats.StatsProvider;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
@@ -56,7 +60,7 @@ import static com.swirlds.common.metrics.FloatFormats.FORMAT_8_1;
  * @param <E>
  * 		the type of {@link ChatterEvent} used
  */
-public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvider, PerSecondStatsProvider {
+public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableFromSignedState {
 	/** the number of milliseconds to sleep while waiting for the chatter protocol to stop */
 	private static final int STOP_WAIT_SLEEP_MILLIS = 10;
 	private final Class<E> eventClass;
@@ -70,6 +74,7 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvi
 
 	private final PerSecondStat msgsPerSecRead;
 	private final PerSecondStat msgsPerSecWrit;
+	private final ProcessingTimes processingTimes;
 
 	/**
 	 * @param eventClass
@@ -82,23 +87,28 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvi
 	 * @param pingConsumer
 	 * 		consumer of the reported ping time for a given peer. accepts the ID of the peer and the number of
 	 * 		nanoseconds it took for the peer to respond
+	 * @param metrics
+	 * 		reference to the metrics-system
 	 */
 	public ChatterCore(
 			final Class<E> eventClass,
 			final MessageHandler<E> prepareReceivedEvent,
 			final ChatterSettings settings,
-			final BiConsumer<NodeId, Long> pingConsumer) {
+			final BiConsumer<NodeId, Long> pingConsumer,
+			final Metrics metrics) {
 		this.eventClass = eventClass;
 		this.prepareReceivedEvent = prepareReceivedEvent;
 		this.settings = settings;
 		this.pingConsumer = pingConsumer;
-		this.selfEventOutput = new QueueOutputMain<>("selfEvent", settings.getSelfEventQueueCapacity());
-		this.otherEventOutput = new QueueOutputMain<>("otherEvent", settings.getOtherEventQueueCapacity());
-		this.hashOutput = new QueueOutputMain<>("descriptor", settings.getDescriptorQueueCapacity());
+		this.selfEventOutput = new QueueOutputMain<>("selfEvent", settings.getSelfEventQueueCapacity(), metrics);
+		this.otherEventOutput = new QueueOutputMain<>("otherEvent", settings.getOtherEventQueueCapacity(), metrics);
+		this.hashOutput = new QueueOutputMain<>("descriptor", settings.getDescriptorQueueCapacity(), metrics);
 		this.peerInstances = new HashMap<>();
+		this.processingTimes = new ProcessingTimes(metrics);
 
 		this.msgsPerSecRead = new PerSecondStat(
 				new AverageStat(
+						metrics,
 						"chatter",
 						"msgsPerSecRead",
 						"number of chatter messages read per second",
@@ -108,6 +118,7 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvi
 		);
 		this.msgsPerSecWrit = new PerSecondStat(
 				new AverageStat(
+						metrics,
 						"chatter",
 						"msgsPerSecWrit",
 						"number of chatter messages written per second",
@@ -126,12 +137,19 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvi
 	 * 		a handler that will send the event outside of chatter
 	 */
 	public void newPeerInstance(final long peerId, final MessageHandler<E> eventHandler) {
-		final PeerGossipState state = new PeerGossipState();
+		final PeerGossipState state = new PeerGossipState(settings.getFutureGenerationLimit());
 		final CommunicationState communicationState = new CommunicationState();
 		final HeartbeatSendReceive heartbeat = new HeartbeatSendReceive(
 				peerId,
 				pingConsumer,
 				settings.getHeartbeatInterval()
+		);
+
+		final ProcessingTimeSendReceive processingTimeSendReceive = new ProcessingTimeSendReceive(
+				peerId,
+				settings.getProcessingTimeInterval(),
+				processingTimes,
+				Clock.DEFAULT
 		);
 
 		final MessageProvider hashPeerInstance = hashOutput.createPeerInstance(
@@ -144,12 +162,16 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvi
 		);
 		final MessageProvider otherEventPeerInstance = otherEventOutput.createPeerInstance(
 				communicationState,
-				new TimeDelay<>(settings.getOtherEventDelay(), state, Instant::now)
+				new VariableTimeDelay<>(
+						() -> getOtherEventDelay(peerId, heartbeat),
+						state,
+						Instant::now)
 		);
 		final PriorityOutputAggregator outputAggregator = new PriorityOutputAggregator(
 				List.of(
 						// heartbeat is first so that responses are not delayed
 						heartbeat,
+						processingTimeSendReceive,
 						hashPeerInstance,
 						selfEventPeerInstance,
 						otherEventPeerInstance),
@@ -166,6 +188,9 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvi
 				.addHandler(MessageTypeHandlerBuilder.builder(HeartbeatMessage.class)
 						.addHandler(heartbeat)
 						.build())
+				.addHandler(MessageTypeHandlerBuilder.builder(ProcessingTimeMessage.class)
+						.addHandler(processingTimeSendReceive)
+						.build())
 				.setStat(msgsPerSecRead)
 				.build();
 		final PeerInstance peerInstance = new PeerInstance(
@@ -175,6 +200,25 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvi
 				inputDelegate
 		);
 		peerInstances.put(peerId, peerInstance);
+	}
+
+	/**
+	 * Calculates the delay for sending other events to a peer.
+	 *
+	 * @param peerId
+	 * 		the id of the peer to calculate other event delay for
+	 * @param heartbeat
+	 * 		the heartbeat instance used to send and receive heartbeats with the peer
+	 * @return the other event delay to use, or null if other events should not be sent to the peer at this time
+	 */
+	private Duration getOtherEventDelay(final long peerId, final HeartbeatSendReceive heartbeat) {
+		final Long peerProcessingNanos = processingTimes.getPeerProcessingTime(peerId);
+		final Long roundTripNanos = heartbeat.getLastRoundTripNanos();
+		if (peerProcessingNanos == null || roundTripNanos == null) {
+			return null;
+		}
+		final long oneWayTripNanos = roundTripNanos / 2;
+		return Duration.ofNanos(oneWayTripNanos + peerProcessingNanos).plus(settings.getOtherEventDelay());
 	}
 
 	/**
@@ -201,6 +245,7 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvi
 	 */
 	public void eventCreated(final E event) {
 		selfEventOutput.send(event);
+		recordProcessingTime(event);
 	}
 
 	/**
@@ -212,36 +257,26 @@ public class ChatterCore<E extends ChatterEvent> implements Purgable, StatsProvi
 	public void eventReceived(final E event) {
 		hashOutput.send(event.getDescriptor());
 		otherEventOutput.send(event);
+		recordProcessingTime(event);
+	}
+
+	private void recordProcessingTime(final E event) {
+		processingTimes.recordSelfProcessingTime(Duration.between(event.getTimeReceived(), Instant.now()));
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void purge(final long olderThan) {
+	public void shiftWindow(final long firstSequenceNumberInWindow) {
 		for (final PeerInstance peer : peerInstances.values()) {
-			peer.state().purge(olderThan);
+			peer.state().shiftWindow(firstSequenceNumberInWindow);
 		}
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
 	@Override
-	public List<StatEntry> getStats() {
-		return CommonUtils.joinLists(
-				hashOutput.getStats(),
-				selfEventOutput.getStats(),
-				otherEventOutput.getStats()
-		);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public List<PerSecondStat> getPerSecondStats() {
-		return List.of(msgsPerSecRead, msgsPerSecWrit);
+	public void loadFromSignedState(final SignedState signedState) {
+		shiftWindow(signedState.getMinRoundGeneration());
 	}
 
 	/**

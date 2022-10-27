@@ -16,7 +16,6 @@
 
 package com.swirlds.common.test.notification;
 
-import com.swirlds.common.notification.DispatchException;
 import com.swirlds.common.notification.NotificationResult;
 import com.swirlds.common.notification.internal.Dispatcher;
 import com.swirlds.common.threading.futures.StandardFuture;
@@ -29,12 +28,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.fail;
 
 class DispatcherTests {
 
@@ -44,7 +40,7 @@ class DispatcherTests {
 			@Tag(TestComponentTags.NOTIFICATION)
 	})
 	@DisplayName("Notification Engine: Dispatcher Sync Exception Handling")
-	void validateSyncExceptionHandling() {
+	void validateSyncExceptionHandling() throws InterruptedException, TimeoutException {
 		final Dispatcher<SyncOrderedIntegerListener> syncDispatcher =
 				new Dispatcher<>(SyncOrderedIntegerListener.class);
 
@@ -53,10 +49,22 @@ class DispatcherTests {
 		});
 
 		final IntegerNotification notification = new IntegerNotification(1);
-		final Consumer<NotificationResult<IntegerNotification>> lambda = (nr) -> fail("Should never be executed");
 
-		assertThrows(DispatchException.class, () -> syncDispatcher.notifySync(notification, lambda),
-				"Expected notifySync to throw a DispatchException but none was thrown");
+		final StandardFuture<NotificationResult<IntegerNotification>> future = new StandardFuture<>();
+		syncDispatcher.notifySync(notification, future::complete);
+
+		final NotificationResult<IntegerNotification> result = future.getAndRethrow(5, TimeUnit.SECONDS);
+
+		assertNotNull(result, "The notification result was null but expected not null");
+		assertEquals(1, result.getFailureCount(),
+				String.format("The result should contain 1 failure but instead contained %d failures",
+						result.getFailureCount()));
+		assertEquals(1, result.getExceptions().size(),
+				String.format("The result should contain 1 exception but instead contained %d exceptions",
+						result.getExceptions().size()));
+		assertEquals(RuntimeException.class, result.getExceptions().get(0).getClass(),
+				String.format("The result should contain a single RuntimeException but instead contained a %s",
+						result.getExceptions().get(0).getClass().getSimpleName()));
 	}
 
 	@Test

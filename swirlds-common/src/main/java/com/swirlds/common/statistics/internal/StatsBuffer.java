@@ -15,7 +15,7 @@
  */
 package com.swirlds.common.statistics.internal;
 
-import com.swirlds.common.metrics.Clock;
+import com.swirlds.common.Clock;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntBinaryOperator;

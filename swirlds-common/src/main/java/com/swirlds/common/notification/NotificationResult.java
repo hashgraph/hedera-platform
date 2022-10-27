@@ -31,17 +31,17 @@ public class NotificationResult<N extends Notification> {
 	/**
 	 * the original notification that was sent to each listener
 	 */
-	private N notification;
+	private final N notification;
 
 	/**
 	 * the total number of registered and available listeners at the time of the dispatch
 	 */
-	private int totalListeners;
+	private final int totalListeners;
 
 	/**
 	 * the list of exceptions, if any, that were thrown by the listeners
 	 */
-	private List<Throwable> exceptions;
+	private final List<Throwable> exceptions;
 
 	/**
 	 * Creates a new instance with no exceptions and the given number of registered listeners.

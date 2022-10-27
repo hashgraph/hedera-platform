@@ -18,12 +18,9 @@ package com.swirlds.jasperdb;
 
 import com.swirlds.common.metrics.DoubleGauge;
 import com.swirlds.common.metrics.IntegerGauge;
-import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.metrics.SpeedometerMetric;
-
-import java.util.LinkedList;
-import java.util.List;
-import java.util.function.Consumer;
+import com.swirlds.common.utility.CommonUtils;
 
 import static com.swirlds.common.metrics.FloatFormats.FORMAT_9_6;
 
@@ -45,35 +42,36 @@ public class JasperDbStatistics {
 	private static final String MERGE_SUFFIX = " for the last call to doMerge().";
 	private static final int SPEEDOMETER_HALF_LIFE_IN_SECONDS = 60;    // look at last minute
 
-	private final List<Metric> statistics;
+	private final String label;
+	private final boolean isLongKeyMode;
 
-	private final SpeedometerMetric internalNodeWritesPerSecond;
-	private final SpeedometerMetric internalNodeReadsPerSecond;
-	private final SpeedometerMetric leafWritesPerSecond;
-	private final SpeedometerMetric leafByKeyReadsPerSecond;
-	private final SpeedometerMetric leafByPathReadsPerSecond;
+	private SpeedometerMetric internalNodeWritesPerSecond;
+	private SpeedometerMetric internalNodeReadsPerSecond;
+	private SpeedometerMetric leafWritesPerSecond;
+	private SpeedometerMetric leafByKeyReadsPerSecond;
+	private SpeedometerMetric leafByPathReadsPerSecond;
 
-	private final IntegerGauge internalHashesStoreFileCount;
-	private final DoubleGauge internalHashesStoreTotalFileSizeInMB;
+	private IntegerGauge internalHashesStoreFileCount;
+	private DoubleGauge internalHashesStoreTotalFileSizeInMB;
 
-	private final IntegerGauge leafKeyToPathStoreFileCount;
+	private IntegerGauge leafKeyToPathStoreFileCount;
 
-	private final DoubleGauge leafKeyToPathStoreTotalFileSizeInMB;
+	private DoubleGauge leafKeyToPathStoreTotalFileSizeInMB;
 
-	private final IntegerGauge leafPathToHashKeyValueStoreFileCount;
+	private IntegerGauge leafPathToHashKeyValueStoreFileCount;
 
-	private final DoubleGauge leafPathToHashKeyValueStoreTotalFileSizeInMB;
+	private DoubleGauge leafPathToHashKeyValueStoreTotalFileSizeInMB;
 
-	private final DoubleGauge internalHashesStoreSmallMergeTime;
+	private DoubleGauge internalHashesStoreSmallMergeTime;
 
-	private final DoubleGauge internalHashesStoreMediumMergeTime;
-	private final DoubleGauge internalHashesStoreLargeMergeTime;
-	private final DoubleGauge leafKeyToPathStoreSmallMergeTime;
-	private final DoubleGauge leafKeyToPathStoreMediumMergeTime;
-	private final DoubleGauge leafKeyToPathStoreLargeMergeTime;
-	private final DoubleGauge leafPathToHashKeyValueStoreSmallMergeTime;
-	private final DoubleGauge leafPathToHashKeyValueStoreMediumMergeTime;
-	private final DoubleGauge leafPathToHashKeyValueStoreLargeMergeTime;
+	private DoubleGauge internalHashesStoreMediumMergeTime;
+	private DoubleGauge internalHashesStoreLargeMergeTime;
+	private DoubleGauge leafKeyToPathStoreSmallMergeTime;
+	private DoubleGauge leafKeyToPathStoreMediumMergeTime;
+	private DoubleGauge leafKeyToPathStoreLargeMergeTime;
+	private DoubleGauge leafPathToHashKeyValueStoreSmallMergeTime;
+	private DoubleGauge leafPathToHashKeyValueStoreMediumMergeTime;
+	private DoubleGauge leafPathToHashKeyValueStoreLargeMergeTime;
 
 	/**
 	 * Create a new statistics object for a JPDB instances.
@@ -82,191 +80,189 @@ public class JasperDbStatistics {
 	 * 		the label for the virtual map
 	 * @param isLongKeyMode
 	 * 		true if the long key optimization is enabled
+	 * @throws IllegalArgumentException if {@code label} is {@code null}
 	 */
 	public JasperDbStatistics(final String label, final boolean isLongKeyMode) {
-		statistics = new LinkedList<>();
-
-		internalNodeWritesPerSecond = buildSpeedometerMetric(
-				"internalNodeWrites/s_" + label,
-				"number of internal node writes per second for " + label
-		);
-		internalNodeReadsPerSecond = buildSpeedometerMetric(
-				"internalNodeReads/s_" + label,
-				"number of internal node reads per second for " + label
-		);
-		leafWritesPerSecond = buildSpeedometerMetric(
-				"leafWrites/s_" + label,
-				"number of leaf writes per second for " + label
-		);
-		leafByKeyReadsPerSecond = buildSpeedometerMetric(
-				"leafByKeyReads/s_" + label,
-				"number of leaf by key reads per second for " + label
-		);
-		leafByPathReadsPerSecond = buildSpeedometerMetric(
-				"leafByPathReads/s_" + label,
-				"number of leaf by path reads per second for " + label
-		);
-		internalHashesStoreFileCount = new IntegerGauge(
-				STAT_CATEGORY,
-				"internalHashFileCount_" + label,
-				NUMBER_OF_FILES_PREFIX + INTERNAL_HASHES_STORE_MIDDLE + label + SUFFIX
-		);
-		internalHashesStoreTotalFileSizeInMB = buildDoubleGauge(
-				"internalHashFileSizeMb_" + label,
-				TOTAL_FILES_SIZE_PREFIX + INTERNAL_HASHES_STORE_MIDDLE + label + SUFFIX
-		);
-		leafKeyToPathStoreFileCount = isLongKeyMode? null : new IntegerGauge(
-				STAT_CATEGORY,
-				"leafKeyToPathFileCount_" + label,
-				NUMBER_OF_FILES_PREFIX + LEAF_KEY_TO_PATH_STORE_MIDDLE + label + SUFFIX
-		);
-		leafKeyToPathStoreTotalFileSizeInMB = isLongKeyMode? null : buildDoubleGauge(
-				"leafKeyToPathFileSizeMb_" + label,
-				TOTAL_FILES_SIZE_PREFIX + LEAF_KEY_TO_PATH_STORE_MIDDLE + label + SUFFIX
-		);
-		leafPathToHashKeyValueStoreFileCount = new IntegerGauge(
-				STAT_CATEGORY,
-				"leafHKVFileCount_" + label,
-				NUMBER_OF_FILES_PREFIX + LEAF_PATH_TO_HKV_STORE_MIDDLE + label + SUFFIX
-		);
-		leafPathToHashKeyValueStoreTotalFileSizeInMB = buildDoubleGauge(
-				"leafHKVFileSizeMb_" + label,
-				TOTAL_FILES_SIZE_PREFIX + LEAF_PATH_TO_HKV_STORE_MIDDLE + label + SUFFIX
-		);
-		internalHashesStoreSmallMergeTime = buildDoubleGauge(
-				"internalHashSmallMergeTime_" + label,
-				SMALL_MERGE_PREFIX + INTERNAL_HASHES_STORE_MIDDLE + label + MERGE_SUFFIX
-		);
-		internalHashesStoreMediumMergeTime = buildDoubleGauge(
-				"internalHashMediumMergeTime_" + label,
-				MEDIUM_MERGE_PREFIX + INTERNAL_HASHES_STORE_MIDDLE + label + MERGE_SUFFIX
-		);
-		internalHashesStoreLargeMergeTime = buildDoubleGauge(
-				"internalHashLargeMergeTime_" + label,
-				LARGE_MERGE_PREFIX + INTERNAL_HASHES_STORE_MIDDLE + label + MERGE_SUFFIX
-		);
-		leafKeyToPathStoreSmallMergeTime = isLongKeyMode? null : buildDoubleGauge(
-				"leafKeyToPathSmallMergeTime_" + label,
-				SMALL_MERGE_PREFIX + LEAF_KEY_TO_PATH_STORE_MIDDLE + label + MERGE_SUFFIX
-		);
-		leafKeyToPathStoreMediumMergeTime = isLongKeyMode? null : buildDoubleGauge(
-				"leafKeyToPathMediumMergeTime_" + label,
-				MEDIUM_MERGE_PREFIX + LEAF_KEY_TO_PATH_STORE_MIDDLE + label + MERGE_SUFFIX
-		);
-		leafKeyToPathStoreLargeMergeTime = isLongKeyMode? null : buildDoubleGauge(
-				"leafKeyToPathLargeMergeTime_" + label,
-				LARGE_MERGE_PREFIX + LEAF_KEY_TO_PATH_STORE_MIDDLE + label + MERGE_SUFFIX
-		);
-		leafPathToHashKeyValueStoreSmallMergeTime = buildDoubleGauge(
-				"leafHKVSmallMergeTime_" + label,
-				SMALL_MERGE_PREFIX + LEAF_PATH_TO_HKV_STORE_MIDDLE + label + MERGE_SUFFIX
-		);
-		leafPathToHashKeyValueStoreMediumMergeTime = buildDoubleGauge(
-				"leafHKVMediumMergeTime_" + label,
-				MEDIUM_MERGE_PREFIX + LEAF_PATH_TO_HKV_STORE_MIDDLE + label + MERGE_SUFFIX
-		);
-		leafPathToHashKeyValueStoreLargeMergeTime = buildDoubleGauge(
-				"leafHKVLargeMergeTime_" + label,
-				LARGE_MERGE_PREFIX + LEAF_PATH_TO_HKV_STORE_MIDDLE + label + MERGE_SUFFIX
-		);
-
-		buildStatistics(isLongKeyMode);
+		this.label = CommonUtils.throwArgNull(label, "label");
+		this.isLongKeyMode = isLongKeyMode;
 	}
 
-	private static SpeedometerMetric buildSpeedometerMetric(final String name, final String description) {
-		return new SpeedometerMetric(STAT_CATEGORY, name, description, FORMAT_9_6, SPEEDOMETER_HALF_LIFE_IN_SECONDS);
+	private static SpeedometerMetric buildSpeedometerMetric(
+			final Metrics metrics,
+			final String name,
+			final String description) {
+
+		return metrics.getOrCreate(
+				new SpeedometerMetric.Config(STAT_CATEGORY, name)
+						.withDescription(description)
+						.withFormat(FORMAT_9_6)
+						.withHalfLife(SPEEDOMETER_HALF_LIFE_IN_SECONDS)
+		);
 	}
 
-	private static DoubleGauge buildDoubleGauge(final String name, final String description) {
-		return new DoubleGauge(STAT_CATEGORY, name, description, FORMAT_9_6);
-	}
-
-	private void buildStatistics(final boolean isLongKeyMode) {
-		statistics.addAll(List.of(
-				internalNodeWritesPerSecond,
-				internalNodeReadsPerSecond,
-				leafWritesPerSecond,
-				leafByKeyReadsPerSecond,
-				leafByPathReadsPerSecond,
-				internalHashesStoreFileCount,
-				internalHashesStoreTotalFileSizeInMB
-		));
-
-		if (!isLongKeyMode) {
-			statistics.addAll(List.of(
-					leafKeyToPathStoreFileCount,
-					leafKeyToPathStoreTotalFileSizeInMB
-			));
-		}
-
-		statistics.addAll(List.of(
-				leafPathToHashKeyValueStoreFileCount,
-				leafPathToHashKeyValueStoreTotalFileSizeInMB,
-				internalHashesStoreSmallMergeTime,
-				internalHashesStoreMediumMergeTime,
-				internalHashesStoreLargeMergeTime
-		));
-
-		if (!isLongKeyMode) {
-			statistics.addAll(List.of(
-					leafKeyToPathStoreSmallMergeTime,
-					leafKeyToPathStoreMediumMergeTime,
-					leafKeyToPathStoreLargeMergeTime
-			));
-		}
-
-		statistics.addAll(List.of(
-				leafPathToHashKeyValueStoreSmallMergeTime,
-				leafPathToHashKeyValueStoreMediumMergeTime,
-				leafPathToHashKeyValueStoreLargeMergeTime
-		));
+	private static DoubleGauge buildDoubleGauge(final Metrics metrics, final String name, final String description) {
+		return metrics.getOrCreate(
+				new DoubleGauge.Config(STAT_CATEGORY, name)
+						.withDescription(description)
+						.withFormat(FORMAT_9_6)
+		);
 	}
 
 	/**
 	 * Register all statistics with a registry.
 	 *
-	 * @param registry
-	 * 		an object that manages statistics
+	 * @param metrics
+	 * 		reference to the metrics system
+	 * @throws IllegalArgumentException if {@code metrics} is {@code null}
 	 */
-	public void registerStatistics(final Consumer<Metric> registry) {
-		for (final Metric metric : statistics) {
-			registry.accept(metric);
+	public void registerMetrics(final Metrics metrics) {
+		CommonUtils.throwArgNull(metrics, "metrics");
+		internalNodeWritesPerSecond = buildSpeedometerMetric(
+				metrics,
+				"internalNodeWrites/s_" + label,
+				"number of internal node writes per second for " + label
+		);
+		internalNodeReadsPerSecond = buildSpeedometerMetric(
+				metrics,
+				"internalNodeReads/s_" + label,
+				"number of internal node reads per second for " + label
+		);
+		leafWritesPerSecond = buildSpeedometerMetric(
+				metrics,
+				"leafWrites/s_" + label,
+				"number of leaf writes per second for " + label
+		);
+		leafByKeyReadsPerSecond = buildSpeedometerMetric(
+				metrics,
+				"leafByKeyReads/s_" + label,
+				"number of leaf by key reads per second for " + label
+		);
+		leafByPathReadsPerSecond = buildSpeedometerMetric(
+				metrics,
+				"leafByPathReads/s_" + label,
+				"number of leaf by path reads per second for " + label
+		);
+		internalHashesStoreFileCount = metrics.getOrCreate(
+				new IntegerGauge.Config(STAT_CATEGORY, "internalHashFileCount_" + label)
+						.withDescription(NUMBER_OF_FILES_PREFIX + INTERNAL_HASHES_STORE_MIDDLE + label + SUFFIX)
+		);
+		internalHashesStoreTotalFileSizeInMB = buildDoubleGauge(
+				metrics,
+				"internalHashFileSizeMb_" + label,
+				TOTAL_FILES_SIZE_PREFIX + INTERNAL_HASHES_STORE_MIDDLE + label + SUFFIX
+		);
+		if (isLongKeyMode) {
+			leafKeyToPathStoreFileCount = metrics.getOrCreate(
+					new IntegerGauge.Config(STAT_CATEGORY, "leafKeyToPathFileCount_" + label)
+							.withDescription(NUMBER_OF_FILES_PREFIX + LEAF_KEY_TO_PATH_STORE_MIDDLE + label + SUFFIX)
+			);
+			leafKeyToPathStoreTotalFileSizeInMB = buildDoubleGauge(
+					metrics,
+					"leafKeyToPathFileSizeMb_" + label,
+					TOTAL_FILES_SIZE_PREFIX + LEAF_KEY_TO_PATH_STORE_MIDDLE + label + SUFFIX
+			);
 		}
+		leafPathToHashKeyValueStoreFileCount = metrics.getOrCreate(
+				new IntegerGauge.Config(STAT_CATEGORY, "leafHKVFileCount_" + label)
+						.withDescription(NUMBER_OF_FILES_PREFIX + LEAF_PATH_TO_HKV_STORE_MIDDLE + label + SUFFIX)
+		);
+		leafPathToHashKeyValueStoreTotalFileSizeInMB = buildDoubleGauge(
+				metrics,
+				"leafHKVFileSizeMb_" + label,
+				TOTAL_FILES_SIZE_PREFIX + LEAF_PATH_TO_HKV_STORE_MIDDLE + label + SUFFIX
+		);
+		internalHashesStoreSmallMergeTime = buildDoubleGauge(
+				metrics,
+				"internalHashSmallMergeTime_" + label,
+				SMALL_MERGE_PREFIX + INTERNAL_HASHES_STORE_MIDDLE + label + MERGE_SUFFIX
+		);
+		internalHashesStoreMediumMergeTime = buildDoubleGauge(
+				metrics,
+				"internalHashMediumMergeTime_" + label,
+				MEDIUM_MERGE_PREFIX + INTERNAL_HASHES_STORE_MIDDLE + label + MERGE_SUFFIX
+		);
+		internalHashesStoreLargeMergeTime = buildDoubleGauge(
+				metrics,
+				"internalHashLargeMergeTime_" + label,
+				LARGE_MERGE_PREFIX + INTERNAL_HASHES_STORE_MIDDLE + label + MERGE_SUFFIX
+		);
+		if (isLongKeyMode) {
+			leafKeyToPathStoreSmallMergeTime = buildDoubleGauge(
+					metrics,
+					"leafKeyToPathSmallMergeTime_" + label,
+					SMALL_MERGE_PREFIX + LEAF_KEY_TO_PATH_STORE_MIDDLE + label + MERGE_SUFFIX
+			);
+			leafKeyToPathStoreMediumMergeTime = buildDoubleGauge(
+					metrics,
+					"leafKeyToPathMediumMergeTime_" + label,
+					MEDIUM_MERGE_PREFIX + LEAF_KEY_TO_PATH_STORE_MIDDLE + label + MERGE_SUFFIX
+			);
+			leafKeyToPathStoreLargeMergeTime = buildDoubleGauge(
+					metrics,
+					"leafKeyToPathLargeMergeTime_" + label,
+					LARGE_MERGE_PREFIX + LEAF_KEY_TO_PATH_STORE_MIDDLE + label + MERGE_SUFFIX
+			);
+		}
+		leafPathToHashKeyValueStoreSmallMergeTime = buildDoubleGauge(
+				metrics,
+				"leafHKVSmallMergeTime_" + label,
+				SMALL_MERGE_PREFIX + LEAF_PATH_TO_HKV_STORE_MIDDLE + label + MERGE_SUFFIX
+		);
+		leafPathToHashKeyValueStoreMediumMergeTime = buildDoubleGauge(
+				metrics,
+				"leafHKVMediumMergeTime_" + label,
+				MEDIUM_MERGE_PREFIX + LEAF_PATH_TO_HKV_STORE_MIDDLE + label + MERGE_SUFFIX
+		);
+		leafPathToHashKeyValueStoreLargeMergeTime = buildDoubleGauge(
+				metrics,
+				"leafHKVLargeMergeTime_" + label,
+				LARGE_MERGE_PREFIX + LEAF_PATH_TO_HKV_STORE_MIDDLE + label + MERGE_SUFFIX
+		);
 	}
 
 	/**
 	 * Cycle the InternalNodeWritesPerSecond stat
 	 */
 	public void cycleInternalNodeWritesPerSecond() {
-		internalNodeWritesPerSecond.cycle();
+		if (internalNodeWritesPerSecond != null) {
+			internalNodeWritesPerSecond.cycle();
+		}
 	}
 
 	/**
 	 * Cycle the InternalNodeReadsPerSecond stat
 	 */
 	public void cycleInternalNodeReadsPerSecond() {
-		internalNodeReadsPerSecond.cycle();
+		if (internalNodeReadsPerSecond != null) {
+			internalNodeReadsPerSecond.cycle();
+		}
 	}
 
 	/**
 	 * Cycle the LeafWritesPerSecond stat
 	 */
 	public void cycleLeafWritesPerSecond() {
-		leafWritesPerSecond.cycle();
+		if (leafWritesPerSecond != null) {
+			leafWritesPerSecond.cycle();
+		}
 	}
 
 	/**
 	 * Cycle the LeafByKeyReadsPerSecond stat
 	 */
 	public void cycleLeafByKeyReadsPerSecond() {
-		leafByKeyReadsPerSecond.cycle();
+		if (leafByKeyReadsPerSecond != null) {
+			leafByKeyReadsPerSecond.cycle();
+		}
 	}
 
 	/**
 	 * Cycle the LeafByPathReadsPerSecond stat
 	 */
 	public void cycleLeafByPathReadsPerSecond() {
-		leafByPathReadsPerSecond.cycle();
+		if (leafByPathReadsPerSecond != null) {
+			leafByPathReadsPerSecond.cycle();
+		}
 	}
 
 	/**
@@ -276,7 +272,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setInternalHashesStoreFileCount(final int value) {
-		internalHashesStoreFileCount.set(value);
+		if (internalHashesStoreFileCount != null) {
+			internalHashesStoreFileCount.set(value);
+		}
 	}
 
 	/**
@@ -286,7 +284,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setInternalHashesStoreTotalFileSizeInMB(final double value) {
-		internalHashesStoreTotalFileSizeInMB.set(value);
+		if (internalHashesStoreTotalFileSizeInMB != null) {
+			internalHashesStoreTotalFileSizeInMB.set(value);
+		}
 	}
 
 	/**
@@ -296,7 +296,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setLeafKeyToPathStoreFileCount(final int value) {
-		leafKeyToPathStoreFileCount.set(value);
+		if (leafKeyToPathStoreFileCount != null) {
+			leafKeyToPathStoreFileCount.set(value);
+		}
 	}
 
 	/**
@@ -306,7 +308,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setLeafKeyToPathStoreTotalFileSizeInMB(final double value) {
-		leafKeyToPathStoreTotalFileSizeInMB.set(value);
+		if (leafKeyToPathStoreTotalFileSizeInMB != null) {
+			leafKeyToPathStoreTotalFileSizeInMB.set(value);
+		}
 	}
 
 	/**
@@ -316,7 +320,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setLeafPathToHashKeyValueStoreFileCount(final int value) {
-		leafPathToHashKeyValueStoreFileCount.set(value);
+		if (leafPathToHashKeyValueStoreFileCount != null) {
+			leafPathToHashKeyValueStoreFileCount.set(value);
+		}
 	}
 
 	/**
@@ -326,7 +332,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setLeafPathToHashKeyValueStoreTotalFileSizeInMB(final double value) {
-		leafPathToHashKeyValueStoreTotalFileSizeInMB.set(value);
+		if (leafPathToHashKeyValueStoreTotalFileSizeInMB != null) {
+			leafPathToHashKeyValueStoreTotalFileSizeInMB.set(value);
+		}
 	}
 
 	/**
@@ -336,7 +344,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setInternalHashesStoreSmallMergeTime(final double value) {
-		internalHashesStoreSmallMergeTime.set(value);
+		if (internalHashesStoreSmallMergeTime != null) {
+			internalHashesStoreSmallMergeTime.set(value);
+		}
 	}
 
 	/**
@@ -346,7 +356,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setInternalHashesStoreMediumMergeTime(final double value) {
-		internalHashesStoreMediumMergeTime.set(value);
+		if (internalHashesStoreMediumMergeTime != null) {
+			internalHashesStoreMediumMergeTime.set(value);
+		}
 	}
 
 	/**
@@ -356,7 +368,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setInternalHashesStoreLargeMergeTime(final double value) {
-		internalHashesStoreLargeMergeTime.set(value);
+		if (internalHashesStoreLargeMergeTime != null) {
+			internalHashesStoreLargeMergeTime.set(value);
+		}
 	}
 
 	/**
@@ -366,7 +380,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setLeafKeyToPathStoreSmallMergeTime(final double value) {
-		leafKeyToPathStoreSmallMergeTime.set(value);
+		if (leafKeyToPathStoreSmallMergeTime != null) {
+			leafKeyToPathStoreSmallMergeTime.set(value);
+		}
 	}
 
 	/**
@@ -376,7 +392,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setLeafKeyToPathStoreMediumMergeTime(final double value) {
-		leafKeyToPathStoreMediumMergeTime.set(value);
+		if (leafKeyToPathStoreMediumMergeTime != null) {
+			leafKeyToPathStoreMediumMergeTime.set(value);
+		}
 	}
 
 	/**
@@ -386,7 +404,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setLeafKeyToPathStoreLargeMergeTime(final double value) {
-		leafKeyToPathStoreLargeMergeTime.set(value);
+		if (leafKeyToPathStoreLargeMergeTime != null) {
+			leafKeyToPathStoreLargeMergeTime.set(value);
+		}
 	}
 
 	/**
@@ -396,7 +416,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setLeafPathToHashKeyValueStoreSmallMergeTime(final double value) {
-		leafPathToHashKeyValueStoreSmallMergeTime.set(value);
+		if (leafPathToHashKeyValueStoreSmallMergeTime != null) {
+			leafPathToHashKeyValueStoreSmallMergeTime.set(value);
+		}
 	}
 
 	/**
@@ -406,7 +428,9 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setLeafPathToHashKeyValueStoreMediumMergeTime(final double value) {
-		leafPathToHashKeyValueStoreMediumMergeTime.set(value);
+		if (leafPathToHashKeyValueStoreMediumMergeTime != null) {
+			leafPathToHashKeyValueStoreMediumMergeTime.set(value);
+		}
 	}
 
 	/**
@@ -416,6 +440,8 @@ public class JasperDbStatistics {
 	 * 		the value to set
 	 */
 	public void setLeafPathToHashKeyValueStoreLargeMergeTime(final double value) {
-		leafPathToHashKeyValueStoreLargeMergeTime.set(value);
+		if (leafPathToHashKeyValueStoreLargeMergeTime != null) {
+			leafPathToHashKeyValueStoreLargeMergeTime.set(value);
+		}
 	}
 }

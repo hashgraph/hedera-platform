@@ -16,6 +16,7 @@
 
 package com.swirlds.platform.components;
 
+import com.swirlds.common.Clock;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.event.CreateEventTask;
 import com.swirlds.platform.event.EventIntakeTask;
@@ -23,7 +24,7 @@ import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.event.ValidEvent;
 import com.swirlds.platform.event.validation.EventValidator;
 import com.swirlds.platform.intake.IntakeCycleStats;
-import com.swirlds.platform.stats.EventIntakeStats;
+import com.swirlds.platform.metrics.EventIntakeMetrics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,8 +49,9 @@ public class EventTaskDispatcher {
 	 * A statistics accumulator for hashgraph-related quantities, used here to record
 	 * time to taken to process a task to hashgraph event
 	 */
-	private final EventIntakeStats stats;
+	private final EventIntakeMetrics eventIntakeMetrics;
 	private final IntakeCycleStats cycleStats;
+	private final Clock clock;
 
 	/**
 	 * Constructor
@@ -60,20 +62,21 @@ public class EventTaskDispatcher {
 	 * 		an event creator
 	 * @param validEventHandler
 	 * 		handles already validated events
-	 * @param stats
-	 * 		dispatching statistics
+	 * @param eventIntakeMetrics
+	 * 		dispatching metrics
 	 */
 	public EventTaskDispatcher(
 			final EventValidator eventValidator,
 			final EventCreator eventCreator,
 			final Consumer<GossipEvent> validEventHandler,
-			final EventIntakeStats stats,
+			final EventIntakeMetrics eventIntakeMetrics,
 			final IntakeCycleStats cycleStats) {
 		this.eventValidator = eventValidator;
 		this.eventCreator = eventCreator;
 		this.validEventHandler = validEventHandler;
-		this.stats = stats;
+		this.eventIntakeMetrics = eventIntakeMetrics;
 		this.cycleStats = cycleStats;
+		this.clock = Clock.DEFAULT;
 	}
 
 	/**
@@ -85,7 +88,7 @@ public class EventTaskDispatcher {
 	 */
 	public void dispatchTask(final EventIntakeTask eventIntakeTask) {
 		cycleStats.startedIntake();
-		final long start = stats.time();
+		final long start = clock.now();
 		//Moving validation to inline model
 		if (eventIntakeTask instanceof GossipEvent task) {
 			eventValidator.validateEvent(task);
@@ -96,7 +99,7 @@ public class EventTaskDispatcher {
 		} else {
 			LOG.error(LogMarker.EXCEPTION.getMarker(), "Unknown instance type: {}", eventIntakeTask.getClass());
 		}
-		stats.processedEventTask(start);
+		eventIntakeMetrics.processedEventTask(start);
 		cycleStats.doneIntake();
 	}
 }

@@ -96,7 +96,7 @@ public class Dispatcher<L extends Listener> {
 
 	public <N extends Notification> void notifySync(final N notification,
 			final Consumer<NotificationResult<N>> callback) {
-		handleDispatch(notification, true, callback);
+		handleDispatch(notification, false, callback);
 	}
 
 	public <N extends Notification> void notifyAsync(final N notification,

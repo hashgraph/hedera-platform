@@ -121,8 +121,8 @@ public class SignedStateValidator {
 				continue;
 			}
 			validFutures[i] = crypto.verifySignatureParallel(
-					signedState.getStateHashBytes(),
-					sigInfo.getSig(),
+					signedState.getState().getHash().getValue(),
+					sigInfo.getSignature().getSignatureBytes(),
 					key,
 					(Boolean b) -> {
 					});

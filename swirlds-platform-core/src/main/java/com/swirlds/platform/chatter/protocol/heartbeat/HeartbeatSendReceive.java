@@ -17,7 +17,7 @@
 package com.swirlds.platform.chatter.protocol.heartbeat;
 
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.metrics.Clock;
+import com.swirlds.common.Clock;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.platform.chatter.protocol.MessageHandler;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
@@ -91,5 +91,12 @@ public class HeartbeatSendReceive implements MessageProvider, MessageHandler<Hea
 	public void clear() {
 		responder.clear();
 		sender.clear();
+	}
+
+	/**
+	 * @see HeartbeatSender#getLastRoundTripNanos()
+	 */
+	public Long getLastRoundTripNanos() {
+		return sender.getLastRoundTripNanos();
 	}
 }

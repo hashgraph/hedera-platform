@@ -16,13 +16,12 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.metrics.Metrics;
+import com.swirlds.platform.stats.cycle.CycleDefinition;
 
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * A stat designed to track the amount of time spent in various parts of a cycle that is repeated over and over.
@@ -30,10 +29,10 @@ import java.util.stream.Collectors;
 public class CycleTimingStat {
 
 	/** The average amount of time spent on a single cycle. */
-	private final TimeStat totalCycleTimeStat;
+	private final AverageTimeStat totalCycleTimeStat;
 
 	/** The average amount of time spent on each interval in the cycle. */
-	private final List<TimeStat> timePointStats;
+	private final List<AverageTimeStat> timePointStats;
 
 	/** The number of intervals in this cycle. */
 	private final int numIntervals;
@@ -53,56 +52,35 @@ public class CycleTimingStat {
 	 *
 	 * @param unit
 	 * 		the unit of time to measure all time intervals in this cycle
-	 * @param category
-	 * 		the category of this stat
-	 * @param name
-	 * 		a name that describes the cycle in its entirety
-	 * @param numIntervals
-	 * 		the number of intervals this cycle will record
-	 * @param detailedNames
-	 * 		a list of names and describe each time interval. The size must match {@code numIntervals}
-	 * @param descList
-	 * 		a list of descriptions for each time interval. The size must match {@code numIntervals}
+	 * @param definition
+	 * 		the definition of the cycle state
 	 */
 	public CycleTimingStat(
+			final Metrics metrics,
 			final ChronoUnit unit,
-			final String category,
-			final String name,
-			final int numIntervals,
-			final List<String> detailedNames,
-			final List<String> descList) {
+			final CycleDefinition definition) {
 
-		if (numIntervals < 1) {
-			throw new IllegalArgumentException(("The number of intervals must be at least 1."));
-		}
-		if (descList.size() != numIntervals) {
-			throw new IllegalArgumentException(
-					String.format("The number of descriptions for %s (%s) does not match the number of intervals " +
-							"(%s).", name, descList.size(), numIntervals));
-		}
-		if (detailedNames.size() != numIntervals) {
-			throw new IllegalArgumentException(
-					String.format("The number of detailed named for %s (%s) does not match the number of intervals " +
-							"(%s).", name, detailedNames.size(), numIntervals));
-		}
-
-		this.numIntervals = numIntervals;
+		this.numIntervals = definition.getNumIntervals();
 		t = new long[numIntervals + 1];
 
 		timePointStats = new ArrayList<>(numIntervals);
 		for (int i = 0; i < numIntervals; i++) {
-			timePointStats.add(new TimeStat(
+			timePointStats.add(new AverageTimeStat(
+					metrics,
 					unit,
-					category,
-					name + "-" + detailedNames.get(i),
-					descList.get(i),
+					definition.getCategory(),
+					definition.getName() + "-" + definition.getIntervalName(i),
+					definition.getIntervalDescription(i),
 					AverageStat.WEIGHT_VOLATILE
 			));
 		}
-		totalCycleTimeStat = new TimeStat(unit,
-				category,
-				name + "-total",
-				"average total time spend in the " + name + " cycle.",
+
+		totalCycleTimeStat = new AverageTimeStat(
+				metrics,
+				unit,
+				definition.getCategory(),
+				definition.getName() + "-total",
+				"average total time spend in the " + definition.getName() + " cycle.",
 				AverageStat.WEIGHT_VOLATILE);
 	}
 
@@ -140,22 +118,6 @@ public class CycleTimingStat {
 		}
 
 		totalCycleTimeStat.update(t[0], t[t.length - 1]);
-	}
-
-	public List<StatEntry> getAverageEntries() {
-		final List<StatEntry> statEntries =
-				timePointStats.stream().map(TimeStat::getAverageStat).collect(Collectors.toList());
-		statEntries.add(totalCycleTimeStat.getAverageStat());
-		return statEntries;
-	}
-
-	public List<StatEntry> getAllEntries() {
-		final List<StatEntry> statEntries = timePointStats.stream()
-				.map(TimeStat::getAllEntries)
-				.flatMap(Collection::stream)
-				.collect(Collectors.toList());
-		statEntries.addAll(totalCycleTimeStat.getAllEntries());
-		return statEntries;
 	}
 
 	/**

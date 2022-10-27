@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.platform.state.signed.SigSet;
+import com.swirlds.common.crypto.Signature;
 
 /**
  * Responsible for recording the state signature
@@ -25,18 +25,14 @@ public interface StateSignatureRecorder {
 	/**
 	 * Record a signature for the signed state for the given round with the given hash. The caller must not
 	 * change the array elements after passing this in. Each time the caller calls this method with
-	 * memberId==selfId, the lastRoundReceived parameter must be greater than on the previous such call.
+	 * memberId==selfId, the round parameter must be greater than on the previous such call.
 	 *
-	 * @param lastRoundReceived
+	 * @param round
 	 * 		the signed state reflects all events with received round less than or equal to this
 	 * @param memberId
 	 * 		the member ID of the signer
-	 * @param hash
-	 * 		the hash of the state to be signed. The signature algorithm may internally hash this
-	 * 		hash.
 	 * @param sig
 	 * 		the signature
-	 * @return the SigSet that the new SigInfo is added to
 	 */
-	SigSet recordStateSig(long lastRoundReceived, long memberId, byte[] hash, byte[] sig);
+	void recordStateSignature(long round, long memberId, Signature sig);
 }

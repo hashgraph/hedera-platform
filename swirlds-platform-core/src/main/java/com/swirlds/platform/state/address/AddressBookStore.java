@@ -19,12 +19,12 @@ package com.swirlds.platform.state.address;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.interfaces.Archivable;
 import com.swirlds.common.system.address.AddressBook;
-import com.swirlds.common.sequence.Purgable;
+import com.swirlds.common.sequence.Shiftable;
 
 /**
  * An in-state collection of address books from recent rounds.
  */
-public interface AddressBookStore extends Archivable, MerkleNode, Purgable {
+public interface AddressBookStore extends Archivable, MerkleNode, Shiftable {
 
 	int UNDEFINED_ROUND = -1;
 
@@ -114,7 +114,7 @@ public interface AddressBookStore extends Archivable, MerkleNode, Purgable {
 	 * 		the earliest round that should remain in the store. All earlier rounds will be removed.
 	 */
 	@Override
-	void purge(final long earliestRound);
+	void shiftWindow(final long earliestRound);
 
 	/**
 	 * Calling this method causes the overriding address book to change to the latest available address book.

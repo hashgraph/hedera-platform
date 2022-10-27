@@ -146,7 +146,7 @@ public final class LinkedObjectStreamUtilities {
 	 * @return timestamp extracted from this filename
 	 */
 	public static Instant getTimeStampFromFileName(final String filename) {
-		int indexOfZ = filename.indexOf("Z");
+		final int indexOfZ = filename.indexOf("Z");
 		if (indexOfZ != -1) {
 			String dateInfo = filename.substring(0, indexOfZ + 1);
 			dateInfo = dateInfo.replace("_", ":");

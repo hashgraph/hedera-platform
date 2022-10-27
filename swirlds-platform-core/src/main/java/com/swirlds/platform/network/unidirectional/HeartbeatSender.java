@@ -24,7 +24,7 @@ import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.ByteConstants;
 import com.swirlds.platform.network.ConnectionManager;
 import com.swirlds.platform.network.NetworkProtocolException;
-import com.swirlds.platform.network.NetworkStats;
+import com.swirlds.platform.network.NetworkMetrics;
 import com.swirlds.platform.network.NetworkUtils;
 
 import java.io.IOException;
@@ -36,13 +36,13 @@ public class HeartbeatSender implements InterruptableRunnable {
 	// ID number for member to send heartbeats to
 	private final NodeId otherId;
 	private final SharedConnectionLocks sharedConnectionLocks;
-	private final NetworkStats stats;
+	private final NetworkMetrics stats;
 	private final SettingsProvider settings;
 
 	public HeartbeatSender(
 			final NodeId otherId,
 			final SharedConnectionLocks sharedConnectionLocks,
-			final NetworkStats stats,
+			final NetworkMetrics stats,
 			final SettingsProvider settings) {
 		this.otherId = otherId;
 		this.sharedConnectionLocks = sharedConnectionLocks;

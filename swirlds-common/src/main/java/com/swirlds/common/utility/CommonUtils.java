@@ -250,7 +250,7 @@ public class CommonUtils {
 	}
 
 	/**
-	 * Throw an {@link IllegalArgumentException} if the supplied argument is null.
+	 * Throw an {@link IllegalArgumentException} if the supplied argument is {@code null}.
 	 *
 	 * @param arg
 	 * 		the argument checked
@@ -265,6 +265,24 @@ public class CommonUtils {
 							argName
 					)
 			);
+		}
+		return arg;
+	}
+
+	/**
+	 * Throw an {@link IllegalArgumentException} if the supplied {@code String} is blank.
+	 *
+	 * @see StringUtils#isBlank(CharSequence)
+	 *
+	 * @param arg
+	 * 		the argument checked
+	 * @param argName
+	 * 		the name of the argument
+	 */
+	public static String throwArgBlank(final String arg, final String argName) {
+		throwArgNull(arg, argName);
+		if (StringUtils.isBlank(arg)) {
+			throw new IllegalArgumentException(String.format("The supplied argument '%s' cannot be blank!", argName));
 		}
 		return arg;
 	}

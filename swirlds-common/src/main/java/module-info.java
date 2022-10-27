@@ -47,18 +47,21 @@ module com.swirlds.common {
 	exports com.swirlds.common.merkle.synchronization.views;
 	exports com.swirlds.common.merkle.utility;
 	exports com.swirlds.common.metrics;
-	exports com.swirlds.common.metrics.writer;
+	exports com.swirlds.common.metrics.atomic;
+	exports com.swirlds.common.metrics.platform;
 	exports com.swirlds.common.notification;
 	exports com.swirlds.common.notification.listeners;
 	exports com.swirlds.common.sequence;
 	exports com.swirlds.common.sequence.map;
 	exports com.swirlds.common.sequence.set;
 	exports com.swirlds.common.settings;
+	exports com.swirlds.common.statistics;
 	exports com.swirlds.common.stream;
 	exports com.swirlds.common.system;
 	exports com.swirlds.common.system.address;
 	exports com.swirlds.common.system.events;
 	exports com.swirlds.common.system.transaction;
+	exports com.swirlds.common.system.state.notifications;
 	exports com.swirlds.common.threading;
 	exports com.swirlds.common.threading.framework;
 	exports com.swirlds.common.threading.framework.config;
@@ -69,6 +72,7 @@ module com.swirlds.common {
 	exports com.swirlds.common.threading.wrappers;
 	exports com.swirlds.common.utility;
 	exports com.swirlds.common.utility.throttle;
+
 
 	/* Targeted exports */
 	exports com.swirlds.common.internal to com.swirlds.platform, com.swirlds.platform.test,
@@ -85,7 +89,6 @@ module com.swirlds.common {
 	opens com.swirlds.common.utility to com.fasterxml.jackson.databind;
 	opens com.swirlds.common.utility.throttle to com.fasterxml.jackson.databind;
 	opens com.swirlds.common.stream to com.fasterxml.jackson.databind;
-	exports com.swirlds.common.statistics;
 	exports com.swirlds.common.statistics.internal to com.swirlds.common.test, com.swirlds.demo.platform,
 			com.swirlds.platform, com.swirlds.platform.test, com.swirlds.jrs;
 	opens com.swirlds.common.merkle.copy to com.fasterxml.jackson.databind;
@@ -101,6 +104,7 @@ module com.swirlds.common {
 	requires com.swirlds.logging;
 
 	requires java.desktop;
+	requires jdk.management;
 
 	/* Cryptography Libraries */
 	requires lazysodium.java;

@@ -36,5 +36,4 @@ public record SavedStateInfo(long round, Path stateFile) {
 	public Path getDir() {
 		return stateFile.toAbsolutePath().getParent();
 	}
-
 }

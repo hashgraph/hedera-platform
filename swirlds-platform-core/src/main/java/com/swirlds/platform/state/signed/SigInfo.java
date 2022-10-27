@@ -18,6 +18,8 @@ package com.swirlds.platform.state.signed;
 
 import com.swirlds.common.FastCopyable;
 import com.swirlds.common.crypto.DigestType;
+import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
@@ -39,6 +41,10 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 	private static class CLassVersion {
 		public static final int ORIGINAL = 1;
 		public static final int MIGRATE_TO_SERIALIZABLE = 2;
+		/**
+		 * Instead of storing the hash/signature as raw bytes, use the Hash/Signature object.
+		 */
+		public static final int USE_HASH_SIGNATURE_WRAPPER = 3;
 	}
 
 	/**
@@ -51,18 +57,18 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 	/** the member who signed the state */
 	private long memberId;
 	/** the hash of the state that was signed. The signature algorithm may internally hash this hash. */
-	private byte[] hash;
+	private Hash hash;
 	/** the signature */
-	private byte[] sig;
+	private Signature signature;
 
 	private boolean immutable;
 
-	public SigInfo(long round, long memberId, byte[] hash, byte[] sig) {
+	public SigInfo(final long round, final long memberId, final Hash hash, final Signature signature) {
 		classVersion = 1;
 		this.round = round;
 		this.memberId = memberId;
 		this.hash = hash;
-		this.sig = sig;
+		this.signature = signature;
 	}
 
 	/** the default constructor is needed for FastCopyable */
@@ -74,7 +80,7 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 		this.round = sourceValue.getRound();
 		this.memberId = sourceValue.getMemberId();
 		this.hash = sourceValue.getHash();
-		this.sig = sourceValue.getSig();
+		this.signature = sourceValue.getSignature();
 	}
 
 	/**
@@ -93,26 +99,33 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 	public void serialize(SerializableDataOutputStream out) throws IOException {
 		out.writeLong(round);
 		out.writeLong(memberId);
-		out.writeByteArray(hash);
-		out.writeByteArray(sig);
+		out.writeSerializable(hash, false);
+		out.writeSerializable(signature, false);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void deserialize(SerializableDataInputStream in, int version) throws IOException {
+	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
 		round = in.readLong();
 		memberId = in.readLong();
-		hash = in.readByteArray(DigestType.SHA_384.digestLength());
-		sig = in.readByteArray(SignatureType.RSA.signatureLength());
-	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void release() {
+		if (version < CLassVersion.USE_HASH_SIGNATURE_WRAPPER) {
+			final byte[] hashBytes = in.readByteArray(DigestType.SHA_384.digestLength());
+			if (hashBytes != null) {
+				hash = new Hash(hashBytes, DigestType.SHA_384);
+			}
+
+			final byte[] signatureBytes = in.readByteArray(SignatureType.RSA.signatureLength());
+			if (signatureBytes != null) {
+				signature = new Signature(SignatureType.RSA, signatureBytes);
+			}
+
+		} else {
+			hash = in.readSerializable(false, Hash::new);
+			signature = in.readSerializable(false, Signature::new);
+		}
 	}
 
 	/**
@@ -138,7 +151,7 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 	 *
 	 * @return the hash of the state that was signed
 	 */
-	public byte[] getHash() {
+	public Hash getHash() {
 		return hash;
 	}
 
@@ -147,8 +160,8 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 	 *
 	 * @return the signature
 	 */
-	public byte[] getSig() {
-		return sig;
+	public Signature getSignature() {
+		return signature;
 	}
 
 	/**
@@ -170,7 +183,7 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 				.append(round, sigInfo.round)
 				.append(memberId, sigInfo.memberId)
 				.append(hash, sigInfo.hash)
-				.append(sig, sigInfo.sig)
+				.append(signature, sigInfo.signature)
 				.isEquals();
 	}
 
@@ -183,7 +196,7 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 				.append(round)
 				.append(memberId)
 				.append(hash)
-				.append(sig)
+				.append(signature)
 				.toHashCode();
 	}
 
@@ -197,7 +210,7 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 				.append("round", round)
 				.append("memberId", memberId)
 				.append("hash", hash)
-				.append("sig", sig)
+				.append("sig", signature)
 				.toString();
 	}
 
@@ -214,7 +227,7 @@ public class SigInfo implements FastCopyable, SelfSerializable {
 	 */
 	@Override
 	public int getVersion() {
-		return CLassVersion.MIGRATE_TO_SERIALIZABLE;
+		return CLassVersion.USE_HASH_SIGNATURE_WRAPPER;
 	}
 
 	/**

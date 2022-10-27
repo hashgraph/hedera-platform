@@ -16,6 +16,7 @@
 
 package com.swirlds.common.test.state;
 
+import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleLeaf;
@@ -46,6 +47,8 @@ public abstract class AbstractDummySwirldState extends PartialMerkleLeaf impleme
 
 	protected AtomicBoolean released = new AtomicBoolean(false);
 
+	private Hash hashOverride;
+
 	protected AbstractDummySwirldState() {
 		this(false);
 	}
@@ -72,6 +75,33 @@ public abstract class AbstractDummySwirldState extends PartialMerkleLeaf impleme
 		this.deletionLatch = that.deletionLatch;
 		this.archivalLatch = that.archivalLatch;
 		this.released = new AtomicBoolean(that.released.get());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Hash getHash() {
+		if (hashOverride != null) {
+			return hashOverride;
+		} else {
+			return super.getHash();
+		}
+	}
+
+	/**
+	 * Set the hash of this object, overrides any hash that might be computed.
+	 * Hash is not preserved during serialization.
+	 */
+	public void setHashOverride(final Hash hashOverride) {
+		this.hashOverride = hashOverride;
+	}
+
+	/**
+	 * Set the override hash of this object.
+	 */
+	public Hash getHashOverride() {
+		return hashOverride;
 	}
 
 	public void enableDeletion() {

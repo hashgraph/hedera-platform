@@ -24,7 +24,7 @@ import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.GossipEvent;
-import com.swirlds.platform.stats.SyncStats;
+import com.swirlds.platform.metrics.SyncMetrics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -59,7 +59,7 @@ public class ShadowGraphSynchronizer {
 	/** Number of member nodes in the network for this sync */
 	private final int numberOfNodes;
 	/** All sync stats */
-	private final SyncStats stats;
+	private final SyncMetrics syncMetrics;
 	/**
 	 * provides the current consensus instance, a supplier is used because this instance will change after a
 	 * reconnect, so we have to make sure we always get the latest one
@@ -83,7 +83,7 @@ public class ShadowGraphSynchronizer {
 	public ShadowGraphSynchronizer(
 			final ShadowGraph shadowGraph,
 			final int numberOfNodes,
-			final SyncStats stats,
+			final SyncMetrics syncMetrics,
 			final Supplier<GraphGenerations> generationsSupplier,
 			final Consumer<SyncResult> syncDone,
 			final Consumer<GossipEvent> eventHandler,
@@ -94,7 +94,7 @@ public class ShadowGraphSynchronizer {
 			final InterruptableRunnable executePreFetchTips) {
 		this.shadowGraph = shadowGraph;
 		this.numberOfNodes = numberOfNodes;
-		this.stats = stats;
+		this.syncMetrics = syncMetrics;
 		this.generationsSupplier = generationsSupplier;
 		this.syncDone = syncDone;
 		this.eventHandler = eventHandler;
@@ -199,7 +199,7 @@ public class ShadowGraphSynchronizer {
 				return false;
 			}
 
-			stats.generations(myGenerations, theirGensTips.getGenerations());
+			syncMetrics.generations(myGenerations, theirGensTips.getGenerations());
 
 			if (fallenBehind(myGenerations, theirGensTips.getGenerations(), conn)) {
 				// aborting the sync since someone has fallen behind
@@ -246,8 +246,8 @@ public class ShadowGraphSynchronizer {
 
 	private List<ShadowEvent> getTips() {
 		final List<ShadowEvent> myTips = shadowGraph.getTips();
-		stats.updateTipsPerSync(myTips.size());
-		stats.updateMultiTipsPerSync(SyncUtils.computeMultiTipCount(myTips));
+		syncMetrics.updateTipsPerSync(myTips.size());
+		syncMetrics.updateMultiTipsPerSync(SyncUtils.computeMultiTipCount(myTips));
 		return myTips;
 	}
 
@@ -277,7 +277,7 @@ public class ShadowGraphSynchronizer {
 		// then vice versa
 		knownAncestors.addAll(knownSet);
 
-		stats.knownSetSize(knownAncestors.size());
+		syncMetrics.knownSetSize(knownAncestors.size());
 
 		// predicate used to search for events to send
 		final Predicate<ShadowEvent> knownAncestorsPredicate =
@@ -313,7 +313,7 @@ public class ShadowGraphSynchronizer {
 		// the reading thread uses this to indicate to the writing thread that it is done
 		final CountDownLatch eventReadingDone = new CountDownLatch(1);
 		final Integer eventsRead = readWriteParallel(
-				SyncComms.phase3Read(conn, eventHandler, stats, eventReadingDone),
+				SyncComms.phase3Read(conn, eventHandler, syncMetrics, eventReadingDone),
 				SyncComms.phase3Write(conn, sendList, eventReadingDone),
 				conn
 		);
@@ -333,7 +333,7 @@ public class ShadowGraphSynchronizer {
 		throttle7(conn, eventsRead, sendList.size());
 
 		timing.setTimePoint(5);
-		stats.recordSyncTiming(timing, conn);
+		syncMetrics.recordSyncTiming(timing, conn);
 	}
 
 	/**
@@ -382,14 +382,14 @@ public class ShadowGraphSynchronizer {
 						throttle7.receiveThrottleBytes(conn),
 						conn
 				);
-				stats.syncThrottleBytesWritten(throttle7BytesWritten);
+				syncMetrics.syncThrottleBytesWritten(throttle7BytesWritten);
 			}
 		}
 	}
 
 	private void syncDone(final SyncResult info) {
 		syncDone.accept(info);
-		stats.syncDone(info);
+		syncMetrics.syncDone(info);
 	}
 
 	/**

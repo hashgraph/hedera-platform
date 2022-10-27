@@ -15,6 +15,7 @@
  */
 package com.swirlds.platform;
 
+import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.statistics.internal.StatsBuffer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,11 +34,20 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.Comparator;
+import java.util.IllegalFormatException;
+import java.util.List;
+import java.util.Locale;
 
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 	private static final long serialVersionUID = 1L;
+	public static final int CHART_WIDTH = 750;
+	public static final int CHART_HEIGHT = 400;
+
+	private final transient List<Metric> metrics;
 	/** number of columns of statistics boxes to display */
 	final int numCols = 8;
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
@@ -51,8 +61,6 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 	/** all the TextArea objects, one per statistic */
 	private JLabel[] statBoxes;
 	/** strings describing each statistic (name, description, formatting string) */
-	private String[][] statInfo;
-	/** Each chart is a JPanel containing two Chart objects: recent history and all history */
 	private JPanel[] charts;
 	/** the panel containing all the stats boxes (one name, one stat each) */
 	private JPanel boxesPanel;
@@ -75,9 +83,10 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 	 * Instantiate and initialize content of this tab.
 	 */
 	public WinTab2Stats() {
-		Statistics stats = WinBrowser.memberDisplayed.platform.getStats();
-		statInfo = stats.getAvailableStats();
-		int numStats = statInfo.length;
+		metrics = WinBrowser.memberDisplayed.platform.getMetrics().getAll().stream()
+				.sorted(Comparator.comparing(m -> m.getName().toUpperCase()))
+				.toList();
+		int numStats = metrics.size();
 		// numRows is: ceiling of numStats / numCols
 		int numRows = numStats / numCols + ((numStats % numCols == 0) ? 0 : 1);
 		// lastTall is: (numStats-1) mod numCols
@@ -98,10 +107,8 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 	private class Chart extends JPanel {
 		/** for serializing */
 		private static final long serialVersionUID = 1L;
-		/** String array: {name, description, format} */
-		private String[] statInfo;
-		/** the index used to retrieve this statistic from Statistics */
-		private int statIndex;
+		/** {@link Metric} of this chart */
+		private final transient Metric metric;
 		/** is this all of history (as opposed to only recent)? */
 		private boolean allHistory;
 		/** the number of labels to generate */
@@ -127,17 +134,13 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 		 * 		height of the panel in pixels
 		 * @param allHistory
 		 * 		is this all of history (as opposed to only recent)?
-		 * @param statIndex
-		 * 		the index used to retrieve this statistic from Statistics
-		 * @param statInfo
-		 * 		String array: {name, description, format}
+		 * @param metric
+		 * 		{@link Metric} of this chart
 		 */
-		Chart(int width, int height, boolean allHistory, int statIndex,
-				String[] statInfo) {
+		Chart(int width, int height, boolean allHistory, final Metric metric) {
 			this.setPreferredSize(new Dimension(width, height));
 			this.allHistory = allHistory;
-			this.statIndex = statIndex;
-			this.statInfo = statInfo;
+			this.metric = metric;
 			this.setBackground(Color.WHITE);
 		}
 
@@ -296,11 +299,9 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 			try {
 				StatsBuffer buffer;
 				if (allHistory) {
-					buffer = WinBrowser.memberDisplayed.platform.getStats()
-							.getAllHistory(statIndex);
+					buffer = metric.getStatsBuffered().getAllHistory();
 				} else {
-					buffer = WinBrowser.memberDisplayed.platform.getStats()
-							.getRecentHistory(statIndex);
+					buffer = metric.getStatsBuffered().getRecentHistory();
 				}
 				minXs = 120;
 				maxXs = getWidth() - 55;
@@ -333,13 +334,13 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 				stringHeight = g.getFontMetrics().getHeight();
 				stringHeightNoDesc = g.getFontMetrics().getHeight()
 						- g.getFontMetrics().getDescent();
-				String title = statInfo[0] + " vs. time for "
+				String title = metric.getName() + " vs. time for "
 						+ (allHistory ? "all" : "recent") + " history";
 
 				if (buffer.numBins() == 0) {
 					String s = String.format(
 							"Skipping the first %,.0f seconds ...",
-							Settings.statsSkipSeconds);
+							Settings.getInstance().getStatsSkipSeconds());
 					int w = g.getFontMetrics().stringWidth(s);
 					g.drawString(s, (minXs + maxXs - w) / 2,
 							(minYs + maxYs) / 2);
@@ -470,7 +471,6 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 			// set up every Component on the screen, but only once
 			return;
 		}
-		Statistics stats = WinBrowser.memberDisplayed.platform.getStats();
 		boxesPanel = new JPanel(new GridBagLayout());
 		chartsPanel = new JPanel();
 		BoxLayout boxLayout = new BoxLayout(chartsPanel, BoxLayout.Y_AXIS);
@@ -491,8 +491,7 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 				+ "the average value during that period. The light gray box shows the min and max value during "//
 				+ "that period. The dark gray box shows one standard deviation above and below the mean."));
 
-		statInfo = stats.getAvailableStats();
-		final int numStats = statInfo.length;
+		final int numStats = metrics.size();
 		statBoxes = new JLabel[numStats];
 		GridBagConstraints c = new GridBagConstraints();
 		c.fill = GridBagConstraints.BOTH;
@@ -503,8 +502,9 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 		charts = new JPanel[numStats];
 		for (int i = 0; i < numStats; i++) { // i goes through them in row major order
 			int j = rm2cm[i]; // j goes through them in column major order
+			final Metric metric = metrics.get(j);
 			JLabel txt = new JLabel();
-			txt.setToolTipText(statInfo[j][1]);
+			txt.setToolTipText(metric.getDescription());
 			txt.setBorder(BorderFactory.createCompoundBorder(
 					BorderFactory.createLineBorder(Color.BLACK),
 					BorderFactory.createEmptyBorder(5, 5, 5, 5)));
@@ -522,7 +522,8 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 				c.gridwidth = GridBagConstraints.REMAINDER; // end of row
 				boxesPanel.add(spacer2, c);
 			}
-			if (stats.getAllHistory(j) == null) {// if no history, then box is gray, and not clickable
+			if (metric.getStatsBuffered() == null || metric.getStatsBuffered().getAllHistory() == null) {
+				// if no history, then box is gray, and not clickable
 				statBoxes[i].setBackground(LIGHT_GRAY);
 				statBoxes[i].setOpaque(true);
 			} else { // else history exists, so white and can draw chart
@@ -530,8 +531,8 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 				statBoxes[i].setOpaque(true);
 				charts[j] = new JPanel();
 				charts[j].setBackground(Color.WHITE);
-				charts[j].add(new Chart(750, 400, false, j, statInfo[j]));
-				charts[j].add(new Chart(750, 400, true, j, statInfo[j]));
+				charts[j].add(new Chart(CHART_WIDTH, CHART_HEIGHT, false, metric));
+				charts[j].add(new Chart(CHART_WIDTH, CHART_HEIGHT, true, metric));
 				charts[j].setVisible(false); // use "visible" as a flag to indicate it's in the container
 				final int jj = j; // effectively final so the listener can use it
 				statBoxes[i].addMouseListener(new MouseAdapter() {
@@ -544,16 +545,17 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 					}
 				});
 			}
+			if ("trans/sec".equals(metric.getName())) {
+				showChart(j);
+			}
 		}
-		showChart(WinBrowser.memberDisplayed.platform.getStats()
-				.getStatIndex("trans/sec")); // or could do "events/sec"
 		descriptions = WinBrowser.newJTextArea();
 		descriptions.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
-		String s = "";
-		for (int j = 0; j < statBoxes.length; j++) {
-			s += String.format("%17s: %s\n", statInfo[j][0], statInfo[j][1]);
+		final StringBuilder s = new StringBuilder();
+		for (final Metric metric : metrics) {
+			s.append(String.format("%17s: %s%n", metric.getName(), metric.getDescription()));
 		}
-		descriptions.setText(s);
+		descriptions.setText(s.toString());
 		c.gridx = 0;
 		c.gridy = 0;
 		c.gridwidth = 1;
@@ -585,14 +587,26 @@ class WinTab2Stats extends WinBrowser.PrePaintableJPanel {
 		if (WinBrowser.memberDisplayed == null) {
 			return; // the screen is blank until we choose who to display
 		}
-		Statistics stats = WinBrowser.memberDisplayed.platform.getStats();
 		for (int i = 0; i < statBoxes.length; i++) {
 			int j = rm2cm[i];
 			statBoxes[i].setForeground(Color.BLACK);
+			final Metric metric = metrics.get(j);
 			statBoxes[i].setText("<html><center>&nbsp;&nbsp;&nbsp;&nbsp;"
-					+ statInfo[j][0] + "&nbsp;&nbsp;&nbsp;&nbsp;<br>"
-					+ stats.getStatString(j).trim() + "</center></html>");
+					+ metric.getName() + "&nbsp;&nbsp;&nbsp;&nbsp;<br>"
+					+ format(metric).trim() + "</center></html>");
 			statBoxes[i].setHorizontalAlignment(JLabel.CENTER);
 		}
+	}
+
+	private static String format(final Metric metric) {
+		try {
+			if (metric == null) {
+				return "";
+			}
+			return String.format(Locale.US, metric.getFormat(), metric.get(VALUE));
+		} catch (final IllegalFormatException e) {
+			log.error(EXCEPTION.getMarker(), "unable to compute string for {}", metric.getName(), e);
+		}
+		return "";
 	}
 }

@@ -18,6 +18,7 @@ package com.swirlds.platform.crypto;
 
 import com.swirlds.common.crypto.CryptographyException;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.stream.HashSigner;
 import com.swirlds.common.stream.Signer;
 import com.swirlds.common.utility.CommonUtils;
@@ -46,10 +47,10 @@ public class PlatformSigner implements Signer, HashSigner {
 	}
 
 	@Override
-	public byte[] sign(final byte[] data) {
+	public com.swirlds.common.crypto.Signature sign(final byte[] data) {
 		try {
 			signature.update(data);
-			return signature.sign();
+			return new com.swirlds.common.crypto.Signature(SignatureType.RSA, signature.sign());
 		} catch (SignatureException e) {
 			// this can only occur if this signature object is not initialized properly, which we ensure is done in the
 			// constructor. so this can never happen
@@ -58,7 +59,7 @@ public class PlatformSigner implements Signer, HashSigner {
 	}
 
 	@Override
-	public byte[] sign(final Hash hash) {
+	public com.swirlds.common.crypto.Signature sign(final Hash hash) {
 		CommonUtils.throwArgNull(hash, "hash");
 		return sign(hash.getValue());
 	}

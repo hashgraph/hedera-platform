@@ -27,7 +27,7 @@ import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
 import com.swirlds.platform.eventhandling.EventTransactionPool;
 import com.swirlds.platform.state.signed.SignedState;
-import com.swirlds.platform.stats.SwirldStateStats;
+import com.swirlds.platform.metrics.SwirldStateMetrics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -53,7 +53,7 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	private static final Logger LOG = LogManager.getLogger();
 
 	/** Stats relevant to SwirldState operations. */
-	private final SwirldStateStats stats;
+	private final SwirldStateMetrics stats;
 
 	/** reference to the state that reflects all known consensus transactions */
 	private final AtomicReference<State> stateRef = new AtomicReference<>();
@@ -85,8 +85,8 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 * 		this node's id
 	 * @param systemTransactionHandler
 	 * 		the handler for system transactions
-	 * @param stats
-	 * 		statistics relevant to this class
+	 * @param swirldStateMetrics
+	 * 		metrics related to SwirldState
 	 * @param settings
 	 * 		a static settings provider
 	 * @param inFreeze
@@ -97,12 +97,12 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	public SwirldStateManagerDouble(
 			final NodeId selfId,
 			final SystemTransactionHandler systemTransactionHandler,
-			final SwirldStateStats stats,
+			final SwirldStateMetrics swirldStateMetrics,
 			final SettingsProvider settings,
 			final BooleanSupplier inFreeze,
 			final State state) {
 		this.systemTransactionHandler = systemTransactionHandler;
-		this.stats = stats;
+		this.stats = swirldStateMetrics;
 		this.transactionPool = new EventTransactionPool(settings, inFreeze);
 		this.transactionHandler = new TransactionHandler(selfId, stats);
 		initialState(state);
@@ -112,8 +112,8 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public boolean submitTransaction(final ConsensusTransactionImpl transaction) {
-		return transactionPool.submitTransaction(transaction);
+	public boolean submitTransaction(final ConsensusTransactionImpl transaction, final boolean priority) {
+		return transactionPool.submitTransaction(transaction, priority);
 	}
 
 	/**

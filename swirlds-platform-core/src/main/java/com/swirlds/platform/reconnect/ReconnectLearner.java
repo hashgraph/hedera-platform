@@ -21,7 +21,7 @@ import com.swirlds.common.io.streams.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.LearningSynchronizer;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.logging.payloads.ReconnectDataUsagePayload;
-import com.swirlds.platform.ReconnectStatistics;
+import com.swirlds.platform.metrics.ReconnectMetrics;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.state.signed.SigSet;
 import com.swirlds.platform.state.signed.SignedState;
@@ -49,7 +49,7 @@ public class ReconnectLearner {
 
 	private final State currentState;
 	private final int reconnectSocketTimeout;
-	private final ReconnectStatistics statistics;
+	private final ReconnectMetrics statistics;
 	private SignedState signedState;
 	/**
 	 * After reconnect is finished, restore the socket timeout to the original value.
@@ -62,7 +62,7 @@ public class ReconnectLearner {
 			final State currentState,
 			final SignedStateValidator signedStateValidator,
 			final int reconnectSocketTimeout,
-			final ReconnectStatistics statistics) {
+			final ReconnectMetrics statistics) {
 
 		currentState.throwIfImmutable("Can not perform reconnect with immutable state");
 		currentState.throwIfDestroyed("Can not perform reconnect with destroyed state");

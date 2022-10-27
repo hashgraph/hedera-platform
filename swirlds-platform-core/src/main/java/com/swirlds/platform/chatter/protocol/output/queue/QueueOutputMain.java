@@ -17,7 +17,7 @@
 package com.swirlds.platform.chatter.protocol.output.queue;
 
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
 import com.swirlds.platform.chatter.protocol.output.MessageOutput;
 import com.swirlds.platform.chatter.protocol.output.SendCheck;
@@ -42,10 +42,11 @@ public class QueueOutputMain<T extends SelfSerializable> implements MessageOutpu
 	private final List<QueueOutputPeer<T>> peerInstances;
 	private final AverageAndMax stats;
 
-	public QueueOutputMain(final String queueName, final int queueCapacity) {
+	public QueueOutputMain(final String queueName, final int queueCapacity, final Metrics metrics) {
 		this.queueCapacity = queueCapacity;
 		peerInstances = new ArrayList<>();
 		stats = new AverageAndMax(
+				metrics,
 				"chatter",
 				queueName + "Queue",
 				"size of " + queueName + " queue",
@@ -72,13 +73,5 @@ public class QueueOutputMain<T extends SelfSerializable> implements MessageOutpu
 		final QueueOutputPeer<T> queueOutputPeer = new QueueOutputPeer<>(queueCapacity, communicationState, sendCheck);
 		peerInstances.add(queueOutputPeer);
 		return queueOutputPeer;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public List<StatEntry> getStats() {
-		return stats.getAllEntries();
 	}
 }

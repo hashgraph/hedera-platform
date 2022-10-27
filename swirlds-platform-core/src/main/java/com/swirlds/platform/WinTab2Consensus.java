@@ -21,6 +21,7 @@ import com.swirlds.platform.state.signed.SignedStateInfo;
 import javax.swing.JTextArea;
 import java.awt.Font;
 import java.awt.Graphics;
+import java.util.List;
 
 /**
  * The tab in the Browser window that shows network speed, transactions per second, etc.
@@ -78,12 +79,12 @@ class WinTab2Consensus extends WinBrowser.PrePaintableJPanel {
 
 			// the hash of a signed state is: Reference.toHex(state.getHash(), 0, 2)
 
-			SignedStateInfo[] stateInfo = platform.getSignedStateManager().getSignedStateInfo();
+			final List<SignedStateInfo> stateInfo = platform.getSignedStateManager().getSignedStateInfo();
 			SignedStateInfo first = null;
-			if (stateInfo.length > 0) {
-				first = stateInfo[0];
+			if (!stateInfo.isEmpty()) {
+				first = stateInfo.get(0);
 			}
-			long d = first == null ? 0 : first.getLastRoundReceived();
+			long d = first == null ? 0 : first.getRound();
 			// count of digits in round number
 			d = String.format("%,d", d).length();
 			// add 2 because earlier rounds might be 2 shorter, like 998 vs 1,002
@@ -93,7 +94,7 @@ class WinTab2Consensus extends WinBrowser.PrePaintableJPanel {
 			for (SignedStateInfo state : stateInfo) {
 				if (state != null && state.getSigSet() != null) {
 					s += String.format("%," + d + "d ",
-							state.getLastRoundReceived());
+							state.getRound());
 				}
 			}
 
@@ -111,7 +112,7 @@ class WinTab2Consensus extends WinBrowser.PrePaintableJPanel {
 					int c = state.getSigSet().getCount();
 					int size;
 
-					if (Settings.enableBetaMirror) {
+					if (Settings.getInstance().isEnableBetaMirror()) {
 						// if beta mirror logic is enabled then use the count of members with stake
 						size = platform.getAddressBook().getNumberWithStake();
 

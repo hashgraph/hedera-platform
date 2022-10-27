@@ -15,145 +15,130 @@
  */
 package com.swirlds.platform.state.signed;
 
-import com.swirlds.common.InvalidSignedStateListener;
+import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.internal.SettingsCommon;
+import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.notification.NotificationFactory;
+import com.swirlds.common.sequence.set.SequenceSet;
+import com.swirlds.common.sequence.set.StandardSequenceSet;
 import com.swirlds.common.stream.HashSigner;
 import com.swirlds.common.system.NodeId;
-import com.swirlds.common.system.SwirldState;
-import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
-import com.swirlds.common.system.transaction.internal.SystemTransaction;
-import com.swirlds.common.system.transaction.internal.SystemTransactionBitsPerSecond;
-import com.swirlds.common.system.transaction.internal.SystemTransactionPing;
-import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.system.state.notifications.NewSignedStateListener;
+import com.swirlds.common.system.state.notifications.NewSignedStateNotification;
 import com.swirlds.common.utility.AutoCloseableWrapper;
-import com.swirlds.platform.AbstractPlatform;
-import com.swirlds.platform.SwirldsPlatform;
+import com.swirlds.platform.Settings;
 import com.swirlds.platform.components.StateSignatureRecorder;
-import com.swirlds.platform.crypto.CryptoConstants;
-import com.swirlds.platform.crypto.CryptoStatic;
-import com.swirlds.platform.internal.EventImpl;
-import com.swirlds.platform.state.IssLogger;
-import com.swirlds.platform.state.NewSignedStateRunnable;
-import com.swirlds.platform.state.StateSettings;
-import com.swirlds.platform.system.Fatal;
+import com.swirlds.platform.state.notifications.NewSignedStateBeingTrackedListener;
+import com.swirlds.platform.state.notifications.NewSignedStateBeingTrackedNotification;
+import com.swirlds.platform.state.notifications.StateHasEnoughSignaturesListener;
+import com.swirlds.platform.state.notifications.StateHasEnoughSignaturesNotification;
+import com.swirlds.platform.state.notifications.StateLacksSignaturesListener;
+import com.swirlds.platform.state.notifications.StateLacksSignaturesNotification;
+import com.swirlds.platform.state.notifications.StateSelfSignedListener;
+import com.swirlds.platform.state.notifications.StateSelfSignedNotification;
+import com.swirlds.platform.state.notifications.StateSignatureProcessedListener;
+import com.swirlds.platform.state.notifications.StateSignatureProcessedNotification;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.security.PublicKey;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
 
-import static com.swirlds.common.utility.Units.BYTES_TO_BITS;
-import static com.swirlds.common.utility.Units.MILLISECONDS_TO_SECONDS;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
-import static com.swirlds.logging.LogMarker.FREEZE;
-import static com.swirlds.logging.LogMarker.LAST_COMPLETE_SIGNED_STATE;
-import static com.swirlds.logging.LogMarker.SIGNED_STATE;
-import static com.swirlds.logging.LogMarker.STATE_SIG_DIST;
-import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS;
-import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
+import static com.swirlds.platform.state.signed.SourceOfSignedState.TRANSACTIONS;
+import static com.swirlds.platform.system.Fatal.fatalError;
 
 /**
- * Data structures and methods to manage the various signed states. That includes collecting signatures from
- * the other members, and storing/loading signed states to/from disk.
+ * <p>
+ * Data structures and methods to manage the lifecycle of signed states.
+ * This class ensures that the following states are always in memory:
+ * </p>
+ *
+ * <ul>
+ * <li>
+ * The most recent fully-signed state
+ * </li>
+ * <li>
+ * All the non-ancient states that are not fully signed
+ * </li>
+ * <li>
+ * Any state that is currently in the process of being written to disk (no matter how old it is)
+ * </li>
+ * <li>
+ * Any state that is being used for a reconnect
+ * </li>
+ * <li>
+ * Any state that the application has taken a reservation on
+ * </li>
+ * </ul>
  */
-public class SignedStateManager implements StateSignatureRecorder, SignedStateSignatureCollector {
+public class SignedStateManager implements StateSignatureRecorder {
 
-	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
-	private static final Logger log = LogManager.getLogger();
-	/** A queue that stores events for a particular round that will be stored in the local state on disk */
-	private final LinkedHashMap<Long, EventImpl[]> eventsForRound = new LinkedHashMap<>();
-	/** instance in charge of deleting and archiving signed states */
-	private final SignedStateGarbageCollector garbageCollector;
-	/** a thread that runs the SignedStateGarbageCollector */
-	private final Thread garbageCollectorThread;
+	private static final Logger LOG = LogManager.getLogger(SignedStateManager.class);
+
 	/**
-	 * The latest signed state signed by members with more than 2/3 of total stake.
-	 * The state referenced here will hold an archival reservation.
-	 *
-	 * Must only be set via {@link #setLastCompleteSignedState(SignedState)}.
+	 * The latest signed state signed by members with more than 1/3 of total stake.
 	 */
-	private volatile SignedState lastCompleteSignedState = null;
+	private final SignedStateReference lastCompleteSignedState = new SignedStateReference();
+
 	/**
-	 * The latest signed state signed by self but not by members with more than 2/3 of total stake.
-	 * The state reference here will hold a reservation.
-	 *
-	 * Must only be set via {@link #setLastIncompleteSignedState(SignedState)}.
+	 * The latest signed state. May be unhashed. May or may not have all of its signatures.
 	 */
-	private volatile SignedState lastIncompleteSignedState = null;
+	private final SignedStateReference lastState = new SignedStateReference();
+
 	/**
-	 * signatures by other members (not self) (not thread safe, because it is private and only accessed in a
-	 * synchronized method here)
+	 * Signed states awaiting signatures. These states are fresh. That is,
+	 * there exist no states from later rounds that have collected enough signatures to be complete.
 	 */
-	private final List<SigInfo> otherSigInfos = new LinkedList<>();
+	private final SignedStateMap freshUnsignedStates = new SignedStateMap(true);
+
 	/**
-	 * mapping from round to SignedState for that round. Because it's linked it preserves the order in which
-	 * they are added, this is useful for discarding old states.
-	 *
-	 * Any signed state taken from this data structure MUST be reserved if it is used outside of a synchronized method.
+	 * Signed states awaiting signatures. These states are stale. That is,
+	 * there are states from later rounds that have collected enough signatures to
+	 * be complete. We keep these states around for a while since we may want to
+	 * write them to disk or use them to detect ISS events.
 	 */
-	private final LinkedHashMap<Long, SignedState> allStates = new LinkedHashMap<>();
-	/** a list of states that are saved to disk */
-	private final AtomicLong lastSavedRound = new AtomicLong(-1);
-	/** the last SignedState round that is intended to be saved to disk */
-	private volatile long lastSSRoundGoingToDisk = -1;
-	/** the member ID for self */
+	private final SignedStateMap staleUnsignedStates = new SignedStateMap(false);
+
+	private final Settings settings = Settings.getInstance();
+	/**
+	 * Signatures for rounds in the future.
+	 */
+	private final SequenceSet<SavedSignature> savedSignatures;
+	/**
+	 * The address book for this network.
+	 */
+	private final AddressBook addressBook;
+	/**
+	 * the member ID for self
+	 */
 	private final NodeId selfId;
 	/**
-	 * The Platform whose address book has all members. Those with more than 2/3 of total stake must sign to
-	 * complete
+	 * An object responsible for signing states with this node's key.
 	 */
-	private final AbstractPlatform platform;
-	/** used to sign states with the platforms signing private key */
 	private final HashSigner signer;
-	/** the timestamp of the last signed state held by the manager */
-	private Instant lastSignedStateTimestamp = null;
-	/** last time the state is saved to disk successfully in millisecond */
-	private long lastSaveStateTimeMS;
-	/** a thread that provides a new signed state to SwirldMain */
-	private final Thread newSignedStateThread;
-	/** a thread that writes, reads and deletes FastCopyable object to/from files */
-	private final SignedStateFileManager signedStateFileManager;
-
-	/** settings that control {@link SignedState} creation, deletion, and disk persistence */
-	private final StateSettings stateSettings;
-
-	/** track all registered {@link InvalidSignedStateListener} attached to this {@link SignedStateManager} instance */
-	private final List<InvalidSignedStateListener> invalidSignedStateListeners;
-
 	/**
-	 * A queue that is constantly polled by newSignedStateThread. This queue does not have a capacity like a regular
-	 * queue. newSignedStateThread needs to be waiting for an object in order for it to be inserted.
-	 *
-	 * A state is reserved before it is inserted into this queue.
+	 * Called when a state enters the pipeline during a recovery.
 	 */
-	private final BlockingQueue<SignedState> newSignedStateQueue = new SynchronousQueue<>();
-
+	private final Consumer<SignedState> recoveryHandler;
 	/**
-	 * the lock providing concurrency control for the {@link #setLastCompleteSignedState(SignedState)} and {@link
-	 * #setLastIncompleteSignedState(SignedState)} methods.
+	 * A collection of signed state metrics.
 	 */
-	private final ReentrantLock lock;
-
+	private final SignedStateMetrics signedStateMetrics;
 	/**
-	 * the last wall clock time that the {@link #dumpSignedState(SignedState)} method wrote a {@link SignedState} to
-	 * disk
+	 * Signed states are deleted on this background thread.
 	 */
-	private double lastISSDumpTimestampSeconds;
-
-	private final IssLogger issLogger;
-
-	private final Runnable freezeEventCreation;
-
+	private final SignedStateGarbageCollector signedStateGarbageCollector;
 
 	/**
 	 * Start empty, with no known signed states. The number of addresses in
@@ -161,444 +146,176 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 	 * exactly the set of members who can sign the state. A signed state is considered completed when it has
 	 * signatures from members with 1/3 or more of the total stake.
 	 *
-	 * @param platform
-	 * 		the Platform running this, such that platform.hashgraph.getAddressBook() containing
-	 * 		exactly those members who can sign
+	 * @param addressBook
+	 * 		the address book for the network
+	 * @param selfId
+	 * 		the ID of this node
+	 * @param recoveryHandler
+	 * 		a method that is passed a signed state during recovery mode
 	 * @param signer
-	 * 		used to sign states with the platforms signing private key
-	 * @param signedStateFileManager
-	 * 		a manager which takes care of saving, deleting, and managing signed state files
-	 * @param freezeEventCreation
-	 * 		a runnable that prevents future events from being created
-	 * @param stateSettings
-	 * 		settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors
+	 * 		an object responsible for signing states with this node's key
+	 * @param signedStateMetrics
+	 * 		a collection of signed state metrics
 	 */
-	public SignedStateManager(final AbstractPlatform platform, final HashSigner signer,
-			final SignedStateFileManager signedStateFileManager, final Runnable freezeEventCreation,
-			final StateSettings stateSettings) {
-		this(platform, signer, signedStateFileManager, freezeEventCreation, stateSettings,
-				new SignedStateGarbageCollector(platform::getStats, stateSettings));
-	}
+	public SignedStateManager(
+			final AddressBook addressBook,
+			final NodeId selfId,
+			final Consumer<SignedState> recoveryHandler,
+			final HashSigner signer,
+			final SignedStateMetrics signedStateMetrics) {
 
-	/**
-	 * Start empty, with no known signed states. The number of addresses in
-	 * platform.hashgraph.getAddressBook() must not change in the future. The addressBook must contain
-	 * exactly the set of members who can sign the state. A signed state is considered completed when it has
-	 * signatures from members with 1/3 or more of the total stake.
-	 *
-	 * @param platform
-	 * 		the Platform running this, such that platform.hashgraph.getAddressBook() containing
-	 * 		exactly those members who can sign
-	 * @param signer
-	 * 		used to sign states with the platforms signing private key
-	 * @param signedStateFileManager
-	 * 		a manager which takes care of saving, deleting, and managing signed state files
-	 * @param freezeEventCreation
-	 * 		a runnable that prevents future events from being created
-	 * @param stateSettings
-	 * 		settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors
-	 * @param signedStateGarbageCollector
-	 * 		a garbage collector which deletes signed states which are not reserved for use
-	 */
-	protected SignedStateManager(final AbstractPlatform platform, final HashSigner signer,
-			final SignedStateFileManager signedStateFileManager,
-			final Runnable freezeEventCreation, final StateSettings stateSettings,
-			final SignedStateGarbageCollector signedStateGarbageCollector) {
-
-		this.selfId = platform.getSelfId();
-		this.platform = platform;
+		this.addressBook = addressBook;
+		this.selfId = selfId;
+		this.recoveryHandler = recoveryHandler;
 		this.signer = signer;
-		this.freezeEventCreation = freezeEventCreation;
+		this.signedStateMetrics = signedStateMetrics;
+		this.signedStateGarbageCollector = new SignedStateGarbageCollector(signedStateMetrics);
 
-		this.issLogger = new IssLogger(platform.getSelfId().getId(), platform.getStats());
-
-		this.signedStateFileManager = signedStateFileManager;
-		this.stateSettings = stateSettings;
-
-		// Initialize the list of InvalidStateListeners
-		this.invalidSignedStateListeners = new LinkedList<>();
-
-		newSignedStateThread = new ThreadConfiguration()
-				.setNodeId(selfId.getId())
-				.setComponent(PLATFORM_THREAD_POOL_NAME)
-				.setThreadName("newSignedState")
-				.setRunnable(new NewSignedStateRunnable(newSignedStateQueue, platform.getAppMain()))
-				.build();
-		newSignedStateThread.start();
-
-		this.garbageCollector = signedStateGarbageCollector;
-
-		garbageCollectorThread = new ThreadConfiguration()
-				.setNodeId(selfId.getId())
-				.setComponent(PLATFORM_THREAD_POOL_NAME)
-				.setThreadName("signedStateGarbageCollector")
-				.setRunnable(garbageCollector)
-				.build();
-		garbageCollectorThread.start();
-
-		lock = new ReentrantLock(false);
-
-		NotificationFactory.getEngine().register(Fatal.FatalListener.class, this::fatalListener);
+		this.savedSignatures = new StandardSequenceSet<>(
+				0,
+				settings.getState().roundsNonAncient,
+				SavedSignature::round);
 	}
 
 	/**
-	 * This method is called if there is a fatal error.
-	 *
-	 * @param notification
-	 * 		the fatal notification object
+	 * Stop background threads used by this manager. Useful for unit tests where we don't want the manager
+	 * to live beyond the scope of a test.
 	 */
-	private void fatalListener(final Fatal.FatalNotification notification) {
-		if (stateSettings.dumpStateOnFatal) {
-			try (final AutoCloseableWrapper<SignedState> wrapper = getLastCompleteSignedState()) {
-				final SignedState state = wrapper.get();
-				if (state != null) {
-					signedStateFileManager.saveFatalStateToDisk(state);
-				}
-			} catch (final InterruptedException e) {
-				log.error(EXCEPTION.getMarker(), "interrupted while attempting to save state");
-				Thread.currentThread().interrupt();
-			}
-		}
+	public void stop() {
+		signedStateGarbageCollector.stop();
 	}
 
 	/**
-	 * Acquire {@link #lock} and return an {@link AutoCloseableWrapper} around it that unlocks the lock.
+	 * @return latest round for which we have a strong minority of signatures
 	 */
-	private AutoCloseableWrapper<ReentrantLock> getAutoCloseableLock() {
-		lock.lock();
-		return new AutoCloseableWrapper<>(lock, lock::unlock);
-	}
-
-	/**
-	 * Mark a SignedState as the last incomplete signed state.
-	 */
-	private void setLastIncompleteSignedState(final SignedState ss) {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			if (lastIncompleteSignedState != null) {
-				lastIncompleteSignedState.releaseState();
-			}
-			if (ss != null) {
-				ss.reserveState();
-			}
-			lastIncompleteSignedState = ss;
-		}
-	}
-
-	/** @return latest round for which we have a supermajority */
 	public long getLastCompleteRound() {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			return lastCompleteSignedState == null ? -1 : lastCompleteSignedState.getLastRoundReceived();
-		}
+		return lastCompleteSignedState.getRound();
 	}
 
 	/**
-	 * @return the round number of the latest round saved to disk
-	 */
-	public long getLastRoundSavedToDisk() {
-		return lastSavedRound.get();
-	}
-
-	/** @return latest round for which we do NOT have a supermajority */
-	public long getLastIncompleteRound() {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			findLastIncompleteSignedState();
-			return lastIncompleteSignedState.getLastRoundReceived();
-		}
-	}
-
-	public long getLastSaveStateTimeMS() {
-		return lastSaveStateTimeMS;
-	}
-
-	/**
-	 * Returns which members still haven't signed the latest incomplete signed state (the latest state
-	 * signed by self but not signed by members with more than 2/3 of the total stake).
+	 * Get a wrapper containing the last complete signed state.
 	 *
-	 * @return an array where element i is null if the member with ID i has not signed the latest incomplete
-	 * 		state
+	 * @param strong
+	 * 		if true then the state will be returned with a strong reservation
+	 * @return a wrapper with the latest complete signed state, or null if none are complete
 	 */
-	public SigInfo[] getNeededLastIncomplete() {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			findLastIncompleteSignedState();
-			return lastIncompleteSignedState == null ? null : lastIncompleteSignedState.getSigSet().getSigInfosCopy();
-		}
+	public AutoCloseableWrapper<SignedState> getLastCompleteSignedState(final boolean strong) {
+		return lastCompleteSignedState.get(strong);
 	}
 
 	/**
-	 * @return the latest complete signed state, or null if none are complete
-	 */
-	public AutoCloseableWrapper<SignedState> getLastCompleteSignedState() {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			final SignedState latest = lastCompleteSignedState;
-
-			final Runnable closeCallback = () -> {
-				if (latest != null) {
-					latest.weakReleaseState();
-				}
-			};
-
-			if (latest != null) {
-				latest.weakReserveState();
-			}
-
-			return new AutoCloseableWrapper<>(latest, closeCallback);
-		}
-	}
-
-	/**
-	 * Mark a SignedState as the most recent completed signed state.
-	 */
-	private void setLastCompleteSignedState(final SignedState ss) {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			if (lastCompleteSignedState != null) {
-				lastCompleteSignedState.weakReleaseState();
-			}
-			if (ss != null) {
-				ss.weakReserveState();
-				// All signed states from earlier rounds can be archived now.
-				for (final SignedState state : allStates.values()) {
-					if (!state.isMarkedForArchival()
-							&& state.isComplete()
-							&& state.getLastRoundReceived() < ss.getLastRoundReceived()) {
-						state.markForArchival();
-						garbageCollector.archiveBackground(state);
-					}
-				}
-			}
-			lastCompleteSignedState = ss;
-		}
-	}
-
-	/**
-	 * Returns the latest signed {#link SwirldState} signed by members with more than 1/3 of total stake.
+	 * Get a wrapper containing the last signed state. May be unhashed, may or may not have all required signatures.
+	 * State is returned with a strong reservation.
 	 *
-	 * The {#link SwirldState} is returned in a {#link AutoCloseableWrapper} that <b>must</b> be use with
-	 * a try-with-resources
-	 *
-	 * @param <T>
-	 * 		A type extending from {#link SwirldState}
-	 * @return the latest complete signed swirld state, or null if none are complete
+	 * @return a wrapper with the latest signed state, or null if none are complete
 	 */
-	@SuppressWarnings("unchecked")
-	public <T extends SwirldState> AutoCloseableWrapper<T> getLastCompleteSwirldState() {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			final SignedState latest = lastCompleteSignedState;
-
-			final Runnable closeCallback = () -> {
-				if (latest != null) {
-					latest.releaseState();
-				}
-			};
-
-			T swirldState = null;
-			if (latest != null) {
-				latest.reserveState();
-				swirldState = (T) latest.getSwirldState();
-			}
-
-			return new AutoCloseableWrapper<>(swirldState, closeCallback);
-		}
+	public AutoCloseableWrapper<SignedState> getLastSignedState() {
+		return lastState.get();
 	}
 
 	/**
-	 * Return the consensus timestamp of the last signed state in the manager, might be null if there are no
-	 * states
-	 *
-	 * @return the consensus timestamp of the last signed state
-	 */
-	public Instant getLastSignedStateConsensusTimestamp() {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			final Instant result = lastSignedStateTimestamp;
-			return result;
-		}
-	}
-
-	/**
-	 * set lastIncompleteRound to the last round signed by self but NOT by members with more than 2/3 of the total
-	 * stake, or null if none exists
-	 */
-	private void findLastIncompleteSignedState() {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			long r = -1;
-			SignedState state = null;
-			for (final SignedState s : allStates.values()) {
-				final long last = s.getLastRoundReceived();
-				if (last > r && !s.getSigSet().isComplete()) {
-					r = last;
-					state = s;
-				}
-			}
-			setLastIncompleteSignedState(state);
-		}
-	}
-
-	/**
-	 * Get the latest signed states. This method creates a copy, so no changes to the array will be made
+	 * Get the latest signed states stored by this manager.
+	 * This method creates a copy, so no changes to the array will be made
 	 *
 	 * @return the latest signed states
 	 */
-	public SignedStateInfo[] getSignedStateInfo() {
-		// It is assumed that all data in SignedStateInfo is safe to read even after a state has been
-		// archived or deleted. If this is not the case then we need to reserve the states before releasing the info.
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			final SignedStateInfo[] result = allStates.values().toArray(new SignedState[0]);
-			return result;
+	public List<SignedStateInfo> getSignedStateInfo() {
+		// Since this method is not synchronized, it's possible we may add a state multiple times to this collection.
+		// The map makes sure that duplicates are not returned to the caller.
+		final Map<Long, SignedState> stateMap = new HashMap<>();
+
+		try (final AutoCloseableWrapper<SignedState> wrapper = lastCompleteSignedState.get()) {
+			if (wrapper.get() != null) {
+				stateMap.put(wrapper.get().getRound(), wrapper.get());
+			}
 		}
+
+		freshUnsignedStates.atomicIteration(iterator -> iterator.forEachRemaining(
+				signedState -> stateMap.put(signedState.getRound(), signedState)));
+
+		staleUnsignedStates.atomicIteration(iterator -> iterator.forEachRemaining(
+				signedState -> stateMap.put(signedState.getRound(), signedState)));
+
+		// Sort the states based on round number
+		final List<Long> rounds = new ArrayList<>(stateMap.keySet());
+		Collections.sort(rounds);
+		final List<SignedStateInfo> sortedStates = new ArrayList<>(rounds.size());
+		for (final long round : rounds) {
+			sortedStates.add(stateMap.get(round));
+		}
+
+		return sortedStates;
 	}
 
 	/**
-	 * Invokes the invalid signed state listeners.
+	 * Hash a state and start collecting signatures for it.
 	 *
 	 * @param signedState
-	 * 		the local signed state instance whose signature failed to match the remote peer
-	 * @param sigInfo
-	 * 		the signatures received from the remote peer
+	 * 		the signed state to be kept by the manager
 	 */
-	public void notifySignedStateListeners(final SignedState signedState, final SigInfo sigInfo) {
-		for (final InvalidSignedStateListener listener : invalidSignedStateListeners) {
-			if (listener != null) {
-				listener.notifyError(platform, signedState.getAddressBook(), signedState.getSwirldState(),
-						signedState.getEvents(), platform.getSelfId(), new NodeId(true, sigInfo.getMemberId()),
-						sigInfo.getRound(), signedState.getConsensusTimestamp(), signedState.getNumEventsCons(),
-						signedState.getStateHashBytes(), signedState.getSwirldStateHashBytes());
-			}
-		}
-	}
+	public synchronized void addUnsignedState(final SignedState signedState) {
 
-	public void addSignedStateListener(final InvalidSignedStateListener listener) {
-		if (listener == null) {
-			throw new IllegalArgumentException("listener");
+		signedState.setGarbageCollector(signedStateGarbageCollector);
+
+		if (lastState.getRound() >= signedState.getRound()) {
+			LOG.error(EXCEPTION.getMarker(), "states added to SignedStateManager in an incorrect order." +
+							"Latest state is from round {}, provided state is from round {}",
+					lastState.getRound(),
+					signedState.getRound());
+			return;
 		}
 
-		invalidSignedStateListeners.add(listener);
-	}
+		hashState(signedState);
+		notifyNewSignedStateBeingTracked(signedState, TRANSACTIONS);
+		lastState.set(signedState);
 
-	private boolean shouldSaveToDisk(final Instant consensusTimestamp, final Instant lastConsTime) {
-		// the first round should be saved to disk and every round which is about saveStatePeriod seconds after the
-		// previous one should be saved. this will not always be exactly saveStatePeriod seconds after the previous one,
-		// but it will be predictable at what time each a state will be saved
-		final boolean isSavePeriod = lastConsTime == null // the first round should be signed
-				|| (stateSettings.getSaveStatePeriod() > 0 &&
-				consensusTimestamp.getEpochSecond()
-						/ stateSettings.getSaveStatePeriod() > lastConsTime.getEpochSecond()
-						/ stateSettings.getSaveStatePeriod());
+		if (settings.isEnableStateRecovery()) {
+			// Short circuit state pipeline during recovery mode
+			recoveryHandler.accept(signedState);
+			return;
+		}
 
-		return stateSettings.getSaveStatePeriod() > 0 && isSavePeriod;
+		freshUnsignedStates.put(signedState);
+
+		final Signature signature = signer.sign(signedState.getState().getHash());
+		notifyStateSelfSigned(signedState, signature);
+		addSignature(signedState, selfId.getId(), signature);
+
+		gatherSavedSignatures(signedState);
+
+		adjustSavedSignaturesWindow(signedState.getRound());
+		purgeOldUnsignedStates();
 	}
 
 	/**
-	 * Keep a new signed state, signed only by self, and start collecting signatures for it.
+	 * Add a completed signed state, e.g. a state from reconnect or a state from disk.
 	 *
-	 * @param ss
-	 * 		the signed state to be kept by the manager
+	 * @param signedState
+	 * 		the signed state to add
+	 * @param sourceOfSignedState
+	 * 		the source of this signed state, should be RECONNECT or DISK
 	 */
-	@Override
-	public SigSet collectSignatures(final SignedState ss) {
-		// The last state saved before the freeze period is always saved to disk
-		// the first round should be saved to disk and every round which is about saveStatePeriod seconds after the
-		// previous one should be saved.
-		final boolean shouldSaveToDisk = ss.isFreezeState() || shouldSaveToDisk(ss.getConsensusTimestamp(),
-				getLastSignedStateConsensusTimestamp());
-		ss.setShouldSaveToDisk(shouldSaveToDisk);
+	public synchronized void addCompleteSignedState(
+			final SignedState signedState,
+			final SourceOfSignedState sourceOfSignedState) {
 
-		// Put the round number and signature of the SignedState into a system transaction.
-		// There is no need to store the hash, since everyone should agree.
-		// There is no need to sign the transaction, because the event will be signed.
-		final Hash stateHash = ss.getStateHash();
-		final byte[] sig = signer.sign(stateHash);
-		log.info(SIGNED_STATE.getMarker(), "newSelfSigned:: get sig by calling crypto.sign()");
+		signedState.setGarbageCollector(signedStateGarbageCollector);
 
+		notifyNewSignedStateBeingTracked(signedState, sourceOfSignedState);
 
-		if (stateHash.getValue().length != CryptoConstants.HASH_SIZE_BYTES) {
-			log.error(EXCEPTION.getMarker(),
-					"hash.length = {} != {} = Crypto.HASH_SIZE_BYTES",
-					stateHash.getValue().length, CryptoConstants.HASH_SIZE_BYTES);
-		}
+		if (signedState.getRound() > lastCompleteSignedState.getRound()) {
+			setLastCompleteSignedState(signedState);
+			purgeOldUnsignedStates();
 
-		// If beta mirror logic is enabled and this node is zero stake then do not attempt
-		// to send the system transaction
-		if (SettingsCommon.enableBetaMirror && platform.isZeroStakeNode()) {
-			if (ss.isFreezeState()) {
-				// no reason to keep creating events because there is no signature transaction to send
-				freezeEventCreation.run();
+			if (signedState.getRound() > lastState.getRound()) {
+				lastState.set(signedState);
+				adjustSavedSignaturesWindow(signedState.getRound());
 			}
 		} else {
-			final SystemTransaction sigTrans = new StateSignatureTransaction(ss.getLastRoundReceived(), sig);
-			final boolean success = platform.createSystemTransaction(sigTrans);
-
-			if (!success) {
-				log.error(EXCEPTION.getMarker(),
-						"failed to create signed state transaction)");
-			}
-
-			//send a transaction giving the average throughput sent from self to all others (in bits per second)
-			if (SettingsCommon.enableBpsTrans) {
-				final long[] avgBitsPerSecSent = new long[platform.getStats().avgBytePerSecSent.length];
-				for (int i = 0; i < platform.getStats().avgBytePerSecSent.length; i++) {
-					avgBitsPerSecSent[i] =
-							(long) platform.getStats().avgBytePerSecSent[i].get() * BYTES_TO_BITS;
-				}
-				final SystemTransaction systemTransaction = new SystemTransactionBitsPerSecond(avgBitsPerSecSent);
-				final boolean good = platform.createSystemTransaction(systemTransaction);
-				if (!good) {
-					log.error(EXCEPTION.getMarker(),
-							"failed to create bits-per-second system transaction)");
-				}
-			}
-
-			//send a transaction giving the average ping time from self to all others (in microseconds)
-			if (SettingsCommon.enablePingTrans) {
-				final int[] avgBitsPerSecSent = new int[platform.getStats().avgPingMilliseconds.length];
-				for (int i = 0; i < platform.getStats().avgPingMilliseconds.length; i++) {
-					avgBitsPerSecSent[i] = (int)
-							(platform.getStats().avgPingMilliseconds[i].get() * MILLISECONDS_TO_SECONDS);
-				}
-				final SystemTransaction systemTransaction = new SystemTransactionPing(avgBitsPerSecSent);
-				final boolean good = platform.createSystemTransaction(systemTransaction);
-				if (!good) {
-					log.error(EXCEPTION.getMarker(),
-							"failed to create bits-per-second system transaction)");
-				}
-			}
-		}
-
-		if (ss.isFreezeState()) {
-			log.info(FREEZE.getMarker(),
-					"Hashed state in freeze period. Freeze state is about to be saved to disk,last round is {}",
-					ss.getLastRoundReceived());
-		}
-
-		if (stateSettings.isEnableStateRecovery()) {
-			ss.reserveState();
-			// must put in newSignedStateQueue otherwise newSignedState() of main App will not be called
-			if (!newSignedStateQueue.offer(ss)) {
-				ss.releaseState();
-				log.error(SIGNED_STATE.getMarker(),
-						"During State Recover offer Failed - NewSignedStateQueue [ round = {} ]",
-						ss::getLastRoundReceived);
-			}
-			// save the last recovered state, even state save period requirement is not met
-			if (shouldSaveToDisk || ss.getLastRoundReceived() >= platform.getRoundOfLastRecoveredEvent()) {
-				signedStateFileManager.saveSignedStateToDisk(ss);
-				lastSignedStateTimestamp = ss.getConsensusTimestamp();
-			}
-			//no need to collect & record signatures in sigSet in recover mode
-			return null;
-		}
-
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			eventsForRound.remove(ss.getLastRoundReceived());
-
-			if (shouldSaveToDisk) {
-				lastSSRoundGoingToDisk = ss.getLastRoundReceived();
-			}
-			// lastRoundFameDecided is the roundReceived for the last Event for which there is
-			// consensus. So this is the round that the signed state represents, and is used as the key in the Map
-			// allStates.
-			allStates.put(ss.getLastRoundReceived(), ss);
-			lastSignedStateTimestamp = ss.getConsensusTimestamp();
-
-			return recordStateSig(ss.getLastRoundReceived(), platform.getSelfId().getId(), ss.getStateHashBytes(), sig);
+			LOG.warn(EXCEPTION.getMarker(),
+					"Latest complete signed state is from round {}, " +
+							"completed signed state for round {} rejected",
+					lastCompleteSignedState.getRound(), signedState.getRound());
 		}
 	}
 
@@ -606,295 +323,323 @@ public class SignedStateManager implements StateSignatureRecorder, SignedStateSi
 	 * {@inheritDoc}
 	 */
 	@Override
-	public SigSet recordStateSig(final long lastRoundReceived, final long memberId,
-			final byte[] hash, final byte[] sig) {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			final SigInfo sigInfo = new SigInfo(lastRoundReceived, memberId, hash, sig);
-			final SignedState signedState = allStates.get(lastRoundReceived);
-			final SigSet sigSet = signedState == null ? null : signedState.getSigSet();
-			if (selfId.equalsMain(memberId)) {
-				if (sigSet == null) {
-					// this should never happen, unless there is a malicious node
-					log.error(TESTING_EXCEPTIONS.getMarker(),
-							"sigSet missing for round {}", lastRoundReceived);
-					return sigSet;
-				}
-				if (sigSet.getSigInfo(selfId.getIdAsInt()) != null) {// selfId assumed to be main
-					log.error(EXCEPTION.getMarker(),
-							"recordSig called twice with selfId and round {}",
-							lastRoundReceived);
-					return sigSet;
-				}
+	public synchronized void recordStateSignature(
+			final long round,
+			final long memberId,
+			final Signature signature) {
 
-				if (platform.getAddressBook().getSize() == 1) {
-					addSigInfo(signedState, sigInfo);
-				} else {
-					sigSet.addSigInfo(sigInfo);
-				}
+		signedStateMetrics.getStateSignaturesGatheredPerSecondMetric().cycle();
 
-				log.debug(SIGNED_STATE.getMarker(),
-						"platform {} created sig for round {}", platform.getSelfId(),
-						sigInfo.getRound());
+		try (final AutoCloseableWrapper<SignedState> wrapper = getIncompleteState(round)) {
 
-				for (final Iterator<SigInfo> iter = otherSigInfos.iterator(); iter
-						.hasNext(); ) {
-					final SigInfo otherSigInfo = iter.next();
-					if (otherSigInfo.getRound() == lastRoundReceived) {
-						iter.remove();
-						addSigInfo(signedState, otherSigInfo);
-					}
-				}
-				log.debug(SIGNED_STATE.getMarker(),
-						"platform {} added sigInfo from other nodes for round {}", platform.getSelfId(),
-						sigInfo.getRound());
-				//update the signature set first then delete old states
-
-				removeOldStates();
-			} else { // not signed by self
-				// ignore rounds too far in the future or past
-				if (sigSet != null) { // if self already signed this round, then collect this one
-					log.debug(STATE_SIG_DIST.getMarker(),
-							"platform {} got sig from {} for round {} and adding it",
-							platform.getSelfId(), sigInfo.getMemberId(),
-							sigInfo.getRound());
-					addSigInfo(signedState, sigInfo);
-				} else { // not yet collecting this round, so hold on to it for a while.
-
-					if (!allStates.isEmpty() && allStates.keySet().iterator()
-							.next() <= sigInfo.getRound()) {
-						otherSigInfos.add(sigInfo);
-
-						log.debug(STATE_SIG_DIST.getMarker(),
-								"platform {} got sig from {} for round {} and keeping it until own sig",
-								platform.getSelfId(), sigInfo.getMemberId(),
-								sigInfo.getRound());
-					} else {
-						log.debug(STATE_SIG_DIST.getMarker(),
-								"platform {} got sig from {} for round {} but set is discarded",
-								platform.getSelfId(), sigInfo.getMemberId(),
-								sigInfo.getRound());
-					}
-
-				}
-			}
-			return sigSet;
-		}
-	}
-
-	/** add the given SigInfo (not by self) to the given SigSet that already includes a self sig */
-	void addSigInfo(final SignedState signedState, final SigInfo sigInfo) {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			// is self the only member in the network?
-			final boolean singleMember = (1 == platform.getAddressBook().getSize());
-			final SigSet sigSet = signedState.getSigSet();
-			if (sigSet.getSigInfo((int) sigInfo.getMemberId()) != null) {
-				// we already have this signature so nothing should be done
+			final SignedState signedState = wrapper.get();
+			if (signedState == null) {
+				// This round has already been completed, or it is really old or in the future
+				savedSignatures.add(new SavedSignature(round, memberId, signature));
 				return;
 			}
 
-			// public key of the other member who signed
-			final PublicKey key = platform.getAddress(sigInfo.getMemberId())
-					.getSigPublicKey();
+			addSignature(signedState, memberId, signature);
+		}
+	}
 
-			// verify that the other member's signature is a valid signature of the hash found by self
-			// if multiple for the same (round,member), only count 1
-			boolean valid = false;
-			// verify signatures from others, but not from self
-			if (stateSettings.isEnableStateRecovery()) {
-				//recover mode no need to collect signatures
-				return;
-			} else {
-				valid = singleMember || CryptoStatic.verifySignature(
-						signedState.getStateHashBytes(), sigInfo.getSig(), key);
+	/**
+	 * Hash a signed state.
+	 */
+	private void hashState(final SignedState signedState) {
+		final Instant start = Instant.now();
+		try {
+			CryptoFactory.getInstance().digestTreeAsync(signedState.getState()).get();
+
+			if (signedStateMetrics != null) {
+				signedStateMetrics.getSignedStateHashingTimeMetric().update(
+						Duration.between(start, Instant.now()).toMillis());
 			}
 
-			issLogger.reportSignature(signedState, sigInfo.getMemberId(), valid);
+		} catch (final ExecutionException e) {
+			fatalError("Exception occurred during SignedState hashing", e);
+		} catch (final InterruptedException e) {
+			LOG.error(EXCEPTION.getMarker(),
+					"Interrupted while hashing state. Expect buggy behavior.");
+			Thread.currentThread().interrupt();
+		}
+	}
 
-			if (valid) {
-				// it is verified so save it (otherwise, it's discarded)
-				sigSet.addSigInfo(sigInfo);
-				if (sigSet.isNewlyComplete()) {
-					// at this point the signed state has the majority of signatures for the first time
-					if (signedState.isFreezeState()) {
-						log.info(FREEZE.getMarker(),
-								"Collected enough signatures on the freeze state. Freezing event creation now.");
-						freezeEventCreation.run();
-					}
+	/**
+	 * Mark a SignedState as the most recent completed signed state.
+	 */
+	private void setLastCompleteSignedState(final SignedState signedState) {
 
-					signedState.reserveState();
-					signedState.markAsComplete();
-					if (!newSignedStateQueue.offer(signedState)) {
-						signedState.releaseState();
-						log.error(SIGNED_STATE.getMarker(),
-								"Offer Failed - NewSignedStateQueue [ round = {} ]",
-								signedState::getLastRoundReceived);
-					}
+		if (signedState.getRound() <= lastCompleteSignedState.getRound()) {
+			throw new IllegalStateException(
+					"last complete signed state is from round " + lastCompleteSignedState.getRound() +
+							", cannot set last complete state from round " + signedState.getRound());
+		}
 
-					if (signedState.shouldSaveToDisk()) {
-						if (signedStateFileManager.saveSignedStateToDisk(signedState)) {
-							lastSaveStateTimeMS = System.currentTimeMillis();
-							lastSavedRound.set(signedState.getLastRoundReceived());
-						}
-					}
+		lastCompleteSignedState.set(signedState);
+
+		freshUnsignedStates.atomicIteration(iterator -> {
+			while (iterator.hasNext()) {
+				final SignedState next = iterator.next();
+
+				if (next.getRound() < signedState.getRound()) {
+					// This state is older than the most recently signed state, so it is stale now
+					staleUnsignedStates.put(next);
+					iterator.remove();
 				}
+			}
+		});
 
-				// we have just added a new signature, so we must check if it was the last one added in order to update
-				// the statistics
-				if (sigSet.hasAllSigs()) {
-					platform.recordStatsValue(SwirldsPlatform.StatsType.AVGSTATESIGS, sigSet.getCount());
-				}
+		notifyNewSignedState(signedState);
+	}
 
-				if (sigSet.getCount() == sigSet.getNumMembers()) {
-					log.debug(STATE_SIG_DIST.getMarker(),
-							"platform {} got all sigs for round {}",
-							platform::getSelfId, signedState::getLastRoundReceived);
-				}
-
-				if (sigSet.isComplete() &&
-						(lastCompleteSignedState == null ||
-								signedState.getLastRoundReceived() > lastCompleteSignedState.getLastRoundReceived())) {
-					setLastCompleteSignedState(signedState);
-					log.info(LAST_COMPLETE_SIGNED_STATE.getMarker(),
-							"set lastCompleteSignedState, lastRoundReceived: {}",
-							lastCompleteSignedState.getLastRoundReceived());
-					if (lastIncompleteSignedState != null
-							&& lastCompleteSignedState.getLastRoundReceived() == lastIncompleteSignedState
-							.getLastRoundReceived()) {
-						findLastIncompleteSignedState();
-					}
-				}
-			} else {
-				signedState.reserveState();
-				try {
-					notifySignedStateListeners(signedState, sigInfo);
-				} finally {
-					signedState.releaseState();
-				}
-				dumpSignedState(signedState);
+	/**
+	 * Given an iterator that walks over a collection of signed states, remove any states that are too old.
+	 *
+	 * @param iterator
+	 * 		an iterator that walks over a collection of signed states
+	 */
+	private void removeOldStatesFromIterator(final Iterator<SignedState> iterator) {
+		final long earliestPermittedRound = lastState.getRound() - settings.getState().roundsNonAncient + 1;
+		while (iterator.hasNext()) {
+			final SignedState signedState = iterator.next();
+			if (signedState.getRound() < earliestPermittedRound) {
+				signedStateMetrics.getTotalUnsignedStatesMetric().increment();
+				notifyStateLacksSignatures(signedState);
+				iterator.remove();
 			}
 		}
 	}
 
 	/**
-	 * Writes a {@link SignedState} to disk if enabled via the {@link StateSettings#dumpStateOnISS} setting. This method
-	 * will only write a {@link SignedState} to disk once every {@link StateSettings#secondsBetweenISSDumps} seconds
-	 * based on previous executions.
-	 *
-	 * <p>
-	 * This method uses wall clock time on the local machine to control how frequently it writes {@link SignedState} to
-	 * disk.
-	 * </p>
-	 *
-	 * @param state
-	 * 		the {@link SignedState} to be written to disk
+	 * Get rid of unsigned states that are too old.
 	 */
-	public void dumpSignedState(final SignedState state) {
-		if (!stateSettings.dumpStateOnISS) {
+	private void purgeOldUnsignedStates() {
+		freshUnsignedStates.atomicIteration(this::removeOldStatesFromIterator);
+		staleUnsignedStates.atomicIteration(this::removeOldStatesFromIterator);
+
+		signedStateMetrics.getFreshStatesMetric().update(freshUnsignedStates.getSize());
+		signedStateMetrics.getStaleStatesMetric().update(staleUnsignedStates.getSize());
+	}
+
+	/**
+	 * Get an unsigned state for a particular round, if it exists.
+	 *
+	 * @param round
+	 * 		the round in question
+	 * @return a wrapper around a signed state for a round, or a wrapper around null if a signed state for that round is
+	 * 		not present
+	 */
+	private AutoCloseableWrapper<SignedState> getIncompleteState(final long round) {
+		final AutoCloseableWrapper<SignedState> wrapper = freshUnsignedStates.get(round, false);
+		if (wrapper.get() != null) {
+			return wrapper;
+		}
+		return staleUnsignedStates.get(round, false);
+	}
+
+	/**
+	 * Gather and apply all signatures that were previously saved for a signed state.
+	 *
+	 * @param signedState
+	 * 		a signed state that is now able to collect signatures
+	 */
+	private void gatherSavedSignatures(final SignedState signedState) {
+		savedSignatures.removeSequenceNumber(signedState.getRound(), savedSignature ->
+				addSignature(signedState, savedSignature.memberId, savedSignature.signature));
+	}
+
+	/**
+	 * Adjust the window where we are willing to save future signatures.
+	 *
+	 * @param currentRound
+	 * 		the round of the most recently signed state
+	 */
+	private void adjustSavedSignaturesWindow(final long currentRound) {
+		// Only save signatures for round N+1 and after.
+		// Any rounds behind this one will either have already had a SignedState
+		// added to this manager, or will never have a SignedState added to this manager.
+		savedSignatures.shiftWindow(currentRound + 1);
+	}
+
+	/**
+	 * Called when a signed state is first completed.
+	 */
+	private void signedStateNewlyComplete(final SignedState signedState) {
+		signedStateMetrics.getStatesSignedPerSecondMetric().cycle();
+		signedStateMetrics.getAverageSigningTimeMetric().update(
+				Duration.between(signedState.getCreationTimestamp(), Instant.now()).toMillis());
+
+		notifyStateHasEnoughSignatures(signedState);
+
+		if (signedState.getRound() > lastCompleteSignedState.getRound()) {
+			setLastCompleteSignedState(signedState);
+		}
+
+		freshUnsignedStates.remove(signedState.getRound());
+		staleUnsignedStates.remove(signedState.getRound());
+	}
+
+	/**
+	 * Add a new signature to a signed state.
+	 *
+	 * @param signedState
+	 * 		the state being signed
+	 * @param nodeId
+	 * 		the ID of the signer
+	 * @param signature
+	 * 		the signature on the state
+	 */
+	private void addSignature(final SignedState signedState, final long nodeId, final Signature signature) {
+
+		if (settings.isEnableStateRecovery()) {
+			// recover mode no need to collect signatures
 			return;
 		}
-		final double currentTimeSeconds = System.currentTimeMillis() * MILLISECONDS_TO_SECONDS;
-		final double timeElapsed = currentTimeSeconds - lastISSDumpTimestampSeconds;
-		if (timeElapsed < stateSettings.secondsBetweenISSDumps) {
+
+		final SigSet sigSet = signedState.getSigSet();
+
+		if (sigSet.isComplete()) {
+			// No need to add more signatures
 			return;
 		}
-		lastISSDumpTimestampSeconds = currentTimeSeconds;
 
-		signedStateFileManager.saveIssStateToDisk(state);
-	}
-
-	// This may be used for a recovery feature in the future.
-	public void saveLastCompleteStateToDisk() {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			// check if we have a complete state and check if we already saved this state to disk
-			if (lastCompleteSignedState != null &&
-					lastSavedRound.get() != lastCompleteSignedState.getLastRoundReceived()) {
-				if (signedStateFileManager.saveSignedStateToDisk(lastCompleteSignedState)) {
-					lastSavedRound.set(lastCompleteSignedState.getLastRoundReceived());
-				}
-			}
+		if (sigSet.getSigInfo((int) nodeId) != null) {
+			// we already have this signature so nothing should be done
+			return;
 		}
-	}
 
-	public void addCompleteSignedState(final SignedState signedState, final boolean onDisk) {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			signedState.setSavedToDisk(onDisk);
-			allStates.put(signedState.getLastRoundReceived(), signedState);
-			lastSignedStateTimestamp = signedState.getConsensusTimestamp();
-			if (lastCompleteSignedState == null
-					|| lastCompleteSignedState.getLastRoundReceived() < signedState.getLastRoundReceived()) {
-				setLastCompleteSignedState(signedState);
-				log.info(LAST_COMPLETE_SIGNED_STATE.getMarker(),
-						"set lastCompleteSignedState, lastRoundReceived: {}",
-						lastCompleteSignedState.getLastRoundReceived());
-			}
-			if (onDisk) {
-				lastSavedRound.set(signedState.getLastRoundReceived());
-			}
+		// public key of the other member who signed
+		final PublicKey key = addressBook.getAddress(nodeId).getSigPublicKey();
+
+		final Hash stateHash = signedState.getState().getHash();
+
+		// Although it may be ok to skip the validation self signatures in theory,
+		// in the interest of defensive programming do the check anyway.
+		final boolean valid = signature.verifySignature(stateHash.getValue(), key);
+
+		if (valid) {
+			sigSet.addSigInfo(new SigInfo(
+					signedState.getRound(),
+					nodeId,
+					signedState.getState().getHash(),
+					signature));
+		}
+
+		notifyStateSignatureProcessed(signedState, nodeId, valid);
+
+		if (sigSet.isComplete()) {
+			// at this point the signed state is complete for the first time
+			signedStateNewlyComplete(signedState);
 		}
 	}
 
 	/**
-	 * Removes Signed states that we no longer need from memory. This method is private and is intended to
-	 * be used internally
+	 * Send out a notification that a new signed state is being tracked.
+	 *
+	 * @param signedState
+	 * 		the signed state now being tracked
+	 * @param sourceOfSignedState
+	 * 		the source of this signed state
 	 */
-	private void removeOldStates() {
-		try (final AutoCloseableWrapper<ReentrantLock> autoLock = getAutoCloseableLock()) {
-			// if the number of signature sets we are keeping is higher than signedStateKeep, iterate over the
-			// map and remove the oldest signature sets until there are no more than signedStateKeep.
-			final Iterator<SignedState> it = allStates.values().iterator();
-			int size = allStates.size();
-			log.debug(SIGNED_STATE.getMarker(),
-					"platform {} is about to remove old states, allStates size: {}", platform.getSelfId(), size);
-			while (size > stateSettings.getSignedStateKeep()
-					&& it.hasNext()) {
-				final SignedState next = it.next();
-				boolean remove = false;
-				// If the signed state is lastCompleteSignedState, we do not delete it
-				if (next.getLastRoundReceived() == getLastCompleteRound()) {
-					continue;
-				} else if (!next.shouldSaveToDisk()) {
-					// we are deleting this state from this list. if it is being saved to disk, then we will still
-					// have it
-					// in memory, and it will be deleted when it is removed from the savedToDisk list
-					// send it to the queue to be deleted by the background thread
-					garbageCollector.deleteBackground(next);
-					remove = true;
-				} else {
-					// If a state needs to be saved to disk, we don't want to remove it until we get a complete set of
-					// signatures. If we were to discard it, a node could miss saving a state to disk.
-					if (next.getSigSet().isComplete() && next.isSavedToDisk()) {
-						garbageCollector.deleteBackground(next);
-						remove = true;
-					}
-				}
+	private void notifyNewSignedStateBeingTracked(
+			final SignedState signedState,
+			final SourceOfSignedState sourceOfSignedState) {
 
-				if (remove) {
-					// if this sigset has all sigs, it means its value has already been updated in the statistics. if it
-					// doesn't, we will update the value before discarding it
-					if (!next.getSigSet().hasAllSigs()) {
-						platform.recordStatsValue(SwirldsPlatform.StatsType.AVGSTATESIGS, next.getSigSet().getCount());
-					}
-					it.remove();
-					size--;
-				}
+		// Caller is always holding a strong reservation and this notification type is synchronous,
+		// so no need to take another reservation.
 
-			}
-			log.debug(SIGNED_STATE.getMarker(),
-					"finished putting old states to deletionQueue, allStates size: {}", size);
-		}
+		final NewSignedStateBeingTrackedNotification notification =
+				new NewSignedStateBeingTrackedNotification(signedState, sourceOfSignedState, selfId);
+		NotificationFactory.getEngine().dispatch(NewSignedStateBeingTrackedListener.class, notification);
 	}
 
 	/**
-	 * Get the number of signed state currently in memroy
+	 * Send out a notification that a state has been signed by self.
+	 *
+	 * @param signedState
+	 * 		the state that was signed
+	 * @param signature
+	 * 		the self signature on the state
 	 */
-	public int getNumStatesInMemory() {
-		return allStates.size();
+	private void notifyStateSelfSigned(final SignedState signedState, final Signature signature) {
+		final StateSelfSignedNotification notification =
+				new StateSelfSignedNotification(signedState.getRound(), signature, selfId);
+		NotificationFactory.getEngine().dispatch(StateSelfSignedListener.class, notification);
 	}
 
 	/**
-	 * Get the round number of the last signed state save to the disk
+	 * Send out a notification that the most recently signed state has changed.
+	 *
+	 * @param signedState
+	 * 		the new most recently signed state
 	 */
-	public long getLastSSRoundGoingToDisk() {
-		return lastSSRoundGoingToDisk;
+	private void notifyNewSignedState(final SignedState signedState) {
+		final NewSignedStateNotification notification = new NewSignedStateNotification(
+				signedState.getSwirldState(),
+				signedState.getState().getSwirldDualState(),
+				signedState.getRound(),
+				signedState.getConsensusTimestamp());
+		signedState.reserveState();
+		NotificationFactory.getEngine().dispatch(
+				NewSignedStateListener.class,
+				notification,
+				result -> signedState.releaseState());
+	}
+
+	/**
+	 * Send out a notification that a signed state was unable to be completely signed.
+	 *
+	 * @param signedState
+	 * 		the state that was unable to be complete signed
+	 */
+	private void notifyStateLacksSignatures(final SignedState signedState) {
+		final StateLacksSignaturesNotification notification = new StateLacksSignaturesNotification(signedState, selfId);
+		signedState.weakReserveState();
+		NotificationFactory.getEngine().dispatch(StateLacksSignaturesListener.class, notification,
+				result -> signedState.weakReleaseState());
+	}
+
+	/**
+	 * Send out a notification that a signed state was able to collect enough signatures to become complete.
+	 *
+	 * @param signedState
+	 * 		the state that now has enough signatures
+	 */
+	private void notifyStateHasEnoughSignatures(final SignedState signedState) {
+		final StateHasEnoughSignaturesNotification notification =
+				new StateHasEnoughSignaturesNotification(signedState, selfId);
+		signedState.weakReserveState();
+		NotificationFactory.getEngine().dispatch(StateHasEnoughSignaturesListener.class, notification,
+				result -> signedState.weakReleaseState());
+	}
+
+	/**
+	 * Send out a notification that a signed state had a signature processed on it.
+	 *
+	 * @param signedState
+	 * 		the signed state that had a signature processed
+	 * @param nodeId
+	 * 		the ID of the node that provided the signature
+	 * @param isValid
+	 * 		is the signature valid?
+	 */
+	private void notifyStateSignatureProcessed(
+			final SignedState signedState,
+			final long nodeId,
+			final boolean isValid) {
+
+		// Caller is always holding a strong reservation and this notification type is synchronous,
+		// so no need to take another reservation.
+
+		final StateSignatureProcessedNotification notification =
+				new StateSignatureProcessedNotification(signedState, nodeId, isValid, selfId);
+		NotificationFactory.getEngine().dispatch(StateSignatureProcessedListener.class, notification);
+	}
+
+	/**
+	 * A signature that was received when there was no state with a matching round.
+	 */
+	private record SavedSignature(long round, long memberId, Signature signature) {
 	}
 }

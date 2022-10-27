@@ -17,9 +17,14 @@
 package com.swirlds.common.metrics;
 
 import com.swirlds.common.internal.SettingsCommon;
-import com.swirlds.common.statistics.StatsBuffered;
-import com.swirlds.common.statistics.StatsSpeedometer;
-import com.swirlds.common.utility.CommonUtils;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+
+import java.util.EnumSet;
+
+import static com.swirlds.common.metrics.Metric.ValueType.MAX;
+import static com.swirlds.common.metrics.Metric.ValueType.MIN;
+import static com.swirlds.common.metrics.Metric.ValueType.STD_DEV;
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * This class measures how many times per second the cycle() method is called. It is recalculated every
@@ -28,96 +33,27 @@ import com.swirlds.common.utility.CommonUtils;
  * <p>
  * The timer starts at instantiation, and can be reset with the reset() method.
  */
-public class SpeedometerMetric extends AbstractDistributionMetric {
-
-	private final Clock clock;
-
-	@SuppressWarnings("removal")
-	private StatsSpeedometer speedometer;
+public interface SpeedometerMetric extends Metric {
 
 	/**
-	 * Constructor of {@code SpeedometerMetric}
-	 *
-	 * @param category
-	 * 		the kind of metric (metrics are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the metric
-	 * @param description
-	 * 		a one-sentence description of the metric
-	 * @param format
-	 * 		a string that can be passed to String.format() to format the metric
-	 * @param halfLife
-	 * 		the halfLife of the speedometer
-	 * @throws IllegalArgumentException if one of the parameters is {@code null}
+	 * {@inheritDoc}
 	 */
-	@SuppressWarnings("removal")
-	public SpeedometerMetric(
-			final String category,
-			final String name,
-			final String description,
-			final String format,
-			final double halfLife) {
-		this(category, name, description, format, halfLife, Clock.DEFAULT);
-	}
-
-	/**
-	 * Constructor of {@code SpeedometerMetric} with a half-life as defined in {@link SettingsCommon#halfLife}.
-	 *
-	 * @param category
-	 * 		the kind of metric (metrics are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the metric
-	 * @param description
-	 * 		a one-sentence description of the metric
-	 * @param format
-	 * 		a string that can be passed to String.format() to format the metric
-	 * @throws IllegalArgumentException if one of the parameters is {@code null}
-	 */
-	@SuppressWarnings("removal")
-	public SpeedometerMetric(
-			final String category,
-			final String name,
-			final String description,
-			final String format) {
-		this(category, name, description, format, SettingsCommon.halfLife, Clock.DEFAULT);
-	}
-
-	/**
-	 * This constructor should only be used for testing.
-	 *
-	 * @deprecated This constructor should only be used for testing and will become non-public at some point.
-	 */
-	@SuppressWarnings("removal")
-	@Deprecated (forRemoval = true)
-	public SpeedometerMetric(
-			final String category,
-			final String name,
-			final String description,
-			final String format,
-			final double halfLife,
-			final Clock clock) {
-		super(category, name, description, format, halfLife);
-		this.clock = CommonUtils.throwArgNull(clock, "clock");
-		this.speedometer = new StatsSpeedometer(halfLife, clock);
+	default EnumSet<ValueType> getValueTypes() {
+		return EnumSet.of(VALUE, MAX, MIN, STD_DEV);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	@SuppressWarnings("removal")
 	@Override
-	public void init() {
-		speedometer = new StatsSpeedometer(halfLife, clock);
-	}
+	Double get(final ValueType valueType);
 
 	/**
-	 * {@inheritDoc}
+	 * Getter of the {@code halfLife}
+	 *
+	 * @return the {@code halfLife}
 	 */
-	@SuppressWarnings("removal")
-	@Override
-	public StatsBuffered getStatsBuffered() {
-		return speedometer;
-	}
+	double getHalfLife();
 
 	/**
 	 * calling update(N) is equivalent to calling cycle() N times almost simultaneously. Calling cycle() is
@@ -132,19 +68,15 @@ public class SpeedometerMetric extends AbstractDistributionMetric {
 	 * weight it would have under the exponentially-weighted average. At that point, it switches to the
 	 * exponentially-weighted average.
 	 *
-	 * @param numCycles
+	 * @param value
 	 * 		number of cycles to record
 	 */
-	public void update(final double numCycles) {
-		speedometer.update(numCycles);
-	}
+	void update(final double value);
 
 	/**
 	 * This is the method to call repeatedly. The average calls per second will be calculated.
 	 */
-	public void cycle() {
-		update(1);
-	}
+	void cycle();
 
 	/**
 	 * Get the average number of times per second the cycle() method was called. This is an
@@ -152,8 +84,126 @@ public class SpeedometerMetric extends AbstractDistributionMetric {
 	 *
 	 * @return the estimated number of calls to cycle() per second, recently
 	 */
-	@Override
-	public double get() {
-		return speedometer.getCyclesPerSecond();
+	double get();
+
+	/**
+	 * Configuration of a {@link SpeedometerMetric}
+	 */
+	final class Config extends MetricConfig<SpeedometerMetric, SpeedometerMetric.Config> {
+
+		private final double halfLife;
+
+		/**
+		 * Constructor of {@code SpeedometerMetric.Config}
+		 *
+		 * The {@code halfLife} is by default set to {@code SettingsCommon.halfLife}.
+		 *
+		 * @param category
+		 * 		the kind of metric (metrics are grouped or filtered by this)
+		 * @param name
+		 * 		a short name for the metric
+		 * @throws IllegalArgumentException
+		 * 		if one of the parameters is {@code null}
+		 */
+		public Config(final String category, final String name) {
+			super(category, name, FloatFormats.FORMAT_11_3);
+			this.halfLife = SettingsCommon.halfLife;
+		}
+
+		private Config(
+				final String category,
+				final String name,
+				final String description,
+				final String unit,
+				final String format,
+				final double halfLife) {
+
+			super(category, name, description, unit, format);
+			this.halfLife = halfLife;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public SpeedometerMetric.Config withDescription(final String description) {
+			return new SpeedometerMetric.Config(
+					getCategory(), getName(), description, getUnit(), getFormat(), getHalfLife()
+			);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public SpeedometerMetric.Config withUnit(final String unit) {
+			return new SpeedometerMetric.Config(
+					getCategory(), getName(), getDescription(), unit, getFormat(), getHalfLife()
+			);
+		}
+
+		/**
+		 * Sets the {@link Metric#getFormat() Metric.format} in fluent style.
+		 *
+		 * @param format
+		 * 		the format-string
+		 * @return a new configuration-object with updated {@code format}
+		 * @throws IllegalArgumentException
+		 * 		if {@code format} is {@code null} or consists only of whitespaces
+		 */
+		public SpeedometerMetric.Config withFormat(final String format) {
+			return new SpeedometerMetric.Config(
+					getCategory(), getName(), getDescription(), getUnit(), format, getHalfLife()
+			);
+		}
+
+		/**
+		 * Getter of the {@code halfLife}.
+		 *
+		 * @return the {@code halfLife}
+		 */
+		public double getHalfLife() {
+			return halfLife;
+		}
+
+		/**
+		 * Fluent-style setter of the {@code halfLife}.
+		 *
+		 * @param halfLife
+		 * 		the {@code halfLife}
+		 * @return a reference to {@code this}
+		 */
+		public SpeedometerMetric.Config withHalfLife(final double halfLife) {
+			return new SpeedometerMetric.Config(
+					getCategory(), getName(), getDescription(), getUnit(), getFormat(), halfLife
+			);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		Class<SpeedometerMetric> getResultClass() {
+			return SpeedometerMetric.class;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		SpeedometerMetric create(final MetricsFactory factory) {
+			return factory.createSpeedometerMetric(this);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public String toString() {
+			return new ToStringBuilder(this)
+					.appendSuper(super.toString())
+					.append("halfLife", halfLife)
+					.toString();
+		}
 	}
 }

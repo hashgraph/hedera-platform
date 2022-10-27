@@ -16,18 +16,28 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.metrics.Metrics;
+import com.swirlds.common.metrics.StatEntry;
 
+/**
+ * A metrics object to track an average number, without history. This class uses an {@link AtomicAverage} so it is both
+ * thread safe and performant.
+ */
 public class AverageStat {
-	/** does not change very quickly */
+	/**
+	 * does not change very quickly
+	 */
 	public static final double WEIGHT_SMOOTH = 0.01;
-	/** changes average quite rapidly */
+	/**
+	 * changes average quite rapidly
+	 */
 	public static final double WEIGHT_VOLATILE = 0.1;
 
 	private final AtomicAverage average;
-	private final StatEntry statEntry;
 
 	/**
+	 * @param metrics
+	 * 		reference to the metrics-system
 	 * @param category
 	 * 		the kind of statistic (stats are grouped or filtered by this)
 	 * @param name
@@ -40,21 +50,19 @@ public class AverageStat {
 	 * 		the weight used to calculate the average
 	 */
 	public AverageStat(
+			final Metrics metrics,
 			final String category,
 			final String name,
 			final String desc,
 			final String format,
 			final double weight) {
 		average = new AtomicAverage(weight);
-		statEntry = new StatEntry(
-				category,
-				name,
-				desc,
-				format,
-				null,
-				null,
-				this::reset,
-				average::get);
+		metrics.getOrCreate(
+				new StatEntry.Config(category, name, average::get)
+						.withDescription(desc)
+						.withFormat(format)
+						.withReset(this::reset)
+		);
 	}
 
 	private void reset(final double unused) {
@@ -81,10 +89,4 @@ public class AverageStat {
 		update(value ? 1 : 0);
 	}
 
-	/**
-	 * @return a {@link StatEntry} of the average number to provide to {@link com.swirlds.common.statistics.Statistics}
-	 */
-	public StatEntry getStatEntry() {
-		return statEntry;
-	}
 }

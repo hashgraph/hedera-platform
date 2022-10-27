@@ -132,7 +132,7 @@ public class ReconnectHelper {
 		reconnect.execute();
 
 		signedState = reconnect.getSignedState();
-		final long lastRoundReceived = signedState.getLastRoundReceived();
+		final long lastRoundReceived = signedState.getRound();
 
 		LOG.info(RECONNECT.getMarker(), () -> new ReconnectFinishPayload(
 				"Finished reconnect in the role of the receiver.",

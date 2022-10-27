@@ -18,14 +18,16 @@ package com.swirlds.platform.sync;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.system.events.PlatformEvent;
 import com.swirlds.common.utility.Clearable;
-import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.EventStrings;
-import com.swirlds.platform.stats.SyncStats;
+import com.swirlds.platform.internal.EventImpl;
+import com.swirlds.platform.metrics.SyncMetrics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -71,7 +73,7 @@ public class ShadowGraph implements Clearable {
 	/**
 	 * The shadow graph represented in a map from has to shadow event.
 	 */
-	private final Map<Hash, ShadowEvent> hashToShadowEvent;
+	private final HashMap<Hash, ShadowEvent> hashToShadowEvent;
 
 	/**
 	 * Map from generation to all shadow events in that generation.
@@ -101,7 +103,7 @@ public class ShadowGraph implements Clearable {
 	/**
 	 * The stats instance to update
 	 */
-	private final SyncStats stats;
+	private final SyncMetrics syncMetrics;
 
 	/** the number of nodes in the network, used for debugging */
 	private final int numberOfNodes;
@@ -109,12 +111,12 @@ public class ShadowGraph implements Clearable {
 	/**
 	 * Constructs a new instance.
 	 */
-	public ShadowGraph(final SyncStats stats) {
-		this(stats, -1);
+	public ShadowGraph(final SyncMetrics syncMetrics) {
+		this(syncMetrics, -1);
 	}
 
-	public ShadowGraph(final SyncStats stats, final int numberOfNodes) {
-		this.stats = stats;
+	public ShadowGraph(final SyncMetrics syncMetrics, final int numberOfNodes) {
+		this.syncMetrics = syncMetrics;
 		this.numberOfNodes = numberOfNodes;
 		expireBelow = FIRST_GENERATION;
 		oldestGeneration = FIRST_GENERATION;
@@ -194,6 +196,7 @@ public class ShadowGraph implements Clearable {
 	private void disconnectShadowEvents() {
 		for (ShadowEvent shadow : hashToShadowEvent.values()) {
 			shadow.disconnect();
+			shadow.getEvent().clear();
 		}
 	}
 
@@ -305,6 +308,36 @@ public class ShadowGraph implements Clearable {
 	}
 
 	/**
+	 * Looks for events in a generation range that pass the provided predicate.
+	 *
+	 * @param startGen
+	 * 		the start of the generation range (inclusive)
+	 * @param endGen
+	 * 		the end of the generation range (exclusive)
+	 * @param predicate
+	 * 		the predicate to filter out events
+	 * @return a collection of events found
+	 */
+	public synchronized Collection<EventImpl> findByGeneration(
+			final long startGen,
+			final long endGen,
+			final Predicate<EventImpl> predicate) {
+		final List<EventImpl> result = new ArrayList<>();
+		if (startGen >= endGen) {
+			return result;
+		}
+		for (long gen = startGen; gen < endGen; gen++) {
+			generationToShadowEvent
+					.getOrDefault(gen, Collections.emptySet())
+					.stream()
+					.map(ShadowEvent::getEvent)
+					.filter(predicate)
+					.forEach(result::add);
+		}
+		return result;
+	}
+
+	/**
 	 * <p>Update the reservable generation and remove any events from the shadow graph that can and should be
 	 * expired.</p>
 	 *
@@ -339,7 +372,7 @@ public class ShadowGraph implements Clearable {
 			oldestReservedGen = expireBelow;
 		}
 
-		stats.updateGensWaitingForExpiry(expireBelow - oldestReservedGen);
+		syncMetrics.updateGensWaitingForExpiry(expireBelow - oldestReservedGen);
 
 		long minGenToKeep = Math.min(expireBelow, oldestReservedGen);
 
@@ -401,6 +434,7 @@ public class ShadowGraph implements Clearable {
 		hashToShadowEvent.remove(shadow.getEventBaseHash());
 		// Remove references to parent shadows so this event gets garbage collected
 		shadow.disconnect();
+		shadow.getEvent().clear();
 		tips.remove(shadow);
 	}
 
@@ -614,6 +648,18 @@ public class ShadowGraph implements Clearable {
 		// If both parents are null, then insertion is allowed. This will create
 		// a new tree in the forest view of the graph.
 		return InsertableStatus.INSERTABLE;
+	}
+
+	/**
+	 * @return all events stored in the shadowgraph
+	 */
+	@SuppressWarnings("unchecked")
+	public EventImpl[] getAllEvents() {
+		final HashMap<Hash, ShadowEvent> clone;
+		synchronized (this) {
+			clone = (HashMap<Hash, ShadowEvent>) hashToShadowEvent.clone();
+		}
+		return clone.values().stream().map(ShadowEvent::getEvent).toArray(EventImpl[]::new);
 	}
 }
 

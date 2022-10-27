@@ -20,6 +20,7 @@ import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.internal.SerializationOperation;
 import com.swirlds.common.io.streams.internal.SerializationStack;
 import com.swirlds.common.merkle.MerkleNode;
+import com.swirlds.common.utility.ValueReference;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -696,8 +697,8 @@ public class DebuggableMerkleDataInputStream extends MerkleDataInputStream {
 	protected <T extends SelfSerializable> T readNextSerializableIteration(
 			final boolean allSameClass,
 			final boolean readClassId,
-			final Long classId,
-			final int version,
+			final ValueReference<Long> classId,
+			final ValueReference<Integer> version,
 			final Function<Long, T> serializableConstructor) throws IOException {
 		startOperation(SerializationOperation.READ_SERIALIZABLE);
 		try {

@@ -29,6 +29,7 @@ import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Predicate;
 
 import static com.swirlds.common.merkle.iterators.MerkleIterationOrder.BREADTH_FIRST;
@@ -122,9 +123,18 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
 
 
 		try {
-			if (!Files.list(directory).toList().isEmpty()) {
-				LOG.info(STATE_TO_DISK.getMarker(),
-						"merkle tree being written to directory {} that is not empty", directory);
+			final List<Path> contents = Files.list(directory).toList();
+			if (contents.size() > 1) {
+				// At this point in time, the only thing in this directory should be SignedState.swh.
+				// If there are other files, then something funny may be going on.
+				final StringBuilder sb = new StringBuilder();
+				sb.append("merkle tree being written to directory ").append(directory)
+						.append(" that already contains data. Contents:");
+				for (final Path path : contents) {
+					sb.append("\n   ").append(path);
+				}
+
+				LOG.info(STATE_TO_DISK.getMarker(), sb);
 			}
 		} catch (final IOException e) {
 			throw new UncheckedIOException(e);

@@ -15,6 +15,7 @@
  */
 package com.swirlds.platform;
 
+import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.internal.CryptoUtils;
 import com.swirlds.platform.crypto.CryptoStatic;
 import com.swirlds.platform.crypto.KeysAndCerts;
@@ -67,7 +68,7 @@ public class Crypto extends CryptoUtils {
 	 * 		the data to sign
 	 * @return the signature (or null if any errors)
 	 */
-	public byte[] sign(final byte[] data) {
+	public Signature sign(final byte[] data) {
 		try {
 			final PlatformSigner signer = new PlatformSigner(keysAndCerts);
 			return signer.sign(data);

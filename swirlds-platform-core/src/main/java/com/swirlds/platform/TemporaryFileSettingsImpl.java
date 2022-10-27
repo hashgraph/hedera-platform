@@ -39,6 +39,6 @@ public class TemporaryFileSettingsImpl extends SubSetting implements TemporaryFi
 	 */
 	@Override
 	public String getTemporaryFilePath() {
-		return Path.of(Settings.state.savedStateDirectory, temporaryFilePath).toString();
+		return Path.of(Settings.getInstance().getState().savedStateDirectory, temporaryFilePath).toString();
 	}
 }

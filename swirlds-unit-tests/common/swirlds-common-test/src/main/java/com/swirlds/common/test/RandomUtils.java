@@ -18,10 +18,11 @@ package com.swirlds.common.test;
 
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.crypto.Signature;
+import com.swirlds.common.crypto.SignatureType;
 
 import java.security.SecureRandom;
 import java.time.Instant;
-import java.time.format.ResolverStyle;
 import java.util.Random;
 
 public class RandomUtils {
@@ -61,6 +62,13 @@ public class RandomUtils {
 
 	public static byte[] randomHashBytes(final Random random) {
 		return randomByteArray(random, DigestType.SHA_384.digestLength());
+	}
+
+	/**
+	 * Get a random signature (doesn't actually sign anything, just random bytes.
+	 */
+	public static Signature randomSignature(final Random random) {
+		return new Signature(SignatureType.RSA, randomByteArray(random, SignatureType.RSA.signatureLength()));
 	}
 
 	public static byte[] randomByteArray(final Random random, final int size) {

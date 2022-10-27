@@ -452,7 +452,7 @@ public final class Utilities {
 	 * 		a long value, the whole being considered (such as the sum of the entire stake)
 	 * @return true if part is more than two thirds of the whole
 	 */
-	public static boolean isSupermajority(long part, long whole) {
+	public static boolean isSupermajority(final long part, final long whole) {
 
 		return part > whole / 3 * 2 + (whole % 3) * 2 / 3;
 	}
@@ -466,10 +466,26 @@ public final class Utilities {
 	 * 		a long value, the whole being considered (such as the sum of the entire stake)
 	 * @return true if part is greater than or equal to one third of the whole
 	 */
-	public static boolean isStrongMinority(long part, long whole) {
+	public static boolean isStrongMinority(final long part, final long whole) {
 
+		// Java long division rounds down, but in this case we instead want to round up.
+		// If whole is divisible by three then floor(whole/3) == ceil(whole/3)
+		// If whole is not divisible by three then floor(whole/3) + 1 == ceil(whole/3)
 
 		return part >= (whole / 3) + ((whole % 3 == 0) ? 0 : 1);
+	}
+
+	/**
+	 * Is the part more than 1/2 of the whole?
+	 *
+	 * @param part
+	 * 		a long value, the fraction of the whole being compared
+	 * @param whole
+	 * 		a long value, the whole being considered (such as the sum of the entire stake)
+	 * @return true if part is greater or equal to one half of the whole
+	 */
+	public static boolean isMajority(final long part, final long whole) {
+		return part >= (whole / 2) + 1;
 	}
 
 	/**
@@ -522,8 +538,8 @@ public final class Utilities {
 	 * @return minimum non-ancient generation
 	 */
 	public static long getMinGenNonAncient(final SignedState signedState) {
-		return Settings.state.getMinGenNonAncient(
-				signedState.getLastRoundReceived(),
+		return Settings.getInstance().getState().getMinGenNonAncient(
+				signedState.getRound(),
 				signedState::getMinGen
 		);
 	}

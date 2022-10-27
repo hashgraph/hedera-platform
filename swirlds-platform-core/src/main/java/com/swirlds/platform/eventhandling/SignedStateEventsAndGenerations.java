@@ -99,7 +99,7 @@ public class SignedStateEventsAndGenerations {
 		generations.addAll(signedState.getMinGenInfo());
 
 		final long minGenNonAncient = settings.getMinGenNonAncient(
-				signedState.getLastRoundReceived(), generations::getRoundGeneration
+				signedState.getRound(), generations::getRoundGeneration
 		);
 		events.loadDataFromSignedState(signedState.getEvents(), minGenNonAncient);
 	}

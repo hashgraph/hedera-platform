@@ -22,6 +22,9 @@ import com.swirlds.platform.state.StateSettings;
  * A temporary class to bridge circumvent the fact that the Settings class is package private
  */
 public final class StaticSettingsProvider implements SettingsProvider {
+
+	private final Settings settings = Settings.getInstance();
+
 	private static final StaticSettingsProvider SINGLETON = new StaticSettingsProvider();
 
 	public static StaticSettingsProvider getSingleton() {
@@ -37,7 +40,7 @@ public final class StaticSettingsProvider implements SettingsProvider {
 	 */
 	@Override
 	public boolean isEnableBetaMirror() {
-		return Settings.enableBetaMirror;
+		return settings.isEnableBetaMirror();
 	}
 
 
@@ -46,7 +49,7 @@ public final class StaticSettingsProvider implements SettingsProvider {
 	 */
 	@Override
 	public int getRescueChildlessInverseProbability() {
-		return Settings.rescueChildlessInverseProbability;
+		return settings.getRescueChildlessInverseProbability();
 	}
 
 
@@ -55,7 +58,7 @@ public final class StaticSettingsProvider implements SettingsProvider {
 	 */
 	@Override
 	public int getRandomEventProbability() {
-		return Settings.randomEventProbability;
+		return settings.getRandomEventProbability();
 	}
 
 
@@ -64,7 +67,7 @@ public final class StaticSettingsProvider implements SettingsProvider {
 	 */
 	@Override
 	public double getThrottle7Threshold() {
-		return Settings.throttle7threshold;
+		return settings.getThrottle7threshold();
 	}
 
 
@@ -73,7 +76,7 @@ public final class StaticSettingsProvider implements SettingsProvider {
 	 */
 	@Override
 	public double getThrottle7Extra() {
-		return Settings.throttle7extra;
+		return settings.getThrottle7extra();
 	}
 
 	/**
@@ -81,105 +84,110 @@ public final class StaticSettingsProvider implements SettingsProvider {
 	 */
 	@Override
 	public int getThrottle7MaxBytes() {
-		return Settings.throttle7maxBytes;
+		return settings.getThrottle7maxBytes();
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public boolean isThrottle7Enabled() {
-		return Settings.throttle7;
+		return settings.isThrottle7();
 	}
 
 	@Override
 	public int getMaxEventQueueForCons() {
-		return Settings.maxEventQueueForCons;
+		return settings.getMaxEventQueueForCons();
 	}
 
 	@Override
 	public int getTransactionMaxBytes() {
-		return Settings.transactionMaxBytes;
-	}
-
-	@Override
-	public int getSignedStateKeep() {
-		return Settings.state.getSignedStateKeep();
+		return settings.getTransactionMaxBytes();
 	}
 
 	@Override
 	public int getSignedStateFreq() {
-		return Settings.signedStateFreq;
+		return settings.getSignedStateFreq();
 	}
 
 	@Override
 	public long getDelayShuffle() {
-		return Settings.delayShuffle;
+		return settings.getDelayShuffle();
 	}
 
 	@Override
 	public int getSocketIpTos() {
-		return Settings.socketIpTos;
+		return settings.getSocketIpTos();
 	}
 
 	@Override
 	public int getTimeoutSyncClientSocket() {
-		return Settings.timeoutSyncClientSocket;
+		return settings.getTimeoutSyncClientSocket();
 	}
 
 	@Override
 	public int getTimeoutSyncClientConnect() {
-		return Settings.timeoutSyncClientConnect;
+		return settings.getTimeoutSyncClientConnect();
 	}
 
 	@Override
 	public int getTimeoutServerAcceptConnect() {
-		return Settings.timeoutServerAcceptConnect;
+		return settings.getTimeoutServerAcceptConnect();
 	}
 
 	@Override
 	public boolean isTcpNoDelay() {
-		return Settings.tcpNoDelay;
+		return settings.isTcpNoDelay();
 	}
 
 	@Override
 	public String getKeystorePassword() {
-		return Settings.crypto.getKeystorePassword();
+		return settings.getCrypto().getKeystorePassword();
 	}
 
 	@Override
 	public boolean isEnableStateRecovery() {
-		return Settings.enableStateRecovery;
+		return settings.isEnableStateRecovery();
 	}
 
 	@Override
 	public StateSettings getStateSettings() {
-		return Settings.state;
+		return settings.getState();
 	}
 
 	/**
-	 * @see Settings#throttleTransactionQueueSize
+	 * @see Settings#getThrottleTransactionQueueSize()
 	 */
 	@Override
 	public int getThrottleTransactionQueueSize() {
-		return Settings.throttleTransactionQueueSize;
+		return settings.getThrottleTransactionQueueSize();
 	}
 
 	@Override
 	public int getMaxTransactionBytesPerEvent() {
-		return Settings.maxTransactionBytesPerEvent;
+		return settings.getMaxTransactionBytesPerEvent();
 	}
 
 	@Override
 	public boolean useLoopbackIp() {
-		return Settings.useLoopbackIp;
+		return settings.isUseLoopbackIp();
 	}
 
 	@Override
 	public int connectionStreamBufferSize() {
-		return Settings.bufferSize;
+		return settings.getBufferSize();
 	}
 
 	@Override
 	public int sleepHeartbeatMillis() {
-		return Settings.sleepHeartbeat;
+		return settings.getSleepHeartbeat();
+	}
+
+	@Override
+	public String getPlaybackStreamFileDirectory() {
+		return settings.getPlaybackStreamFileDirectory();
+	}
+
+	@Override
+	public String getPlaybackEndTimeStamp() {
+		return settings.getPlaybackEndTimeStamp();
 	}
 }

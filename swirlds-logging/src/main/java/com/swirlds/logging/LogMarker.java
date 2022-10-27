@@ -195,6 +195,11 @@ public enum LogMarker {
 	STATE_TO_DISK(LogMarkerType.INFO),
 
 	/**
+	 * logs info related to the signed state's hash
+	 */
+	STATE_HASH(LogMarkerType.INFO),
+
+	/**
 	 * logs related to the state deleter
 	 */
 	STATE_DELETER(LogMarkerType.INFO),

@@ -16,9 +16,6 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.statistics.StatEntry;
-
-import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -40,9 +37,5 @@ public class PerSecondStat {
 
 	public void update() {
 		average.update(accumulator.getAndSet(0));
-	}
-
-	public List<StatEntry> getStats() {
-		return List.of(average.getStatEntry());
 	}
 }

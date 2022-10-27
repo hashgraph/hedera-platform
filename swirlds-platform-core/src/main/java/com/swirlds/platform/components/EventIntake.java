@@ -16,28 +16,29 @@
 
 package com.swirlds.platform.components;
 
-import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.Consensus;
-import com.swirlds.platform.internal.ConsensusRound;
-import com.swirlds.platform.internal.EventImpl;
-import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.event.linking.EventLinker;
 import com.swirlds.platform.event.validation.StaticValidators;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 import com.swirlds.platform.intake.IntakeCycleStats;
+import com.swirlds.platform.internal.ConsensusRound;
+import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.observers.EventObserverDispatcher;
+import com.swirlds.platform.sync.ShadowGraph;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
 
 import static com.swirlds.logging.LogMarker.INTAKE_EVENT;
 import static com.swirlds.logging.LogMarker.STALE_EVENTS;
 import static com.swirlds.logging.LogMarker.SYNC;
-import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT;
 
 /**
  * This class is responsible for adding events to {@link Consensus} and notifying event observers, including
@@ -58,6 +59,8 @@ public class EventIntake {
 	private final EventObserverDispatcher dispatcher;
 	/** Collects statistics */
 	private final IntakeCycleStats stats;
+	/** Stores events, expires them, provides event lookup methods */
+	private final ShadowGraph shadowGraph;
 
 	/**
 	 * Constructor
@@ -77,7 +80,8 @@ public class EventIntake {
 			final Supplier<Consensus> consensusSupplier,
 			final AddressBook addressBook,
 			final EventObserverDispatcher dispatcher,
-			final IntakeCycleStats stats) {
+			final IntakeCycleStats stats,
+			final ShadowGraph shadowGraph) {
 		this.selfId = selfId;
 		this.eventLinker = eventLinker;
 		this.consensusSupplier = consensusSupplier;
@@ -85,6 +89,7 @@ public class EventIntake {
 		this.addressBook = addressBook;
 		this.dispatcher = dispatcher;
 		this.stats = stats;
+		this.shadowGraph = shadowGraph;
 	}
 
 	/**
@@ -112,12 +117,13 @@ public class EventIntake {
 	 * 		an event to be added
 	 */
 	public void addEvent(final EventImpl event) {
+		// an expired event will cause ShadowGraph to throw an exception, so we just to discard it
+		if (consensus().isExpired(event)) {
+			return;
+		}
 		stats.startIntake();
 		if (!StaticValidators.isValidTimeCreated(event)) {
 			event.clear();
-			return;
-		}
-		if (smallerThanMinRound(event)) {
 			return;
 		}
 		stats.doneValidation();
@@ -125,31 +131,59 @@ public class EventIntake {
 		dispatcher.preConsensusEvent(event);
 		log.debug(INTAKE_EVENT.getMarker(), "Adding {} ", event::toShortString);
 		stats.dispatchedPreConsensus();
+		final long minGenNonAncientBeforeAdding = consensus().getMinGenerationNonAncient();
+		// #5762 if we cannot calculate its roundCreated, then we use the one that was sent to us
+		final boolean hasAtLeastOneParent = event.getSelfParentHash() != null || event.getOtherParentHash() != null;
+		final boolean noParentsFound = event.getSelfParent() == null && event.getOtherParent() == null;
+		if (hasAtLeastOneParent && noParentsFound) {
+			if (event.getBaseEvent().isRoundCreatedSet()) {
+				// we then use the round created sent to us
+				event.setRoundCreated(event.getBaseEvent().getRoundCreated());
+			} else {
+				log.error(LogMarker.EXCEPTION.getMarker(),
+						"cannot determine round created for event {}",
+						event::toMediumString);
+			}
+		}
 		// record the event in the hashgraph, which results in the events in consEvent reaching consensus
 		final List<ConsensusRound> consRounds = consensusWrapper.addEvent(event, addressBook);
+		// #5762 after we calculate roundCreated, se set its value in GossipEvent so that it can be shared with other
+		// nodes
+		event.getBaseEvent().setRoundCreated(event.getRoundCreated());
 		stats.addedToConsensus();
 		dispatcher.eventAdded(event);
 		stats.dispatchedAdded();
 		if (consRounds != null) {
 			consRounds.forEach(this::handleConsensus);
+			stats.dispatchedRound();
 		}
-		stats.dispatchedRound();
-		handleStale();
-		stats.dispatchedStale();
+		if (consensus().getMinGenerationNonAncient() > minGenNonAncientBeforeAdding) {
+			// consensus rounds can be null and the minNonAncient might change, this is probably because of a round
+			// with no consensus events, so we check the diff in generations to look for stale events
+			handleStale(minGenNonAncientBeforeAdding);
+			stats.dispatchedStale();
+		}
 	}
 
 	/**
 	 * Notify observer of stale events, of all event in the consensus stale event queue.
 	 */
-	private void handleStale() {
-		while (!consensus().getStaleEventQueue().isEmpty()) {
-			final EventImpl e = consensus().getStaleEventQueue().poll();
-			if (e != null) {
-				dispatcher.staleEvent(e);
-
-				log.warn(STALE_EVENTS.getMarker(), "Stale event {}", e::toShortString);
-			}
+	private void handleStale(final long previousNonAncient) {
+		// find all events that just became ancient and did not reach consensus, these events will be considered stale
+		final Collection<EventImpl> staleEvents = shadowGraph.findByGeneration(
+				previousNonAncient,
+				consensus().getMinGenerationNonAncient(),
+				EventIntake::isNotConsensus
+		);
+		for (final EventImpl e : staleEvents) {
+			e.setStale(true);
+			dispatcher.staleEvent(e);
+			log.warn(STALE_EVENTS.getMarker(), "Stale event {}", e::toShortString);
 		}
+	}
+
+	private static boolean isNotConsensus(final EventImpl event) {
+		return !event.isConsensus();
 	}
 
 	/**
@@ -164,44 +198,6 @@ public class EventIntake {
 			eventLinker.updateGenerations(consensusRound.getGenerations());
 			dispatcher.consensusRound(consensusRound);
 		}
-	}
-
-	/**
-	 * Checks if the event will have a round created smaller than minRound. If it does, we should discard it. This
-	 * should not cause any issues since that event will be stale anyway.
-	 *
-	 * @param event
-	 * 		the Event to check
-	 * @return true if its round will be smaller, false otherwise
-	 */
-	private boolean smallerThanMinRound(final EventImpl event) {
-		// if max roundCreated of the event's parents is smaller than min round, we discard this event.
-		//
-		// this exception is acceptable when reconnect happens;
-		// for example, suppose node3 has been disconnected for a while,
-		// after node3 reconnect, when node0 syncs with node3,
-		// node0 creates an event whose otherParent is the lastInfo received from node3, i.e., lastInfoByMember.get(3)
-		if (event.getMaxRoundCreated() < consensus().getMinRound() && !event.isFromSignedState()) {
-			final Consensus consensus = consensus();
-			log.error(TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(),
-					"""
-							Round created {} will be smaller than min round {}, discarding event: {}
-							Self parent:{} Other parent:{}
-							Consensus min round:{}, max round:{}, last round decided:{}
-							Consensus min gen:{}, min gen non ancient:{}, max gen:{}""",
-					event::getMaxRoundCreated, consensus::getMinRound, event::toMediumString,
-					() -> EventStrings.toShortString(event.getSelfParent()),
-					() -> EventStrings.toShortString(event.getOtherParent()),
-					consensus::getMinRound, consensus::getMaxRound, consensus::getFameDecidedBelow,
-					consensus::getMinRoundGeneration,
-					consensus::getMinGenerationNonAncient,
-					consensus::getMaxRoundGeneration
-			);
-			event.setStale(true);
-			event.clear();
-			return true;
-		}
-		return false;
 	}
 
 	/**

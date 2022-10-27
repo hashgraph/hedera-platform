@@ -16,8 +16,6 @@
 
 package com.swirlds.common.test.sequence;
 
-import com.swirlds.common.sequence.map.ConcurrentSequenceMap;
-import com.swirlds.common.sequence.map.SequenceMap;
 import com.swirlds.common.sequence.set.ConcurrentSequenceSet;
 import com.swirlds.common.sequence.set.SequenceSet;
 import com.swirlds.common.sequence.set.StandardSequenceSet;
@@ -74,7 +72,7 @@ public class SequenceSetTests {
 		}
 	}
 
-	private record SetBuilder(String name, BiFunction<Long, Long, SequenceSet<SequenceSetElement>> constructor) {
+	private record SetBuilder(String name, BiFunction<Long, Integer, SequenceSet<SequenceSetElement>> constructor) {
 		@Override
 		public String toString() {
 			return name;
@@ -84,16 +82,16 @@ public class SequenceSetTests {
 	static Stream<Arguments> testConfiguration() {
 		return Stream.of(
 				Arguments.of(new SetBuilder("standard",
-						(min, max) -> new StandardSequenceSet<>(min, max, SequenceSetElement::sequence))),
+						(min, capacity) -> new StandardSequenceSet<>(min, capacity, SequenceSetElement::sequence))),
 				Arguments.of(new SetBuilder("concurrent",
-						(min, max) -> new ConcurrentSequenceSet<>(min, max, SequenceSetElement::sequence)))
+						(min, capacity) -> new ConcurrentSequenceSet<>(min, capacity, SequenceSetElement::sequence)))
 		);
 	}
 
 	private static boolean isKeyPresent(final SequenceSet<SequenceSetElement> set, final Long sequenceNumber) {
 		return sequenceNumber != null
-				&& sequenceNumber >= set.getLowestAllowedSequenceNumber()
-				&& sequenceNumber <= set.getHighestAllowedSequenceNumber();
+				&& sequenceNumber >= set.getFirstSequenceNumberInWindow()
+				&& sequenceNumber <= set.getLastSequenceNumberInWindow();
 	}
 
 	/**
@@ -147,8 +145,8 @@ public class SequenceSetTests {
 		if (size == 0) {
 			// For the sake of sanity, we don't want to attempt to use the default values for these
 			// variables under any conditions.
-			smallestSequenceNumber = set.getLowestAllowedSequenceNumber();
-			largestSequenceNumber = set.getHighestAllowedSequenceNumber();
+			smallestSequenceNumber = set.getFirstSequenceNumberInWindow();
+			largestSequenceNumber = set.getLastSequenceNumberInWindow();
 		}
 
 
@@ -179,7 +177,7 @@ public class SequenceSetTests {
 	@MethodSource("testConfiguration")
 	@DisplayName("Simple Access Test")
 	void simpleAccessTest(final SetBuilder setBuilder) {
-		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, Long.MAX_VALUE);
+		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, 100);
 
 		// The number of things inserted into the set
 		final int size = 100;
@@ -205,10 +203,10 @@ public class SequenceSetTests {
 
 	@ParameterizedTest
 	@MethodSource("testConfiguration")
-	@DisplayName("purge() Test")
-	void purgeTest(final SetBuilder setBuilder) {
-		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, Long.MAX_VALUE);
-		assertEquals(0, set.getLowestAllowedSequenceNumber(), "unexpected lower bound");
+	@DisplayName("Single Shift Test")
+	void singleShiftTest(final SetBuilder setBuilder) {
+		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, 100);
+		assertEquals(0, set.getFirstSequenceNumberInWindow(), "unexpected lower bound");
 
 		// The number of things inserted into the set
 		final int size = 100;
@@ -221,8 +219,8 @@ public class SequenceSetTests {
 			assertEquals(i + 1, set.getSize(), "unexpected size");
 		}
 
-		set.purge(size / 2 / keysPerSeq);
-		assertEquals(size / 2 / keysPerSeq, set.getLowestAllowedSequenceNumber(),
+		set.shiftWindow(size / 2 / keysPerSeq);
+		assertEquals(size / 2 / keysPerSeq, set.getFirstSequenceNumberInWindow(),
 				"unexpected lower bound");
 		assertEquals(size / 2, set.getSize(), "unexpected size");
 
@@ -239,10 +237,10 @@ public class SequenceSetTests {
 
 	@ParameterizedTest
 	@MethodSource("testConfiguration")
-	@DisplayName("purge() With Callback Test")
-	void purgeWithCallbackTest(final SetBuilder setBuilder) {
-		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, Long.MAX_VALUE);
-		assertEquals(0, set.getLowestAllowedSequenceNumber(), "unexpected lower bound");
+	@DisplayName("shiftWindow() With Callback Test")
+	void shiftWindowWithCallbackTest(final SetBuilder setBuilder) {
+		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, 100);
+		assertEquals(0, set.getFirstSequenceNumberInWindow(), "unexpected lower bound");
 
 		// The number of things inserted into the set
 		final int size = 100;
@@ -256,7 +254,7 @@ public class SequenceSetTests {
 		}
 
 		final Set<Integer> purgedKeys = new HashSet<>();
-		set.purge(size / 2 / keysPerSeq, key -> {
+		set.shiftWindow(size / 2 / keysPerSeq, key -> {
 			assertTrue(key.sequence < size / 2 / keysPerSeq, "key should not be purged");
 			assertEquals(key.key / keysPerSeq, key.sequence, "unexpected sequence number for key");
 			assertTrue(purgedKeys.add(key.key), "callback should be invoked once per key");
@@ -264,7 +262,7 @@ public class SequenceSetTests {
 
 		assertEquals(size / 2, purgedKeys.size(), "unexpected number of keys purged");
 
-		assertEquals(size / 2 / keysPerSeq, set.getLowestAllowedSequenceNumber(),
+		assertEquals(size / 2 / keysPerSeq, set.getFirstSequenceNumberInWindow(),
 				"unexpected lower bound");
 		assertEquals(size / 2, set.getSize(), "unexpected size");
 
@@ -290,10 +288,10 @@ public class SequenceSetTests {
 		final int keysPerSeq = 5;
 
 		final SequenceSet<SequenceSetElement> set =
-				setBuilder.constructor.apply(5L, 10L);
+				setBuilder.constructor.apply(5L, 5);
 
-		assertEquals(5, set.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-		assertEquals(10, set.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+		assertEquals(5, set.getFirstSequenceNumberInWindow(), "unexpected lower bound");
+		assertEquals(9, set.getLastSequenceNumberInWindow(), "unexpected upper bound");
 
 		for (int i = 0; i < size; i++) {
 			set.add(new SequenceSetElement(i, i / keysPerSeq));
@@ -315,32 +313,33 @@ public class SequenceSetTests {
 		// The lowest permitted sequence number
 		int lowerBound = 0;
 
-		// The highest permitted sequence number
-		int upperBound = size / keysPerSeq;
+		final int capacity = 20;
 
 		final SequenceSet<SequenceSetElement> set =
-				setBuilder.constructor.apply((long) lowerBound, (long) upperBound);
+				setBuilder.constructor.apply((long) lowerBound, capacity);
 
 		for (int iteration = 0; iteration < 10; iteration++) {
 			if (iteration % 2 == 0) {
 				// shift the lower bound
-				lowerBound += size / 2 / keysPerSeq;
-				set.purge(lowerBound);
-			} else {
-				// shift the upper bound
-				upperBound += size / 2 / keysPerSeq;
-				set.expand(upperBound);
+				lowerBound++;
+				set.shiftWindow(lowerBound);
 			}
 
-			assertEquals(lowerBound, set.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-			assertEquals(upperBound, set.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+			assertEquals(lowerBound, set.getFirstSequenceNumberInWindow(), "unexpected lower bound");
+			assertEquals(set.getLastSequenceNumberInWindow(),
+					set.getFirstSequenceNumberInWindow() + capacity - 1,
+					"unexpected upper bound");
 
 			// Add a bunch of values. Values outside the window should be ignored.
-			for (int i = lowerBound * keysPerSeq - 100; i < upperBound * keysPerSeq + 100; i++) {
+			for (int i = lowerBound * keysPerSeq - 100;
+				 i < set.getLastSequenceNumberInWindow() * keysPerSeq + 100;
+				 i++) {
+
 				set.add(new SequenceSetElement(i, i / keysPerSeq));
 			}
 
-			validateSetContents(set, 0, upperBound * keysPerSeq + size,
+			validateSetContents(set, 0,
+					(int) (set.getLastSequenceNumberInWindow() * keysPerSeq + size),
 					key -> {
 						if (key >= 0) {
 							return (long) key / keysPerSeq;
@@ -363,57 +362,54 @@ public class SequenceSetTests {
 		// The lowest permitted sequence number
 		final int lowerBound = 50;
 
-		// The highest permitted sequence number
-		final int upperBound = 100;
+		final int capacity = 5;
 
 		final SequenceSet<SequenceSetElement> set =
-				setBuilder.constructor.apply((long) lowerBound, (long) upperBound);
+				setBuilder.constructor.apply((long) lowerBound, capacity);
 
-		assertEquals(lowerBound, set.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-		assertEquals(upperBound, set.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+		assertEquals(lowerBound, set.getFirstSequenceNumberInWindow(), "unexpected lower bound");
 
-		for (int i = 0; i < upperBound * keysPerSeq + 100; i++) {
+		for (int i = 0; i < set.getLastSequenceNumberInWindow() * keysPerSeq + 100; i++) {
 			set.add(new SequenceSetElement(i, i / 5));
 		}
 
-		validateSetContents(set, 0, upperBound * keysPerSeq + 100,
+		validateSetContents(set, 0,
+				(int) (set.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> (long) key / keysPerSeq);
 
 		// Shift the window.
 		final int newLowerBound = lowerBound + 10;
-		final int newUpperBound = upperBound + 10;
-		set.purge(newLowerBound);
-		set.expand(newUpperBound);
+		set.shiftWindow(newLowerBound);
 
-		assertEquals(newLowerBound, set.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-		assertEquals(newUpperBound, set.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+		assertEquals(newLowerBound, set.getFirstSequenceNumberInWindow(), "unexpected lower bound");
 
-		for (int i = 0; i < newUpperBound * keysPerSeq + 100; i++) {
+		for (int i = 0; i < set.getLastSequenceNumberInWindow() * keysPerSeq + 100; i++) {
 			set.add(new SequenceSetElement(i, i / 5));
 		}
 
-		validateSetContents(set, 0, newUpperBound * keysPerSeq + 100,
+		validateSetContents(set, 0,
+				(int) (set.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> (long) key / keysPerSeq);
 
 		set.clear();
 
 		// should revert to original bounds
-		assertEquals(lowerBound, set.getLowestAllowedSequenceNumber(), "unexpected lower bound");
-		assertEquals(upperBound, set.getHighestAllowedSequenceNumber(), "unexpected upper bound");
+		assertEquals(lowerBound, set.getFirstSequenceNumberInWindow(), "unexpected lower bound");
 
 		assertEquals(0, set.getSize(), "set should be empty");
 
-		validateSetContents(set, 0, upperBound * keysPerSeq + 100, key -> null);
+		validateSetContents(set, 0,
+				(int) (set.getLastSequenceNumberInWindow() * keysPerSeq + 100), key -> null);
 
 		// Reinserting values should work the same way as when the set was "fresh"
-		for (int i = 0; i < upperBound * keysPerSeq + 100; i++) {
+		for (int i = 0; i < set.getLastSequenceNumberInWindow() * keysPerSeq + 100; i++) {
 			set.add(new SequenceSetElement(i, i / 5));
 		}
 
-		validateSetContents(set, 0, upperBound * keysPerSeq + 100,
+		validateSetContents(set, 0,
+				(int) (set.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> (long) key / keysPerSeq);
 	}
-
 
 	@ParameterizedTest
 	@MethodSource("testConfiguration")
@@ -425,11 +421,10 @@ public class SequenceSetTests {
 		// The lowest permitted sequence number
 		final int lowerBound = 0;
 
-		// The highest permitted sequence number
-		final int upperBound = 100;
+		int capacity = 5;
 
 		final SequenceSet<SequenceSetElement> set =
-				setBuilder.constructor.apply((long) lowerBound, (long) upperBound);
+				setBuilder.constructor.apply((long) lowerBound, capacity);
 
 		// removing values from an empty set shouldn't cause problems
 		assertFalse(set.remove(new SequenceSetElement(-100, 0)), "value should not be in set");
@@ -439,14 +434,16 @@ public class SequenceSetTests {
 
 		// Validate removal of an existing value
 		assertEquals(0, set.getSize(), "set should be empty");
-		validateSetContents(set, 0, upperBound * keysPerSeq + 100,
+		validateSetContents(set, 0,
+				(int) (set.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> null);
 
 		set.add(new SequenceSetElement(10, 2));
 		assertTrue(set.remove(new SequenceSetElement(10, 2)), "value should have been removed");
 
 		assertEquals(0, set.getSize(), "set should be empty");
-		validateSetContents(set, 0, upperBound * keysPerSeq + 100,
+		validateSetContents(set, 0,
+				(int) (set.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> null);
 
 		// Re-inserting after removal should work the same as regular insertion
@@ -454,7 +451,8 @@ public class SequenceSetTests {
 		assertTrue(set.contains(new SequenceSetElement(10, 2)), "should contain value");
 
 		assertEquals(1, set.getSize(), "set should contain one thing");
-		validateSetContents(set, 0, upperBound * keysPerSeq + 100,
+		validateSetContents(set, 0,
+				(int) (set.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> {
 					if (key == 10) {
 						return 2L;
@@ -474,16 +472,16 @@ public class SequenceSetTests {
 		// The lowest permitted sequence number
 		final int lowerBound = 0;
 
-		// The highest permitted sequence number
-		final int upperBound = 100;
+		final int capacity = 5;
 
 		final SequenceSet<SequenceSetElement> set =
-				setBuilder.constructor.apply((long) lowerBound, (long) upperBound);
+				setBuilder.constructor.apply((long) lowerBound, capacity);
 
 		assertTrue(set.add(new SequenceSetElement(10, 2)), "no value should currently be in set");
 
 		assertEquals(1, set.getSize(), "set should contain one thing");
-		validateSetContents(set, 0, upperBound * keysPerSeq + 100,
+		validateSetContents(set, 0,
+				(int) (set.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> {
 					if (key == 10) {
 						return 2L;
@@ -496,7 +494,8 @@ public class SequenceSetTests {
 				"previous value should be returned");
 
 		assertEquals(1, set.getSize(), "set should contain one thing");
-		validateSetContents(set, 0, upperBound * keysPerSeq + 100,
+		validateSetContents(set, 0,
+				(int) (set.getLastSequenceNumberInWindow() * keysPerSeq + 100),
 				key -> {
 					if (key == 10) {
 						return 2L;
@@ -510,7 +509,7 @@ public class SequenceSetTests {
 	@MethodSource("testConfiguration")
 	@DisplayName("removeSequenceNumber() Test")
 	void removeSequenceNumberTest(final SetBuilder setBuilder) {
-		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, Long.MAX_VALUE);
+		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, 100);
 
 		// The number of things inserted into the set
 		final int size = 100;
@@ -602,7 +601,7 @@ public class SequenceSetTests {
 	@MethodSource("testConfiguration")
 	@DisplayName("removeSequenceNumber() With Callback Test")
 	void removeSequenceNumberWithCallbackTest(final SetBuilder setBuilder) {
-		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, Long.MAX_VALUE);
+		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, 100);
 
 		// The number of things inserted into the set
 		final int size = 100;
@@ -702,11 +701,11 @@ public class SequenceSetTests {
 		final Random random = new Random();
 
 		final AtomicInteger lowerBound = new AtomicInteger(0);
-		final AtomicInteger upperBound = new AtomicInteger(100);
+		final int capacity = 100;
 
 		final SequenceSet<SequenceSetElement> set = new ConcurrentSequenceSet<>(
 				lowerBound.get(),
-				upperBound.get(),
+				capacity,
 				SequenceSetElement::sequence);
 
 		final AtomicBoolean error = new AtomicBoolean();
@@ -721,10 +720,10 @@ public class SequenceSetTests {
 
 					// Verify that no data is present that should not be present
 					for (int sequenceNumber = lowerBound.get() - 100;
-						 sequenceNumber < upperBound.get() + 100;
+						 sequenceNumber < set.getLastSequenceNumberInWindow() + 100;
 						 sequenceNumber++) {
 
-						if (sequenceNumber < lowerBound.get() || sequenceNumber > upperBound.get()) {
+						if (sequenceNumber < lowerBound.get() || sequenceNumber > set.getLastSequenceNumberInWindow()) {
 							final List<SequenceSetElement> keys = set.getEntriesWithSequenceNumber(sequenceNumber);
 							assertEquals(0, keys.size(), "no keys should be present for this round");
 						}
@@ -732,9 +731,7 @@ public class SequenceSetTests {
 
 					// shift the window
 					lowerBound.getAndAdd(5);
-					upperBound.getAndAdd(5);
-					set.purge(lowerBound.get());
-					set.expand(upperBound.get());
+					set.shiftWindow(lowerBound.get());
 				})
 				.build(true);
 
@@ -750,7 +747,8 @@ public class SequenceSetTests {
 
 						final double choice = random.nextDouble();
 						final int sequenceNumber =
-								random.nextInt(lowerBound.get() - 50, upperBound.get() + 50);
+								random.nextInt(lowerBound.get() - 50,
+										(int) (set.getLastSequenceNumberInWindow() + 50));
 
 						if (choice < 0.5) {
 							// attempt to delete a value
@@ -788,5 +786,26 @@ public class SequenceSetTests {
 		});
 
 		assertFalse(error.get(), "error(s) encountered");
+	}
+
+	@ParameterizedTest
+	@MethodSource("testConfiguration")
+	@DisplayName("add() Return Value Test")
+	void addReturnValueTest(final SetBuilder setBuilder) {
+		final SequenceSet<SequenceSetElement> set = setBuilder.constructor.apply(0L, 10);
+
+		assertTrue(set.add(new SequenceSetElement(0, 0)),
+				"should return true if value is not present");
+		assertFalse(set.add(new SequenceSetElement(0, 0)),
+				"should return true if value is present");
+
+		assertFalse(set.add(new SequenceSetElement(1, -1)),
+				"should return false if value is outside window");
+		assertFalse(set.add(new SequenceSetElement(2, 10)),
+				"should return false if value is outside window");
+
+		set.shiftWindow(1);
+		assertTrue(set.add(new SequenceSetElement(2, 10)),
+				"should return true now that window has shifted");
 	}
 }

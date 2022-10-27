@@ -16,14 +16,20 @@
 
 package com.swirlds.platform.stats.cycle;
 
-import com.swirlds.common.metrics.Metric;
-
-import java.util.List;
-
 /**
  * Metrics that track a thread cycle
  */
 public interface CycleMetrics {
+	/**
+	 * Called when an interval has ended and the next interval begins.
+	 *
+	 * @param interval
+	 * 		the index of the interval that ended
+	 * @param durationNanos
+	 * 		the number of nanoseconds the interval took to complete
+	 */
+	void intervalFinished(int interval, long durationNanos);
+
 	/**
 	 * Called when a single cycle has ended
 	 *
@@ -44,9 +50,4 @@ public interface CycleMetrics {
 	 * @return the number of intervals of the cycle
 	 */
 	int getNumIntervals();
-
-	/**
-	 * @return all metrics tracked
-	 */
-	List<Metric> getAllEntries();
 }

@@ -16,6 +16,8 @@
 
 package com.swirlds.platform.stats.atomic;
 
+import com.swirlds.common.metrics.atomic.AtomicIntPair;
+
 /**
  * Atomically sums the values provided as well as counting the number of additions
  */

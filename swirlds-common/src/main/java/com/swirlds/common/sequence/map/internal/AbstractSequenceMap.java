@@ -18,12 +18,11 @@ package com.swirlds.common.sequence.map.internal;
 
 import com.swirlds.common.sequence.map.SequenceMap;
 
+import java.lang.reflect.Array;
 import java.util.AbstractMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.ToLongFunction;
@@ -41,12 +40,14 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 	/**
 	 * The data in the map.
 	 */
-	private final Map<K, V> data = buildDataMap();
+	private final Map<K, V> data;
 
 	/**
-	 * Organize keys by sequence number.
+	 * Keys for each sequence number currently being stored.
 	 */
-	private final Map<Long, Set<K>> sequenceMap = buildSequenceMap();
+	private final SequenceKeySet<K>[] keySets;
+
+	private final int sequenceNumberCapacity;
 
 	/**
 	 * A method that gets the sequence number associated with a given key.
@@ -56,64 +57,73 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 	/**
 	 * When this object is cleared, the lowest allowed sequence number is reset to this value.
 	 */
-	private final long initialLowestAllowedSequenceNumber;
+	private final long initialFirstSequenceNumber;
 
 	/**
-	 * When this object is cleared, the highest allowed sequence number is reset to this value.
-	 */
-	private final long initialHighestAllowedSequenceNumber;
-
-	/**
-	 * Construct an abstract purgable map.
+	 * Construct an abstract sequence map.
 	 *
-	 * @param initialLowestAllowedSequenceNumber
+	 * @param initialFirstSequenceNumber
 	 * 		the lowest allowed sequence number when this object is constructed,
 	 * 		or after it is cleared
-	 * @param initialHighestAllowedSequenceNumber
-	 * 		the highest allowed sequence number when this object is constructed,
-	 * 		or after it is cleared
+	 * @param sequenceNumberCapacity
+	 * 		the number of sequence numbers permitted to exist in this data structure. E.g. if
+	 * 		the lowest allowed sequence number is 100 and the capacity is 10, then values with
+	 * 		a sequence number between 100 and 109 (inclusive) will be allowed, and any value
+	 * 		with a sequence number outside that range will be rejected.
 	 * @param getSequenceNumberFromKey
 	 * 		a method that extracts the sequence number from a 1key
 	 */
+	@SuppressWarnings("unchecked")
 	protected AbstractSequenceMap(
-			final long initialLowestAllowedSequenceNumber,
-			final long initialHighestAllowedSequenceNumber,
+			final long initialFirstSequenceNumber,
+			final int sequenceNumberCapacity,
 			final ToLongFunction<K> getSequenceNumberFromKey) {
 
-		this.initialLowestAllowedSequenceNumber = initialLowestAllowedSequenceNumber;
-		this.initialHighestAllowedSequenceNumber = initialHighestAllowedSequenceNumber;
+		this.sequenceNumberCapacity = sequenceNumberCapacity;
+		data = buildDataMap();
+		keySets = (SequenceKeySet<K>[]) Array.newInstance(SequenceKeySet.class, sequenceNumberCapacity);
+
+		for (long sequenceNumber = initialFirstSequenceNumber;
+			 sequenceNumber < initialFirstSequenceNumber + sequenceNumberCapacity;
+			 sequenceNumber++) {
+
+			keySets[getSequenceKeyIndex(sequenceNumber)] = new SequenceKeySet<>(sequenceNumber);
+		}
+
+		this.initialFirstSequenceNumber = initialFirstSequenceNumber;
 		this.getSequenceNumberFromKey = getSequenceNumberFromKey;
 	}
 
 	/**
-	 * Set the smallest allowed sequence number.
+	 * Set the smallest allowed sequence number in the current window.
 	 *
-	 * @param sequenceNumber
-	 * 		the smallest allowed sequence number
+	 * @param firstSequenceNumberInWindow
+	 * 		the new first sequence number in the window
 	 */
-	protected abstract void setLowestAllowedSequenceNumber(final long sequenceNumber);
-
-	/**
-	 * Set the largest allowed sequence number.
-	 *
-	 * @param sequenceNumber
-	 * 		the largest allowed sequence number
-	 */
-	protected abstract void setHighestAllowedSequenceNumber(final long sequenceNumber);
+	protected abstract void setFirstSequenceNumberInWindow(final long firstSequenceNumberInWindow);
 
 	/**
 	 * Build the map to hold data.
 	 *
-	 * @return a map
+	 * @return a map with appropriate thread safety guarantees
 	 */
 	protected abstract Map<K, V> buildDataMap();
 
 	/**
-	 * Build the map that organizes the data by sequence number.
-	 *
-	 * @return a map
+	 * Acquire a lock on window management. Held during purge/expand calls, and during clear.
+	 * No-op for implementations that do not require thread safety.
 	 */
-	protected abstract Map<Long, Set<K>> buildSequenceMap();
+	protected void windowLock() {
+		// Override if thread safety is required
+	}
+
+	/**
+	 * Release a lock on window management. Held during purge/expand calls, and during clear.
+	 * No-op for implementations that do not require thread safety.
+	 */
+	protected void windowUnlock() {
+		// Override if thread safety is required
+	}
 
 	/**
 	 * Acquire an exclusive lock on a sequence number. No-op for implementations that do not require thread safety.
@@ -150,19 +160,15 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 	}
 
 	/**
-	 * Acquire a lock on window management. Held during purge/expand calls, and during clear.
-	 * No-op for implementations that do not require thread safety.
+	 * When the window is shifted significantly, it can be more efficient to grab all locks at the start, as
+	 * compared to locking on each sequence number one at a time. This method describes the size of the shift
+	 * required to trigger a full lock.
+	 *
+	 * @return shifts greater or equal to this in size will trigger a full lock
 	 */
-	protected void windowLock() {
-		// Override if thread safety is required
-	}
-
-	/**
-	 * Release a lock on window management. Held during purge/expand calls, and during clear.
-	 * No-op for implementations that do not require thread safety.
-	 */
-	protected void windowUnlock() {
-		// Override if thread safety is required
+	protected int getFullLockThreshold() {
+		// Override if locking is needed
+		return 0;
 	}
 
 	/**
@@ -181,15 +187,9 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 		return data.containsKey(key);
 	}
 
-	/**
-	 * Add a key to the map that tracks keys by sequence numbers. Should only be called in locked blocks.
-	 *
-	 * @param key
-	 * 		the key to add
-	 */
-	private void addToSequenceMap(final K key) {
-		final Set<K> keysWithSequenceNumber = sequenceMap.computeIfAbsent(getSequenceNumber(key), k -> new HashSet<>());
-		keysWithSequenceNumber.add(key);
+	@Override
+	public int getSequenceNumberCapacity() {
+		return sequenceNumberCapacity;
 	}
 
 	/**
@@ -204,50 +204,28 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 	}
 
 	/**
-	 * <p>
-	 * Check if a key has a sequence number that is outside the allowed window.
-	 * </p>
+	 * Get the key set index for a given sequence number.
 	 *
-	 * <p>
-	 * Thread safety: this window may be adjusting concurrently with an attempt to insert something into
-	 * this map.
-	 * </p>
-	 *
-	 * <p>
-	 * If the lower bound is shifting (as a result of a purge), there is no thread safety problem
-	 * since we lock each index as it is purged.
-	 * </p>
-	 *
-	 * <p>
-	 * There are several cases to consider if the upper bound is shifting.
-	 * </p>
-	 *
-	 * <ul>
-	 * <li>
-	 * If sequence number of the key being inserted is outside the allowed window before and after the shift then
-	 * no harm, as it will be rejected if either the new or old window is used.
-	 * </li>
-	 * <li>
-	 * If sequence number of the key being inserted is inside the allowed window before and after the shift then
-	 * no harm, as it will be accepted if either the new or old window is used.
-	 * </li>
-	 * <li>
-	 * If the sequence number of the key being inserted is outside the allowed window before the shift and inside
-	 * the window after the shift, then there is a race condition of sorts. But this is not problematic, as the
-	 * end result is indistinguishable from a legal sequential ordering of the two operations:
-	 * (window shift -&gt; insertion, resulting in key being inserted) or
-	 * (insertion -&gt; window shift, resulting in key being rejected).
-	 * </li>
-	 * <li>
-	 * It's impossible for the upper bound of the window to decrease over time
-	 * </li>
-	 * </ul>
-	 *
-	 * @param sequenceNumber the sequence number in question
-	 * @return true if the key has a sequence number that is not currently permitted to be in the data structure
+	 * @param sequenceNumber
+	 * 		the sequence number in question
+	 * @return the index of the sequence number
 	 */
-	private boolean isOutsideAllowedWindow(final long sequenceNumber) {
-		return sequenceNumber < getLowestAllowedSequenceNumber() || sequenceNumber > getHighestAllowedSequenceNumber();
+	private int getSequenceKeyIndex(final long sequenceNumber) {
+		if (sequenceNumber >= 0) {
+			return (int) (sequenceNumber % sequenceNumberCapacity);
+		}
+		return (int) (((sequenceNumber % sequenceNumberCapacity) + sequenceNumberCapacity) % sequenceNumberCapacity);
+	}
+
+	/**
+	 * Get the sequence key set for a given sequence number.
+	 *
+	 * @param sequenceNumber
+	 * 		the sequence number to fetch
+	 * @return the key set for the sequence number
+	 */
+	private SequenceKeySet<K> getSequenceKeySet(final long sequenceNumber) {
+		return keySets[getSequenceKeyIndex(sequenceNumber)];
 	}
 
 	/**
@@ -258,61 +236,41 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 		V value = data.get(key);
 
 		if (value == null) {
-			final long sequenceNumber = getSequenceNumber(key);
-			lockSequenceNumber(sequenceNumber);
-
-			try {
-				if (isOutsideAllowedWindow(sequenceNumber)) {
-					// this sequence number is not permitted to be in the map
-					return null;
-				}
-
-				value = data.computeIfAbsent(key, mappingFunction);
-
-				// The key may already be in the map, but the cost of re-attempting insertion is minimal
-				addToSequenceMap(key);
-			} finally {
-				unlockSequenceNumber(sequenceNumber);
+			value = mappingFunction.apply(key);
+			final boolean added = putIfAbsent(key, value);
+			if (!added) {
+				value = null;
 			}
 		}
 		return value;
 	}
 
 	/**
-	 * Insert a value if there is currently no entry for the value. More efficient than {@link #put(Object, Object)}
-	 * if there are many duplicate keys being inserted into the map. Less efficient than {@link #put(Object, Object)}
-	 * if duplicates are sufficiently rare.
-	 *
-	 * @param key
-	 * 		the key
-	 * @param value
-	 * 		the value
-	 * @return the previous value if the key is currently in the map, or null if it is not currently in the map
+	 * {@inheritDoc}
 	 */
 	@Override
-	public V putIfAbsent(final K key, final V value) {
-		V ret = data.get(key);
+	public boolean putIfAbsent(final K key, final V value) {
+		final long sequenceNumber = getSequenceNumber(key);
+		final SequenceKeySet<K> keys = getSequenceKeySet(sequenceNumber);
 
-		if (ret == null) {
-			final long sequenceNumber = getSequenceNumber(key);
-
-			lockSequenceNumber(sequenceNumber);
-
-			try {
-				if (isOutsideAllowedWindow(sequenceNumber)) {
-					return null;
-				}
-
-				ret = data.putIfAbsent(key, value);
-				if (ret == null) {
-					addToSequenceMap(key);
-				}
-			} finally {
-				unlockSequenceNumber(sequenceNumber);
+		lockSequenceNumber(sequenceNumber);
+		try {
+			if (keys.getSequenceNumber() != sequenceNumber) {
+				// the key is outside the allowed window
+				return false;
 			}
-		}
+			if (data.containsKey(key)) {
+				// don't re-insert if the value is already present
+				return false;
+			}
 
-		return ret;
+			data.put(key, value);
+			keys.getKeys().add(key);
+
+			return true;
+		} finally {
+			unlockSequenceNumber(sequenceNumber);
+		}
 	}
 
 	/**
@@ -321,20 +279,19 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 	@Override
 	public V put(final K key, final V value) {
 		final long sequenceNumber = getSequenceNumber(key);
-		lockSequenceNumber(sequenceNumber);
+		final SequenceKeySet<K> keys = getSequenceKeySet(sequenceNumber);
 
+		lockSequenceNumber(sequenceNumber);
 		try {
-			if (isOutsideAllowedWindow(sequenceNumber)) {
+			if (keys.getSequenceNumber() != sequenceNumber) {
+				// the key is outside the allowed window
 				return null;
 			}
 
-			final V ret = data.put(key, value);
+			final V previousValue = data.put(key, value);
+			keys.getKeys().add(key);
 
-			if (ret == null) {
-				addToSequenceMap(key);
-			}
-
-			return ret;
+			return previousValue;
 		} finally {
 			unlockSequenceNumber(sequenceNumber);
 		}
@@ -346,34 +303,18 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 	@Override
 	public V remove(final K key) {
 		final long sequenceNumber = getSequenceNumber(key);
+		final SequenceKeySet<K> keys = getSequenceKeySet(sequenceNumber);
 
 		lockSequenceNumber(sequenceNumber);
 		try {
-			final Set<K> keysWithSequenceNumber = sequenceMap.get(sequenceNumber);
-			if (keysWithSequenceNumber != null) {
-				keysWithSequenceNumber.remove(key);
+			if (keys.getSequenceNumber() != sequenceNumber) {
+				// the key is outside the allowed window
+				return null;
 			}
 
+			keys.getKeys().remove(key);
 			return data.remove(key);
-		} finally {
-			unlockSequenceNumber(sequenceNumber);
-		}
-	}
 
-	/**
-	 * Purge all values with a particular sequence number and increase the smallest allowed sequence number by 1.
-	 *
-	 * @param sequenceNumber
-	 * 		the sequence number to be purged
-	 * @param purgedValueHandler
-	 * 		handles purged values
-	 */
-	private void purgeSequenceNumber(final long sequenceNumber, final BiConsumer<K, V> purgedValueHandler) {
-		lockSequenceNumber(sequenceNumber);
-
-		try {
-			removeSequenceNumberUnlocked(sequenceNumber, purgedValueHandler);
-			setLowestAllowedSequenceNumber(sequenceNumber + 1);
 		} finally {
 			unlockSequenceNumber(sequenceNumber);
 		}
@@ -383,76 +324,114 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void purge(final long smallestAllowedSequenceNumber, final BiConsumer<K, V> removedValueHandler) {
+	public void shiftWindow(final long firstSequenceNumberInWindow, final BiConsumer<K, V> removedValueHandler) {
 		windowLock();
 
+		final long shiftSize = firstSequenceNumberInWindow - getFirstSequenceNumberInWindow();
+		final boolean largeShift = shiftSize >= getFullLockThreshold();
+
+		if (largeShift) {
+			// Better to take locks once than to take them over and over
+			fullLock();
+		}
+
 		try {
-			final long currentSmallestSequenceNumber = getLowestAllowedSequenceNumber();
-			if (smallestAllowedSequenceNumber < currentSmallestSequenceNumber) {
-				// sequence number has already been purged
-				return;
+			final long previousFirstSequenceNumber = getFirstSequenceNumberInWindow();
+			if (firstSequenceNumberInWindow < previousFirstSequenceNumber) {
+				throw new IllegalStateException("Window can only be shifted towards larger value. " +
+						"Current lowest sequence number = " + previousFirstSequenceNumber +
+						", requested lowest sequence number = " + firstSequenceNumberInWindow);
 			}
+			setFirstSequenceNumberInWindow(firstSequenceNumberInWindow);
 
-			for (long sequenceNumber = currentSmallestSequenceNumber;
-				 sequenceNumber < smallestAllowedSequenceNumber;
-				 sequenceNumber++) {
+			for (int offset = 0; offset < sequenceNumberCapacity; offset++) {
 
-				purgeSequenceNumber(sequenceNumber, removedValueHandler);
+				// Stop purging once we encounter a high enough sequence number
+				final long sequenceNumberToReplace = previousFirstSequenceNumber + offset;
+				if (sequenceNumberToReplace >= firstSequenceNumberInWindow) {
+					return;
+				}
+
+				final SequenceKeySet<K> keys = getSequenceKeySet(sequenceNumberToReplace);
+
+				if (!largeShift) {
+					lockSequenceNumber(sequenceNumberToReplace);
+				}
+				try {
+					// Remove the old data from the map
+					for (final K key : keys.getKeys()) {
+						final V value = data.remove(key);
+						if (removedValueHandler != null) {
+							removedValueHandler.accept(key, value);
+						}
+					}
+
+					// Prepare the key set for the new data
+					keys.setSequenceNumber(
+							mapToNewSequenceNumber(firstSequenceNumberInWindow, sequenceNumberToReplace));
+					keys.getKeys().clear();
+				} finally {
+					if (!largeShift) {
+						unlockSequenceNumber(sequenceNumberToReplace);
+					}
+				}
 			}
 		} finally {
 			windowUnlock();
+			if (largeShift) {
+				fullUnlock();
+			}
 		}
+	}
+
+	/**
+	 * When the window is shifted, it causes some key sets in the circular buffer increase their sequence number.
+	 * This method computes the new sequence number that the key set is required to have.
+	 */
+	private long mapToNewSequenceNumber(final long firstSequenceNumberInWindow, final long sequenceNumberToReplace) {
+		// the distance between the new first sequence number in the window
+		// and the sequence number that is being replaced
+		final long difference = firstSequenceNumberInWindow - sequenceNumberToReplace;
+
+		// The number of times we have wrapped around the buffer by increasing to the
+		// new first sequence number. Will be 1 if we are increasing the minimum
+		// sequence number by a small amount, may be larger than 1 if we suddenly
+		// move the window a large distance in a single step.
+		final long wrapFactor = difference / getSequenceNumberCapacity() +
+				(difference % getSequenceNumberCapacity() == 0 ? 0 : 1);
+
+		// Every time we go one time around the buffer, the sequence number at a particular
+		// index increases by an amount equal to the capacity.
+		final long increase = wrapFactor * getSequenceNumberCapacity();
+		return sequenceNumberToReplace + increase;
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void expand(final long largestAllowedSequenceNumber) {
+	public void removeValuesWithSequenceNumber(final long sequenceNumber, final BiConsumer<K, V> removedValueHandler) {
 		windowLock();
-
 		try {
-			if (largestAllowedSequenceNumber <= getHighestAllowedSequenceNumber()) {
-				// Maximum window size is only permitted to increase
-				return;
+			final SequenceKeySet<K> keys = getSequenceKeySet(sequenceNumber);
+			lockSequenceNumber(sequenceNumber);
+			try {
+				if (keys.getSequenceNumber() != sequenceNumber) {
+					return;
+				}
+
+				for (final K key : keys.getKeys()) {
+					final V value = data.remove(key);
+					if (removedValueHandler != null) {
+						removedValueHandler.accept(key, value);
+					}
+				}
+				keys.getKeys().clear();
+			} finally {
+				unlockSequenceNumber(sequenceNumber);
 			}
-			setHighestAllowedSequenceNumber(largestAllowedSequenceNumber);
 		} finally {
 			windowUnlock();
-		}
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void removeSequenceNumber(final long sequenceNumber, final BiConsumer<K, V> removedValueHandler) {
-		lockSequenceNumber(sequenceNumber);
-		removeSequenceNumberUnlocked(sequenceNumber, removedValueHandler);
-		unlockSequenceNumber(sequenceNumber);
-	}
-
-	/**
-	 * Remove all keys with a given sequence number. This method is not locked, the caller is expected to hold
-	 * a lock on the sequence number that is being removed
-	 *
-	 * @param sequenceNumber
-	 * 		the sequence number to remove
-	 * @param removedValueHandler
-	 * 		a callback that is passed each key/value pair that is removed
-	 */
-	private void removeSequenceNumberUnlocked(final long sequenceNumber, final BiConsumer<K, V> removedValueHandler) {
-		final Set<K> keys = sequenceMap.remove(sequenceNumber);
-		if (keys == null) {
-			// no values are present for this sequence number
-			return;
-		}
-
-		for (final K key : keys) {
-			final V value = data.remove(key);
-			if (removedValueHandler != null) {
-				removedValueHandler.accept(key, value);
-			}
 		}
 	}
 
@@ -462,18 +441,18 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 	@Override
 	public List<K> getKeysWithSequenceNumber(final long sequenceNumber) {
 		final List<K> list = new LinkedList<>();
+		final SequenceKeySet<K> keys = getSequenceKeySet(sequenceNumber);
+
 		lockSequenceNumber(sequenceNumber);
-
 		try {
-			final Set<K> keysWithSequenceNumber = sequenceMap.get(sequenceNumber);
-			if (keysWithSequenceNumber != null) {
-				list.addAll(keysWithSequenceNumber);
+			if (keys.getSequenceNumber() == sequenceNumber) {
+				list.addAll(keys.getKeys());
 			}
-
-			return list;
 		} finally {
 			unlockSequenceNumber(sequenceNumber);
 		}
+
+		return list;
 	}
 
 	/**
@@ -482,20 +461,20 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 	@Override
 	public List<Map.Entry<K, V>> getEntriesWithSequenceNumber(final long sequenceNumber) {
 		final List<Map.Entry<K, V>> list = new LinkedList<>();
-		lockSequenceNumber(sequenceNumber);
+		final SequenceKeySet<K> keys = getSequenceKeySet(sequenceNumber);
 
+		lockSequenceNumber(sequenceNumber);
 		try {
-			final Set<K> keysWithSequenceNumber = sequenceMap.get(sequenceNumber);
-			if (keysWithSequenceNumber != null) {
-				for (final K key : keysWithSequenceNumber) {
+			if (keys.getSequenceNumber() == sequenceNumber) {
+				for (final K key : keys.getKeys()) {
 					list.add(new AbstractMap.SimpleEntry<>(key, data.get(key)));
 				}
 			}
-
-			return list;
 		} finally {
 			unlockSequenceNumber(sequenceNumber);
 		}
+
+		return list;
 	}
 
 	/**
@@ -511,14 +490,18 @@ public abstract class AbstractSequenceMap<K, V> implements SequenceMap<K, V> {
 	 */
 	@Override
 	public void clear() {
-		fullLock();
 		windowLock();
+		fullLock();
 
 		try {
 			data.clear();
-			sequenceMap.clear();
-			setLowestAllowedSequenceNumber(initialLowestAllowedSequenceNumber);
-			setHighestAllowedSequenceNumber(initialHighestAllowedSequenceNumber);
+			setFirstSequenceNumberInWindow(initialFirstSequenceNumber);
+			for (int offset = 0; offset < sequenceNumberCapacity; offset++) {
+				final long sequenceNumber = initialFirstSequenceNumber + offset;
+				final SequenceKeySet<K> keys = getSequenceKeySet(sequenceNumber);
+				keys.setSequenceNumber(sequenceNumber);
+				keys.getKeys().clear();
+			}
 		} finally {
 			windowUnlock();
 			fullUnlock();

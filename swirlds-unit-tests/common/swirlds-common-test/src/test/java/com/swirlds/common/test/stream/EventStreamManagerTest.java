@@ -16,11 +16,11 @@
 
 package com.swirlds.common.test.stream;
 
-import com.swirlds.common.system.NodeId;
-import com.swirlds.common.system.Platform;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.stream.EventStreamManager;
 import com.swirlds.common.stream.MultiStream;
+import com.swirlds.common.stream.Signer;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.common.test.RandomUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -35,13 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class EventStreamManagerTest {
-	private static final Platform platform = mock(Platform.class);
-	static {
-		when(platform.getSelfId()).thenReturn(new NodeId(false, 0));
-	}
+	private static final NodeId selfId = new NodeId(false, 0);
 	private static final String nodeName = "node0";
 	private static final String eventsLogDir = "eventStream/";
 	private static final long eventsLogPeriod = 5;
@@ -65,11 +61,11 @@ class EventStreamManagerTest {
 
 	@BeforeAll
 	static void init() throws Exception {
-		disableStreamingInstance = new EventStreamManager<>(platform, nodeName, false,
+		disableStreamingInstance = new EventStreamManager<>(selfId, mock(Signer.class), nodeName, false,
 				eventsLogDir,
 				eventsLogPeriod, eventStreamQueueCapacity, EventStreamManagerTest::isFreezeEvent);
 
-		enableStreamingInstance = new EventStreamManager<>(platform, nodeName, true,
+		enableStreamingInstance = new EventStreamManager<>(selfId, mock(Signer.class), nodeName, true,
 				eventsLogDir,
 				eventsLogPeriod, eventStreamQueueCapacity, EventStreamManagerTest::isFreezeEvent);
 	}

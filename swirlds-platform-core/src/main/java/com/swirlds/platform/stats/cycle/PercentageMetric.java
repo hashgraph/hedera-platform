@@ -17,19 +17,53 @@
 package com.swirlds.platform.stats.cycle;
 
 import com.swirlds.common.metrics.FloatFormats;
-import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.IntegerPairAccumulator;
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.utility.CommonUtils;
+
+import java.util.function.BiFunction;
 
 /**
  * A metric that is used to output a percentage 0-100%
  */
-public abstract class PercentageMetric extends Metric {
+public class PercentageMetric {
 	private static final String APPENDIX = " (%)";
 	private static final int PERCENT = 100;
 
-	protected PercentageMetric(final String category, final String name, final String description) {
-		super(category, name + APPENDIX, description, FloatFormats.FORMAT_3_1);
+	private final IntegerPairAccumulator<Double> container;
+
+	protected PercentageMetric(
+			final Metrics metrics,
+			final String category,
+			final String name,
+			final String description,
+			final BiFunction<Integer, Integer, Double> resultFunction) {
+
 		CommonUtils.throwArgNull(name, "name");
+		container = metrics.getOrCreate(
+				new IntegerPairAccumulator.Config<>(category, name + APPENDIX, resultFunction)
+						.withDescription(description)
+						.withFormat(FloatFormats.FORMAT_3_1)
+		);
+	}
+
+	protected PercentageMetric(
+			final Metrics metrics,
+			final String category,
+			final String name,
+			final String description) {
+
+		this(metrics, category, name, description, PercentageMetric::calculatePercentage);
+	}
+
+	/**
+	 * Atomically update the left and right value
+	 *
+	 * @param leftValue the left value
+	 * @param rightValue the right value
+	 */
+	protected void update(final int leftValue, final int rightValue) {
+		container.update(leftValue, rightValue);
 	}
 
 	public static double calculatePercentage(final int total, final int part){
@@ -37,5 +71,14 @@ public abstract class PercentageMetric extends Metric {
 			return 0;
 		}
 		return (((double) part) / total) * PERCENT;
+	}
+
+	/**
+	 * Returns the current value
+	 *
+	 * @return the current value
+	 */
+	public double get() {
+		return container.get();
 	}
 }

@@ -30,15 +30,19 @@ public class ChatterSubSetting extends SubSetting implements ChatterSettings {
 	/** @see #getChatterIntakeThrottle() */
 	public int chatterIntakeThrottle = 20;
 	/** @see #getOtherEventDelay() */
-	public Duration otherEventDelay = Duration.ofSeconds(1);
+	public Duration otherEventDelay = Duration.ofMillis(500);
 	/** @see #getSelfEventQueueCapacity() */
 	public int selfEventQueueCapacity = 1500;
 	/** @see #getOtherEventQueueCapacity() */
 	public int otherEventQueueCapacity = 45000;
 	/** @see #getDescriptorQueueCapacity() */
 	public int descriptorQueueCapacity = 45000;
+	/** @see #getProcessingTimeInterval() */
+	public Duration processingTimeInterval = Duration.ofMillis(100);
 	/** @see #getHeartbeatInterval() */
 	public Duration heartbeatInterval = Duration.ofSeconds(1);
+	/** @see #getFutureGenerationLimit() */
+	public int futureGenerationLimit = 100_000;
 
 	@Override
 	public boolean isChatterUsed() {
@@ -81,7 +85,17 @@ public class ChatterSubSetting extends SubSetting implements ChatterSettings {
 	}
 
 	@Override
+	public Duration getProcessingTimeInterval() {
+		return processingTimeInterval;
+	}
+
+	@Override
 	public Duration getHeartbeatInterval() {
 		return heartbeatInterval;
+	}
+
+	@Override
+	public int getFutureGenerationLimit() {
+		return futureGenerationLimit;
 	}
 }

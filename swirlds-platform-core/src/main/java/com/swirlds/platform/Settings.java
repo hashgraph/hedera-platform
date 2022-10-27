@@ -31,6 +31,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -48,6 +49,81 @@ import static com.swirlds.common.io.utility.FileUtils.rethrowIO;
 import static com.swirlds.common.settings.ParsingUtils.parseDuration;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STARTUP;
+import static com.swirlds.platform.SettingConstants.APPS_STRING;
+import static com.swirlds.platform.SettingConstants.BUFFER_SIZE_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.CALLER_SKIPS_BEFORE_SLEEP_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.CHECK_SIGNED_STATE_FROM_DISK_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.COIN_FREQ_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.CONFIG_TXT;
+import static com.swirlds.platform.SettingConstants.CVS_APPEND_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.CVS_FILE_NAME_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.CVS_OUTPUT_FOLDER_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.CVS_WRITE_FREQUENCY_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.DATA_STRING;
+import static com.swirlds.platform.SettingConstants.DEADLOCK_CHECK_PERIOD_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.DELAY_SHUFFLE_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.DO_UPNP_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.ENABLE_BETA_MIRROR_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.ENABLE_EVENT_STREAMING_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.ENABLE_STATE_RECOVERY_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.EVENTS_LOG_DIR_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.EVENTS_LOG_PERIOD_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.EVENT_INTAKE_QUEUE_SIZE_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.EVENT_INTAKE_QUEUE_THROTTLE_SIZE_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.EVENT_STREAM_QUEUE_CAPACITY_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.FREEZE_SECONDS_AFTER_STARTUP_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.GOSSIP_WITH_DIFFERENT_VERSIONS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.HALF_LIFE_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.JVM_PAUSE_DETECTOR_SLEEP_MS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.JVM_PAUSE_REPORT_MS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.KEYS_STRING;
+import static com.swirlds.platform.SettingConstants.LOAD_KEYS_FROM_PFX_FILES_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.LOG4J2_CONFIG_FILE;
+import static com.swirlds.platform.SettingConstants.LOG_STACK_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.MAX_ADDRESS_SIZE_ALLOWED_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.MAX_EVENT_QUEUE_FOR_CONS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.MAX_INCOMING_SYNCS_INC_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.MAX_OUTGOING_SYNCS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.MAX_TRANSACTION_BYTES_PER_EVENT_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.MAX_TRANSACTION_COUNT_PER_EVENT_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.NUM_CONNECTIONS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.NUM_CRYPTO_THREADS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.PLAYBACK_END_TIME_STAMP_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.PLAYBACK_STREAM_FILE_DIRECTORY_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.RANDOM_EVENT_PROBABILITY_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.REQUIRE_STATE_LOAD_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.RESCUE_CHILDLESS_INVERSE_PROBABILITY_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.RUN_PAUSE_CHECK_TIMER_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.SETTINGS_TXT;
+import static com.swirlds.platform.SettingConstants.SHOW_INTERNAL_STATS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.SIGNED_STATE_FREQ_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.SLEEP_CALLER_SKIPS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.SLEEP_HEARTBEAT_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.SOCKET_IP_TOS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.STALE_EVENT_PREVENTION_THRESHOLD_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.STATS_BUFFER_SIZE_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.STATS_RECENT_SECONDS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.STATS_SKIP_SECONDS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.TCP_NO_DELAY_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.THREAD_DUMP_LOG_DIR_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.THREAD_DUMP_PERIOD_MS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.THREAD_PRIORITY_NON_SYNC_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.THREAD_PRIORITY_SYNC_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.THROTTLE_7_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.THROTTLE_7_EXTRA_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.THROTTLE_7_MAX_BYTES_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.THROTTLE_7_THRESHOLD_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.THROTTLE_TRANSACTION_QUEUE_SIZE_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.TIMEOUTT_SYNC_CLIENT_CONNECT_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.TIMEOUT_SERVER_ACCEPT_CONNECT_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.TIMEOUT_SYNC_CLIENT_SOCKET_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.TRANSACTION_MAX_BYTES_DEFAULT_VALUES;
+import static com.swirlds.platform.SettingConstants.TRANS_THROTTLE_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.USE_LOOPBACK_IP_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.USE_LTS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.VERBOSE_STATISTICS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.VERIFY_EVENT_SIGS_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.WAIT_AT_STARTUP_DEFAULT_VALUE;
 
 /**
  * This purely-static class holds global settings that control how the Platform and sync processes operate.
@@ -65,6 +141,7 @@ import static com.swirlds.logging.LogMarker.STARTUP;
  * (though only if settings.txt exists).
  */
 public class Settings {
+
 	// The following paths are for 4 files and 2 directories, such as:
 
 	// /FULL/PATH/sdk/config.txt
@@ -78,78 +155,72 @@ public class Settings {
 	// -XX:+HeapDumpOnOutOfMemoryError
 	// -Djavax.net.debug=ssl,handshake
 
-	/** path to config.txt (which might not exist) */
-	static final Path configPath = getAbsolutePath("config.txt");
-	/** path to settings.txt (which might not exist) */
-	static final Path settingsPath = getAbsolutePath("settings.txt");
-	/** name of the settings used file */
-	static final String settingsUsedFilename = "settingsUsed.txt";
-	/** the directory where the settings used file will be created on startup if and only if settings.txt exists */
-	static final Path settingsUsedDir = getAbsolutePath();
-	/** path to data/keys/ */
-	static final Path keysDirPath = getAbsolutePath().resolve("data").resolve("keys");
-	/** path to data/apps/ */
-	static final Path appsDirPath = getAbsolutePath().resolve("data").resolve("apps");
 	/** use this for all logging, as controlled by the optional data/log4j2.xml file */
 	private static final Logger log = LogManager.getLogger();
-	/** path to log4j2.xml (which might not exist) */
-	static Path logPath = rethrowIO(() -> getAbsolutePath("log4j2.xml"));
+	private static final Settings INSTANCE = new Settings();
+	/** path to config.txt (which might not exist) */
+	private final Path configPath = getAbsolutePath(CONFIG_TXT);
+	/** path to settings.txt (which might not exist) */
+	private final Path settingsPath = getAbsolutePath(SETTINGS_TXT);
+	/** the directory where the settings used file will be created on startup if and only if settings.txt exists */
+	private final Path settingsUsedDir = getAbsolutePath();
+	/** path to data/keys/ */
+	private final Path keysDirPath = getAbsolutePath().resolve(DATA_STRING).resolve(KEYS_STRING);
+	/** path to data/apps/ */
+	private final Path appsDirPath = getAbsolutePath().resolve(DATA_STRING).resolve(APPS_STRING);
+
 
 	///////////////////////////////////////////
 	// settings from settings.txt file
-
+	/** priority for threads that don't sync (all but SyncCaller, SyncListener,SyncServer */
+	private final int threadPriorityNonSync = THREAD_PRIORITY_NON_SYNC_DEFAULT_VALUE;
+	/** path to log4j2.xml (which might not exist) */
+	private Path logPath = rethrowIO(() -> getAbsolutePath(LOG4J2_CONFIG_FILE));
 	/** verify event signatures (rather than just trusting they are correct)? */
-	static boolean verifyEventSigs = true;
+	private boolean verifyEventSigs = VERIFY_EVENT_SIGS_DEFAULT_VALUE;
 	/** number of threads used to verify signatures and generate keys, in parallel */
-	static int numCryptoThreads = 32;
-
+	private int numCryptoThreads = NUM_CRYPTO_THREADS_DEFAULT_VALUE;
 	/** show the user all statistics, including those with category "internal"? */
-	static boolean showInternalStats = false;
+	private boolean showInternalStats = SHOW_INTERNAL_STATS_DEFAULT_VALUE;
 	/** show expand statistics values, inlcude mean, min, max, stdDev */
-	static boolean verboseStatistics = false;
-
-	/** settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors */
-	public static StateSettings state = new StateSettings();
-
+	private boolean verboseStatistics = VERBOSE_STATISTICS_DEFAULT_VALUE;
 	/** if set to true, the platform will fail to start if it fails to load a state from disk */
-	static boolean requireStateLoad = false;
+	private boolean requireStateLoad = REQUIRE_STATE_LOAD_DEFAULT_VALUE;
 	/**
 	 * hash and sign a state every signedStateFreq rounds. 1 means that a state will be signed every round, 2 means
 	 * every other round, and so on. If the value is 0 or less, no states will be signed
 	 */
-	static int signedStateFreq = 1;
+	private int signedStateFreq = SIGNED_STATE_FREQ_DEFAULT_VALUE;
 	/** max events that can be put in the forCons queue (q2) in ConsensusRoundHandler (0 for infinity) */
-	static int maxEventQueueForCons = 500;
+	private int maxEventQueueForCons = MAX_EVENT_QUEUE_FOR_CONS_DEFAULT_VALUE;
 	/**
 	 * Stop accepting new non-system transactions into the 4 transaction queues if any of them have more
 	 * than this many.
 	 */
-	static int throttleTransactionQueueSize = 100_000;
-
+	private int throttleTransactionQueueSize = THROTTLE_TRANSACTION_QUEUE_SIZE_DEFAULT_VALUE;
 	/**
 	 * on startup, only Alice can create an event with no otherParent, and all other members will refrain
 	 * from creating an event until they have received at least one event
 	 */
-	static boolean waitAtStartup = false;
+	private boolean waitAtStartup = WAIT_AT_STARTUP_DEFAULT_VALUE;
 	/**
 	 * should we slow down when not behind? One of N members is "falling behind" when it receives at least
 	 * (N + throttle7threshold) events during a sync.
 	 */
-	static boolean throttle7 = false;
+	private boolean throttle7 = THROTTLE_7_DEFAULT_VALUE;
 	/**
 	 * "falling behind" if received at least N * throttle7threshold events in a sync. A good choice for this
 	 * constant might be 1+2*d if a fraction d of received events are duplicates.
 	 */
-	static double throttle7threshold = 1.5;
+	private double throttle7threshold = THROTTLE_7_THRESHOLD_DEFAULT_VALUE;
 	/** if a sync has neither party falling behind, increase the bytes sent by this fraction */
-	static double throttle7extra = 0.05;
+	private double throttle7extra = THROTTLE_7_EXTRA_DEFAULT_VALUE;
 	/** the maximum number of slowdown bytes to be sent during a sync */
-	static int throttle7maxBytes = 100 * 1024 * 1024;
-
+	private int throttle7maxBytes = THROTTLE_7_MAX_BYTES_DEFAULT_VALUE;
 	/** number of connections maintained by each member (syncs happen on random connections from that set */
-	static int numConnections = 40; // probably 40 is a good number
+	private int numConnections = NUM_CONNECTIONS_DEFAULT_VALUE; // probably 40 is a good number
 	/** maximum number of simultaneous outgoing syncs initiated by me */
-	static int maxOutgoingSyncs = 2;
+	private int maxOutgoingSyncs = MAX_OUTGOING_SYNCS_DEFAULT_VALUE;
 	/**
 	 * maximum number of simultaneous incoming syncs initiated by others, minus maxOutgoingSyncs. If there
 	 * is a moment where each member has maxOutgoingSyncs outgoing syncs in progress, then a fraction of at
@@ -163,11 +234,9 @@ public class Settings {
 	 * possible to find a partner to sync with in about (maxOutgoingSyncs + maxIncomingSyncsInc) tries, on
 	 * average.
 	 */
-	static int maxIncomingSyncsInc = 1;
-
+	private int maxIncomingSyncsInc = MAX_INCOMING_SYNCS_INC_DEFAULT_VALUE;
 	/** for BufferedInputStream and BufferedOutputStream for syncing */
-	static int bufferSize = 8 * 1024;
-
+	private int bufferSize = BUFFER_SIZE_DEFAULT_VALUE;
 	/**
 	 * The IP_TOS to set for a socket, from 0 to 255, or -1 to not set one. This number (if not -1) will be
 	 * part of every TCP/IP packet, and is normally ignored by internet routers, but it is possible to make
@@ -176,148 +245,95 @@ public class Settings {
 	 *
 	 * @see <a href="https://en.wikipedia.org/wiki/Type_of_service">Type of Service</a>
 	 */
-	static int socketIpTos = -1;
-
+	private int socketIpTos = SOCKET_IP_TOS_DEFAULT_VALUE;
 	/** half life of some of the various statistics (give half the weight to the last halfLife seconds) */
-	static double halfLife = 10;
+	private double halfLife = HALF_LIFE_DEFAULT_VALUE;
 	/** a coin round happens every coinFreq rounds during an election (every other one is all true) */
-	static int coinFreq = 12;
+	private int coinFreq = COIN_FREQ_DEFAULT_VALUE;
 	/** when converting an exception to a string for logging, should it include the stack trace? */
-	static boolean logStack = true;
+	private boolean logStack = LOG_STACK_DEFAULT_VALUE;
 	/** should TLS be turned on, rather than making all sockets unencrypted? */
-	static boolean useTLS = true;
+	private boolean useTLS = USE_LTS_DEFAULT_VALUE;
 	/** should this set up uPnP port forwarding on the router once every 60 seconds? */
-	static boolean doUpnp = true;
+	private boolean doUpnp = DO_UPNP_DEFAULT_VALUE;
 	/** should be set to true when using the internet simulator */
-	static boolean useLoopbackIp = true;
-
+	private boolean useLoopbackIp = USE_LOOPBACK_IP_DEFAULT_VALUE;
 	/** if true, then Nagel's algorithm is disabled, which helps latency, hurts bandwidth usage */
-	static boolean tcpNoDelay = true;
+	private boolean tcpNoDelay = TCP_NO_DELAY_DEFAULT_VALUE;
 	/** timeout when waiting for data */
-	static int timeoutSyncClientSocket = 5_000;
+	private int timeoutSyncClientSocket = TIMEOUT_SYNC_CLIENT_SOCKET_DEFAULT_VALUE;
 	/** timeout when establishing a connection */
-	static int timeoutSyncClientConnect = 5_000;
+	private int timeoutSyncClientConnect = TIMEOUTT_SYNC_CLIENT_CONNECT_DEFAULT_VALUE;
 	/** timeout when server is waiting for another member to create a connection */
-	static int timeoutServerAcceptConnect = 5_000;
+	private int timeoutServerAcceptConnect = TIMEOUT_SERVER_ACCEPT_CONNECT_DEFAULT_VALUE;
 	/** check for deadlocks every this many milliseconds (-1 for never) */
-	static int deadlockCheckPeriod = 1000;
-	/** update some statistics every this many milliseconds (-1 for never) */
-	static int statUpdatePeriod = 1000;
-
+	private int deadlockCheckPeriod = DEADLOCK_CHECK_PERIOD_DEFAULT_VALUE;
 	/** send a heartbeat byte on each comm channel to keep it open, every this many milliseconds */
-	static int sleepHeartbeat = 500;
+	private int sleepHeartbeat = SLEEP_HEARTBEAT_DEFAULT_VALUE;
 	/**
 	 * the working state (stateWork) resets to a copy of the consensus state (stateCons) (which is called a
 	 * shuffle) when its queue is empty and the two are equal, but never twice within this many milliseconds
 	 */
-	static long delayShuffle = 200;
-
+	private long delayShuffle = DELAY_SHUFFLE_DEFAULT_VALUE;
 	/** sleep sleepCallerSkips ms after the caller fails this many times to call a random member */
-	static long callerSkipsBeforeSleep = 30;
+	private long callerSkipsBeforeSleep = CALLER_SKIPS_BEFORE_SLEEP_DEFAULT_VALUE;
 	/** caller sleeps this many milliseconds if it failed to connect to callerSkipsBeforeSleep in a row */
-	static long sleepCallerSkips = 50;
-
+	private long sleepCallerSkips = SLEEP_CALLER_SKIPS_DEFAULT_VALUE;
 	/** number of bins to store for the history (in StatsBuffer etc.) */
-	static int statsBufferSize = 100;
+	private int statsBufferSize = STATS_BUFFER_SIZE_DEFAULT_VALUE;
 	/** number of seconds covered by "recent" history (in StatsBuffer etc.) */
-	static double statsRecentSeconds = 63;
+	private double statsRecentSeconds = STATS_RECENT_SECONDS_DEFAULT_VALUE;
 	/** number of seconds that the "all" history window skips at the start */
-	static double statsSkipSeconds = 60;
+	private double statsSkipSeconds = STATS_SKIP_SECONDS_DEFAULT_VALUE;
 	/** priority for threads that sync (in SyncCaller, SyncListener, SyncServer) */
-	static int threadPrioritySync = Thread.NORM_PRIORITY;// Thread.MAX_PRIORITY;
-	/** priority for threads that don't sync (all but SyncCaller, SyncListener,SyncServer */
-	public static int threadPriorityNonSync = Thread.NORM_PRIORITY;
+	private int threadPrioritySync = THREAD_PRIORITY_SYNC_DEFAULT_VALUE;// Thread.MAX_PRIORITY;
 	/** maximum number of bytes allowed in a transaction */
-	static int transactionMaxBytes = 6144;
+	private int transactionMaxBytes = TRANSACTION_MAX_BYTES_DEFAULT_VALUES;
 	/** the maximum number of address allowed in a address book, the same as the maximum allowed network size */
-	static int maxAddressSizeAllowed = 1024;
-
+	private int maxAddressSizeAllowed = MAX_ADDRESS_SIZE_ALLOWED_DEFAULT_VALUE;
 	/**
 	 * do not create events for this many seconds after the platform has started (0 or less to not freeze at
 	 * startup)
 	 */
-	static int freezeSecondsAfterStartup = 10;
-
-	/** settings related to the {@link com.swirlds.common.crypto.Cryptography} implementation */
-	static CryptoSettings crypto = new CryptoSettings();
-
+	private int freezeSecondsAfterStartup = FREEZE_SECONDS_AFTER_STARTUP_DEFAULT_VALUE;
 	/**
 	 * When enabled, the platform will try to load node keys from .pfx files located in {@link #keysDirPath}. If even a
 	 * single key is missing, the platform will warn and exit.
 	 *
 	 * If disabled, the platform will generate keys deterministically.
 	 */
-	static boolean loadKeysFromPfxFiles = true;
-
+	private boolean loadKeysFromPfxFiles = LOAD_KEYS_FROM_PFX_FILES_DEFAULT_VALUE;
 	/**
 	 * the maximum number of bytes that a single event may contain not including the event headers
 	 * if a single transaction exceeds this limit then the event will contain the single transaction only
 	 */
-	static int maxTransactionBytesPerEvent = 245760;
-
+	private int maxTransactionBytesPerEvent = MAX_TRANSACTION_BYTES_PER_EVENT_DEFAULT_VALUE;
 	/** the maximum number of transactions that a single event may contain */
-	static int maxTransactionCountPerEvent = 245760;
-
-	/**
-	 * settings controlling the reconnect feature, ie. enabled/disabled, fallen behind, etc
-	 */
-	static ReconnectSettingsImpl reconnect = new ReconnectSettingsImpl();
-
-	/**
-	 * Settings controlling FCHashMap.
-	 */
-	static FCHashMapSettingsImpl fcHashMap = new FCHashMapSettingsImpl();
-
-	/**
-	 * Settings controlling VirtualMap.
-	 */
-	static VirtualMapSettingsImpl virtualMap = new VirtualMapSettingsImpl();
-
-	/**
-	 * Settings controlling address books and related components.
-	 */
-	static AddressBookSettingsImpl addressBook = new AddressBookSettingsImpl();
-
-	/**
-	 * Settings controlling JasperDB.
-	 */
-	static JasperDbSettingsImpl jasperDb = new JasperDbSettingsImpl();
-
-	/**
-	 * Settings for temporary files.
-	 */
-	static TemporaryFileSettingsImpl temporaryFiles = new TemporaryFileSettingsImpl();
-
+	private int maxTransactionCountPerEvent = MAX_TRANSACTION_COUNT_PER_EVENT_DEFAULT_VALUE;
 	/**
 	 * if on, transThrottle will stop initiating syncs and thus stop generating events if the are no non consensus user
 	 * transactions. If states are being saved to disk, it will only stop after all user transactions have been handled
 	 * by a state that has been saved to disk.
 	 */
-	static boolean transThrottle = true;
-
+	private boolean transThrottle = TRANS_THROTTLE_DEFAULT_VALUE;
 	/**
 	 * The absolute or relative folder path where all the statistics CSV files will be written. If this value is null or
 	 * an empty string, the current folder selection behavior will be used (ie: the SDK base path).
 	 */
-	static String csvOutputFolder = "";
-
+	private String csvOutputFolder = CVS_OUTPUT_FOLDER_DEFAULT_VALUE;
 	/**
 	 * The prefix of the name of the CSV file that the platform will write statistics to. If this value is null or an
 	 * empty string, the platform will not write any statistics.
 	 */
-	static String csvFileName = "";
-
+	private String csvFileName = CVS_FILE_NAME_DEFAULT_VALUE;
 	/**
 	 * The frequency, in milliseconds, at which values are written to the statistics CSV file.
 	 */
-	static int csvWriteFrequency = 3000;
-
+	private int csvWriteFrequency = CVS_WRITE_FREQUENCY_DEFAULT_VALUE;
 	/** Indicates whether statistics should be appended to the CSV file. */
-	static boolean csvAppend = false;
-
+	private boolean csvAppend = CVS_APPEND_DEFAULT_VALUE;
 	/** The value for the event intake queue at which the node should stop syncing */
-	static int eventIntakeQueueThrottleSize = 1000;
-
+	private int eventIntakeQueueThrottleSize = EVENT_INTAKE_QUEUE_THROTTLE_SIZE_DEFAULT_VALUE;
 	/**
 	 * The size of the event intake queue,
 	 * {@link QueueThreadConfiguration#UNLIMITED_CAPACITY} for unbounded.
@@ -326,14 +342,12 @@ public class Settings {
 	 * #eventIntakeQueueThrottleSize}, because syncs that started before the throttle engages can grow the queue to very
 	 * large sizes on larger networks.
 	 */
-	static int eventIntakeQueueSize = 10_000;
-
+	private int eventIntakeQueueSize = EVENT_INTAKE_QUEUE_SIZE_DEFAULT_VALUE;
 	/**
 	 * If true, the platform will recalculate the hash of the signed state and check it against the written hash. It
 	 * will also verify that the signatures are valid.
 	 */
-	static boolean checkSignedStateFromDisk = false;
-
+	private boolean checkSignedStateFromDisk = CHECK_SIGNED_STATE_FROM_DISK_DEFAULT_VALUE;
 	/**
 	 * The probability that after a sync, a node will create an event with a random other parent. The probability is
 	 * is 1 in X, where X is the value of randomEventProbability. A value of 0 means that a node will not create any
@@ -341,84 +355,108 @@ public class Settings {
 	 *
 	 * This feature is used to get consensus on events with no descendants which are created by nodes who go offline.
 	 */
-	static int randomEventProbability = 0;
-
+	private int randomEventProbability = RANDOM_EVENT_PROBABILITY_DEFAULT_VALUE;
 	/**
 	 * A setting used to prevent a node from generating events that will probably become stale. This value is
 	 * multiplied by the address book size and compared to the number of events received in a sync.
 	 * If ( numEventsReceived > staleEventPreventionThreshold * addressBookSize ) then we will not create an event for
 	 * that sync, to reduce the probability of creating an event that will become stale.
 	 */
-	static int staleEventPreventionThreshold = 5;
-
+	private int staleEventPreventionThreshold = STALE_EVENT_PREVENTION_THRESHOLD_DEFAULT_VALUE;
 	/**
 	 * The probability that we will create a child for a childless event.
 	 * The probability is 1 / X, where X is the value of rescueChildlessInverseProbability. A value of 0 means
 	 * that a node will not create any children for childless events.
 	 */
-	static int rescueChildlessInverseProbability = 10;
-
-	/** Run a thread that checks if the JVM pauses for a long time */
-	static boolean runPauseCheckTimer = false;
+	private int rescueChildlessInverseProbability = RESCUE_CHILDLESS_INVERSE_PROBABILITY_DEFAULT_VALUE;
 
 	///////////////////////////////////////////
 	// Beta Mirror Nodes
-
-	/** enables or disables beta mirror node support including zero stake support */
-	static boolean enableBetaMirror = false;
+	/** Run a thread that checks if the JVM pauses for a long time */
+	private boolean runPauseCheckTimer = RUN_PAUSE_CHECK_TIMER_DEFAULT_VALUE;
 
 	///////////////////////////////////////////
 	// Setting for stream event
-
+	/** enables or disables beta mirror node support including zero stake support */
+	private boolean enableBetaMirror = ENABLE_BETA_MIRROR_DEFAULT_VALUE;
 	/** enable stream event to server */
-	static boolean enableEventStreaming = false;
-
+	private boolean enableEventStreaming = ENABLE_EVENT_STREAMING_DEFAULT_VALUE;
 	/** capacity of the blockingQueue from which we take events and write to EventStream files */
-	static int eventStreamQueueCapacity = 500;
-
+	private int eventStreamQueueCapacity = EVENT_STREAM_QUEUE_CAPACITY_DEFAULT_VALUE;
 	/** period of generating eventStream file */
-	static long eventsLogPeriod = 60;
-
-	/** eventStream files will be generated in this directory */
-	static String eventsLogDir = "./eventstreams";
+	private long eventsLogPeriod = EVENTS_LOG_PERIOD_DEFAULT_VALUE;
 
 	///////////////////////////////////////////
 	// Setting for thread dump
+	/** eventStream files will be generated in this directory */
+	private String eventsLogDir = EVENTS_LOG_DIR_DEFAULT_VALUE;
 	/** period of generating thread dump file in the unit of milliseconds */
-	static long threadDumpPeriodMs = 0;
-
-	/** thread dump files will be generated in this directory */
-	static String threadDumpLogDir = "data/threadDump";
+	private long threadDumpPeriodMs = THREAD_DUMP_PERIOD_MS_DEFAULT_VALUE;
 
 	///////////////////////////////////////////
 	// Setting for JVMPauseDetectorThread
+	/** thread dump files will be generated in this directory */
+	private String threadDumpLogDir = THREAD_DUMP_LOG_DIR_DEFAULT_VALUE;
 	/** period of JVMPauseDetectorThread sleeping in the unit of milliseconds */
-	static int JVMPauseDetectorSleepMs = 1000;
-
+	private int JVMPauseDetectorSleepMs = JVM_PAUSE_DETECTOR_SLEEP_MS_DEFAULT_VALUE;
 	/** log an error when JVMPauseDetectorThread detect a pause greater than this many milliseconds */
-	static int JVMPauseReportMs = 1000;
-
+	private int JVMPauseReportMs = JVM_PAUSE_REPORT_MS_DEFAULT_VALUE;
 	///////////////////////////////////////////
 	// Setting for state recover
-	static boolean enableStateRecovery = false;
+	private boolean enableStateRecovery = ENABLE_STATE_RECOVERY_DEFAULT_VALUE;
 	/** directory where event stream files are stored */
-	static String playbackStreamFileDirectory = "";
+	private String playbackStreamFileDirectory = PLAYBACK_STREAM_FILE_DIRECTORY_DEFAULT_VALUE;
 	/** last time stamp (inclusive) to stop the playback, format is "2019-10-02T19:46:30.037063163Z" */
-	static String playbackEndTimeStamp = "";
-
-	/** All chatter related settings */
-	static ChatterSubSetting chatter = new ChatterSubSetting();
-
+	private String playbackEndTimeStamp = PLAYBACK_END_TIME_STAMP_DEFAULT_VALUE;
 	/**
 	 * if set to false, the platform will refuse to gossip with a node which has a different version of either
 	 * platform or application
 	 */
-	static boolean gossipWithDifferentVersions = false;
+	private boolean gossipWithDifferentVersions = GOSSIP_WITH_DIFFERENT_VERSIONS_DEFAULT_VALUE;
+	/** settings that control the {@link SignedStateManager} and {@link SignedStateFileManager} behaviors */
+	private StateSettings state = new StateSettings();
+	/** settings related to the {@link com.swirlds.common.crypto.Cryptography} implementation */
+	private CryptoSettings crypto = new CryptoSettings();
+	/**
+	 * settings controlling the reconnect feature, ie. enabled/disabled, fallen behind, etc
+	 */
+	private ReconnectSettingsImpl reconnect = new ReconnectSettingsImpl();
+	/**
+	 * Settings controlling FCHashMap.
+	 */
+	private FCHashMapSettingsImpl fcHashMap = new FCHashMapSettingsImpl();
+	/**
+	 * Settings controlling VirtualMap.
+	 */
+	private VirtualMapSettingsImpl virtualMap = new VirtualMapSettingsImpl();
+	/**
+	 * Settings controlling address books and related components.
+	 */
+	private AddressBookSettingsImpl addressBook = new AddressBookSettingsImpl();
+	/**
+	 * Settings controlling JasperDB.
+	 */
+	private JasperDbSettingsImpl jasperDb = new JasperDbSettingsImpl();
+	/**
+	 * Settings for temporary files.
+	 */
+	private TemporaryFileSettingsImpl temporaryFiles = new TemporaryFileSettingsImpl();
+	/** All chatter related settings */
+	private ChatterSubSetting chatter = new ChatterSubSetting();
 
 	private Settings() {
 	}
 
-	static void writeSettingsUsed() {
+	public static Settings getInstance() {
+		return INSTANCE;
+	}
+
+	public static void main(final String[] args) {
+		getInstance().loadSettings();
+		getInstance().writeSettingsUsed();
+	}
+
+	public void writeSettingsUsed() {
 		writeSettingsUsed(settingsUsedDir);
 	}
 
@@ -428,9 +466,10 @@ public class Settings {
 	 * @param directory
 	 * 		the directory to write to
 	 */
-	public static void writeSettingsUsed(final Path directory) {
-		final String[][] settings = Settings.currSettings();
-		try (final BufferedWriter writer = Files.newBufferedWriter(directory.resolve(settingsUsedFilename))) {
+	public void writeSettingsUsed(final Path directory) {
+		final String[][] settings = currSettings();
+		try (final BufferedWriter writer =
+					 Files.newBufferedWriter(directory.resolve(SettingConstants.SETTING_USED_FILENAME))) {
 			writer.write(PlatformVersion.locateOrDefault().license());
 			writer.write(System.lineSeparator());
 			writer.write(System.lineSeparator());
@@ -450,13 +489,6 @@ public class Settings {
 	}
 
 	/**
-	 * @return true if the settings.txt file exists
-	 */
-	static boolean settingsTxtExists() {
-		return Files.exists(Settings.settingsPath);
-	}
-
-	/**
 	 * If the sdk/data/settings.txt file exists, then load settings from it. If it doesn't exist, keep the
 	 * existing settings. If it exists but a setting is missing, keep the default value for it. If a setting
 	 * is given multiple times, use the last one. If the file contains a setting name that doesn't exist,
@@ -465,22 +497,32 @@ public class Settings {
 	 * It is intended that this file will not normally exist. Most settings should be controlled by the
 	 * defaults set in this source file. The settings.txt file is only used for testing and debugging.
 	 */
-	static void loadSettings() {
+	public void loadSettings() {
+		loadSettings(settingsPath.toFile());
+	}
+
+	public void loadSettings(final Path path) {
+		CommonUtils.throwArgNull(path, "path");
+		loadSettings(path.toFile());
+	}
+
+	public void loadSettings(final File settingsFile) {
+		CommonUtils.throwArgNull(settingsFile, "settingsFile");
 		final Scanner scanner;
-		if (!settingsTxtExists()) {
+		if (!Files.exists(settingsFile.toPath())) {
 			return; // normally, the file won't exist, so the defaults are used.
 		}
 
 		try {
-			scanner = new Scanner(Settings.settingsPath.toFile(), StandardCharsets.UTF_8.name());
+			scanner = new Scanner(settingsFile, StandardCharsets.UTF_8.name());
 		} catch (final FileNotFoundException e) { // this should never happen
-			CommonUtils.tellUserConsole("The file " + Settings.settingsPath
+			CommonUtils.tellUserConsole("The file " + Settings.getInstance().getSettingsPath()
 					+ " exists, but can't be opened. " + e);
 			return;
 		}
 
 		CommonUtils.tellUserConsole("Reading the settings from the file:        "
-				+ Settings.settingsPath);
+				+ settingsFile.getAbsolutePath());
 
 		int count = 0;
 		while (scanner.hasNextLine()) {
@@ -519,7 +561,7 @@ public class Settings {
 	/**
 	 * validate the settings read in from the settings.txt file
 	 */
-	static void validateSettings() {
+	private void validateSettings() {
 		// if the settings allow a transaction larger than the maximum event size
 		if (maxTransactionBytesPerEvent < transactionMaxBytes) {
 			log.error(STARTUP.getMarker(), "Settings Mismatch: transactionMaxBytes ({}) is larger than " +
@@ -539,7 +581,7 @@ public class Settings {
 	 * 		the parameters on that line, split by commas
 	 * @return true if the line is a valid setting assignment
 	 */
-	static boolean handleSetting(final String[] pars) {
+	private boolean handleSetting(final String[] pars) {
 		String name = pars[0];
 		String subName = null;
 		if (name.contains(".")) {
@@ -554,11 +596,11 @@ public class Settings {
 		if (field != null && !Modifier.isFinal(field.getModifiers())) {
 			try {
 				if (subName == null) {
-					good = setValue(field, null, val);
+					good = setValue(field, this, val);
 				} else {
 					final Field subField = getFieldByName(field.getType().getDeclaredFields(), subName);
 					if (subField != null) {
-						good = setValue(subField, field.get(Settings.class), val);
+						good = setValue(subField, field.get(this), val);
 					}
 				}
 			} catch (final IllegalArgumentException | IllegalAccessException | SettingsException e) {
@@ -587,7 +629,7 @@ public class Settings {
 	 * 		the name of the field to look for
 	 * @return the field with the name supplied, or null if such a field cannot be found
 	 */
-	static Field getFieldByName(final Field[] fields, final String name) {
+	private Field getFieldByName(final Field[] fields, final String name) {
 		for (final Field f : fields) {
 			if (f.getName().equalsIgnoreCase(name)) {
 				return f;
@@ -610,7 +652,7 @@ public class Settings {
 	 * 		if this Field object is enforcing Java language access control and the
 	 * 		underlying field is either inaccessible or final.
 	 */
-	static boolean setValue(final Field field, final Object object, final String value) throws IllegalAccessException {
+	private boolean setValue(final Field field, final Object object, final String value) throws IllegalAccessException {
 		final Class<?> t = field.getType();
 		if (t == String.class) {
 			field.set(object, value);
@@ -652,7 +694,7 @@ public class Settings {
 	 *
 	 * @return the current settings
 	 */
-	static String[][] currSettings() {
+	private String[][] currSettings() {
 		final Field[] fields = Settings.class.getDeclaredFields();
 		final List<String[]> list = new ArrayList<>();
 		for (final Field f : fields) {
@@ -662,14 +704,14 @@ public class Settings {
 					if (SubSetting.class.isAssignableFrom(f.getType())) {
 						final Field[] subFields = f.getType().getDeclaredFields();
 						for (final Field subField : subFields) {
-							final Object subFieldValue = subField.get(f.get(Settings.class));
+							final Object subFieldValue = subField.get(f.get(this));
 							list.add(new String[] {
 									f.getName() + "." + subField.getName(),
 									subFieldValue == null ? "null" : subFieldValue.toString()
 							});
 						}
 					} else {
-						list.add(new String[] { f.getName(), f.get(null).toString() });
+						list.add(new String[] { f.getName(), f.get(this).toString() });
 					}
 				} catch (final IllegalArgumentException | IllegalAccessException e) {
 					log.error(EXCEPTION.getMarker(),
@@ -680,9 +722,368 @@ public class Settings {
 		return list.toArray(new String[0][0]);
 	}
 
-	public static void main(final String[] args) {
-		loadSettings();
-		writeSettingsUsed();
+	public Path getConfigPath() {
+		return configPath;
+	}
+
+	public Path getSettingsPath() {
+		return settingsPath;
+	}
+
+	public Path getKeysDirPath() {
+		return keysDirPath;
+	}
+
+	public Path getAppsDirPath() {
+		return appsDirPath;
+	}
+
+	public Path getLogPath() {
+		return logPath;
+	}
+
+	public void setLogPath(final Path logPath) {
+		this.logPath = logPath;
+	}
+
+	public boolean isVerifyEventSigs() {
+		return verifyEventSigs;
+	}
+
+	public int getNumCryptoThreads() {
+		return numCryptoThreads;
+	}
+
+	public boolean isShowInternalStats() {
+		return showInternalStats;
+	}
+
+	public boolean isVerboseStatistics() {
+		return verboseStatistics;
+	}
+
+	public StateSettings getState() {
+		return state;
+	}
+
+	public boolean isRequireStateLoad() {
+		return requireStateLoad;
+	}
+
+	public int getSignedStateFreq() {
+		return signedStateFreq;
+	}
+
+	public int getMaxEventQueueForCons() {
+		return maxEventQueueForCons;
+	}
+
+	public int getThrottleTransactionQueueSize() {
+		return throttleTransactionQueueSize;
+	}
+
+	public boolean isWaitAtStartup() {
+		return waitAtStartup;
+	}
+
+	public void setWaitAtStartup(final boolean waitAtStartup) {
+		this.waitAtStartup = waitAtStartup;
+	}
+
+	public boolean isThrottle7() {
+		return throttle7;
+	}
+
+	public double getThrottle7threshold() {
+		return throttle7threshold;
+	}
+
+	public double getThrottle7extra() {
+		return throttle7extra;
+	}
+
+	public int getThrottle7maxBytes() {
+		return throttle7maxBytes;
+	}
+
+	public int getNumConnections() {
+		return numConnections;
+	}
+
+	public int getMaxOutgoingSyncs() {
+		return maxOutgoingSyncs;
+	}
+
+	public void setMaxOutgoingSyncs(final int maxOutgoingSyncs) {
+		this.maxOutgoingSyncs = maxOutgoingSyncs;
+	}
+
+	public int getMaxIncomingSyncsInc() {
+		return maxIncomingSyncsInc;
+	}
+
+	public void setMaxIncomingSyncsInc(final int maxIncomingSyncsInc) {
+		this.maxIncomingSyncsInc = maxIncomingSyncsInc;
+	}
+
+	public int getBufferSize() {
+		return bufferSize;
+	}
+
+	public int getSocketIpTos() {
+		return socketIpTos;
+	}
+
+	public void setSocketIpTos(final int socketIpTos) {
+		this.socketIpTos = socketIpTos;
+	}
+
+	public double getHalfLife() {
+		return halfLife;
+	}
+
+	public int getCoinFreq() {
+		return coinFreq;
+	}
+
+	public boolean isLogStack() {
+		return logStack;
+	}
+
+	public boolean isUseTLS() {
+		return useTLS;
+	}
+
+	public void setUseTLS(final boolean useTLS) {
+		this.useTLS = useTLS;
+	}
+
+	public boolean isDoUpnp() {
+		return doUpnp;
+	}
+
+	public boolean isUseLoopbackIp() {
+		return useLoopbackIp;
+	}
+
+	public boolean isTcpNoDelay() {
+		return tcpNoDelay;
+	}
+
+	public int getTimeoutSyncClientSocket() {
+		return timeoutSyncClientSocket;
+	}
+
+	public int getTimeoutSyncClientConnect() {
+		return timeoutSyncClientConnect;
+	}
+
+	public int getTimeoutServerAcceptConnect() {
+		return timeoutServerAcceptConnect;
+	}
+
+	public int getDeadlockCheckPeriod() {
+		return deadlockCheckPeriod;
+	}
+
+	public int getSleepHeartbeat() {
+		return sleepHeartbeat;
+	}
+
+	public long getDelayShuffle() {
+		return delayShuffle;
+	}
+
+	public long getCallerSkipsBeforeSleep() {
+		return callerSkipsBeforeSleep;
+	}
+
+	public long getSleepCallerSkips() {
+		return sleepCallerSkips;
+	}
+
+	public double getStatsSkipSeconds() {
+		return statsSkipSeconds;
+	}
+
+	public int getThreadPrioritySync() {
+		return threadPrioritySync;
+	}
+
+	public int getThreadPriorityNonSync() {
+		return threadPriorityNonSync;
+	}
+
+	public int getTransactionMaxBytes() {
+		return transactionMaxBytes;
+	}
+
+	public void setTransactionMaxBytes(final int transactionMaxBytes) {
+		this.transactionMaxBytes = transactionMaxBytes;
+	}
+
+	public int getMaxAddressSizeAllowed() {
+		return maxAddressSizeAllowed;
+	}
+
+	public int getFreezeSecondsAfterStartup() {
+		return freezeSecondsAfterStartup;
+	}
+
+	public CryptoSettings getCrypto() {
+		return crypto;
+	}
+
+	public boolean isLoadKeysFromPfxFiles() {
+		return loadKeysFromPfxFiles;
+	}
+
+	public int getMaxTransactionBytesPerEvent() {
+		return maxTransactionBytesPerEvent;
+	}
+
+	public int getMaxTransactionCountPerEvent() {
+		return maxTransactionCountPerEvent;
+	}
+
+	public ReconnectSettingsImpl getReconnect() {
+		return reconnect;
+	}
+
+	public FCHashMapSettingsImpl getFcHashMap() {
+		return fcHashMap;
+	}
+
+	public VirtualMapSettingsImpl getVirtualMap() {
+		return virtualMap;
+	}
+
+	public AddressBookSettingsImpl getAddressBook() {
+		return addressBook;
+	}
+
+	public JasperDbSettingsImpl getJasperDb() {
+		return jasperDb;
+	}
+
+	public TemporaryFileSettingsImpl getTemporaryFiles() {
+		return temporaryFiles;
+	}
+
+	public boolean isTransThrottle() {
+		return transThrottle;
+	}
+
+	public void setTransThrottle(final boolean transThrottle) {
+		this.transThrottle = transThrottle;
+	}
+
+	public String getCsvOutputFolder() {
+		return csvOutputFolder;
+	}
+
+	public String getCsvFileName() {
+		return csvFileName;
+	}
+
+	public int getCsvWriteFrequency() {
+		return csvWriteFrequency;
+	}
+
+	public boolean isCsvAppend() {
+		return csvAppend;
+	}
+
+	public int getEventIntakeQueueThrottleSize() {
+		return eventIntakeQueueThrottleSize;
+	}
+
+	public void setEventIntakeQueueThrottleSize(final int eventIntakeQueueThrottleSize) {
+		this.eventIntakeQueueThrottleSize = eventIntakeQueueThrottleSize;
+	}
+
+	public int getEventIntakeQueueSize() {
+		return eventIntakeQueueSize;
+	}
+
+	public boolean isCheckSignedStateFromDisk() {
+		return checkSignedStateFromDisk;
+	}
+
+	public int getRandomEventProbability() {
+		return randomEventProbability;
+	}
+
+	public int getStaleEventPreventionThreshold() {
+		return staleEventPreventionThreshold;
+	}
+
+	public void setStaleEventPreventionThreshold(final int staleEventPreventionThreshold) {
+		this.staleEventPreventionThreshold = staleEventPreventionThreshold;
+	}
+
+	public int getRescueChildlessInverseProbability() {
+		return rescueChildlessInverseProbability;
+	}
+
+	public boolean isRunPauseCheckTimer() {
+		return runPauseCheckTimer;
+	}
+
+	public boolean isEnableBetaMirror() {
+		return enableBetaMirror;
+	}
+
+	public boolean isEnableEventStreaming() {
+		return enableEventStreaming;
+	}
+
+	public int getEventStreamQueueCapacity() {
+		return eventStreamQueueCapacity;
+	}
+
+	public long getEventsLogPeriod() {
+		return eventsLogPeriod;
+	}
+
+	public String getEventsLogDir() {
+		return eventsLogDir;
+	}
+
+	public long getThreadDumpPeriodMs() {
+		return threadDumpPeriodMs;
+	}
+
+	public String getThreadDumpLogDir() {
+		return threadDumpLogDir;
+	}
+
+	public int getJVMPauseDetectorSleepMs() {
+		return JVMPauseDetectorSleepMs;
+	}
+
+	public int getJVMPauseReportMs() {
+		return JVMPauseReportMs;
+	}
+
+	public boolean isEnableStateRecovery() {
+		return enableStateRecovery;
+	}
+
+	public String getPlaybackStreamFileDirectory() {
+		return playbackStreamFileDirectory;
+	}
+
+	public String getPlaybackEndTimeStamp() {
+		return playbackEndTimeStamp;
+	}
+
+	public ChatterSubSetting getChatter() {
+		return chatter;
+	}
+
+	public boolean isGossipWithDifferentVersions() {
+		return gossipWithDifferentVersions;
 	}
 
 }

@@ -20,11 +20,11 @@ import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.utility.Clearable;
-import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.event.EventUtils;
+import com.swirlds.platform.internal.EventImpl;
+import com.swirlds.platform.metrics.ConsensusMetrics;
 import com.swirlds.platform.observers.PreConsensusEventObserver;
 import com.swirlds.platform.state.SwirldStateManager;
-import com.swirlds.platform.stats.SwirldStateStats;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,7 +52,7 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Clea
 
 	private final QueueThread<EventImpl> queueThread;
 
-	private final SwirldStateStats stats;
+	private final ConsensusMetrics metrics;
 
 	/**
 	 * The class responsible for all interactions with the swirld state
@@ -61,10 +61,10 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Clea
 
 	public PreConsensusEventHandler(final NodeId selfId,
 			final SwirldStateManager swirldStateManager,
-			final SwirldStateStats stats) {
+			final ConsensusMetrics metrics) {
 		this.selfId = selfId;
 		this.swirldStateManager = swirldStateManager;
-		this.stats = stats;
+		this.metrics = metrics;
 		final BlockingQueue<EventImpl> queue = new PriorityBlockingQueue<>(INITIAL_PRE_CONS_EVENT_QUEUE_CAPACITY,
 				EventUtils::consensusPriorityComparator);
 		queueThread = new QueueThreadConfiguration<EventImpl>()
@@ -124,7 +124,7 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Clea
 
 		try {
 			// update the estimate now, so the queue can sort on it
-			event.estimateTime(selfId, stats.getAvgSelfCreatedTimestamp(), stats.getAvgOtherReceivedTimestamp());
+			event.estimateTime(selfId, metrics.getAvgSelfCreatedTimestamp(), metrics.getAvgOtherReceivedTimestamp());
 			queueThread.put(event);
 		} catch (final InterruptedException e) {
 			LOG.error(EXCEPTION.getMarker(), "error:{} event:{}", e, event);

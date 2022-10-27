@@ -16,6 +16,9 @@
 
 package com.swirlds.platform;
 
+import com.swirlds.common.metrics.Metrics;
+import com.swirlds.common.notification.NotificationEngine;
+import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.stream.EventStreamManager;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.SoftwareVersion;
@@ -26,28 +29,43 @@ import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.threading.pool.CachedPoolParallelExecutor;
 import com.swirlds.common.threading.pool.ParallelExecutor;
+import com.swirlds.common.utility.AutoCloseableWrapper;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.crypto.KeysAndCerts;
 import com.swirlds.platform.crypto.PlatformSigner;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 import com.swirlds.platform.eventhandling.PreConsensusEventHandler;
 import com.swirlds.platform.internal.EventImpl;
+import com.swirlds.platform.metrics.ConsensusHandlingMetrics;
+import com.swirlds.platform.metrics.ConsensusMetrics;
+import com.swirlds.platform.metrics.ConsensusMetricsImpl;
+import com.swirlds.platform.metrics.IssMetrics;
+import com.swirlds.platform.metrics.SwirldStateMetrics;
+import com.swirlds.platform.network.NetworkMetrics;
 import com.swirlds.platform.network.connectivity.SocketFactory;
 import com.swirlds.platform.network.connectivity.TcpFactory;
 import com.swirlds.platform.network.connectivity.TlsFactory;
+import com.swirlds.platform.state.IssDetector;
+import com.swirlds.platform.state.SignatureTransmitter;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.SwirldStateManager;
 import com.swirlds.platform.state.SwirldStateManagerDouble;
 import com.swirlds.platform.state.SwirldStateManagerSingle;
+import com.swirlds.platform.state.notifications.NewSignedStateBeingTrackedListener;
+import com.swirlds.platform.state.notifications.StateHasEnoughSignaturesListener;
+import com.swirlds.platform.state.notifications.StateLacksSignaturesListener;
+import com.swirlds.platform.state.notifications.StateSelfSignedListener;
+import com.swirlds.platform.state.notifications.StateSignatureProcessedListener;
 import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateFileManager;
 import com.swirlds.platform.state.signed.SignedStateManager;
-import com.swirlds.platform.state.signed.StateHasherSigner;
-import com.swirlds.platform.stats.ConsensusHandlingStats;
-import com.swirlds.platform.stats.SignedStateStats;
-import com.swirlds.platform.stats.SwirldStateStats;
+import com.swirlds.platform.state.signed.SignedStateMetrics;
+import com.swirlds.platform.state.signed.SourceOfSignedState;
+import com.swirlds.platform.system.Fatal;
 import com.swirlds.platform.system.PlatformConstructionException;
 import com.swirlds.platform.system.SystemExitReason;
 import com.swirlds.platform.system.SystemUtils;
+import com.swirlds.platform.util.HashLogger;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -65,6 +83,8 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 import static com.swirlds.logging.LogMarker.ERROR;
+import static com.swirlds.logging.LogMarker.EXCEPTION;
+import static com.swirlds.logging.LogMarker.FREEZE;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
 
 /**
@@ -93,14 +113,14 @@ final class PlatformConstructor {
 	}
 
 	static SocketFactory socketFactory(final KeysAndCerts keysAndCerts) {
-		if (!Settings.useTLS) {
+		if (!Settings.getInstance().isUseTLS()) {
 			return new TcpFactory(PlatformConstructor.settingsProvider());
 		}
 		try {
 			return new TlsFactory(keysAndCerts, PlatformConstructor.settingsProvider());
 		} catch (final NoSuchAlgorithmException | UnrecoverableKeyException
-				| KeyStoreException | KeyManagementException
-				| CertificateException | IOException e) {
+					   | KeyStoreException | KeyManagementException
+					   | CertificateException | IOException e) {
 			throw new PlatformConstructionException("A problem occurred while creating the SocketFactory", e);
 		}
 	}
@@ -121,19 +141,14 @@ final class PlatformConstructor {
 	 * 		this node's id
 	 * @param signedStateManager
 	 * 		the signed state manager that collects signatures
-	 * @param stats
-	 * 		the class that records stats for signed state signing and hashing
-	 * @return
 	 */
-	static QueueThread<SignedState> stateHashSignQueue(final long selfId, final SignedStateManager signedStateManager,
-			final SignedStateStats stats) {
-		final StateHasherSigner stateHasherSigner = new StateHasherSigner(signedStateManager, stats);
+	static QueueThread<SignedState> stateHashSignQueue(final long selfId, final SignedStateManager signedStateManager) {
 
 		return new QueueThreadConfiguration<SignedState>()
 				.setNodeId(selfId)
 				.setComponent(PLATFORM_THREAD_POOL_NAME)
 				.setThreadName("state-hash-sign")
-				.setHandler(stateHasherSigner::hashAndCollectSignatures)
+				.setHandler(signedStateManager::addUnsignedState)
 				.setCapacity(STATE_HASH_QUEUE_MAX)
 				.build();
 	}
@@ -145,8 +160,8 @@ final class PlatformConstructor {
 	 * 		this node's id
 	 * @param systemTransactionHandler
 	 * 		the handler of system transactions
-	 * @param stats
-	 * 		the class that records stats relating to {@link SwirldStateManager}
+	 * @param metrics
+	 * 		reference to the metrics-system
 	 * @param settings
 	 * 		static settings provider
 	 * @param consEstimateSupplier
@@ -156,7 +171,7 @@ final class PlatformConstructor {
 	 * @return the newly constructed instance of {@link SwirldStateManager}
 	 */
 	public static SwirldStateManager swirldStateManager(final NodeId selfId,
-			final SystemTransactionHandler systemTransactionHandler, final SwirldStateStats stats,
+			final SystemTransactionHandler systemTransactionHandler, final Metrics metrics,
 			final SettingsProvider settings, final Supplier<Instant> consEstimateSupplier,
 			final BooleanSupplier inFreezeChecker, final State initialState) {
 
@@ -164,7 +179,7 @@ final class PlatformConstructor {
 			return new SwirldStateManagerDouble(
 					selfId,
 					systemTransactionHandler,
-					stats,
+					new SwirldStateMetrics(metrics),
 					settings,
 					inFreezeChecker,
 					initialState);
@@ -172,7 +187,8 @@ final class PlatformConstructor {
 			return new SwirldStateManagerSingle(
 					selfId,
 					systemTransactionHandler,
-					stats,
+					new SwirldStateMetrics(metrics),
+					new ConsensusMetricsImpl(selfId, metrics),
 					settings,
 					consEstimateSupplier,
 					inFreezeChecker,
@@ -191,17 +207,17 @@ final class PlatformConstructor {
 	 * 		this node's id
 	 * @param swirldStateManager
 	 * 		the instance of {@link SwirldStateManager}
-	 * @param stats
+	 * @param consensusMetrics
 	 * 		the class that records stats relating to {@link SwirldStateManager}
 	 * @return the newly constructed instance of {@link PreConsensusEventHandler}
 	 */
 	public static PreConsensusEventHandler preConsensusEventHandler(final NodeId selfId,
-			final SwirldStateManager swirldStateManager, final SwirldStateStats stats) {
+			final SwirldStateManager swirldStateManager, final ConsensusMetrics consensusMetrics) {
 
 		return new PreConsensusEventHandler(
 				selfId,
 				swirldStateManager,
-				stats
+				consensusMetrics
 		);
 	}
 
@@ -214,7 +230,7 @@ final class PlatformConstructor {
 	 * 		a static settings provider
 	 * @param swirldStateManager
 	 * 		the instance of {@link SwirldStateManager}
-	 * @param stats
+	 * @param consensusHandlingMetrics
 	 * 		the class that records stats relating to {@link SwirldStateManager}
 	 * @param eventStreamManager
 	 * 		the instance that streams consensus events to disk
@@ -229,7 +245,7 @@ final class PlatformConstructor {
 	 * @return the newly constructed instance of {@link ConsensusRoundHandler}
 	 */
 	public static ConsensusRoundHandler consensusHandler(final long selfId, final SettingsProvider settingsProvider,
-			final SwirldStateManager swirldStateManager, final ConsensusHandlingStats stats,
+			final SwirldStateManager swirldStateManager, final ConsensusHandlingMetrics consensusHandlingMetrics,
 			final EventStreamManager<EventImpl> eventStreamManager, final AddressBook addressBook,
 			final BlockingQueue<SignedState> stateHashSignQueue, final Runnable enterFreezePeriod,
 			final SoftwareVersion softwareVersion) {
@@ -238,11 +254,166 @@ final class PlatformConstructor {
 				selfId,
 				settingsProvider,
 				swirldStateManager,
-				stats,
+				consensusHandlingMetrics,
 				eventStreamManager,
 				addressBook,
 				stateHashSignQueue,
 				enterFreezePeriod,
 				softwareVersion);
+	}
+
+	/**
+	 * Register a listener for fatal events, i.e. unrecoverable errors that force the node to shut down.
+	 */
+	public static void registerFatalListener(
+			final SignedStateManager signedStateManager,
+			final SignedStateFileManager signedStateFileManager) {
+
+		final NotificationEngine engine = NotificationFactory.getEngine();
+
+		engine.register(Fatal.FatalListener.class, (Fatal.FatalNotification notification) -> {
+			if (Settings.getInstance().getState().dumpStateOnFatal) {
+				try (final AutoCloseableWrapper<SignedState> wrapper =
+							 signedStateManager.getLastCompleteSignedState(false)) {
+					final SignedState state = wrapper.get();
+					if (state != null) {
+						signedStateFileManager.saveFatalStateToDisk(state);
+					}
+				} catch (final InterruptedException e) {
+					LOG.error(EXCEPTION.getMarker(), "FATAL: interrupted while attempting to save state");
+					Thread.currentThread().interrupt();
+				}
+			}
+		});
+	}
+
+	/**
+	 * Register a listener for when this node self-signs a state.
+	 */
+	public static void registerStateSelfSignedListener(
+			final SwirldsPlatform platform,
+			final NodeId selfId) {
+
+		final NotificationEngine engine = NotificationFactory.getEngine();
+		final NetworkMetrics networkMetrics = new NetworkMetrics(platform);
+
+		engine.register(StateSelfSignedListener.class,
+				notification -> {
+					if (notification.getSelfId().equals(selfId)) {
+						SignatureTransmitter.transmitSignature(
+								platform, notification.getRound(), notification.getSelfSignature());
+						NetworkStatsTransmitter.transmitStats(platform, networkMetrics);
+					}
+				});
+	}
+
+	/**
+	 * Register a listener for when a signed state gathers enough signatures to become complete.
+	 */
+	public static void registerStateHasEnoughSignaturesListener(
+			final NodeId selfId,
+			final FreezeManager freezeManager,
+			final SignedStateFileManager signedStateFileManager) {
+
+		final NotificationEngine engine = NotificationFactory.getEngine();
+
+		engine.register(StateHasEnoughSignaturesListener.class, notification -> {
+			if (notification.getSelfId().equals(selfId)) {
+				if (notification.getSignedState().isFreezeState()) {
+					LOG.info(FREEZE.getMarker(),
+							"Collected enough signatures on the freeze state (round = {}). " +
+									"Freezing event creation now.",
+							notification.getSignedState().getRound());
+					freezeManager.freezeEventCreation();
+				}
+				if (notification.getSignedState().isStateToSave()) {
+					signedStateFileManager.saveSignedStateToDisk(notification.getSignedState());
+				}
+			}
+		});
+	}
+
+	/**
+	 * Register a listener for when a signed state fails to collect enough signatures to be complete before aging
+	 * out and being discarded.
+	 */
+	public static void registerStateLacksSignaturesListener(
+			final NodeId selfId,
+			final FreezeManager freezeManager,
+			final SignedStateMetrics signedStateMetrics,
+			final SignedStateFileManager signedStateFileManager) {
+
+		final NotificationEngine engine = NotificationFactory.getEngine();
+
+		engine.register(StateLacksSignaturesListener.class, notification -> {
+			if (notification.getSelfId().equals(selfId)) {
+				if (notification.getSignedState().isFreezeState()) {
+					LOG.error(FREEZE.getMarker(),
+							"Unable to collect enough signatures on the freeze state (round = {}). " +
+									"THIS SHOULD NEVER HAPPEN! This node may not start from the same state as other " +
+									"nodes after a restart. Freezing event creation anyways.",
+							notification.getSignedState().getRound());
+					freezeManager.freezeEventCreation();
+				}
+				if (notification.getSignedState().isStateToSave()) {
+					signedStateMetrics.getTotalUnsignedDiskStatesMetric().increment();
+					if (!Settings.getInstance().isEnableStateRecovery()) {
+						LOG.error(EXCEPTION.getMarker(),
+								"state written to disk for round {} did not have enough signatures",
+								notification.getSignedState().getRound());
+					}
+					signedStateFileManager.saveSignedStateToDisk(notification.getSignedState());
+				}
+			}
+		});
+	}
+
+	/**
+	 * Register a listener for when the signed state manager starts tracking a new signed state.
+	 */
+	public static void registerNewSignedStateBeingTrackedListener(
+			final NodeId selfId,
+			final SignedStateFileManager signedStateFileManager,
+			final HashLogger hashLogger) {
+
+		final NotificationEngine engine = NotificationFactory.getEngine();
+
+		// When we begin tracking a new signed state, "introduce" the state to the SignedStateFileManager
+		engine.register(NewSignedStateBeingTrackedListener.class, notification -> {
+			if (notification.getSelfId().equals(selfId)) {
+				if (notification.getSourceOfSignedState() == SourceOfSignedState.DISK) {
+					signedStateFileManager.registerSignedStateFromDisk(notification.getSignedState());
+				} else {
+					signedStateFileManager.determineIfStateShouldBeSaved(notification.getSignedState());
+			 	}
+				if (notification.getSignedState().getState().getHash() != null) {
+					hashLogger.logHashes(notification.getSignedState());
+				}
+			}
+		});
+
+	}
+
+	/**
+	 * Register a listener for each state signature that is processed, valid or invalid. Not called for state
+	 * signatures that are not eligible to be added to a signed state (i.e. a signature that comes in too late).
+	 */
+	public static void registerSignatureProcessedListener(
+			final NodeId selfId,
+			final IssMetrics issMetrics,
+			final SignedStateFileManager signedStateFileManager) {
+
+		final NotificationEngine engine = NotificationFactory.getEngine();
+
+		// Listen to signatures on states as they are processed, and report an ISS if signatures aren't valid.
+		final IssDetector issDetector = new IssDetector(selfId.getId(), issMetrics, signedStateFileManager);
+		engine.register(StateSignatureProcessedListener.class, notification -> {
+			if (notification.getSelfId().equals(selfId)) {
+				issDetector.reportSignature(
+						notification.getSignedState(),
+						notification.getNodeId(),
+						notification.isValid());
+			}
+		});
 	}
 }

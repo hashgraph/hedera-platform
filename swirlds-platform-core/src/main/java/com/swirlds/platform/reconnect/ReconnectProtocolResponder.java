@@ -17,7 +17,7 @@
 package com.swirlds.platform.reconnect;
 
 import com.swirlds.common.merkle.synchronization.settings.ReconnectSettings;
-import com.swirlds.platform.ReconnectStatistics;
+import com.swirlds.platform.metrics.ReconnectMetrics;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.unidirectional.NetworkProtocolResponder;
@@ -39,13 +39,13 @@ public class ReconnectProtocolResponder implements NetworkProtocolResponder {
 	 * This object is responsible for limiting the frequency of reconnect attempts (in the role of the sender)
 	 */
 	private final ReconnectThrottle reconnectThrottle;
-	private final ReconnectStatistics stats;
+	private final ReconnectMetrics stats;
 
 	public ReconnectProtocolResponder(
 			final SignedStateManager signedStateManager,
 			final ReconnectSettings settings,
 			final ReconnectThrottle reconnectThrottle,
-			final ReconnectStatistics stats) {
+			final ReconnectMetrics stats) {
 		this.signedStateManager = signedStateManager;
 		this.settings = settings;
 		this.reconnectThrottle = reconnectThrottle;
@@ -70,7 +70,7 @@ public class ReconnectProtocolResponder implements NetworkProtocolResponder {
 			ReconnectUtils.confirmReconnect(connection);
 
 			// the SignedState is later manually released by the ReconnectTeacher
-			final SignedState state = signedStateManager.getLastCompleteSignedState().get();
+			final SignedState state = signedStateManager.getLastCompleteSignedState(false).get();
 
 			new ReconnectTeacher(
 					connection,
@@ -78,7 +78,7 @@ public class ReconnectProtocolResponder implements NetworkProtocolResponder {
 					settings.getAsyncStreamTimeoutMilliseconds(),
 					connection.getSelfId().getId(),
 					connection.getOtherId().getId(),
-					state.getLastRoundReceived(),
+					state.getRound(),
 					stats).execute();
 		} finally {
 			reconnectThrottle.markReconnectFinished();

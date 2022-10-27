@@ -26,7 +26,7 @@ import java.util.function.ToLongFunction;
 import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
 /**
- * Boilerplate implementation for {@link SequenceSet SequenceSet}.
+ * Boilerplate implementation for {@link SequenceSet}.
  *
  * @param <T>
  * 		the type of the element contained within this set
@@ -43,17 +43,20 @@ public abstract class AbstractSequenceSet<T> implements SequenceSet<T> {
 	 *
 	 * @param lowestAllowedSequenceNumber
 	 * 		the initial lowest permitted sequence in the set
-	 * @param highestAllowedSequenceNumber
-	 * 		the initial highest permitted sequence in the set
+	 * @param sequenceNumberCapacity
+	 * 		the number of sequence numbers permitted to exist in this data structure. E.g. if
+	 * 		the lowest allowed sequence number is 100 and the capacity is 10, then values with
+	 * 		a sequence number between 100 and 109 (inclusive) will be allowed, and any value
+	 * 		with a sequence number outside that range will be rejected.
 	 * @param getSequenceNumberFromEntry
 	 * 		given an entry, extract the sequence number
 	 */
 	protected AbstractSequenceSet(
 			final long lowestAllowedSequenceNumber,
-			final long highestAllowedSequenceNumber,
+			final int sequenceNumberCapacity,
 			final ToLongFunction<T> getSequenceNumberFromEntry) {
 
-		map = buildMap(lowestAllowedSequenceNumber, highestAllowedSequenceNumber, getSequenceNumberFromEntry);
+		map = buildMap(lowestAllowedSequenceNumber, sequenceNumberCapacity, getSequenceNumberFromEntry);
 	}
 
 	/**
@@ -61,15 +64,18 @@ public abstract class AbstractSequenceSet<T> implements SequenceSet<T> {
 	 *
 	 * @param lowestAllowedSequenceNumber
 	 * 		the initial lowest permitted sequence in the set
-	 * @param highestAllowedSequenceNumber
-	 * 		the initial highest permitted sequence in the set
+	 * @param sequenceNumberCapacity
+	 * 		the number of sequence numbers permitted to exist in this data structure. E.g. if
+	 * 		the lowest allowed sequence number is 100 and the capacity is 10, then values with
+	 * 		a sequence number between 100 and 109 (inclusive) will be allowed, and any value
+	 * 		with a sequence number outside that range will be rejected.
 	 * @param getSequenceNumberFromEntry
 	 * 		given an entry, extract the sequence number
 	 * @return a sequence map
 	 */
 	protected abstract SequenceMap<T, Boolean> buildMap(
 			final long lowestAllowedSequenceNumber,
-			final long highestAllowedSequenceNumber,
+			final int sequenceNumberCapacity,
 			final ToLongFunction<T> getSequenceNumberFromEntry);
 
 	/**
@@ -78,7 +84,7 @@ public abstract class AbstractSequenceSet<T> implements SequenceSet<T> {
 	@Override
 	public boolean add(final T element) {
 		throwArgNull(element, "element");
-		return map.put(element, true) == null;
+		return map.putIfAbsent(element, true);
 	}
 
 	/**
@@ -103,7 +109,7 @@ public abstract class AbstractSequenceSet<T> implements SequenceSet<T> {
 	 */
 	@Override
 	public void removeSequenceNumber(final long sequenceNumber, final Consumer<T> removedElementHandler) {
-		map.removeSequenceNumber(sequenceNumber,
+		map.removeValuesWithSequenceNumber(sequenceNumber,
 				removedElementHandler == null ? null : ((k, v) -> removedElementHandler.accept(k)));
 	}
 
@@ -119,8 +125,8 @@ public abstract class AbstractSequenceSet<T> implements SequenceSet<T> {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void purge(final long smallestAllowedSequenceNumber, final Consumer<T> removedElementHandler) {
-		map.purge(smallestAllowedSequenceNumber,
+	public void shiftWindow(final long lowestAllowedSequenceNumber, final Consumer<T> removedElementHandler) {
+		map.shiftWindow(lowestAllowedSequenceNumber,
 				removedElementHandler == null ? null : ((k, v) -> removedElementHandler.accept(k)));
 	}
 
@@ -128,8 +134,8 @@ public abstract class AbstractSequenceSet<T> implements SequenceSet<T> {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void expand(final long largestAllowedSequenceNumber) {
-		map.expand(largestAllowedSequenceNumber);
+	public int getSequenceNumberCapacity() {
+		return map.getSequenceNumberCapacity();
 	}
 
 	/**
@@ -144,16 +150,16 @@ public abstract class AbstractSequenceSet<T> implements SequenceSet<T> {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public long getLowestAllowedSequenceNumber() {
-		return map.getLowestAllowedSequenceNumber();
+	public long getFirstSequenceNumberInWindow() {
+		return map.getFirstSequenceNumberInWindow();
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public long getHighestAllowedSequenceNumber() {
-		return map.getHighestAllowedSequenceNumber();
+	public long getLastSequenceNumberInWindow() {
+		return map.getLastSequenceNumberInWindow();
 	}
 
 	/**

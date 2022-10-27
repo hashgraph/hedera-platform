@@ -22,6 +22,7 @@ import com.swirlds.common.io.SerializableDet;
 import com.swirlds.common.io.exceptions.ClassNotFoundException;
 import com.swirlds.common.io.exceptions.InvalidVersionException;
 import com.swirlds.common.utility.CommonUtils;
+import com.swirlds.common.utility.ValueReference;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -243,8 +244,8 @@ public class SerializableDataInputStream extends AugmentedDataInputStream {
 
 		final boolean allSameClass = readBoolean();
 
-		Long classId = null;
-		int version = -1;
+		final ValueReference<Long> classId = new ValueReference<>();
+		final ValueReference<Integer> version = new ValueReference<>();
 
 		for (int i = 0; i < size; i++) {
 			final T next = readNextSerializableIteration(
@@ -253,12 +254,6 @@ public class SerializableDataInputStream extends AugmentedDataInputStream {
 					classId,
 					version,
 					serializableConstructor);
-
-			if (next != null) {
-				classId = next.getClassId();
-				version = next.getVersion();
-			}
-
 			callback.accept(next);
 		}
 	}
@@ -284,8 +279,8 @@ public class SerializableDataInputStream extends AugmentedDataInputStream {
 	protected <T extends SelfSerializable> T readNextSerializableIteration(
 			final boolean allSameClass,
 			final boolean readClassId,
-			Long classId,
-			int version,
+			final ValueReference<Long> classId,
+			final ValueReference<Integer> version,
 			final Function<Long, T> serializableConstructor) throws IOException {
 
 		if (!allSameClass) {
@@ -298,17 +293,18 @@ public class SerializableDataInputStream extends AugmentedDataInputStream {
 			return null;
 		}
 
-		if (classId == null) {
+		if (version.getValue() == null) {
 			// this is the first non-null member, so we read the ID and version
 			if (readClassId) {
-				classId = readLong();
+				classId.setValue(readLong());
 			}
-			version = readInt();
+			version.setValue(readInt());
 		}
 
-		final T serializable = serializableConstructor.apply(classId);
+		final T serializable = serializableConstructor.apply(classId.getValue());
 		recordClassId(serializable.getClassId());
-		serializable.deserialize(this, version);
+		recordClass(serializable);
+		serializable.deserialize(this, version.getValue());
 		return serializable;
 	}
 

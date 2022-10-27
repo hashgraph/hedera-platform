@@ -23,7 +23,7 @@ import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
-import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.utility.RuntimeObjectRecord;
 import com.swirlds.common.utility.RuntimeObjectRegistry;
 import com.swirlds.common.utility.ValueReference;
@@ -41,7 +41,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
 
 import static com.swirlds.common.io.streams.StreamDebugUtils.deserializeAndDebugOnFailure;
 import static com.swirlds.common.utility.CommonUtils.getNormalisedStringBytes;
@@ -227,11 +226,11 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
 	/**
 	 * Register all statistics with a registry. If not called then no statistics will be captured for this map.
 	 *
-	 * @param registry
-	 * 		an object that manages statistics
+	 * @param metrics
+	 * 		refernece to the metrics-system
 	 */
-	public void registerStatistics(final Consumer<Metric> registry) {
-		root.registerStatistics(registry);
+	public void registerMetrics(final Metrics metrics) {
+		root.registerMetrics(metrics);
 	}
 
 	/*-----------------------------------------------------------------------------

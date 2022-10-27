@@ -35,10 +35,12 @@ import java.util.Objects;
  */
 public class GossipEvent implements EventIntakeTask, BaseEvent, ChatterEvent {
 	private static final long CLASS_ID = 0xfe16b46795bfb8dcL;
+	private static final long ROUND_CREATED_UNDEFINED = -1;
 	private BaseEventHashedData hashedData;
 	private BaseEventUnhashedData unhashedData;
 	private ChatterEventDescriptor descriptor;
 	private Instant timeReceived;
+	private long roundCreated = ROUND_CREATED_UNDEFINED;
 
 	@SuppressWarnings("unused") // needed for RuntimeConstructable
 	public GossipEvent() {
@@ -63,6 +65,7 @@ public class GossipEvent implements EventIntakeTask, BaseEvent, ChatterEvent {
 	public void serialize(final SerializableDataOutputStream out) throws IOException {
 		out.writeSerializable(hashedData, false);
 		out.writeSerializable(unhashedData, false);
+		out.writeLong(roundCreated);
 	}
 
 	/**
@@ -72,6 +75,7 @@ public class GossipEvent implements EventIntakeTask, BaseEvent, ChatterEvent {
 	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
 		hashedData = in.readSerializable(false, BaseEventHashedData::new);
 		unhashedData = in.readSerializable(false, BaseEventUnhashedData::new);
+		roundCreated = in.readLong();
 		timeReceived = Instant.now();
 	}
 
@@ -117,6 +121,21 @@ public class GossipEvent implements EventIntakeTask, BaseEvent, ChatterEvent {
 	@Override
 	public Instant getTimeReceived() {
 		return timeReceived;
+	}
+
+	/**
+	 * @return true if roundCreated has been set
+	 */
+	public boolean isRoundCreatedSet() {
+		return roundCreated != ROUND_CREATED_UNDEFINED;
+	}
+
+	public long getRoundCreated() {
+		return roundCreated;
+	}
+
+	public void setRoundCreated(final long roundCreated) {
+		this.roundCreated = roundCreated;
 	}
 
 	/**
@@ -167,7 +186,6 @@ public class GossipEvent implements EventIntakeTask, BaseEvent, ChatterEvent {
 		return new HashCodeBuilder(17, 37)
 				.append(hashedData).append(unhashedData).append(descriptor).toHashCode();
 	}
-
 
 
 	private static final class ClassVersion {

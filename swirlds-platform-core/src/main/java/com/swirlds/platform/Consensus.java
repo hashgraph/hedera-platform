@@ -16,14 +16,13 @@
 
 package com.swirlds.platform;
 
-import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.consensus.RoundNumberProvider;
 import com.swirlds.platform.internal.EventImpl;
 
 import java.util.List;
-import java.util.Queue;
 
 /**
  * An interface for classes that calculate consensus of events
@@ -40,34 +39,6 @@ public interface Consensus extends GraphGenerations, RoundNumberProvider {
 	 * @return A list of consensus events, or null if no consensus was reached
 	 */
 	List<EventImpl> addEvent(EventImpl event, AddressBook addressBook);
-
-	/**
-	 * Get an array of all the events in the hashgraph.
-	 *
-	 * @return An array of events
-	 */
-	EventImpl[] getAllEvents();
-
-	/**
-	 * Gets a queue of stale events.
-	 *
-	 * <p>
-	 * Stale events do not reach consensus, and their transactions are never handled. The agreement is guaranteed: if
-	 * one computer decides that an event is stale, then any other computer that has that event will eventually agree
-	 * that it’s stale.
-	 * And some computers might never receive the event at all. If one computer decides an event is “consensus”, then
-	 * any other computer with that event will eventually decide that it is consensus. And every computer will either
-	 * receive that event or will do a reconnect where it receives a state that includes the effects of handling that
-	 * event.
-	 *
-	 * Unless a computer is disconnected from the internet, all its events will be consensus. The only way to be
-	 * stale is if you create an event and then it somehow doesn’t get gossipped to the rest of the network for many
-	 * rounds. That only happens if you crash, or have an internet connection problem.
-	 * </p>
-	 *
-	 * @return a queue of stale Events
-	 */
-	Queue<EventImpl> getStaleEventQueue();
 
 	/**
 	 * Returns a list of 3 lists of hashes of witnesses associated with round "round".

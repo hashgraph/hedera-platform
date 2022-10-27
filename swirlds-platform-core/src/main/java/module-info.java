@@ -34,6 +34,7 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.event.validation;
 	exports com.swirlds.platform.eventhandling;
 	exports com.swirlds.platform.intake;
+	exports com.swirlds.platform.metrics;
 	exports com.swirlds.platform.network;
 	exports com.swirlds.platform.network.communication;
 	exports com.swirlds.platform.network.protocol;
@@ -65,6 +66,9 @@ module com.swirlds.platform {
 	exports com.swirlds.platform.event.linking to com.swirlds.common, com.swirlds.platform.test;
 	exports com.swirlds.platform.event.intake to com.swirlds.platform.test;
 	exports com.swirlds.platform.reconnect to com.swirlds.platform.test;
+	exports com.swirlds.platform.chatter.protocol.processing;
+	exports com.swirlds.platform.recovery to com.swirlds.platform.test;
+	exports com.swirlds.platform.util.router to com.swirlds.platform.test;
 
 	/* Swirlds Libraries */
 	requires transitive com.swirlds.common;

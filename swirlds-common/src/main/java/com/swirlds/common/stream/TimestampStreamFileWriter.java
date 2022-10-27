@@ -295,9 +295,11 @@ public class TimestampStreamFileWriter<T extends StreamAligned & RunningHashable
 			final Hash metaHash = new Hash(metadataStreamDigest.digest(), SHA_384);
 
 			// generate signature for entire Hash
-			final Signature entireSignature = new Signature(SIGNATURE_TYPE, signer.sign(entireHash.getValue()));
+			final Signature entireSignature =
+					new Signature(SIGNATURE_TYPE, signer.sign(entireHash.getValue()).getSignatureBytes());
 			// generate signature for metaData Hash
-			final Signature metaSignature = new Signature(SIGNATURE_TYPE, signer.sign(metaHash.getValue()));
+			final Signature metaSignature =
+					new Signature(SIGNATURE_TYPE, signer.sign(metaHash.getValue()).getSignatureBytes());
 			try {
 				writeSignatureFile(entireHash, entireSignature, metaHash, metaSignature,
 						generateSigFilePath(closedFile), streamType);

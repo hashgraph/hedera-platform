@@ -17,8 +17,8 @@
 package com.swirlds.platform.sync;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.io.extendable.extensions.CountingStreamExtension;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.network.ByteConstants;
 
@@ -134,7 +134,6 @@ public class SyncOutputStream extends SerializableDataOutputStream {
 	 * 		iff the {@link SyncOutputStream} instance throws
 	 */
 	public void writeEventData(final EventImpl event) throws IOException {
-		writeSerializable(event.getBaseEventHashedData(), false);
-		writeSerializable(event.getBaseEventUnhashedData(), false);
+		writeSerializable(event.getBaseEvent(), false);
 	}
 }

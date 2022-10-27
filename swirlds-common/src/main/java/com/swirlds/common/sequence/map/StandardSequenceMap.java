@@ -20,7 +20,6 @@ import com.swirlds.common.sequence.map.internal.AbstractSequenceMap;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.ToLongFunction;
 
 /**
@@ -33,69 +32,44 @@ import java.util.function.ToLongFunction;
  */
 public class StandardSequenceMap<K, V> extends AbstractSequenceMap<K, V> {
 
-	private long lowestAllowedSequenceNumber;
-	private long highestAllowedSequenceNumber;
+	private long firstSequenceNumberInWindow;
 
 	/**
 	 * Construct a {@link SequenceMap}.
 	 *
-	 * @param getSequenceNumberFromKey
-	 * 		a method that extracts the sequence number from a key
-	 */
-	public StandardSequenceMap(final ToLongFunction<K> getSequenceNumberFromKey) {
-		this(DEFAULT_LOWEST_ALLOWED_SEQUENCE_NUMBER, DEFAULT_HIGHEST_ALLOWED_SEQUENCE_NUMBER, getSequenceNumberFromKey);
-	}
-
-	/**
-	 * Construct a {@link SequenceMap}.
-	 *
-	 * @param lowestAllowedSequenceNumber
+	 * @param firstSequenceNumberInWindow
 	 * 		the lowest allowed sequence number
-	 * @param highestAllowedSequenceNumber
-	 * 		the highest allowed sequence number
+	 * @param sequenceNumberCapacity
+	 * 		the number of sequence numbers permitted to exist in this data structure. E.g. if
+	 * 		the lowest allowed sequence number is 100 and the capacity is 10, then values with
+	 * 		a sequence number between 100 and 109 (inclusive) will be allowed, and any value
+	 * 		with a sequence number outside that range will be rejected.
 	 * @param getSequenceNumberFromKey
 	 * 		a method that extracts the sequence number from a key
 	 */
 	public StandardSequenceMap(
-			final long lowestAllowedSequenceNumber,
-			final long highestAllowedSequenceNumber,
+			final long firstSequenceNumberInWindow,
+			final int sequenceNumberCapacity,
 			final ToLongFunction<K> getSequenceNumberFromKey) {
 
-		super(lowestAllowedSequenceNumber, highestAllowedSequenceNumber, getSequenceNumberFromKey);
-		this.lowestAllowedSequenceNumber = lowestAllowedSequenceNumber;
-		this.highestAllowedSequenceNumber = highestAllowedSequenceNumber;
+		super(firstSequenceNumberInWindow, sequenceNumberCapacity, getSequenceNumberFromKey);
+		this.firstSequenceNumberInWindow = firstSequenceNumberInWindow;
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public long getLowestAllowedSequenceNumber() {
-		return lowestAllowedSequenceNumber;
+	public long getFirstSequenceNumberInWindow() {
+		return firstSequenceNumberInWindow;
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public long getHighestAllowedSequenceNumber() {
-		return highestAllowedSequenceNumber;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void setLowestAllowedSequenceNumber(final long sequenceNumber) {
-		lowestAllowedSequenceNumber = sequenceNumber;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void setHighestAllowedSequenceNumber(final long sequenceNumber) {
-		this.highestAllowedSequenceNumber = sequenceNumber;
+	protected void setFirstSequenceNumberInWindow(final long firstSequenceNumberInWindow) {
+		this.firstSequenceNumberInWindow = firstSequenceNumberInWindow;
 	}
 
 	/**
@@ -103,14 +77,6 @@ public class StandardSequenceMap<K, V> extends AbstractSequenceMap<K, V> {
 	 */
 	@Override
 	protected Map<K, V> buildDataMap() {
-		return new HashMap<>();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected Map<Long, Set<K>> buildSequenceMap() {
 		return new HashMap<>();
 	}
 }

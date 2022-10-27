@@ -16,11 +16,13 @@
 
 package com.swirlds.common.metrics;
 
-import com.swirlds.common.utility.CommonUtils;
+import org.apache.commons.lang3.builder.ToStringBuilder;
 
+import java.util.EnumSet;
 import java.util.function.Supplier;
 
 import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
 /**
  * A {@code FunctionGauge} maintains a single value.
@@ -32,45 +34,25 @@ import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
  *
  * @param <T> the type of the contained value
  */
-public class FunctionGauge<T> extends AbstractGauge<T> {
-
-	private final Supplier<T> supplier;
+public interface FunctionGauge<T> extends Metric {
 
 	/**
-	 * Constructor of {@code FunctionGauge}
-	 *
-	 * @param category
-	 * 		the kind of metric (metrics are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the metric
-	 * @param description
-	 * 		a one-sentence description of the metric
-	 * @param format
-	 * 		a string that can be passed to String.format() to format the metric
-	 * @param supplier
-	 * 		the {@code Supplier} of the value of this {@code Gauge}
-	 * @throws IllegalArgumentException
-	 * 		if {@code category}, {@code name}, {@code description} or {@code format} are {@code null}
+	 * {@inheritDoc}
 	 */
-	public FunctionGauge(
-			final String category,
-			final String name,
-			final String description,
-			final String format,
-			final Supplier<T> supplier) {
-		super(category, name, description, format);
-		this.supplier = CommonUtils.throwArgNull(supplier, "supplier");
+	@Override
+	default EnumSet<ValueType> getValueTypes() {
+		return EnumSet.of(VALUE);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public T get(final ValueType valueType) {
+	default T get(final ValueType valueType) {
 		if (valueType == VALUE) {
 			return get();
 		}
-		throw new IllegalArgumentException("Unsupported ValueType");
+		throw new IllegalArgumentException("Unsupported ValueType: " + valueType);
 	}
 
 	/**
@@ -78,7 +60,115 @@ public class FunctionGauge<T> extends AbstractGauge<T> {
 	 *
 	 * @return the current value
 	 */
-	public T get() {
-		return supplier.get();
+	T get();
+
+	/**
+	 * Configuration of a {@link FunctionGauge}
+	 *
+	 * @param <T> the type of the value that will be contained in the {@code FunctionGauge}
+	 */
+	final class Config<T> extends MetricConfig<FunctionGauge<T>, FunctionGauge.Config<T>> {
+
+		private final Supplier<T> supplier;
+
+		/**
+		 * Constructor of {@code FunctionGauge.Config}
+		 *
+		 * @param category
+		 * 		the kind of metric (metrics are grouped or filtered by this)
+		 * @param name
+		 * 		a short name for the metric
+		 * @param supplier
+		 * 		the {@code Supplier} of the value of this {@code Gauge}
+		 * @throws IllegalArgumentException
+		 * 		if {@code category}, {@code name}, {@code description} or {@code format} are {@code null}
+		 */
+		public Config(final String category, final String name, final Supplier<T> supplier) {
+			super(category, name, "%s");
+			this.supplier = throwArgNull(supplier, "supplier");
+		}
+
+		private Config(
+				final String category,
+				final String name,
+				final String description,
+				final String unit,
+				final String format,
+				final Supplier<T> supplier) {
+			super(category, name, description, unit, format);
+			this.supplier = throwArgNull(supplier, "supplier");
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public FunctionGauge.Config<T> withDescription(final String description) {
+			return new FunctionGauge.Config<>(
+					getCategory(), getName(), description, getUnit(), getFormat(), getSupplier()
+			);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public FunctionGauge.Config<T> withUnit(final String unit) {
+			return new FunctionGauge.Config<>(
+					getCategory(), getName(), getDescription(), unit, getFormat(), getSupplier()
+			);
+		}
+
+		/**
+		 * Sets the {@link Metric#getFormat() Metric.format} in fluent style.
+		 *
+		 * @param format
+		 * 		the format-string
+		 * @return a new configuration-object with updated {@code format}
+		 * @throws IllegalArgumentException
+		 * 		if {@code format} is {@code null} or consists only of whitespaces
+		 */
+		public FunctionGauge.Config<T> withFormat(final String format) {
+			return new FunctionGauge.Config<>(
+					getCategory(), getName(), getDescription(), getUnit(), format, getSupplier()
+			);
+		}
+
+		/**
+		 * Getter of the {@code supplier}
+		 *
+		 * @return the {@code supplier}
+		 */
+		public Supplier<T> getSupplier() {
+			return supplier;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@SuppressWarnings("unchecked")
+		@Override
+		Class<FunctionGauge<T>> getResultClass() {
+			return (Class<FunctionGauge<T>>) (Class<?>) FunctionGauge.class;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		FunctionGauge<T> create(final MetricsFactory factory) {
+			return factory.createFunctionGauge(this);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public String toString() {
+			return new ToStringBuilder(this)
+					.appendSuper(super.toString())
+					.toString();
+		}
 	}
+
 }

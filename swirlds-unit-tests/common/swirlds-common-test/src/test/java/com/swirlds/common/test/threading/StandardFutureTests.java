@@ -367,4 +367,74 @@ class StandardFutureTests {
 		assertEventuallyTrue(finished::get, Duration.ofSeconds(1), "should have finished by now");
 		assertEventuallyTrue(callbackFinished::get, Duration.ofSeconds(1), "should have finished by now");
 	}
+
+	@Test
+	@DisplayName("Completion Callback Test")
+	void completionCallbackTest() {
+		final AtomicBoolean complete = new AtomicBoolean();
+
+		final StandardFuture<Integer> future = new StandardFuture<>(value -> {
+			assertFalse(complete.get(), "should only be completed once");
+			assertEquals(17, value, "unexpected value");
+			complete.set(true);
+		});
+
+		future.complete(17);
+
+		assertTrue(complete.get(), "callback not invoked");
+	}
+
+	@Test
+	@DisplayName("Complete After Complete Test")
+	void completeAfterCompleteTest() throws ExecutionException, InterruptedException {
+		final StandardFuture<Integer> future = new StandardFuture<>();
+		future.complete(0);
+		future.complete(1);
+		assertEquals(0, future.get(), "unexpected value");
+	}
+
+	@Test
+	@DisplayName("Complete After Cancellation Test")
+	void completeAfterCancellationTest() {
+		final StandardFuture<Integer> future = new StandardFuture<>();
+		future.cancel();
+		future.complete(1);
+		assertThrows(CancellationException.class, future::get, "should be cancelled");
+	}
+
+	@Test
+	@DisplayName("Cancel After Complete Test")
+	void cancelAfterCompleteTest() throws ExecutionException, InterruptedException {
+		final StandardFuture<Integer> future = new StandardFuture<>();
+		future.complete(0);
+		future.cancel();
+		assertEquals(0, future.get(), "unexpected value");
+	}
+
+	@Test
+	@DisplayName("Cancel After Cancel Test")
+	void cancelAfterCancelTest() {
+		final StandardFuture<Integer> future = new StandardFuture<>();
+		future.cancel();
+		future.cancel();
+		assertThrows(CancellationException.class, future::get, "should be cancelled");
+	}
+
+	@Test
+	@DisplayName("cancelWithError() After Complete Test")
+	void cancelWithErrorAfterComplete() throws ExecutionException, InterruptedException {
+		final StandardFuture<Integer> future = new StandardFuture<>();
+		future.complete(0);
+		future.cancelWithError(new RuntimeException("intentional error"));
+		assertEquals(0, future.get(), "unexpected value");
+	}
+
+	@Test
+	@DisplayName("cancelWithError() After Cancellation Test")
+	void cancelWithErrorAfterCancel() {
+		final StandardFuture<Integer> future = new StandardFuture<>();
+		future.cancel();
+		future.cancelWithError(new RuntimeException("intentional error"));
+		assertThrows(CancellationException.class, future::get, "should be cancelled");
+	}
 }

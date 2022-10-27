@@ -261,10 +261,15 @@ public class LearningSynchronizer implements ReconnectNodeCount {
 		final AtomicReference<T> reconstructedRoot = new AtomicReference<>();
 
 		new LearnerThread<>(workGroup, in, out, rootsToReceive, reconstructedRoot, view, this).start();
+		InterruptedException interruptException = null;
+		try {
+			workGroup.waitForTermination();
+		} catch (final InterruptedException e) {  // NOSONAR: Exception is rethrown below after cleanup.
+			interruptException = e;
+			LOG.warn(RECONNECT.getMarker(), "interrupted while waiting for work group termination");
+		}
 
-		workGroup.waitForTermination();
-
-		if (workGroup.hasExceptions()) {
+		if (interruptException != null || workGroup.hasExceptions()) {
 
 			// Depending on where the failure occurred, there may be deserialized objects still sitting in
 			// the async input stream's queue that haven't been attached to any tree.
@@ -278,7 +283,9 @@ public class LearningSynchronizer implements ReconnectNodeCount {
 				LOG.warn(RECONNECT.getMarker(), "deleting partially constructed subtree");
 				merkleRoot.release();
 			}
-
+			if (interruptException != null) {
+				throw interruptException;
+			}
 			throw new MerkleSynchronizationException("Synchronization failed with exceptions");
 		}
 

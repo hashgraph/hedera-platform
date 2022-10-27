@@ -19,7 +19,7 @@ package com.swirlds.platform;
 import com.swirlds.common.system.PlatformStatus;
 import com.swirlds.common.system.transaction.internal.SwirldTransaction;
 import com.swirlds.common.utility.BooleanFunction;
-import com.swirlds.platform.stats.TransactionStatistics;
+import com.swirlds.platform.metrics.TransactionMetrics;
 
 import java.util.function.Supplier;
 
@@ -34,7 +34,7 @@ public class TransactionSubmitter {
 	private final boolean isZeroStakeNode;
 	private final SettingsProvider settings;
 	private final BooleanFunction<SwirldTransaction> addToTransactionPool;
-	private final TransactionStatistics stats;
+	private final TransactionMetrics transactionMetrics;
 
 	/**
 	 * Creates a new instance.
@@ -47,7 +47,7 @@ public class TransactionSubmitter {
 	 * 		true is this node is a zero-stake node
 	 * @param addToTransactionPool
 	 * 		a function that adds the transaction to the transaction pool, if room is available
-	 * @param stats
+	 * @param transactionMetrics
 	 * 		stats relevant to transactions
 	 */
 	public TransactionSubmitter(
@@ -55,13 +55,13 @@ public class TransactionSubmitter {
 			final SettingsProvider settings,
 			final boolean isZeroStakeNode,
 			final BooleanFunction<SwirldTransaction> addToTransactionPool,
-			final TransactionStatistics stats) {
+			final TransactionMetrics transactionMetrics) {
 
 		this.platformStatusSupplier = platformStatusSupplier;
 		this.settings = settings;
 		this.isZeroStakeNode = isZeroStakeNode;
 		this.addToTransactionPool = addToTransactionPool;
-		this.stats = stats;
+		this.transactionMetrics = transactionMetrics;
 	}
 
 	/**
@@ -100,7 +100,7 @@ public class TransactionSubmitter {
 
 		final long start = System.nanoTime();
 		final boolean success = addToTransactionPool.apply(trans);
-		stats.updateTransSubmitMicros((long) ((System.nanoTime() - start) * NANOSECONDS_TO_MICROSECONDS));
+		transactionMetrics.updateTransSubmitMicros((long) ((System.nanoTime() - start) * NANOSECONDS_TO_MICROSECONDS));
 
 		return success;
 	}

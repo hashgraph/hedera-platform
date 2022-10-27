@@ -16,7 +16,9 @@
 
 package com.swirlds.common.metrics;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+
+import java.util.EnumSet;
 
 import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
@@ -25,108 +27,25 @@ import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
  * <p>
  * Only the current value is stored, no history or distribution is kept.
  */
-public class IntegerGauge extends AbstractGauge<Integer> {
-
-	private final AtomicInteger value = new AtomicInteger();
+public interface IntegerGauge extends Metric {
 
 	/**
-	 * Constructor of {@code IntegerGauge}
-	 *
-	 * @param category
-	 * 		the kind of metric (metrics are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the metric
-	 * @param description
-	 * 		a one-sentence description of the metric
-	 * @throws IllegalArgumentException
-	 * 		if one of the parameters is {@code null}
+	 * {@inheritDoc}
 	 */
-	public IntegerGauge(
-			final String category,
-			final String name,
-			final String description) {
-		this(category, name, description, "%d");
-	}
-
-	/**
-	 * Constructor of {@code IntegerGauge}
-	 *
-	 * @param category
-	 * 		the kind of metric (metrics are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the metric
-	 * @param description
-	 * 		a one-sentence description of the metric
-	 * @param initialValue
-	 * 		the initial value of this {@code IntegerGauge}
-	 * @throws IllegalArgumentException
-	 * 		if one of the parameters is {@code null}
-	 */
-	public IntegerGauge(
-			final String category,
-			final String name,
-			final String description,
-			final int initialValue) {
-		this(category, name, description, "%d", initialValue);
-	}
-
-	/**
-	 * Constructor of {@code IntegerGauge}
-	 *
-	 * @param category
-	 * 		the kind of metric (metrics are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the metric
-	 * @param description
-	 * 		a one-sentence description of the metric
-	 * @param format
-	 * 		a string that can be passed to String.format() to format the metric
-	 * @throws IllegalArgumentException
-	 * 		if one of the parameters is {@code null}
-	 */
-	public IntegerGauge(
-			final String category,
-			final String name,
-			final String description,
-			final String format) {
-		this(category, name, description, format, 0);
-	}
-
-	/**
-	 * Constructor of {@code IntegerGauge}
-	 *
-	 * @param category
-	 * 		the kind of metric (metrics are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the metric
-	 * @param description
-	 * 		a one-sentence description of the metric
-	 * @param format
-	 * 		a string that can be passed to String.format() to format the metric
-	 * @param initialValue
-	 * 		the initial value of this {@code IntegerGauge}
-	 * @throws IllegalArgumentException
-	 * 		if one of the parameters is {@code null}
-	 */
-	public IntegerGauge(
-			final String category,
-			final String name,
-			final String description,
-			final String format,
-			final int initialValue) {
-		super(category, name, description, format);
-		this.value.set(initialValue);
+	@Override
+	default EnumSet<ValueType> getValueTypes() {
+		return EnumSet.of(VALUE);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public Integer get(final ValueType valueType) {
+	default Integer get(final ValueType valueType) {
 		if (valueType == VALUE) {
 			return get();
 		}
-		throw new IllegalArgumentException("Unsupported ValueType");
+		throw new IllegalArgumentException("Unsupported ValueType: " + valueType);
 	}
 
 	/**
@@ -134,9 +53,7 @@ public class IntegerGauge extends AbstractGauge<Integer> {
 	 *
 	 * @return the current value
 	 */
-	public int get() {
-		return value.get();
-	}
+	int get();
 
 	/**
 	 * Set the current value
@@ -144,7 +61,130 @@ public class IntegerGauge extends AbstractGauge<Integer> {
 	 * @param newValue
 	 * 		the new value
 	 */
-	public void set(final int newValue) {
-		this.value.set(newValue);
+	void set(final int newValue);
+
+	/**
+	 * Configuration of a {@link IntegerGauge}
+	 */
+	final class Config extends MetricConfig<IntegerGauge, IntegerGauge.Config> {
+
+		private final int initialValue;
+
+		/**
+		 * Constructor of {@code IntegerGauge.Config}
+		 *
+		 * The {@link #getInitialValue() initialValue} is by default set to {@code 0},
+		 * the {@link #getFormat() format} is set to "%d".
+		 *
+		 * @param category
+		 * 		the kind of metric (metrics are grouped or filtered by this)
+		 * @param name
+		 * 		a short name for the metric
+		 * @throws IllegalArgumentException
+		 * 		if one of the parameters is {@code null}
+		 */
+		public Config(
+				final String category, final String name) {
+
+			super(category, name, "%d");
+			this.initialValue = 0;
+		}
+
+		private Config(
+				final String category,
+				final String name,
+				final String description,
+				final String unit,
+				final String format,
+				final int initialValue) {
+
+			super(category, name, description, unit, format);
+			this.initialValue = initialValue;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public IntegerGauge.Config withDescription(final String description) {
+			return new IntegerGauge.Config(
+					getCategory(), getName(), description, getUnit(), getFormat(), getInitialValue()
+			);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public IntegerGauge.Config withUnit(final String unit) {
+			return new IntegerGauge.Config(
+					getCategory(), getName(), getDescription(), unit, getFormat(), getInitialValue()
+			);
+		}
+
+		/**
+		 * Sets the {@link Metric#getFormat() Metric.format} in fluent style.
+		 *
+		 * @param format
+		 * 		the format-string
+		 * @return a new configuration-object with updated {@code format}
+		 * @throws IllegalArgumentException
+		 * 		if {@code format} is {@code null} or consists only of whitespaces
+		 */
+		public IntegerGauge.Config withFormat(final String format) {
+			return new IntegerGauge.Config(
+					getCategory(), getName(), getDescription(), getUnit(), format, getInitialValue()
+			);
+		}
+
+		/**
+		 * Getter of the {@code initialValue}
+		 *
+		 * @return the {@code initialValue}
+		 */
+		public int getInitialValue() {
+			return initialValue;
+		}
+
+		/**
+		 * Fluent-style setter of the initial value.
+		 *
+		 * @param initialValue
+		 * 		the initial value
+		 * @return a new configuration-object with updated {@code initialValue}
+		 */
+		public IntegerGauge.Config withInitialValue(final int initialValue) {
+			return new IntegerGauge.Config(
+					getCategory(), getName(), getDescription(), getUnit(), getFormat(), initialValue
+			);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		Class<IntegerGauge> getResultClass() {
+			return IntegerGauge.class;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		IntegerGauge create(final MetricsFactory factory) {
+			return factory.createIntegerGauge(this);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public String toString() {
+			return new ToStringBuilder(this)
+					.appendSuper(super.toString())
+					.append("initialValue", initialValue)
+					.toString();
+		}
 	}
+
 }

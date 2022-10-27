@@ -54,6 +54,9 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 	 * one if a suitable neighbor is not found yet.
 	 */
 	private static final int MAXIMUM_NEIGHBORS_TO_QUERY = 10;
+
+	private final Settings settings = Settings.getInstance();
+
 	/** the event intake queue */
 	private final BlockingQueue<EventIntakeTask> intakeQueue;
 	/** This object holds data on how nodes are connected to each other. */
@@ -149,7 +152,7 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 	public boolean shouldAcceptSync() {
 		// we shouldn't sync if the event intake queue is too big
 		final int intakeQueueSize = intakeQueue.size();
-		if (intakeQueueSize > Settings.eventIntakeQueueThrottleSize) {
+		if (intakeQueueSize > settings.getEventIntakeQueueThrottleSize()) {
 			LogManager.getLogger().debug(SYNC.getMarker(),
 					"don't accept sync because event intake queue is too big, size: {}",
 					intakeQueueSize);
@@ -166,7 +169,7 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 	@Override
 	public boolean shouldInitiateSync() {
 		//we shouldn't sync if the event intake queue is too big
-		return intakeQueue.size() <= Settings.eventIntakeQueueThrottleSize;
+		return intakeQueue.size() <= settings.getEventIntakeQueueThrottleSize();
 	}
 
 	/**
@@ -234,7 +237,7 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 	@Override
 	public boolean transThrottleCallAndCreate() {
 		// check 1: if transThrottle is off, initiate a sync and create an event
-		if (!Settings.transThrottle) {
+		if (!settings.isTransThrottle()) {
 			return true;
 		}
 		// check 2: when a node starts up or does a reconnect,
@@ -249,7 +252,7 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 		}
 
 		final long roundReceivedAllCons = transactionTracker.getLastRoundReceivedAllTransCons();
-		if (Settings.state.getSaveStatePeriod() > 0) {
+		if (settings.getState().getSaveStatePeriod() > 0) {
 			// check 4: if we are saving states to disk, then we need to sync until we have saved a state that has
 			// processed all transactions
 			if (roundReceivedAllCons > lastRoundSavedToDisk.get()) {
@@ -332,8 +335,8 @@ class SyncManagerImpl implements SyncManager, FallenBehindManager {
 		}
 
 		// check 5: staleEventPrevention
-		if (Settings.staleEventPreventionThreshold > 0 &&
-				info.getEventsRead() > Settings.staleEventPreventionThreshold * addressBook.getSize()) {
+		if (settings.getStaleEventPreventionThreshold() > 0 &&
+				info.getEventsRead() > settings.getStaleEventPreventionThreshold() * addressBook.getSize()) {
 			// if we read too many events during this sync, we skip creating an event to reduce the probability of
 			// having a stale event
 			return false;

@@ -31,7 +31,7 @@ import com.swirlds.common.merkle.synchronization.views.CustomReconnectRoot;
 import com.swirlds.common.merkle.synchronization.views.LearnerTreeView;
 import com.swirlds.common.merkle.synchronization.views.TeacherTreeView;
 import com.swirlds.common.merkle.utility.DebugIterationEndpoint;
-import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualMap;
@@ -69,7 +69,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
@@ -615,9 +614,6 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 		throwIfImmutable();
 		Objects.requireNonNull(key, NO_NULL_KEYS_ALLOWED_MESSAGE);
 		final VirtualLeafRecord<K, V> rec = records.findLeafRecord(key, true);
-		if (rec != null) {
-			markDirty(rec);
-		}
 		return rec == null ? null : rec.getValue();
 	}
 
@@ -1227,12 +1223,12 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 	/**
 	 * Pass all statistics to the registry.
 	 *
-	 * @param registry
-	 * 		an object that manages statistics
+	 * @param metrics
+	 * 		reference to the metrics system
 	 */
-	public void registerStatistics(final Consumer<Metric> registry) {
-		statistics.registerStatistics(registry);
-		dataSource.registerStatistics(registry);
+	public void registerMetrics(final Metrics metrics) {
+		statistics.registerMetrics(metrics);
+		dataSource.registerMetrics(metrics);
 	}
 
 	/**

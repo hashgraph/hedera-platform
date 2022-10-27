@@ -75,18 +75,6 @@ public class RoundInfo {
 	protected final EventImpl[] judges;
 
 	/**
-	 * all the known events that were created in this round (i.e., have this round number)
-	 *
-	 * synchronized so getAllEvents works well
-	 */
-	protected final List<EventImpl> allEvents = Collections.synchronizedList(new ArrayList<>());
-
-	/**
-	 * these events were all created in this round, and aren't yet consensus
-	 */
-	protected final List<EventImpl> nonConsensusEvents = Collections.synchronizedList(new ArrayList<>());
-
-	/**
 	 * XOR of sigs of all famous events
 	 */
 	protected final byte[] whitening = new byte[CryptoConstants.SIG_SIZE_BYTES];

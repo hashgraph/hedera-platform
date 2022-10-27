@@ -21,7 +21,7 @@ import com.swirlds.common.io.streams.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.TeachingSynchronizer;
 import com.swirlds.logging.payloads.ReconnectFinishPayload;
 import com.swirlds.logging.payloads.ReconnectStartPayload;
-import com.swirlds.platform.ReconnectStatistics;
+import com.swirlds.platform.metrics.ReconnectMetrics;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.state.StateSettings;
@@ -51,7 +51,7 @@ public class ReconnectTeacher {
 	private final long otherId;
 	private final long lastRoundReceived;
 
-	private final ReconnectStatistics statistics;
+	private final ReconnectMetrics statistics;
 
 	/**
 	 * After reconnect is finished, restore the socket timeout to the original value.
@@ -67,7 +67,7 @@ public class ReconnectTeacher {
 			final long selfId,
 			final long otherId,
 			final long lastRoundReceived,
-			final ReconnectStatistics statistics) {
+			final ReconnectMetrics statistics) {
 
 		this.connection = connection;
 		this.signedState = signedState;

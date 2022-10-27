@@ -85,6 +85,7 @@
 		<!-- Saved States -->
 		<MarkerFilter marker="SNAPSHOT_MANAGER"       onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
 		<MarkerFilter marker="STATE_TO_DISK"          onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
+		<MarkerFilter marker="STATE_HASH"             onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
 
 		<!-- Beta Mirror -->
 		<MarkerFilter marker="BETA_MIRROR_NODE" 	  onMatch="ACCEPT" 	onMismatch="NEUTRAL"/>
@@ -205,6 +206,7 @@
 				<!-- Saved States -->
 				<MarkerFilter marker="SNAPSHOT_MANAGER"       onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
 				<MarkerFilter marker="STATE_TO_DISK"          onMatch="ACCEPT"  onMismatch="NEUTRAL"/>
+				<MarkerFilter marker="STATE_HASH"             onMatch="DENY"    onMismatch="NEUTRAL"/>
 
 				<!-- Beta Mirror -->
 				<MarkerFilter marker="BETA_MIRROR_NODE" 	  onMatch="ACCEPT" 	onMismatch="NEUTRAL"/>
@@ -299,10 +301,25 @@
 			</Filters>
 		</RollingRandomAccessFile>
 
+		<!-- Platform hash stream logs -->
+		<RollingRandomAccessFile name="SwirldsHashStream" fileName="swirlds-hashstream.log" filePattern="swirlds-hashstream.%i.log"
+								 append="true">
+			<PatternLayout>
+				 <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-8sn %-5p %-16marker &lt;%t&gt; %c{1}: %msg%n</pattern>
+			</PatternLayout>
+			<Policies>
+				 <SizeBasedTriggeringPolicy size="500 MB"/>
+			</Policies>
+			<DefaultRolloverStrategy max="1"/>
+			<Filters>
+				<MarkerFilter marker="STATE_HASH"             onMatch="ACCEPT"  onMismatch="DENY"/>
+			</Filters>
+		</RollingRandomAccessFile>
 	</Appenders>
 	<Loggers>
 		<Root level="ALL">
 			<AppenderRef ref="SwirldsPrimaryLog" />
+			<AppenderRef ref="SwirldsHashStream" />
 
 			<!-- Debugging Logs that are disabled by default (Do not remove) -->
 			<!-- <AppenderRef ref="SwirldsSyncLog" />-->

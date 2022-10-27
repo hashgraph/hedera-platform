@@ -25,11 +25,11 @@ import com.swirlds.common.system.address.AddressBook;
 public interface SignedStateInfo {
 
 	/**
-	 * The greatest round number such that all famous witnesses are known for it and all earlier rounds.
+	 * The round of the state.
 	 *
-	 * @return the last round number
+	 * @return the round number
 	 */
-	long getLastRoundReceived();
+	long getRound();
 
 	/**
 	 * Return the set of signatures collected so far for the hash of this SignedState. This includes the

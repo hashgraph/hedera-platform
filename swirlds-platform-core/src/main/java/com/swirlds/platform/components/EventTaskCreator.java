@@ -18,13 +18,13 @@ package com.swirlds.platform.components;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.framework.QueueThread;
-import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.event.CreateEventTask;
 import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.event.ValidEvent;
-import com.swirlds.platform.stats.EventIntakeStats;
+import com.swirlds.platform.internal.EventImpl;
+import com.swirlds.platform.metrics.EventIntakeMetrics;
 import com.swirlds.platform.sync.SyncManager;
 import com.swirlds.platform.sync.SyncResult;
 import org.apache.logging.log4j.LogManager;
@@ -50,7 +50,7 @@ public class EventTaskCreator {
 	private final AddressBook addressBook; // if this code is changed to non-final, make it volatile
 
 	/** the object that tracks statistics */
-	private final EventIntakeStats stats;
+	private final EventIntakeMetrics eventIntakeMetrics;
 
 	/** the member ID of the member running the platform using this hashgraph */
 	private final NodeId selfId;
@@ -80,8 +80,8 @@ public class EventTaskCreator {
 	 * 		the addressBook
 	 * @param selfId
 	 * 		the ID of the platform this hashgraph is running on
-	 * @param stats
-	 * 		tracks statistics
+	 * @param eventIntakeMetrics
+	 * 		tracks metrics
 	 * @param eventIntakeQueue
 	 * 		the queue add tasks to
 	 * @param settings
@@ -95,13 +95,13 @@ public class EventTaskCreator {
 			final EventMapper eventMapper,
 			final AddressBook addressBook,
 			final NodeId selfId,
-			final EventIntakeStats stats,
+			final EventIntakeMetrics eventIntakeMetrics,
 			final BlockingQueue<EventIntakeTask> eventIntakeQueue,
 			final SettingsProvider settings,
 			final SyncManager syncManager,
 			final Supplier<Random> random) {
 		this.eventMapper = eventMapper;
-		this.stats = stats;
+		this.eventIntakeMetrics = eventIntakeMetrics;
 		this.selfId = selfId;
 		this.addressBook = addressBook.copy();
 		this.addressBook.seal();
@@ -121,7 +121,7 @@ public class EventTaskCreator {
 	 */
 	public void syncDone(final SyncResult result) {
 		final boolean shouldCreateEvent = syncManager.shouldCreateEvent(result);
-		stats.eventCreation(shouldCreateEvent);
+		eventIntakeMetrics.eventCreation(shouldCreateEvent);
 		if (!shouldCreateEvent) {
 			// we are not creating any events
 			return;
@@ -183,7 +183,7 @@ public class EventTaskCreator {
 				LOG.info(STALE_EVENTS.getMarker(), "Creating child for childless event {}",
 						event::toShortString);
 				createEvent(event.getCreatorId());
-				stats.rescuedEvent();
+				eventIntakeMetrics.rescuedEvent();
 			}
 		}
 	}

@@ -16,10 +16,10 @@
 
 package com.swirlds.platform;
 
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.system.EventCreationRule;
 import com.swirlds.common.system.EventCreationRuleResponse;
 import com.swirlds.platform.components.TransThrottleSyncRule;
-import com.swirlds.platform.stats.PlatformStatistics;
 
 import java.time.Instant;
 import java.util.function.Supplier;
@@ -33,14 +33,14 @@ public class StartUpEventFrozenManager implements TransThrottleSyncRule, EventCr
 	private volatile Instant startUpEventFrozenEndTime = null;
 	/** a boolean that indicates whether the statistics have been reset after the startup freeze */
 	private volatile boolean freezeResetStatistics = false;
-	/** Stats supplier used to reset statistics */
-	private final Supplier<PlatformStatistics> stats;
+	/** Metrics system */
+	private final Metrics metrics;
 	/** Instant supplier used for unit testing */
 	private final Supplier<Instant> now;
 
-	StartUpEventFrozenManager(final Supplier<PlatformStatistics> stats,
-			final Supplier<Instant> now) {
-		this.stats = stats;
+	StartUpEventFrozenManager(final Metrics metrics,
+							  final Supplier<Instant> now) {
+		this.metrics = metrics;
 		this.now = now;
 	}
 
@@ -57,9 +57,7 @@ public class StartUpEventFrozenManager implements TransThrottleSyncRule, EventCr
 			if (!freezeResetStatistics) {
 				// after the startup freeze, we need to reset the statistics
 				freezeResetStatistics = true;
-				if (stats != null && stats.get() != null) {
-					stats.get().resetAllSpeedometers();
-				}
+				metrics.resetAll();
 			}
 		}
 		return false;

@@ -17,12 +17,14 @@
 package com.swirlds.platform.chatter.protocol.heartbeat;
 
 import com.swirlds.common.io.SelfSerializable;
-import com.swirlds.common.metrics.Clock;
+import com.swirlds.common.Clock;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.platform.chatter.protocol.MessageHandler;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
 
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
@@ -36,6 +38,8 @@ public class HeartbeatSender implements MessageProvider, MessageHandler<Heartbea
 	private final Duration heartbeatInterval;
 	private final Clock clock;
 	private final AtomicReference<HeartbeatSent> outbound = new AtomicReference<>();
+	private final AtomicLong lastHeartbeatNanos = new AtomicLong();
+	private final AtomicBoolean firstResponseReceived = new AtomicBoolean();
 
 	/**
 	 * @param peerId
@@ -95,9 +99,12 @@ public class HeartbeatSender implements MessageProvider, MessageHandler<Heartbea
 			return;
 		}
 		// they are responding to our ping, so we capture the time difference
+		final long roundTripNanos = clock.now() - lastSent.time();
+		lastHeartbeatNanos.set(roundTripNanos);
+		firstResponseReceived.set(true);
 		pingConsumer.accept(
 				peerId,
-				clock.now() - lastSent.time());
+				roundTripNanos);
 		final HeartbeatSent respondedTrue = new HeartbeatSent(
 				message.getHeartbeatId(),
 				lastSent.time(),
@@ -109,5 +116,31 @@ public class HeartbeatSender implements MessageProvider, MessageHandler<Heartbea
 	@Override
 	public void clear() {
 		outbound.set(new HeartbeatSent(0, clock.now(), true));
+		firstResponseReceived.set(false);
+		lastHeartbeatNanos.set(0);
+	}
+
+	/**
+	 * Calculates the last known round-trip time of a heartbeat with this peer, or the time since sending the last
+	 * heartbeat without a response, whichever is greater.
+	 *
+	 * @return latest round trip time in nanos, or null if no heartbeat response has been received
+	 */
+	public Long getLastRoundTripNanos() {
+		if (!firstResponseReceived.get()) {
+			return null;
+		}
+		return Math.max(lastHeartbeatNanos.get(), timeSinceLastSentWithNoResponse());
+	}
+
+	private long timeSinceLastSentWithNoResponse() {
+		final HeartbeatSent lastHeartBeatSent = outbound.get();
+		if (lastHeartBeatSent.responded()) {
+			// The last heartbeat was responded to, and we have not sent another yet
+			return 0;
+		} else {
+			// we are still waiting for a response
+			return clock.now() - lastHeartBeatSent.time();
+		}
 	}
 }

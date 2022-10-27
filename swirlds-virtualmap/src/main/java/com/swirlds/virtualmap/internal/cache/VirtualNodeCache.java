@@ -382,7 +382,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 	 * 		if this is not the oldest cache in the chain
 	 */
 	@Override
-	public void release() {
+	public boolean release() {
 		throwIfDestroyed();
 
 		// Under normal conditions "seal()" would have been called already, but it is at least possible to
@@ -425,6 +425,8 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 		if (LOG.isTraceEnabled()) {
 			LOG.trace("Released {}", fastCopyVersion);
 		}
+
+		return true;
 	}
 
 	@Override
@@ -648,8 +650,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 			@SuppressWarnings("unchecked")
 			final VirtualLeafRecord<K, V> leaf = new VirtualLeafRecord<>(
 					mutation.value.getPath(), null, mutation.value.getKey(), (V) mutation.value.getValue().copy());
-			updatePaths(key, leaf.getPath(), pathToDirtyLeafIndex, dirtyLeafPaths);
-			keyToDirtyLeafIndex.compute(key, (k, m) -> mutate(leaf, m));
+			putLeaf(leaf);
 			return leaf;
 		}
 

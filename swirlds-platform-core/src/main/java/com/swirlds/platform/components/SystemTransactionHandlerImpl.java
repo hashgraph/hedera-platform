@@ -16,6 +16,8 @@
 
 package com.swirlds.platform.components;
 
+import com.swirlds.common.crypto.Signature;
+import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
 import com.swirlds.common.system.transaction.internal.SystemTransaction;
@@ -90,11 +92,12 @@ public class SystemTransactionHandlerImpl implements SystemTransactionHandler {
 					if (!selfId.equalsMain(creatorId)) {
 						final StateSignatureTransaction signatureTransaction = (StateSignatureTransaction) transaction;
 						final long lastRoundReceived = signatureTransaction.getLastRoundReceived();
-						final byte[] sig = signatureTransaction.getStateSignature();
+						final Signature signature =
+								new Signature(SignatureType.RSA, signatureTransaction.getStateSignature());
 						LOG.debug(STATE_SIG_DIST.getMarker(),
 								"platform {} got sig from {} for round {} at handleSystemTransaction",
 								selfId, creatorId, lastRoundReceived);
-						recorder.recordStateSig(lastRoundReceived, creatorId, null, sig);
+						recorder.recordStateSignature(lastRoundReceived, creatorId, signature);
 					}
 					break;
 				case SYS_TRANS_PING_MICROSECONDS: // latency between members

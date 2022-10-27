@@ -472,7 +472,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 		StopWatch watch = null;
 
-		if (MerkleMapStatistics.isRegistered()) {
+		if (MerkleMapMetrics.isRegistered()) {
 			watch = new StopWatch();
 			watch.start();
 		}
@@ -492,7 +492,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 			if (watch != null) {
 				watch.stop();
-				MerkleMapStatistics.mmmGetMicroSec.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+				MerkleMapMetrics.updateMmmGetMicroSec(watch.getTime(TimeUnit.MICROSECONDS));
 			}
 		}
 	}
@@ -519,7 +519,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 		StopWatch watch = null;
 
-		if (MerkleMapStatistics.isRegistered()) {
+		if (MerkleMapMetrics.isRegistered()) {
 			watch = new StopWatch();
 			watch.start();
 		}
@@ -555,7 +555,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 			if (watch != null) {
 				watch.stop();
-				MerkleMapStatistics.mmGfmMicroSec.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+				MerkleMapMetrics.updateMmGfmMicroSec(watch.getTime(TimeUnit.MICROSECONDS));
 			}
 		}
 	}
@@ -575,7 +575,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 		StopWatch watch = null;
 
-		if (MerkleMapStatistics.isRegistered()) {
+		if (MerkleMapMetrics.isRegistered()) {
 			watch = new StopWatch();
 			watch.start();
 		}
@@ -583,7 +583,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 		final V val = putInternal(key, value);
 		if (watch != null) {
 			watch.stop();
-			MerkleMapStatistics.mmPutMicroSec.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+			MerkleMapMetrics.updateMmPutMicroSec(watch.getTime(TimeUnit.MICROSECONDS));
 		}
 
 		return val;
@@ -713,7 +713,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 		StopWatch watch = null;
 
-		if (MerkleMapStatistics.isRegistered()) {
+		if (MerkleMapMetrics.isRegistered()) {
 			watch = new StopWatch();
 			watch.start();
 		}
@@ -726,7 +726,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>>
 
 			if (watch != null) {
 				watch.stop();
-				MerkleMapStatistics.mmReplaceMicroSec.recordValue(watch.getTime(TimeUnit.MICROSECONDS));
+				MerkleMapMetrics.updateMmReplaceMicroSec(watch.getTime(TimeUnit.MICROSECONDS));
 			}
 		}
 	}

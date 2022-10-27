@@ -36,26 +36,34 @@ import java.io.PrintStream;
  * <code>cons.out.println()</code> in the same way as the System <code>print()</code> and
  * <code>println()</code> write to the Java console.
  */
-public class Console extends JFrame {
+public class Console {
+
+	public static final double MAX_SIZE_PERCENTAGE = 0.75;
+
 	/**
 	 * Use {@link #out} to write to this console window in the same way that {@link System#out} is used to
 	 * write to Java's console window.
 	 */
 	public final PrintStream out;
+
+	private final boolean headless;
+
 	/** the window holding the console */
-	private JFrame window = null;
+	private final JFrame window;
+
 	/** the heading text at the top */
-	private JTextArea heading = null;
+	private final JTextArea heading;
+
 	/** the main body text below the heading */
-	private JTextArea textArea = null;
+	private final JTextArea textArea;
+
 	/** the scroll pane containing textArea and heading */
-	private JScrollPane scrollPane = null;
+	private final JScrollPane scrollPane;
+
 	/** max number of characters stored stored. Older text is deleted. */
-	private final int maxSize = 50 * 1024;
-	/**
-	 *
-	 */
-	private ConsoleStream consoleStream;
+	private static final int MAX_SIZE = 50 * 1024;
+
+	private static final int DEFAULT_FONT_SIZE = 12; // 14 is good for for windows
 
 	private class ConsoleStream extends ByteArrayOutputStream {
 		@Override
@@ -66,17 +74,17 @@ public class Console extends JFrame {
 				return;
 			}
 			str = textArea.getText() + str;
-			int n = (int) (0.75 * maxSize);
+			int n = (int) (MAX_SIZE_PERCENTAGE * MAX_SIZE);
 			if (str.length() > n) {
 				int i = str.lastIndexOf("\r", str.length() - n);
 				i = Math.max(i, str.lastIndexOf("\n", str.length() - n));
 				i = Math.max(i, 0);
-				i = Math.max(i, (int) (str.length() - maxSize));
+				i = Math.max(i, str.length() - MAX_SIZE);
 				str = str.substring(i);
 			}
 			textArea.setText(str);
 
-			JScrollBar bar = scrollPane.getVerticalScrollBar();
+			final JScrollBar bar = scrollPane.getVerticalScrollBar();
 			// the position of a scrollbar handle (its value) is at most maxScroll.
 			// this could have used textArea.getHeight() instead of bar.getMaximum().
 			int maxScroll = bar.getMaximum() - bar.getModel().getExtent();
@@ -88,23 +96,19 @@ public class Console extends JFrame {
 		}
 	}
 
-	/**
-	 * Get the number of rows of text visible, given the current size of the window.
-	 *
-	 * @return the number of rows visible
-	 */
-	public int getNumRows() {
-		int lineHeight = textArea.getFontMetrics(textArea.getFont())
-				.getHeight();
-		Rectangle viewRect = textArea.getVisibleRect();
-		int linesVisible = viewRect.height / lineHeight;
-		return linesVisible;
+	public Console(final String name, final Rectangle winRect) {
+		this(name, winRect, DEFAULT_FONT_SIZE, false);
 	}
 
-	public Console(String name, int bufferSize, Rectangle winRect, int fontSize,
-			boolean visible) {
+	public Console(final String name, final Rectangle winRect, final int fontSize,
+				   final boolean visible) {
 		if (GraphicsEnvironment.isHeadless()) {
+			window = null;
+			heading = null;
+			textArea = null;
+			scrollPane = null;
 			out = null;
+			headless = true;
 		} else {
 			heading = new JTextArea(2, 40);
 			heading.setFont(new Font(Font.MONOSPACED, Font.PLAIN, fontSize));
@@ -130,12 +134,11 @@ public class Console extends JFrame {
 			window.add(scrollPane, BorderLayout.CENTER);
 			window.setFocusable(true);
 			window.requestFocusInWindow();
-			window.setSize(winRect.width, winRect.height);
-			window.setLocation(winRect.x, winRect.y);
+			window.setBounds(winRect);
 			window.setVisible(visible);
 
-			consoleStream = new ConsoleStream();
-			out = new PrintStream(consoleStream, true);
+			out = new PrintStream(new ConsoleStream(), true);
+			headless = false;
 		}
 	}
 
@@ -145,7 +148,10 @@ public class Console extends JFrame {
 	 * @param headingText
 	 * 		the text to display at the top
 	 */
-	public void setHeading(String headingText) {
+	public void setHeading(final String headingText) {
+		if(headless) {
+			throw new IllegalStateException("Heading can not be defined in headless mode!");
+		}
 		heading.setText(headingText);
 		heading.revalidate();
 	}
@@ -156,7 +162,10 @@ public class Console extends JFrame {
 	 * @param listener
 	 * 		the key listener.
 	 */
-	public synchronized void addKeyListener(KeyListener listener) {
+	public synchronized void addKeyListener(final KeyListener listener) {
+		if(headless) {
+			throw new IllegalStateException("KeyListener can not be added in headless mode!");
+		}
 		window.addKeyListener(listener);
 		heading.addKeyListener(listener);
 		scrollPane.addKeyListener(listener);
@@ -170,6 +179,9 @@ public class Console extends JFrame {
 	 * 		whether the window holding console is visible
 	 */
 	public void setVisible(boolean visible) {
+		if(headless) {
+			throw new IllegalStateException("Visible state can not be changed in headless mode!");
+		}
 		window.setVisible(visible);
 	}
 
@@ -179,6 +191,10 @@ public class Console extends JFrame {
 	 * @return window holding console
 	 */
 	public JFrame getWindow() {
+		if(headless) {
+			throw new IllegalStateException("No window accessible in headless mode!");
+		}
 		return window;
 	}
+
 }

@@ -17,7 +17,7 @@
 package com.swirlds.platform.reconnect;
 
 import com.swirlds.common.system.NodeId;
-import com.swirlds.platform.ReconnectStatistics;
+import com.swirlds.platform.metrics.ReconnectMetrics;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.protocol.Protocol;
@@ -34,7 +34,7 @@ public class ReconnectProtocol implements Protocol {
 	private final ReconnectThrottle teacherThrottle;
 	private final Supplier<SignedState> lastCompleteSignedState;
 	private final int reconnectSocketTimeout;
-	private final ReconnectStatistics statistics;
+	private final ReconnectMetrics statistics;
 	private final ReconnectController reconnectController;
 
 
@@ -59,7 +59,7 @@ public class ReconnectProtocol implements Protocol {
 			final ReconnectThrottle teacherThrottle,
 			final Supplier<SignedState> lastCompleteSignedState,
 			final int reconnectSocketTimeout,
-			final ReconnectStatistics statistics,
+			final ReconnectMetrics statistics,
 			final ReconnectController reconnectController) {
 		this.peerId = peerId;
 		this.teacherThrottle = teacherThrottle;
@@ -125,7 +125,7 @@ public class ReconnectProtocol implements Protocol {
 					reconnectSocketTimeout,
 					connection.getSelfId().getId(),
 					connection.getOtherId().getId(),
-					state.getLastRoundReceived(),
+					state.getRound(),
 					statistics).execute();
 		} finally {
 			teacherThrottle.markReconnectFinished();

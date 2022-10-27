@@ -21,7 +21,7 @@ import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.network.ByteConstants;
-import com.swirlds.platform.stats.SyncStats;
+import com.swirlds.platform.metrics.SyncMetrics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -200,7 +200,7 @@ public final class SyncComms {
 	public static Callable<Integer> phase3Read(
 			final Connection conn,
 			final Consumer<GossipEvent> eventHandler,
-			final SyncStats stats,
+			final SyncMetrics syncMetrics,
 			final CountDownLatch eventReadingDone) {
 		return () -> {
 			LOG.info(SYNC_INFO.getMarker(), "{} reading events start", conn.getDescription());
@@ -220,7 +220,7 @@ public final class SyncComms {
 							eventsRead++;
 						}
 						case ByteConstants.COMM_EVENT_DONE -> {
-							stats.eventsReceived(startTime, eventsRead);
+							syncMetrics.eventsReceived(startTime, eventsRead);
 							LOG.info(SYNC_INFO.getMarker(), "{} reading events done, read {} events",
 									conn.getDescription(), eventsRead);
 							// we are done reading event, tell the writer thread to send a COMM_SYNC_DONE

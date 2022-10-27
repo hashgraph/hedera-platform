@@ -53,6 +53,10 @@ public class SettingsCommon {
 	/** should a transaction be sent after each state signature transaction, giving all avgBytePerSecSent[] stats? */
 	public static boolean enableBpsTrans = true;
 
+	/** update some metrics every this many milliseconds (-1 for never) */
+	public static int metricsUpdatePeriodMillis = 1000;
+
+
 	// used by MetricsWriterService
 	public static int threadPriorityNonSync = Thread.NORM_PRIORITY;
 	public static String csvFileName = "";

@@ -16,7 +16,7 @@
 
 package com.swirlds.common.sequence.map;
 
-import com.swirlds.common.sequence.Purgable;
+import com.swirlds.common.sequence.Shiftable;
 import com.swirlds.common.utility.Clearable;
 
 import java.util.List;
@@ -40,11 +40,10 @@ import java.util.function.Function;
  * </p>
  *
  * <p>
- * This data structure manages the allowed window of sequence numbers. That is, it allows a minimum and maximum
- * sequence number to be specified, and ensures that entries that violate that window are removed and not allowed
+ * This data structure manages the allowed window of sequence numbers. That is, it allows a minimum sequence number
+ * and a capacity to be specified, and ensures that entries that violate that window are removed and not allowed
  * to enter. Increasing the minimum value allowed in the window is also called "purging", as it may cause values in the
- * map to be removed if they fall outside the window. Increasing the maximum value allowed in the window is called
- * "expanding", as it allows the insertion of values that would have previously been rejected.
+ * map to be removed if they fall outside the window.
  * </p>
  *
  * <p>
@@ -57,19 +56,7 @@ import java.util.function.Function;
  * @param <V>
  * 		the type of value
  */
-public interface SequenceMap<K, V> extends Purgable, Clearable {
-
-	/**
-	 * When a new {@link SequenceMap} is instantiated, this is the default lowest sequence number that is permitted
-	 * to be added to the map.
-	 */
-	long DEFAULT_LOWEST_ALLOWED_SEQUENCE_NUMBER = 0;
-
-	/**
-	 * When a new {@link SequenceMap} is instantiated, this is the default highest sequence number that is permitted
-	 * to be added to the map.
-	 */
-	long DEFAULT_HIGHEST_ALLOWED_SEQUENCE_NUMBER = Long.MAX_VALUE;
+public interface SequenceMap<K, V> extends Clearable, Shiftable {
 
 	/**
 	 * Get the value for a key. Returns null if the key is not in the map. Also returns null if the key was once in the
@@ -96,7 +83,7 @@ public interface SequenceMap<K, V> extends Purgable, Clearable {
 	 *
 	 * @param key
 	 * 		the key
-	 * @return the value, or null if the key has been purged
+	 * @return the original value if present, or the new value, or null if the value is outside the allowed window
 	 */
 	V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction);
 
@@ -110,10 +97,9 @@ public interface SequenceMap<K, V> extends Purgable, Clearable {
 	 * 		the key
 	 * @param value
 	 * 		the value
-	 * @return the inserted value, or the previous value if the key was already in the map. Null if the sequence
-	 * 		number is not permitted
+	 * @return true if the value was inserted, false if it was not inserted for any reason
 	 */
-	V putIfAbsent(K key, V value);
+	boolean putIfAbsent(K key, V value);
 
 	/**
 	 * Insert a value into the map. No-op if key has a purged sequence number.
@@ -142,8 +128,8 @@ public interface SequenceMap<K, V> extends Purgable, Clearable {
 	 * @param sequenceNumber
 	 * 		all keys with this sequence number will be removed
 	 */
-	default void removeSequenceNumber(final long sequenceNumber) {
-		removeSequenceNumber(sequenceNumber, null);
+	default void removeValuesWithSequenceNumber(final long sequenceNumber) {
+		removeValuesWithSequenceNumber(sequenceNumber, null);
 	}
 
 	/**
@@ -155,7 +141,7 @@ public interface SequenceMap<K, V> extends Purgable, Clearable {
 	 * @param removedValueHandler
 	 * 		a callback that is passed all key/value pairs that are removed. Ignored if null.
 	 */
-	void removeSequenceNumber(final long sequenceNumber, BiConsumer<K, V> removedValueHandler);
+	void removeValuesWithSequenceNumber(final long sequenceNumber, BiConsumer<K, V> removedValueHandler);
 
 	/**
 	 * Get a list of all keys with a given sequence number. Once the list is returned, it is safe to modify
@@ -180,60 +166,32 @@ public interface SequenceMap<K, V> extends Purgable, Clearable {
 	List<Map.Entry<K, V>> getEntriesWithSequenceNumber(final long sequenceNumber);
 
 	/**
-	 * Purge all keys that have a sequence number smaller than a specified value. After this operation,
-	 * all keys with a smaller sequence number will be rejected if insertion is attempted.
-	 *
-	 * <p>
-	 * The smallest allowed sequence number must only increase over time. If N&lt;=M and M has already been purged,
-	 * then purging N will have no effect.
-	 * </p>
-	 *
-	 * @param smallestAllowedSequenceNumber
-	 * 		all keys with a sequence number strictly smaller than this value will be removed
+	 * {@inheritDoc}
 	 */
-	default void purge(final long smallestAllowedSequenceNumber) {
-		purge(smallestAllowedSequenceNumber, null);
+	@Override
+	default void shiftWindow(final long firstSequenceNumberInWindow) {
+		shiftWindow(firstSequenceNumberInWindow, null);
 	}
 
 	/**
 	 * <p>
-	 * Purge all keys that have a sequence number smaller than a specified value. After this operation,
-	 * all keys with a smaller sequence number will be rejected if insertion is attempted.
+	 * Remove all keys that have a sequence number smaller than a specified value, and increase the maximum allowed
+	 * sequence number by the same amount. After this operation, all keys outside the new window will be rejected.
 	 * </p>
 	 *
 	 * <p>
-	 * The smallest allowed sequence number must only increase over time. If N&lt;=M and M has already been purged,
-	 * then purging N will have no effect.
+	 * The smallest allowed sequence number must only increase over time.
 	 * </p>
 	 *
-	 * @param smallestAllowedSequenceNumber
+	 * @param firstSequenceNumberInWindow
+	 * 		the first sequence number in the new window,
 	 * 		all keys with a sequence number strictly smaller than this value will be removed
 	 * @param removedValueHandler
 	 * 		this value is passed each key/value pair that is removed as a result of this operation, ignored if null
+	 * @throws IllegalStateException
+	 * 		if the window is shifted to the left (towards smaller values)
 	 */
-	void purge(long smallestAllowedSequenceNumber, BiConsumer<K, V> removedValueHandler);
-
-	/**
-	 * <p>
-	 * Specify a newly permitted maximum sequence number. After calling this method, keys with sequence numbers
-	 * strictly greater than this value will be rejected, and keys with sequence numbers less than or equal to this
-	 * value may be accepted (if they don't violate the minimum sequence number).
-	 * </p>
-	 *
-	 * <p>
-	 * The largest allowed sequence number must only increase over time. If N&lt;=M and N has already been expanded to,
-	 * then then expanding to M will have no effect.
-	 * </p>
-	 *
-	 * <p>
-	 * Unlike {@link #purge(long)}, this method allows a wider range of sequence numbers to be included in this
-	 * data structure, and does not have the capability of removing elements.
-	 * </p>
-	 *
-	 * @param largestAllowedSequenceNumber
-	 * 		the largest sequence number that is permitted to be in this data structure
-	 */
-	void expand(long largestAllowedSequenceNumber);
+	void shiftWindow(long firstSequenceNumberInWindow, BiConsumer<K, V> removedValueHandler);
 
 	/**
 	 * @return the number of entries in this map
@@ -247,7 +205,7 @@ public interface SequenceMap<K, V> extends Purgable, Clearable {
 	 *
 	 * @return the smallest allowed sequence number
 	 */
-	long getLowestAllowedSequenceNumber();
+	long getFirstSequenceNumberInWindow();
 
 	/**
 	 * Get the maximum sequence number that is permitted to be in this map. All keys with larger
@@ -256,15 +214,14 @@ public interface SequenceMap<K, V> extends Purgable, Clearable {
 	 *
 	 * @return the largest allowed sequence number
 	 */
-	long getHighestAllowedSequenceNumber();
+	default long getLastSequenceNumberInWindow() {
+		return getFirstSequenceNumberInWindow() + getSequenceNumberCapacity() - 1;
+	}
 
 	/**
-	 * {@inheritDoc}
+	 * Get the capacity of this map, in number of sequence numbers allowed.
 	 *
-	 * <p>
-	 * Warning: this operation is moderately expensive for the concurrent implementation of this interface.
-	 * </p>
+	 * @return the sequence number capacity
 	 */
-	@Override
-	void clear();
+	int getSequenceNumberCapacity();
 }

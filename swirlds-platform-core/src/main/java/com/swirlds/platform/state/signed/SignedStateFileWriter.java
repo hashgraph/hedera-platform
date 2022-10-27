@@ -125,7 +125,7 @@ public final class SignedStateFileWriter {
 
 		writeStateFile(directory, signedState);
 		writeHashInfoFile(directory, signedState.getState());
-		Settings.writeSettingsUsed(directory);
+		Settings.getInstance().writeSettingsUsed(directory);
 	}
 
 	/**
@@ -147,22 +147,19 @@ public final class SignedStateFileWriter {
 		try {
 			LOG.info(STATE_TO_DISK.getMarker(),
 					"Started writing round {} state to disk. Reason: {}",
-					signedState.getLastRoundReceived(), taskDescription);
+					signedState.getRound(), taskDescription);
 
 			executeAndRename(savedStateDirectory,
 					directory -> writeSignedStateFilesToDirectory(directory, signedState));
 
 			LOG.info(STATE_TO_DISK.getMarker(),
-					() -> new StateSavedToDiskPayload(signedState.getLastRoundReceived(),
+					() -> new StateSavedToDiskPayload(signedState.getRound(),
 							signedState.isFreezeState()).toString());
 		} catch (final Throwable e) {
 			LOG.error(EXCEPTION.getMarker(),
 					"Exception when writing the signed state for round {} to disk:",
-					signedState.getLastRoundReceived(), e);
+					signedState.getRound(), e);
 			throw e;
-		} finally {
-			// set it to saved to disk in all cases so that it can be deleted from memory
-			signedState.setSavedToDisk(true);
 		}
 	}
 }

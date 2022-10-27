@@ -83,11 +83,12 @@ public interface Reservable extends Releasable {
 	 * object will be destroyed.
 	 * </p>
 	 *
+	 * @return true if this call to release() caused the object to become destroyed
 	 * @throws com.swirlds.common.exceptions.ReferenceCountException
 	 * 		this object has already been fully released and destroyed
 	 */
 	@Override
-	void release();
+	boolean release();
 
 	/**
 	 * Returns true if this object has had all of its reservations released, or if it has had its implicit reference

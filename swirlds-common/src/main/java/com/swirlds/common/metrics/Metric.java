@@ -17,142 +17,95 @@
 package com.swirlds.common.metrics;
 
 import com.swirlds.common.statistics.StatsBuffered;
-import org.apache.commons.lang3.tuple.Pair;
 
-import java.util.List;
-
-import static com.swirlds.common.utility.CommonUtils.throwArgNull;
+import java.util.EnumSet;
 
 /**
  * A single metric that is monitored here.
  */
-public abstract class Metric {
+public interface Metric {
 
 	/**
 	 * A {@code Metric} can keep track of several values, which are distinguished via the {@code MetricType}
 	 */
-	public enum ValueType {COUNTER, VALUE, MAX, MIN, STD_DEV}
-
-	protected static final List<ValueType> VALUE_TYPE = List.of(ValueType.VALUE);
-	protected static final List<ValueType> DISTRIBUTION_TYPES = List.of(
-			ValueType.VALUE,
-			ValueType.MAX,
-			ValueType.MIN,
-			ValueType.STD_DEV
-	);
-	protected static final List<ValueType> COUNTER_TYPE = List.of(ValueType.COUNTER);
-
-	private final String category;
-	private final String name;
-	private final String description;
-	private final String format;
+	enum ValueType {COUNTER, VALUE, MAX, MIN, STD_DEV}
 
 	/**
-	 * Constructor of {@code Metric}
+	 * Returns the unique identifier of this {@code Metric}.
 	 *
-	 * @param category
-	 * 		the kind of metric (metrics are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the metric
-	 * @param description
-	 * 		a one-sentence description of the metric
-	 * @param format
-	 * 		a string that can be passed to String.format() to format the metric
-	 * @throws IllegalArgumentException if one of the parameters is {@code null}
+	 * A {@code Metric} is identified by its category and name.
+	 *
+	 * @return the unique identifier
 	 */
-	protected Metric(final String category,
-			final String name,
-			final String description,
-			final String format) {
-		this.category = throwArgNull(category, "category");
-		this.name = throwArgNull(name, "name");
-		this.description = throwArgNull(description, "description");
-		this.format= throwArgNull(format, "format");
+	default String getIdentifier() {
+		return getCategory() + "." + getName();
 	}
 
 	/**
-	 * the kind of metric (metrics are grouped or filtered by this)
+	 * the kind of {@code Metric} (metrics are grouped or filtered by this)
 	 *
 	 * @return the category
 	 */
-	public String getCategory() {
-		return category;
-	}
+	String getCategory();
 
 	/**
-	 * a short name for the statistic
+	 * a short name for the {@code Metric}
 	 *
 	 * @return the name
 	 */
-	public String getName() {
-		return name;
-	}
+	String getName();
 
 	/**
-	 * a one-sentence description of the statistic
+	 * a one-sentence description of the {@code Metric}
 	 *
 	 * @return the description
 	 */
-	public String getDescription() {
-		return description;
-	}
+	String getDescription();
 
 	/**
-	 * a string that can be passed to String.format() to format the statistic
+	 * The unit of the {@code Metric}
+	 *
+	 * @return the unit
+	 */
+	String getUnit();
+
+	/**
+	 * a string that can be passed to String.format() to format the {@code Metric}
 	 *
 	 * @return the format
 	 */
-	public String getFormat() {
-		return format;
-	}
+	String getFormat();
 
 	/**
 	 * Returns a list of {@link ValueType}s that are provided by this {@code Metric}.
 	 * The list of {@code ValueTypes} will always be in the same order.
+	 * <p>
+	 * All values returned by this method have to be supported by an implementing class.
 	 *
 	 * @return the list of {@code ValueTypes}
 	 */
-	public abstract List<ValueType> getValueTypes();
+	EnumSet<ValueType> getValueTypes();
 
 	/**
 	 * Returns the current value of the given {@link ValueType}.
 	 *
-	 * @param valueType The {@code ValueType} of the requested value
+	 * The option {@link ValueType#VALUE} has a special meaning in this context. It is always supported and returns
+	 * the "main" value of the {@code Metric}. I.e. even if you do not know the type of {@code Metric}, it is
+	 * always safe to call this method with the parameter {@code ValueType.VALUE}.
+	 *
+	 * @param valueType
+	 * 		The {@code ValueType} of the requested value
 	 * @return the current value
-	 * @throws IllegalArgumentException if the given {@code ValueType} is not supported by this {@code Metric}
+	 * @throws IllegalArgumentException
+	 * 		if the given {@code ValueType} is {@code null} or not supported by this {@code Metric}
 	 */
-	public abstract Object get(final ValueType valueType);
-
-	/**
-	 * Take a snapshot of the current value(s) and return them. If the functionality of this {@code Metric}
-	 * requires it to be reset in regular intervals, it is done automatically after the snapshot was generated.
-	 * The list of {@code ValueTypes} will always be in the same order.
-	 *
-	 * @return the list of {@code ValueTypes} with their current values
-	 * @deprecated Implementation detail, will become non-public at some point
-	 */
-	@Deprecated(forRemoval = true)
-	public abstract List<Pair<ValueType, Object>> takeSnapshot();
-
-	/**
-	 * This method initializes the {@code Metric}
-	 *
-	 * @deprecated This method seems to be a byproduct of the current Statistics-initialization
-	 * and is very likely to become obsolete. Instances of {@code Metric} should be initialized
-	 * in the constructor instead.
-	 */
-	@Deprecated(forRemoval = true)
-	public void init() {
-		// default implementation is empty
-	}
+	Object get(final ValueType valueType);
 
 	/**
 	 * This method resets a {@code Metric}. It is for example called after startup to ensure that the
-	 * startup time is not taken into consideration;
+	 * startup time is not taken into consideration.
 	 */
-	public void reset() {
-		// default implementation is empty
-	}
+	void reset();
 
 	/**
 	 * This method returns the {@link StatsBuffered} of this metric, if there is one.
@@ -163,8 +116,25 @@ public abstract class Metric {
 	 * @deprecated This method is only temporary and will be removed during the Metric overhaul.
 	 */
 	@Deprecated(forRemoval = true)
-	public StatsBuffered getStatsBuffered() {
-		return null;
-	}
+	StatsBuffered getStatsBuffered();
+
+	/**
+	 * Overwritten {@code equals}-method. Two {@code Metric}-instances are considered equal, if they
+	 * have the same {@code Class}, {@link #getCategory() category}, and {@link #getName() name}.
+	 *
+	 * @param other
+	 * 		the other {@code Object}
+	 * @return {@code true}, if both {@code Metric}-instances are considered equal, {@code false} otherwise
+	 */
+	@Override
+	boolean equals(final Object other);
+
+	/**
+	 * Overwritten {@code hashCode}-method, that matches the overwritten {@link #equals(Object)}-method.
+	 *
+	 * @return the calculated hash-code
+	 */
+	@Override
+	int hashCode();
 
 }

@@ -119,8 +119,8 @@ public interface ComposedMerkleInternal extends MerkleInternal {
 	 * {@inheritDoc}
 	 */
 	@Override
-	default void release() {
-		getMerkleImplementation().release();
+	default boolean release() {
+		return getMerkleImplementation().release();
 	}
 
 	/**

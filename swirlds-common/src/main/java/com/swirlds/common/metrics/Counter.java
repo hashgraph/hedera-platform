@@ -17,98 +17,40 @@
 package com.swirlds.common.metrics;
 
 import com.swirlds.common.utility.CommonUtils;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.builder.ToStringBuilder;
 
-import java.util.List;
-import java.util.concurrent.atomic.LongAdder;
+import java.util.EnumSet;
 
 import static com.swirlds.common.metrics.Metric.ValueType.COUNTER;
 import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * A {@code Counter} can be used to count events and similar things.
- *
- * A {@code Counter} can be initialized in one of two modes: {@link Mode#INCREASE_ONLY} and
- * {@link  Mode#INCREASE_AND_DECREASE}. In {@code INCREASE_ONLY}-mode, the value of the {@code Counter}
- * can only increase, and therefore it can never become negative. In {@code INCREASE_AND_DECREASE}-mode,
- * the value can increase and decrease and also become negative
+ * <p>
+ * The value of a {@code Counter} is initially {@code 0} and can only be increased.
  */
-public class Counter extends Metric {
-
-	private static final String INCREASE_ONLY_ERROR_MESSAGE = "The value of a this Counter can only be increased";
+public interface Counter extends Metric {
 
 	/**
-	 * Possible modes of a {@code Counter}
-	 *
-	 * A {@code Counter} can be strictly increasing only, or it can also be allowed to decrease
+	 * {@inheritDoc}
 	 */
-	public enum Mode { INCREASE_ONLY, INCREASE_AND_DECREASE }
-
-	private final LongAdder adder = new LongAdder();
-	private final boolean increaseOnly;
-
-	/**
-	 * Constructor of {@code Counter}. The mode of the {@code Counter} will be {@link Mode#INCREASE_ONLY}.
-	 *
-	 * @param category
-	 * 		the kind of metric (metrics are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the metric
-	 * @param description
-	 * 		a one-sentence description of the metric
-	 * @throws IllegalArgumentException
-	 * 		if one of the parameters is {@code null}
-	 */
-	public Counter(final String category, final String name, final String description) {
-		this(category, name, description, Mode.INCREASE_ONLY);
-	}
-
-	/**
-	 * Constructor of {@code Counter}
-	 *
-	 * @param category
-	 * 		the kind of metric (metrics are grouped or filtered by this)
-	 * @param name
-	 * 		a short name for the metric
-	 * @param description
-	 * 		a one-sentence description of the metric
-	 * @param mode
-	 * 		the mode of this {@code Counter}
-	 * @throws IllegalArgumentException
-	 * 		if one of the parameters is {@code null}
-	 */
-	public Counter(final String category, final String name, final String description, final Mode mode) {
-		super(category, name, description, "%d");
-		increaseOnly = CommonUtils.throwArgNull(mode, "mode") == Mode.INCREASE_ONLY;
+	@Override
+	default EnumSet<ValueType> getValueTypes() {
+		return EnumSet.of(COUNTER);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public List<ValueType> getValueTypes() {
-		return increaseOnly? Metric.COUNTER_TYPE : Metric.VALUE_TYPE;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public Long get(final ValueType valueType) {
+	default Long get(final ValueType valueType) {
 		CommonUtils.throwArgNull(valueType, "valueType");
+		// Metric.get(ValueType.VALUE) should always work and return the main value of a Metric.
+		// Therefore, we allow it here, too.
 		if ((valueType == COUNTER) || (valueType == VALUE)) {
 			return get();
 		}
-		throw new IllegalArgumentException("Unsupported ValueType");
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@SuppressWarnings("removal")
-	@Override
-	public List<Pair<ValueType, Object>> takeSnapshot() {
-		return List.of(Pair.of(increaseOnly? COUNTER : VALUE, get()));
+		throw new IllegalArgumentException("Unsupported ValueType: " + valueType);
 	}
 
 	/**
@@ -116,18 +58,7 @@ public class Counter extends Metric {
 	 *
 	 * @return the current value
 	 */
-	public long get() {
-		return adder.sum();
-	}
-
-	/**
-	 * Return the {@code mode} of this {@code Counter}
-	 *
-	 * @return the mode of this counter
-	 */
-	public Mode getMode() {
-		return increaseOnly? Mode.INCREASE_ONLY : Mode.INCREASE_AND_DECREASE;
-	}
+	long get();
 
 	/**
 	 * Add a value to the {@code Counter}.
@@ -137,48 +68,79 @@ public class Counter extends Metric {
 	 * @param value
 	 * 		the value that needs to be added
 	 * @throws IllegalArgumentException
-	 * 		if this {@code Counter} is in {@code INCREASE_ONLY}-mode and {@code value <= 0}
+	 * 		if {@code value <= 0}
 	 */
-	public void add(final long value) {
-		if (increaseOnly && value <= 0) {
-			throw new IllegalArgumentException(INCREASE_ONLY_ERROR_MESSAGE);
-		}
-		adder.add(value);
-	}
-
-	/**
-	 * Subtract a value from the {@code Counter}.
-	 *
-	 * @param value
-	 * 		the value that needs to be subtracted
-	 * @throws UnsupportedOperationException
-	 * 		if this {@code Counter} is in {@code INCREASE_ONLY}-mode
-	 */
-	public void subtract(final long value) {
-		if (increaseOnly) {
-			throw new UnsupportedOperationException(INCREASE_ONLY_ERROR_MESSAGE);
-		}
-		adder.add(-value);
-	}
+	void add(final long value);
 
 	/**
 	 * Increase the {@code Counter} by {@code 1}.
 	 */
-	public void increment() {
-		adder.increment();
-	}
+	void increment();
 
 	/**
-	 * Decrease the {@code Counter} by {@code 1}.
-	 *
-	 * @throws UnsupportedOperationException
-	 * 		if this {@code Counter} is in {@code INCREASE_ONLY}-mode
+	 * Configuration of a {@link Counter}.
 	 */
-	public void decrement() {
-		if (increaseOnly) {
-			throw new UnsupportedOperationException(INCREASE_ONLY_ERROR_MESSAGE);
+	final class Config extends MetricConfig<Counter, Counter.Config> {
+
+		/**
+		 * Constructor of {@code Counter.Config}
+		 *
+		 * @param category
+		 * 		the kind of metric (metrics are grouped or filtered by this)
+		 * @param name
+		 * 		a short name for the metric
+		 * @throws IllegalArgumentException
+		 * 		if one of the parameters is {@code null} or consists only of whitespaces
+		 */
+		public Config(final String category, final String name) {
+			super(category, name, "%d");
 		}
-		adder.decrement();
+
+		private Config(final String category, final String name, final String description, final String unit) {
+			super(category, name, description, unit, "%d");
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public Counter.Config withDescription(final String description) {
+			return new Counter.Config(getCategory(), getName(), description, getUnit());
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public Counter.Config withUnit(final String unit) {
+			return new Counter.Config(getCategory(), getName(), getDescription(), unit);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		Class<Counter> getResultClass() {
+			return Counter.class;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		Counter create(final MetricsFactory factory) {
+			return factory.createCounter(this);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public String toString() {
+			return new ToStringBuilder(this)
+					.appendSuper(super.toString())
+					.toString();
+		}
 	}
 
 }

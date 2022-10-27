@@ -16,6 +16,7 @@
 
 package com.swirlds.common.test.state;
 
+import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.system.Round;
 import com.swirlds.common.system.SwirldDualState;
@@ -172,5 +173,11 @@ public class DummySwirldState2 extends AbstractDummySwirldState implements Swirl
 			abortAndThrowIfInterrupted(serializationLatch::await,
 					"interrupted while waiting for latch");
 		}
+		out.writeSerializable(getHashOverride(), true);
+	}
+
+	@Override
+	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
+		setHashOverride(in.readSerializable());
 	}
 }

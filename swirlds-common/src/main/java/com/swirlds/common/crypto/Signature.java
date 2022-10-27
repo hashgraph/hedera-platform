@@ -52,7 +52,7 @@ public class Signature implements SelfSerializable {
 	private SignatureType signatureType;
 
 	/** signature byte array */
-	private byte[] sigBytes;
+	private byte[] signatureBytes;
 
 	/**
 	 * For RuntimeConstructable
@@ -60,9 +60,9 @@ public class Signature implements SelfSerializable {
 	public Signature() {
 	}
 
-	public Signature(final SignatureType signatureType, final byte[] sigBytes) {
+	public Signature(final SignatureType signatureType, final byte[] signatureBytes) {
 		this.signatureType = signatureType;
-		this.sigBytes = sigBytes;
+		this.signatureBytes = signatureBytes;
 	}
 
 	/**
@@ -71,7 +71,7 @@ public class Signature implements SelfSerializable {
 	@Override
 	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
 		this.signatureType = SignatureType.from(in.readInt(), RSA);
-		this.sigBytes = in.readByteArray(this.signatureType.signatureLength(), true);
+		this.signatureBytes = in.readByteArray(this.signatureType.signatureLength(), true);
 	}
 
 	/**
@@ -80,7 +80,14 @@ public class Signature implements SelfSerializable {
 	@Override
 	public void serialize(final SerializableDataOutputStream out) throws IOException {
 		out.writeInt(signatureType.ordinal());
-		out.writeByteArray(sigBytes, true);
+		out.writeByteArray(signatureBytes, true);
+	}
+
+	/**
+	 * Get the bytes of this signature.
+	 */
+	public byte[] getSignatureBytes() {
+		return signatureBytes;
 	}
 
 	/**
@@ -104,7 +111,7 @@ public class Signature implements SelfSerializable {
 			final java.security.Signature sig = java.security.Signature.getInstance(signingAlgorithm, sigProvider);
 			sig.initVerify(publicKey);
 			sig.update(data);
-			return sig.verify(sigBytes);
+			return sig.verify(signatureBytes);
 		} catch (final NoSuchAlgorithmException | NoSuchProviderException
 				| InvalidKeyException | SignatureException e) {
 			log.error(LogMarker.EXCEPTION.getMarker(), " verifySignature :: Fail to verify Signature: {}, PublicKey: " +
@@ -143,7 +150,7 @@ public class Signature implements SelfSerializable {
 		}
 
 		final Signature signature = (Signature) obj;
-		return Arrays.equals(sigBytes, signature.sigBytes)
+		return Arrays.equals(signatureBytes, signature.signatureBytes)
 				&& signatureType == signature.signatureType;
 	}
 
@@ -152,7 +159,7 @@ public class Signature implements SelfSerializable {
 	 */
 	@Override
 	public int hashCode() {
-		return Objects.hash(signatureType, Arrays.hashCode(sigBytes));
+		return Objects.hash(signatureType, Arrays.hashCode(signatureBytes));
 	}
 
 	/**
@@ -161,6 +168,6 @@ public class Signature implements SelfSerializable {
 	@Override
 	public String toString() {
 		return String.format("Signature{signatureType: %s, sigBytes: %s",
-				signatureType, hex(sigBytes));
+				signatureType, hex(signatureBytes));
 	}
 }

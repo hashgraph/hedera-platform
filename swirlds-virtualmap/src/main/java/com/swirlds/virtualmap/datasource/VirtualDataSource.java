@@ -17,13 +17,12 @@
 package com.swirlds.virtualmap.datasource;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /**
@@ -170,10 +169,10 @@ public interface VirtualDataSource<K extends VirtualKey<? super K>, V extends Vi
 	/**
 	 * Register all statistics with an object that manages statistics.
 	 *
-	 * @param registry
-	 * 		the object that will manage statistics
+	 * @param metrics
+	 * 		reference to the metrics system
 	 */
-	void registerStatistics(Consumer<Metric> registry);
+	void registerMetrics(final Metrics metrics);
 
 	/**
 	 * Start background compaction process, if it is not already running.

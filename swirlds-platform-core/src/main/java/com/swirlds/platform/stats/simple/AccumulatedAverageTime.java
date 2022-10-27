@@ -17,14 +17,9 @@
 package com.swirlds.platform.stats.simple;
 
 import com.swirlds.common.metrics.FloatFormats;
-import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.IntegerPairAccumulator;
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.utility.Units;
-import com.swirlds.platform.stats.atomic.AtomicSumAndCount;
-import org.apache.commons.lang3.tuple.Pair;
-
-import java.util.List;
-
-import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 
 /**
  * Tracks the average time taken for an operation by accumulating the time and the number of operation. The actual
@@ -32,13 +27,25 @@ import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
  * minimal overhead. This class accumulates time in microseconds and stores it in an integer, which means the maximum
  * accumulated time is about 35 minutes before it overflows.
  */
-public class AccumulatedAverageTime extends Metric {
+public class AccumulatedAverageTime {
 	private static final String UNIT_APPENDIX = " (ms)";
-	private final AtomicSumAndCount sumAndCount;
+	private final IntegerPairAccumulator<Double> accumulator;
 
-	public AccumulatedAverageTime(final String category, final String name, final String description) {
-		super(category, name + UNIT_APPENDIX, description, FloatFormats.FORMAT_10_6);
-		this.sumAndCount = new AtomicSumAndCount();
+	public AccumulatedAverageTime(
+			final Metrics metrics,
+			final String category,
+			final String name,
+			final String description) {
+
+		accumulator = metrics.getOrCreate(
+				new IntegerPairAccumulator.Config<>(
+						category,
+						name + UNIT_APPENDIX,
+						AccumulatedAverageTime::averageMillis
+				)
+						.withDescription(description)
+						.withFormat(FloatFormats.FORMAT_10_6)
+		);
 	}
 
 	/**
@@ -48,36 +55,19 @@ public class AccumulatedAverageTime extends Metric {
 	 * 		the time in nanoseconds
 	 */
 	public void add(final long nanoTime) {
-		sumAndCount.add((int) (nanoTime * Units.NANOSECONDS_TO_MICROSECONDS));
+		accumulator.update((int) (nanoTime * Units.NANOSECONDS_TO_MICROSECONDS), 1);
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public List<ValueType> getValueTypes() {
-		return Metric.VALUE_TYPE;
+	public double get() {
+		return accumulator.get();
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public Double get(final ValueType valueType) {
-		if (valueType == VALUE) {
-			return sumAndCount.average() * Units.MICROSECONDS_TO_MILLISECONDS;
+	private static double averageMillis(final int sum, final int count) {
+		if (count == 0) {
+			// avoid division by 0
+			return 0;
 		}
-		throw new IllegalArgumentException("Unknown MetricType");
+		return ((double) sum) / count * Units.MICROSECONDS_TO_MILLISECONDS;
 	}
 
-	/**
-	 * {@inheritDoc}
-	 *
-	 * @return
-	 */
-	@SuppressWarnings("removal")
-	@Override
-	public List<Pair<ValueType, Object>> takeSnapshot() {
-		return List.of(Pair.of(VALUE, sumAndCount.averageAndReset() * Units.MICROSECONDS_TO_MILLISECONDS));
-	}
 }

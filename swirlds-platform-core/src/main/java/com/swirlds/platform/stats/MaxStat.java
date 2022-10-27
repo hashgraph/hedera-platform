@@ -16,13 +16,15 @@
 
 package com.swirlds.platform.stats;
 
-import com.swirlds.common.statistics.StatEntry;
+import com.swirlds.common.metrics.Metrics;
+import com.swirlds.common.metrics.StatEntry;
 
 public class MaxStat {
 	private final AtomicMax max;
-	private final StatEntry statEntry;
 
 	/**
+	 * @param metrics
+	 * 		reference to the metrics-system
 	 * @param category
 	 * 		the kind of statistic (stats are grouped or filtered by this)
 	 * @param name
@@ -33,21 +35,19 @@ public class MaxStat {
 	 * 		a string that can be passed to String.format() to format the statistic for the average number
 	 */
 	public MaxStat(
+			final Metrics metrics,
 			final String category,
 			final String name,
 			final String desc,
 			final String format) {
 		max = new AtomicMax();
-		statEntry = new StatEntry(
-				category,
-				name,
-				desc,
-				format,
-				null,
-				null,
-				this::resetMax,
-				max::get,
-				max::getAndReset);// the max we reset after each write to the CSV
+		metrics.getOrCreate(
+				new StatEntry.Config(category, name, max::get)
+						.withDescription(desc)
+						.withFormat(format)
+						.withReset(this::resetMax)
+						.withResetStatsStringSupplier(max::getAndReset)
+		);
 	}
 
 	private void resetMax(final double unused) {
@@ -62,12 +62,5 @@ public class MaxStat {
 	 */
 	public void update(long value) {
 		max.update(value);
-	}
-
-	/**
-	 * @return a {@link StatEntry} of the max number to provide to {@link com.swirlds.common.statistics.Statistics}
-	 */
-	public StatEntry getStatEntry() {
-		return statEntry;
 	}
 }

@@ -16,6 +16,9 @@
 
 package com.swirlds.common.sequence.set;
 
+import com.swirlds.common.sequence.Shiftable;
+import com.swirlds.common.utility.Clearable;
+
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -40,8 +43,8 @@ import java.util.function.Consumer;
  * </p>
  *
  * <p>
- * This data structure manages the allowed window of sequence numbers. That is, it allows a minimum and maximum
- * sequence number to be specified, and ensures that entries that violate that window are removed and not allowed
+ * This data structure manages the allowed window of sequence numbers. That is, it allows a minimum sequence
+ * number and capacity to be specified, and ensures that entries that violate that window are removed and not allowed
  * to enter.
  * </p>
  *
@@ -53,7 +56,7 @@ import java.util.function.Consumer;
  * @param <T>
  * 		the type of the entry contained within this set
  */
-public interface SequenceSet<T> {
+public interface SequenceSet<T> extends Clearable, Shiftable {
 
 	/**
 	 * Add an element to the set. Element is rejected if the element is already in the set, or if the sequence
@@ -117,19 +120,11 @@ public interface SequenceSet<T> {
 	List<T> getEntriesWithSequenceNumber(final long sequenceNumber);
 
 	/**
-	 * Purge all entries that have a sequence number smaller than a specified value. After this operation,
-	 * all entries with a smaller sequence number will be rejected if insertion is attempted.
-	 *
-	 * <p>
-	 * The smallest allowed sequence number must only increase over time. If N&lt;=M and M has already been purged,
-	 * then purging N will have no effect.
-	 * </p>
-	 *
-	 * @param smallestAllowedSequenceNumber
-	 * 		all entries with a sequence number strictly smaller than this value will be removed
+	 * {@inheritDoc}
 	 */
-	default void purge(final long smallestAllowedSequenceNumber) {
-		purge(smallestAllowedSequenceNumber, null);
+	@Override
+	default void shiftWindow(final long lowestAllowedSequenceNumber) {
+		shiftWindow(lowestAllowedSequenceNumber, null);
 	}
 
 	/**
@@ -148,34 +143,19 @@ public interface SequenceSet<T> {
 	 * @param removedValueHandler
 	 * 		this value is passed each key/value pair that is removed as a result of this operation, ignored if null
 	 */
-	void purge(long smallestAllowedSequenceNumber, Consumer<T> removedValueHandler);
-
-	/**
-	 * <p>
-	 * Specify a newly permitted maximum sequence number. After calling this method, entries with sequence numbers
-	 * strictly greater than this value will be rejected, and entries with sequence numbers less than or equal to this
-	 * value may be accepted (if they don't violate the minimum sequence number).
-	 * </p>
-	 *
-	 * <p>
-	 * The largest allowed sequence number must only increase over time. If N&lt;=M and N has already been expanded to,
-	 * then then expanding to M will have no effect.
-	 * </p>
-	 *
-	 * <p>
-	 * Unlike {@link #purge(long)}, this method allows a wider range of sequence numbers to be included in this
-	 * data structure, and does not have the capability of removing elements.
-	 * </p>
-	 *
-	 * @param largestAllowedSequenceNumber
-	 * 		the largest sequence number that is permitted to be in this data structure
-	 */
-	void expand(long largestAllowedSequenceNumber);
+	void shiftWindow(long smallestAllowedSequenceNumber, Consumer<T> removedValueHandler);
 
 	/**
 	 * @return the number of entries in this set
 	 */
 	int getSize();
+
+	/**
+	 * Get the capacity of this map, in number of sequence numbers allowed.
+	 *
+	 * @return the sequence number capacity
+	 */
+	int getSequenceNumberCapacity();
 
 	/**
 	 * Get the minimum sequence number that is permitted to be in this set. All entries with smaller
@@ -184,20 +164,14 @@ public interface SequenceSet<T> {
 	 *
 	 * @return the smallest allowed sequence number
 	 */
-	long getLowestAllowedSequenceNumber();
+	long getFirstSequenceNumberInWindow();
 
 	/**
-	 * Get the maximum sequence number that is permitted to be in this set. All entries with larger
-	 * sequence numbers have been rejected, and any entry added in the future will be rejected
+	 * Get the maximum sequence number that is permitted to be in this map. All keys with larger
+	 * sequence numbers have been rejected, and any key added in the future will be rejected
 	 * if it has a larger sequence number than what is returned by this method at that time.
 	 *
 	 * @return the largest allowed sequence number
 	 */
-	long getHighestAllowedSequenceNumber();
-
-	/**
-	 * Clear all entries in this set, and reset the set to the condition it was in when initially constructed.
-	 */
-	void clear();
-
+	long getLastSequenceNumberInWindow();
 }

@@ -206,7 +206,7 @@ public class SocketConnection implements Connection {
 		getDis().getSyncByteCounter().resetCount();
 		getDos().getSyncByteCounter().resetCount();
 
-		this.setTimeout(Settings.timeoutSyncClientSocket);
+		this.setTimeout(Settings.getInstance().getTimeoutSyncClientSocket());
 	}
 
 	@Override

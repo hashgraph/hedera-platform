@@ -18,7 +18,7 @@ package com.swirlds.platform.reconnect;
 
 import com.swirlds.common.merkle.synchronization.settings.ReconnectSettings;
 import com.swirlds.common.system.address.AddressBook;
-import com.swirlds.platform.ReconnectStatistics;
+import com.swirlds.platform.metrics.ReconnectMetrics;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.state.State;
 
@@ -29,11 +29,11 @@ public class ReconnectLearnerFactory {
 	private final AddressBook addressBook;
 	private final SignedStateValidator stateValidator;
 	private final ReconnectSettings settings;
-	private final ReconnectStatistics statistics;
+	private final ReconnectMetrics statistics;
 
 	public ReconnectLearnerFactory(final AddressBook addressBook,
 			final SignedStateValidator stateValidator,
-			final ReconnectSettings settings, final ReconnectStatistics statistics) {
+			final ReconnectSettings settings, final ReconnectMetrics statistics) {
 		this.addressBook = addressBook;
 		this.stateValidator = stateValidator;
 		this.settings = settings;

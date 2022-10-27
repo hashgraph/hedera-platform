@@ -17,8 +17,8 @@
 package com.swirlds.jasperdb;
 
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.metrics.Counter;
-import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.FunctionGauge;
+import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.collections.HashList;
@@ -75,12 +75,11 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
-import static com.swirlds.common.metrics.Counter.Mode.INCREASE_AND_DECREASE;
 import static com.swirlds.common.utility.Units.BYTES_TO_BITS;
 import static com.swirlds.jasperdb.KeyRange.INVALID_KEY_RANGE;
 import static com.swirlds.logging.LogMarker.ERROR;
@@ -141,12 +140,14 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 	private static final String JASPER_DB_COMPONENT = "jasper-db";
 
 	/** Count of open database instances */
-	private static final Counter COUNT_OF_OPEN_DATABASES = new Counter(
-			JasperDbStatistics.STAT_CATEGORY,
-			"jpdb_count",
-			"the number of JPDB instances that have been created but not released",
-			INCREASE_AND_DECREASE
-	);
+	private static final LongAdder COUNT_OF_OPEN_DATABASES = new LongAdder();
+	private static final FunctionGauge.Config<Long> COUNT_OF_OPEN_DATABASES_CONFIG =
+			new FunctionGauge.Config<>(
+					JasperDbStatistics.STAT_CATEGORY,
+					"jpdb_count",
+					VirtualDataSourceJasperDB::getCountOfOpenDatabases)
+					.withDescription("the number of JPDB instances that have been created but not released")
+					.withFormat("%d");
 
 	/**
 	 * We have an optimized mode when the keys can be represented by a single long
@@ -537,7 +538,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 	 * @return Count of open databases.
 	 */
 	public static long getCountOfOpenDatabases() {
-		return COUNT_OF_OPEN_DATABASES.get();
+		return COUNT_OF_OPEN_DATABASES.sum();
 	}
 
 	/**
@@ -1016,17 +1017,16 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void registerStatistics(final Consumer<Metric> registry) {
+	public void registerMetrics(final Metrics metrics) {
 		if (firstStatRegistration) {
 			// register static/global statistics
 
 			firstStatRegistration = false;
-
-			registry.accept(COUNT_OF_OPEN_DATABASES);
+			metrics.getOrCreate(COUNT_OF_OPEN_DATABASES_CONFIG);
 		}
 
 		// register instance statistics
-		statistics.registerStatistics(registry);
+		statistics.registerMetrics(metrics);
 	}
 
 	/**

@@ -24,6 +24,7 @@ import com.swirlds.platform.chatter.protocol.messages.ChatterEventDescriptor;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.internal.EventImpl;
+import com.swirlds.platform.state.signed.SignedState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -45,12 +46,26 @@ public class OrphanBufferingLinker extends AbstractEventLinker {
 	private final SequenceMap<ParentDescriptor, Set<ChildEvent>> missingParents;
 	private final SequenceMap<ChatterEventDescriptor, ChildEvent> orphanMap;
 
-	public OrphanBufferingLinker(final ParentFinder parentFinder) {
+	/**
+	 * Create a new orphan buffer.
+	 *
+	 * @param parentFinder
+	 * 		responsible for finding parents of an event
+	 * @param futureGenerationLimit
+	 * 		the maximum number of future generations we are willing to store
+	 */
+	public OrphanBufferingLinker(final ParentFinder parentFinder, final int futureGenerationLimit) {
 		this.parentFinder = parentFinder;
 		this.eventOutput = new ArrayDeque<>();
 		this.newlyLinkedEvents = new ArrayDeque<>();
-		this.orphanMap = new StandardSequenceMap<>(ChatterEventDescriptor::getGeneration);
-		this.missingParents = new StandardSequenceMap<>(ParentDescriptor::generation);
+		this.orphanMap = new StandardSequenceMap<>(
+				0,
+				futureGenerationLimit,
+				ChatterEventDescriptor::getGeneration);
+		this.missingParents = new StandardSequenceMap<>(
+				0,
+				futureGenerationLimit,
+				ParentDescriptor::generation);
 	}
 
 	private static void parentNoLongerMissing(final ChildEvent child, final Hash parentHash, final EventImpl parent) {
@@ -97,14 +112,26 @@ public class OrphanBufferingLinker extends AbstractEventLinker {
 		}
 
 		if (childEvent.isMissingSelfParent()) {
-			missingParents
-					.computeIfAbsent(childEvent.buildSelfParentDescriptor(), d -> new HashSet<>())
-					.add(childEvent);
+			addMissingParent(childEvent, true);
 		}
 		if (childEvent.isMissingOtherParent()) {
-			missingParents
-					.computeIfAbsent(childEvent.buildOtherParentDescriptor(), d -> new HashSet<>())
-					.add(childEvent);
+			addMissingParent(childEvent, false);
+		}
+	}
+
+	private void addMissingParent(final ChildEvent childEvent, final boolean missingSelfParent) {
+		final ParentDescriptor parentDescriptor = missingSelfParent ? childEvent.buildSelfParentDescriptor() :
+				childEvent.buildOtherParentDescriptor();
+		final Set<ChildEvent> childSet = missingParents.computeIfAbsent(parentDescriptor, d -> new HashSet<>());
+		if (childSet == null) {
+			LOG.error(LogMarker.INVALID_EVENT_ERROR.getMarker(),
+					"Orphan event {} is missing {} parent outside of missing parent window ({}-{})",
+					() -> childEvent.getChild().toMediumString(),
+					() -> missingSelfParent ? "self" : "other",
+					missingParents::getFirstSequenceNumberInWindow,
+					() -> missingParents.getFirstSequenceNumberInWindow() + missingParents.getSequenceNumberCapacity());
+		} else {
+			childSet.add(childEvent);
 		}
 	}
 
@@ -143,14 +170,25 @@ public class OrphanBufferingLinker extends AbstractEventLinker {
 	 */
 	@Override
 	public void updateGenerations(final GraphGenerations generations) {
+		// very rarely, after a restart, generations can go in reverse, so we need this safeguard
+		if (generations.getMinGenerationNonAncient() < getMinGenerationNonAncient()) {
+			return;
+		}
 		super.updateGenerations(generations);
-		missingParents.purge(
+		missingParents.shiftWindow(
 				generations.getMinGenerationNonAncient(),
 				this::parentPurged
 		);
-		// if an orphan becomes ancient, we don't it anymore
-		orphanMap.purge(generations.getMinGenerationNonAncient(), OrphanBufferingLinker::orphanPurged);
+		// if an orphan becomes ancient, we don't need it anymore
+		orphanMap.shiftWindow(generations.getMinGenerationNonAncient(), OrphanBufferingLinker::orphanPurged);
 		processNewlyLinkedEvents();
+	}
+
+	@Override
+	public void loadFromSignedState(final SignedState signedState) {
+		super.loadFromSignedState(signedState);
+		missingParents.shiftWindow(getMinGenerationNonAncient());
+		orphanMap.shiftWindow(getMinGenerationNonAncient());
 	}
 
 	private void parentPurged(final ParentDescriptor purgedParent, final Set<ChildEvent> orphans) {

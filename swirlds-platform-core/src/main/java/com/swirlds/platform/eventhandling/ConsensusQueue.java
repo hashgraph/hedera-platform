@@ -17,7 +17,7 @@
 package com.swirlds.platform.eventhandling;
 
 import com.swirlds.platform.internal.ConsensusRound;
-import com.swirlds.platform.stats.ConsensusHandlingStats;
+import com.swirlds.platform.metrics.ConsensusHandlingMetrics;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -41,7 +41,7 @@ public class ConsensusQueue implements BlockingQueue<ConsensusRound> {
 	private final AtomicInteger eventsInQueue = new AtomicInteger(0);
 
 	/** The statistics instance to update */
-	private final ConsensusHandlingStats stats;
+	private final ConsensusHandlingMetrics consensusHandlingMetrics;
 
 	/** The maximum number of events allowed in rounds in the queue */
 	private final int eventCapacity;
@@ -52,15 +52,15 @@ public class ConsensusQueue implements BlockingQueue<ConsensusRound> {
 	/**
 	 * Creates a new instance with no items in the queue.
 	 *
-	 * @param stats
+	 * @param consensusHandlingMetrics
 	 * 		the stats object to record stats on
 	 * @param eventCapacity
 	 * 		the maximum number of events allowed in all the rounds in the queue, unless there is a single round in the
 	 * 		queue with more than this many events
 	 */
-	ConsensusQueue(final ConsensusHandlingStats stats, final int eventCapacity) {
+	ConsensusQueue(final ConsensusHandlingMetrics consensusHandlingMetrics, final int eventCapacity) {
 		super();
-		this.stats = stats;
+		this.consensusHandlingMetrics = consensusHandlingMetrics;
 		this.eventCapacity = eventCapacity;
 	}
 
@@ -147,7 +147,7 @@ public class ConsensusQueue implements BlockingQueue<ConsensusRound> {
 	 */
 	@Override
 	public synchronized void put(final ConsensusRound consensusRound) throws InterruptedException {
-		stats.recordEventsPerRound(consensusRound.getNumEvents());
+		consensusHandlingMetrics.recordEventsPerRound(consensusRound.getNumEvents());
 		while (!queueHasRoom(consensusRound)) {
 			this.wait();
 		}
@@ -166,7 +166,7 @@ public class ConsensusQueue implements BlockingQueue<ConsensusRound> {
 	@Override
 	public synchronized boolean offer(final ConsensusRound consensusRound, final long timeout,
 			final TimeUnit unit) throws InterruptedException {
-		stats.recordEventsPerRound(consensusRound.getNumEvents());
+		consensusHandlingMetrics.recordEventsPerRound(consensusRound.getNumEvents());
 		final boolean ans;
 		long millisWaited = 0;
 		final long maxMillisToWait = unit.toMillis(timeout);

@@ -16,7 +16,7 @@
 
 package com.swirlds.platform.chatter.protocol.peer;
 
-import com.swirlds.common.sequence.Purgable;
+import com.swirlds.common.sequence.Shiftable;
 import com.swirlds.common.sequence.map.SequenceMap;
 import com.swirlds.common.sequence.map.StandardSequenceMap;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEvent;
@@ -27,14 +27,24 @@ import org.apache.commons.lang3.ObjectUtils;
 /**
  * Keeps track of the state of chatter communication with a peer, including events we are sure the peer knows
  */
-public class PeerGossipState implements Purgable {
+public class PeerGossipState implements Shiftable {
 	/** non-ancient events we know the peer knows */
 	private final SequenceMap<ChatterEventDescriptor, ObjectUtils.Null> events;
 	/** the maximum generation of all event descriptors received */
 	private long maxReceivedDescriptorGeneration;
 
-	public PeerGossipState() {
-		events = new StandardSequenceMap<>(ChatterEventDescriptor::getGeneration);
+	/**
+	 * Create a new object for tracking communication with a peer.
+	 *
+	 * @param futureGenerationLimit
+	 * 		the maximum number of generations in the future we are willing to accept from
+	 * 		the peer
+	 */
+	public PeerGossipState(final int futureGenerationLimit) {
+		events = new StandardSequenceMap<>(
+				GraphGenerations.FIRST_GENERATION,
+				futureGenerationLimit,
+				ChatterEventDescriptor::getGeneration);
 		maxReceivedDescriptorGeneration = GraphGenerations.FIRST_GENERATION;
 	}
 
@@ -63,8 +73,11 @@ public class PeerGossipState implements Purgable {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized void purge(final long olderThan) {
-		events.purge(olderThan);
+	public synchronized void shiftWindow(final long generation) {
+		// very rarely, after a restart, generations can go in reverse, so we need this safeguard
+		if (generation > events.getFirstSequenceNumberInWindow()) {
+			events.shiftWindow(generation);
+		}
 	}
 
 	/**

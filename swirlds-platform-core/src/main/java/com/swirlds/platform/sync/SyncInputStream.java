@@ -21,8 +21,6 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.extendable.extensions.CountingStreamExtension;
 import com.swirlds.common.io.extendable.extensions.HashingStreamExtension;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
-import com.swirlds.common.system.events.BaseEventHashedData;
-import com.swirlds.common.system.events.BaseEventUnhashedData;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.network.ByteConstants;
 
@@ -113,9 +111,6 @@ public class SyncInputStream extends SerializableDataInputStream {
 	}
 
 	public GossipEvent readEventData() throws IOException {
-		final BaseEventHashedData hashedData = readSerializable(false, BaseEventHashedData::new);
-		final BaseEventUnhashedData unhashedData = readSerializable(false, BaseEventUnhashedData::new);
-
-		return new GossipEvent(hashedData, unhashedData);
+		return readSerializable(false, GossipEvent::new);
 	}
 }

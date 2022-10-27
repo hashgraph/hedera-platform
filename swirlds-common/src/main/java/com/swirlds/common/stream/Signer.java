@@ -16,6 +16,8 @@
 
 package com.swirlds.common.stream;
 
+import com.swirlds.common.crypto.Signature;
+
 /**
  * An object capable of signing data.
  */
@@ -29,5 +31,5 @@ public interface Signer {
 	 * 		an array of bytes
 	 * @return signature bytes
 	 */
-	byte[] sign(byte[] data);
+	Signature sign(byte[] data);
 }

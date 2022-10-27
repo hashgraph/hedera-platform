@@ -25,7 +25,7 @@ import com.swirlds.common.system.transaction.ConsensusTransaction;
 import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.internal.ConsensusRound;
 import com.swirlds.platform.internal.EventImpl;
-import com.swirlds.platform.stats.SwirldStateStats;
+import com.swirlds.platform.metrics.SwirldStateMetrics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,9 +49,9 @@ public class TransactionHandler {
 	private final NodeId selfId;
 
 	/** Stats relevant to SwirldState operations. */
-	private final SwirldStateStats stats;
+	private final SwirldStateMetrics stats;
 
-	public TransactionHandler(final NodeId selfId, final SwirldStateStats stats) {
+	public TransactionHandler(final NodeId selfId, final SwirldStateMetrics stats) {
 		this.selfId = selfId;
 		this.stats = stats;
 	}

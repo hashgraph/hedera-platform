@@ -16,11 +16,9 @@
 
 package com.swirlds.platform.stats.cycle;
 
-import com.swirlds.common.metrics.Clock;
-import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.Clock;
 
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * Tracks the time points of a thread cycle and passes on the information to the metrics
@@ -76,6 +74,7 @@ public class CycleTracker {
 		duration[i] = now - lastTime;
 		lastTime = now;
 		intervalStarted = i + 1;
+		metrics.intervalFinished(i, duration[i]);
 	}
 
 	/**
@@ -86,10 +85,6 @@ public class CycleTracker {
 			intervalEnded(intervalStarted);
 		}
 		metrics.cycleFinished(duration);
-	}
-
-	public List<Metric> getAllEntries() {
-		return metrics.getAllEntries();
 	}
 
 	/**

@@ -16,11 +16,10 @@
 
 package com.swirlds.platform.intake;
 
-import com.swirlds.common.metrics.Metric;
-import com.swirlds.common.utility.CommonUtils;
+import com.swirlds.common.metrics.Metrics;
+import com.swirlds.platform.stats.cycle.AccumulatedCycleMetrics;
 import com.swirlds.platform.stats.cycle.CycleDefinition;
 import com.swirlds.platform.stats.cycle.CycleTracker;
-import com.swirlds.platform.stats.cycle.AccumulatedCycleMetrics;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
@@ -51,12 +50,17 @@ public class IntakeCycleStats {
 					Pair.of("stale", "time dispatch stale event")
 			)
 	);
-	private final CycleTracker unlinkedEventTiming = new CycleTracker(
-			new AccumulatedCycleMetrics(unlinked)
-	);
-	private final CycleTracker eventIntakeTiming = new CycleTracker(
-			new AccumulatedCycleMetrics(linked)
-	);
+	private final CycleTracker unlinkedEventTiming;
+	private final CycleTracker eventIntakeTiming;
+
+	public IntakeCycleStats(final Metrics metrics) {
+		unlinkedEventTiming = new CycleTracker(
+				new AccumulatedCycleMetrics(metrics, unlinked)
+		);
+		eventIntakeTiming = new CycleTracker(
+				new AccumulatedCycleMetrics(metrics, linked)
+		);
+	}
 
 	public void startedIntake() {
 		unlinkedEventTiming.startCycle();
@@ -114,11 +118,6 @@ public class IntakeCycleStats {
 
 	/** A linked stale event has been dispatched */
 	public void dispatchedStale() {
-		eventIntakeTiming.cycleEnded();
+		eventIntakeTiming.intervalEnded(5);
 	}
-
-	public List<Metric> getAllEntries() {
-		return CommonUtils.joinLists(unlinkedEventTiming.getAllEntries(), eventIntakeTiming.getAllEntries());
-	}
-
 }

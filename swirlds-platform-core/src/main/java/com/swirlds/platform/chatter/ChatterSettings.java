@@ -47,7 +47,8 @@ public interface ChatterSettings {
 
 	/**
 	 * Events by other creators are not set immediately to other nodes. We wait a while to see if they will send us a
-	 * descriptor of an event. We wait for the descriptor the specified amount of time before sending the event.
+	 * descriptor of an event. We wait the amount of time the peer tells us it takes it to process an event plus the
+	 * estimated time it takes the descriptor to this node, plus a constant. This value is the constant.
 	 *
 	 * @return the delay for other events
 	 */
@@ -69,7 +70,17 @@ public interface ChatterSettings {
 	int getDescriptorQueueCapacity();
 
 	/**
+	 * @return the interval at which to send each peer processing time messages
+	 */
+	Duration getProcessingTimeInterval();
+
+	/**
 	 * @return the interval at which to send each peer heartbeats
 	 */
 	Duration getHeartbeatInterval();
+
+	/**
+	 * @return the number of non-ancient generations we are willing to accept from a peer
+	 */
+	int getFutureGenerationLimit();
 }

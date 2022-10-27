@@ -66,8 +66,16 @@ public class StateInfo implements Releasable {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void release() {
-		state.get().release();
+	public boolean release() {
+		return state.get().release();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public boolean isDestroyed() {
+		return state.get().isDestroyed();
 	}
 
 	/**

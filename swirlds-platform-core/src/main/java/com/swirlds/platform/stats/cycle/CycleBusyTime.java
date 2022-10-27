@@ -16,24 +16,16 @@
 
 package com.swirlds.platform.stats.cycle;
 
-import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.utility.Units;
-import com.swirlds.platform.stats.atomic.AtomicIntPair;
-import org.apache.commons.lang3.tuple.Pair;
-
-import java.util.List;
-
-import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
+import com.swirlds.common.metrics.Metrics;
 
 /**
  * Tracks the fraction of busy time to idle in a cycle
  */
 public class CycleBusyTime extends PercentageMetric {
 	private static final int PERCENT = 100;
-	private final AtomicIntPair intPair = new AtomicIntPair();
-
-	public CycleBusyTime(final String category, final String name, final String description) {
-		super(category, name, description);
+	public CycleBusyTime(final Metrics metrics, final String category, final String name, final String description) {
+		super(metrics, category, name, description, CycleBusyTime::busyPercentage);
 	}
 
 	private static double busyPercentage(final int b, final int i) {
@@ -51,7 +43,7 @@ public class CycleBusyTime extends PercentageMetric {
 	 * 		the number of nanoseconds a thread was busy
 	 */
 	public void addBusyTime(final long nanoTime) {
-		intPair.accumulate((int) (nanoTime * Units.NANOSECONDS_TO_MICROSECONDS), 0);
+		super.update((int) (nanoTime * Units.NANOSECONDS_TO_MICROSECONDS), 0);
 	}
 
 	/**
@@ -61,34 +53,6 @@ public class CycleBusyTime extends PercentageMetric {
 	 * 		the number of nanoseconds a thread was idle
 	 */
 	public void addIdleTime(final long nanoTime) {
-		intPair.accumulate(0, (int) (nanoTime * Units.NANOSECONDS_TO_MICROSECONDS));
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public List<ValueType> getValueTypes() {
-		return Metric.VALUE_TYPE;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public Double get(final ValueType valueType) {
-		if (valueType == VALUE) {
-			return intPair.computeDouble(CycleBusyTime::busyPercentage);
-		}
-		throw new IllegalArgumentException("Unknown MetricType");
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@SuppressWarnings("removal")
-	@Override
-	public List<Pair<ValueType, Object>> takeSnapshot() {
-		return List.of(Pair.of(VALUE, intPair.computeDoubleAndReset(CycleBusyTime::busyPercentage)));
+		super.update(0, (int) (nanoTime * Units.NANOSECONDS_TO_MICROSECONDS));
 	}
 }

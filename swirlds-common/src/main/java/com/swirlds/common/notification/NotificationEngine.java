@@ -16,6 +16,8 @@
 
 package com.swirlds.common.notification;
 
+import com.swirlds.common.threading.futures.StandardFuture;
+
 import java.util.concurrent.Future;
 
 /**
@@ -57,8 +59,41 @@ public interface NotificationEngine {
 	 * @return a {@link Future} that upon resolution provides the status of the dispatch request as {@link
 	 *        NotificationResult} instance
 	 */
-	<L extends Listener<N>, N extends Notification> Future<NotificationResult<N>> dispatch(final Class<L> listenerClass,
-			final N notification);
+	default <L extends Listener<N>, N extends Notification> Future<NotificationResult<N>> dispatch(
+			final Class<L> listenerClass,
+			final N notification) {
+		return dispatch(listenerClass, notification, null);
+	}
+
+	/**
+	 * Dispatches a {@link Notification} instance to the listeners of the specified type.
+	 *
+	 * If the listener class uses {@link DispatchMode#SYNC} then this method will block until all registered listeners
+	 * have been notified and the {@link Future} returned by this method will already be complete.
+	 *
+	 * However, If the listener class uses {@link DispatchMode#ASYNC} then this method will return immediately after the
+	 * dispatch request has been given to the dispatcher. Only when the returned {@link Future} is resolved will all the
+	 * registered listeners have been notified. Any exceptions thrown during listener notification will be provided by
+	 * the {@link NotificationResult#getExceptions()} method.
+	 *
+	 * @param listenerClass
+	 * 		the type of listener to which the given notification should be sent
+	 * @param notification
+	 * 		the notification to be sent to all registered listeners
+	 * @param <L>
+	 * 		the type of the {@link Listener} class
+	 * @param <N>
+	 * 		the type of the {@link Notification} class
+	 * @param notificationsCompletedCallback
+	 * 		an optional callback that is invoked when the returned future
+	 * 		is completed, ignored if null.
+	 * @return a {@link Future} that upon resolution provides the status of the dispatch request as {@link
+	 *        NotificationResult} instance
+	 */
+	<L extends Listener<N>, N extends Notification> Future<NotificationResult<N>> dispatch(
+			final Class<L> listenerClass,
+			final N notification,
+			final StandardFuture.CompletionCallback<NotificationResult<N>> notificationsCompletedCallback);
 
 	/**
 	 * Registers a concrete {@link Listener} implementation with the underlying dispatcher.
@@ -71,7 +106,7 @@ public interface NotificationEngine {
 	 * 		the type of the {@link Listener} class
 	 * @return true if the listener was successfully registered with the dispatcher; otherwise false
 	 */
-	<L extends Listener> boolean register(final Class<L> listenerClass, final L callback);
+	<L extends Listener<?>> boolean register(final Class<L> listenerClass, final L callback);
 
 	/**
 	 * Removes a concrete {@link Listener} implementation from the underlying dispatcher.
@@ -84,6 +119,19 @@ public interface NotificationEngine {
 	 * 		the type of the {@link Listener} class
 	 * @return true if the listener was successfully unregistered from the dispatcher; otherwise false
 	 */
-	<L extends Listener> boolean unregister(final Class<L> listenerClass, final L callback);
+	<L extends Listener<?>> boolean unregister(final Class<L> listenerClass, final L callback);
+
+	// FUTURE WORK this method can removed once the notification engine is managed by the PlatformContext
+	/**
+	 * <p>
+	 * Unregister ALL listeners.
+	 * </p>
+	 *
+	 * <p>
+	 * DANGER: calling this method on a running system could have disastrous consequences.
+	 * Think very carefully before calling this method.
+	 * </p>
+	 */
+	void unregisterAll();
 
 }

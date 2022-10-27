@@ -154,7 +154,7 @@ public abstract class AbstractAddressBookStore implements AddressBookStore {
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void purge(final long earliestRound) {
+	public void shiftWindow(final long earliestRound) {
 		throwIfImmutable();
 		for (long round = getEarliestRound(); round < earliestRound; round++) {
 			removeOldest();
