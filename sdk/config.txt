@@ -3,8 +3,7 @@
 ###############################################################################################
 swirld, 123
 
-# app,		HashgraphDemo.jar,	   1,0,0,0,0,0,0,0,0,0, all
- app,		GameDemo.jar,		   9000, 9000
+ app,		HashgraphDemo.jar,	   1,0,0,0,0,0,0,0,0,0, all
 # app,		HelloSwirldDemo.jar
 # app,		CryptocurrencyDemo.jar
 # app,		StatsDemo.jar,		   1, 3000, 0, 100, -1, 200

@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,29 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test.merkle;
-
-import com.swirlds.common.crypto.CryptoFactory;
-import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.streams.SerializableDataInputStream;
-import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.merkle.MerkleInternal;
-import com.swirlds.common.merkle.MerkleLeaf;
-import com.swirlds.common.merkle.MerkleNode;
-import com.swirlds.common.merkle.route.MerkleRoute;
-import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
-import com.swirlds.common.merkle.impl.PartialNaryMerkleInternal;
-import com.swirlds.common.test.merkle.util.MerkleTestUtils;
-import com.swirlds.test.framework.TestComponentTags;
-import com.swirlds.test.framework.TestTypeTags;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 import static com.swirlds.common.merkle.utility.MerkleUtils.invalidateTree;
 import static com.swirlds.common.merkle.utility.MerkleUtils.rehashTree;
@@ -44,199 +22,234 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.io.streams.SerializableDataInputStream;
+import com.swirlds.common.io.streams.SerializableDataOutputStream;
+import com.swirlds.common.merkle.MerkleInternal;
+import com.swirlds.common.merkle.MerkleLeaf;
+import com.swirlds.common.merkle.MerkleNode;
+import com.swirlds.common.merkle.crypto.MerkleCryptoFactory;
+import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
+import com.swirlds.common.merkle.impl.PartialNaryMerkleInternal;
+import com.swirlds.common.merkle.route.MerkleRoute;
+import com.swirlds.common.test.merkle.util.MerkleTestUtils;
+import com.swirlds.test.framework.TestComponentTags;
+import com.swirlds.test.framework.TestTypeTags;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
 @DisplayName("Merkle Rehash Tests")
 class MerkleRehashTests {
 
-	private static class DummySelfHashingLeaf extends PartialMerkleLeaf implements MerkleLeaf {
+    /**
+     * If the root of the tree is an internal node, add some self hashing nodes that "explode" if
+     * rehashed.
+     */
+    private void addSelfHashingNodes(final MerkleNode root) {
+        if (!root.isLeaf()) {
+            final MerkleInternal internal = root.asInternal();
+            final int childCount = internal.getNumberOfChildren();
 
-		@Override
-		public long getClassId() {
-			// unique ID just in case constructable registry discovers this object
-			return 0xeca90add22ad0775L;
-		}
+            internal.setChild(childCount, new DummySelfHashingLeaf());
 
-		@Override
-		public void serialize(final SerializableDataOutputStream out) throws IOException {
+            final MerkleInternal subtree = new DummySelfHashingInternal();
+            subtree.setChild(0, new DummySelfHashingLeaf());
+            subtree.setChild(1, new DummySelfHashingLeaf());
 
-		}
+            internal.setChild(childCount + 1, subtree);
+        }
+    }
 
-		@Override
-		public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
+    @Test
+    @Tag(TestTypeTags.FUNCTIONAL)
+    @Tag(TestComponentTags.MERKLE)
+    @DisplayName("Invalidate Behavior")
+    void invalidateBehavior() {
 
-		}
+        for (final MerkleNode root : MerkleTestUtils.buildTreeList()) {
+            if (root == null) {
+                continue;
+            }
 
-		@Override
-		public int getVersion() {
-			return 1;
-		}
+            addSelfHashingNodes(root);
 
-		@Override
-		public DummySelfHashingLeaf copy() {
-			throw new UnsupportedOperationException("not implemented");
-		}
+            root.forEachNode(
+                    (final MerkleNode node) -> {
+                        if (node.isSelfHashing()) {
+                            assertEquals(
+                                    CryptoFactory.getInstance().getNullHash(),
+                                    node.getHash(),
+                                    "dummy node should have null hash");
+                        } else {
+                            assertNull(node.getHash(), "node should have a null hash");
+                        }
+                    });
 
-		@Override
-		public void invalidateHash() {
-			throw new UnsupportedOperationException("not implemented");
-		}
+            MerkleCryptoFactory.getInstance().digestTreeSync(root);
 
-		@Override
-		public void setHash(final Hash hash) {
-			throw new UnsupportedOperationException("not implemented");
-		}
+            root.forEachNode(
+                    (final MerkleNode node) -> {
+                        assertNotNull(node.getHash(), "node should not have a null hash");
+                    });
 
-		@Override
-		public Hash getHash() {
-			return CryptoFactory.getInstance().getNullHash();
-		}
+            invalidateTree(root);
 
-		@Override
-		public boolean isSelfHashing() {
-			return true;
-		}
-	}
+            root.forEachNode(
+                    (final MerkleNode node) -> {
+                        if (node.isSelfHashing()) {
+                            assertEquals(
+                                    CryptoFactory.getInstance().getNullHash(),
+                                    node.getHash(),
+                                    "dummy node should have null hash");
+                        } else {
+                            assertNull(node.getHash(), "node should have a null hash");
+                        }
+                    });
+        }
+    }
 
-	private static class DummySelfHashingInternal extends PartialNaryMerkleInternal implements MerkleInternal {
+    @Test
+    @Tag(TestTypeTags.FUNCTIONAL)
+    @Tag(TestComponentTags.MERKLE)
+    @DisplayName("Rehash Behavior")
+    void rehashBehavior() {
 
-		@Override
-		public long getClassId() {
-			// unique ID just in case constructable registry discovers this object
-			return 0xcbac5958c3d04e5bL;
-		}
+        for (final MerkleNode root : MerkleTestUtils.buildTreeList()) {
+            if (root == null) {
+                continue;
+            }
 
-		@Override
-		public int getVersion() {
-			return 1;
-		}
+            addSelfHashingNodes(root);
 
-		@Override
-		public DummySelfHashingInternal copy() {
-			throw new UnsupportedOperationException("not implemented");
-		}
+            root.forEachNode(
+                    (final MerkleNode node) -> {
+                        if (node.isSelfHashing()) {
+                            assertEquals(
+                                    CryptoFactory.getInstance().getNullHash(),
+                                    node.getHash(),
+                                    "dummy node should have null hash");
+                        } else {
+                            assertNull(node.getHash(), "node should have a null hash");
+                        }
+                    });
 
-		@Override
-		public void invalidateHash() {
-			throw new UnsupportedOperationException("not implemented");
-		}
+            MerkleCryptoFactory.getInstance().digestTreeSync(root);
 
-		@Override
-		public void setHash(final Hash hash) {
-			throw new UnsupportedOperationException("not implemented");
-		}
+            final Map<MerkleRoute, Hash> hashes = new HashMap<>();
 
-		@Override
-		public Hash getHash() {
-			return CryptoFactory.getInstance().getNullHash();
-		}
+            root.forEachNode(
+                    (final MerkleNode node) -> {
+                        assertNotNull(node.getHash(), "node should not have a null hash");
+                        hashes.put(node.getRoute(), node.getHash());
+                    });
 
-		@Override
-		public boolean isSelfHashing() {
-			return true;
-		}
-	}
+            rehashTree(root);
 
-	/**
-	 * If the root of the tree is an internal node, add some self hashing nodes that "explode" if rehashed.
-	 */
-	private void addSelfHashingNodes(final MerkleNode root) {
-		if (!root.isLeaf()) {
-			final MerkleInternal internal = root.asInternal();
-			final int childCount = internal.getNumberOfChildren();
+            root.forEachNode(
+                    (final MerkleNode node) -> {
+                        assertNotNull(node.getHash(), "node should not have a null hash");
+                        assertEquals(
+                                hashes.get(node.getRoute()),
+                                node.getHash(),
+                                "node should have the same hash");
+                        if (!node.isSelfHashing()) {
+                            assertNotSame(
+                                    hashes.get(node.getRoute()),
+                                    node.getHash(),
+                                    "hash should be a different object");
+                        }
+                    });
+        }
+    }
 
-			internal.setChild(childCount, new DummySelfHashingLeaf());
+    private static class DummySelfHashingLeaf extends PartialMerkleLeaf implements MerkleLeaf {
 
-			final MerkleInternal subtree = new DummySelfHashingInternal();
-			subtree.setChild(0, new DummySelfHashingLeaf());
-			subtree.setChild(1, new DummySelfHashingLeaf());
+        @Override
+        public long getClassId() {
+            // unique ID just in case constructable registry discovers this object
+            return 0xeca90add22ad0775L;
+        }
 
-			internal.setChild(childCount + 1, subtree);
-		}
-	}
+        @Override
+        public void serialize(final SerializableDataOutputStream out) throws IOException {}
 
-	@Test
-	@Tag(TestTypeTags.FUNCTIONAL)
-	@Tag(TestComponentTags.MERKLE)
-	@DisplayName("Invalidate Behavior")
-	void invalidateBehavior() {
+        @Override
+        public void deserialize(final SerializableDataInputStream in, final int version)
+                throws IOException {}
 
-		for (final MerkleNode root : MerkleTestUtils.buildTreeList()) {
-			if (root == null) {
-				continue;
-			}
+        @Override
+        public int getVersion() {
+            return 1;
+        }
 
-			addSelfHashingNodes(root);
+        @Override
+        public DummySelfHashingLeaf copy() {
+            throw new UnsupportedOperationException("not implemented");
+        }
 
-			root.forEachNode((final MerkleNode node) -> {
-				if (node.isSelfHashing()) {
-					assertEquals(CryptoFactory.getInstance().getNullHash(), node.getHash(),
-							"dummy node should have null hash");
-				} else {
-					assertNull(node.getHash(), "node should have a null hash");
-				}
-			});
+        @Override
+        public void invalidateHash() {
+            throw new UnsupportedOperationException("not implemented");
+        }
 
-			CryptoFactory.getInstance().digestTreeSync(root);
+        @Override
+        public Hash getHash() {
+            return CryptoFactory.getInstance().getNullHash();
+        }
 
-			root.forEachNode((final MerkleNode node) -> {
-				assertNotNull(node.getHash(), "node should not have a null hash");
-			});
+        @Override
+        public void setHash(final Hash hash) {
+            throw new UnsupportedOperationException("not implemented");
+        }
 
-			invalidateTree(root);
+        @Override
+        public boolean isSelfHashing() {
+            return true;
+        }
+    }
 
-			root.forEachNode((final MerkleNode node) -> {
-				if (node.isSelfHashing()) {
-					assertEquals(CryptoFactory.getInstance().getNullHash(), node.getHash(),
-							"dummy node should have null hash");
-				} else {
-					assertNull(node.getHash(), "node should have a null hash");
-				}
-			});
-		}
-	}
+    private static class DummySelfHashingInternal extends PartialNaryMerkleInternal
+            implements MerkleInternal {
 
-	@Test
-	@Tag(TestTypeTags.FUNCTIONAL)
-	@Tag(TestComponentTags.MERKLE)
-	@DisplayName("Rehash Behavior")
-	void rehashBehavior() {
+        @Override
+        public long getClassId() {
+            // unique ID just in case constructable registry discovers this object
+            return 0xcbac5958c3d04e5bL;
+        }
 
-		for (final MerkleNode root : MerkleTestUtils.buildTreeList()) {
-			if (root == null) {
-				continue;
-			}
+        @Override
+        public int getVersion() {
+            return 1;
+        }
 
-			addSelfHashingNodes(root);
+        @Override
+        public DummySelfHashingInternal copy() {
+            throw new UnsupportedOperationException("not implemented");
+        }
 
-			root.forEachNode((final MerkleNode node) -> {
-				if (node.isSelfHashing()) {
-					assertEquals(CryptoFactory.getInstance().getNullHash(), node.getHash(),
-							"dummy node should have null hash");
-				} else {
-					assertNull(node.getHash(), "node should have a null hash");
-				}
-			});
+        @Override
+        public void invalidateHash() {
+            throw new UnsupportedOperationException("not implemented");
+        }
 
-			CryptoFactory.getInstance().digestTreeSync(root);
+        @Override
+        public Hash getHash() {
+            return CryptoFactory.getInstance().getNullHash();
+        }
 
-			final Map<MerkleRoute, Hash> hashes = new HashMap<>();
+        @Override
+        public void setHash(final Hash hash) {
+            throw new UnsupportedOperationException("not implemented");
+        }
 
-			root.forEachNode((final MerkleNode node) -> {
-				assertNotNull(node.getHash(), "node should not have a null hash");
-				hashes.put(node.getRoute(), node.getHash());
-			});
-
-			rehashTree(root);
-
-			root.forEachNode((final MerkleNode node) -> {
-				assertNotNull(node.getHash(), "node should not have a null hash");
-				assertEquals(hashes.get(node.getRoute()), node.getHash(), "node should have the same hash");
-				if (!node.isSelfHashing()) {
-					assertNotSame(hashes.get(node.getRoute()), node.getHash(),
-							"hash should be a different object");
-				}
-			});
-		}
-
-	}
-
+        @Override
+        public boolean isSelfHashing() {
+            return true;
+        }
+    }
 }

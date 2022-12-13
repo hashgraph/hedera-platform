@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test.crypto;
 
 import com.goterl.lazysodium.LazySodiumJava;
@@ -22,271 +21,243 @@ import com.goterl.lazysodium.interfaces.Sign;
 import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.system.transaction.internal.SwirldTransaction;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.Marker;
-import org.apache.logging.log4j.MarkerManager;
-
 import java.security.SignatureException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Marker;
+import org.apache.logging.log4j.MarkerManager;
 
 /**
- * Provides pre-generated random transactions that are optionally pre-signed with Ed25519 signatures.
+ * Provides pre-generated random transactions that are optionally pre-signed with Ed25519
+ * signatures.
  */
 public class SignaturePool {
 
-	/**
-	 * the length of signature in bytes
-	 */
-	static final int SIGNATURE_LENGTH = Sign.BYTES;
+    /** the length of signature in bytes */
+    static final int SIGNATURE_LENGTH = Sign.BYTES;
 
-	/**
-	 * the length of the public key in bytes
-	 */
-	static final int PUBLIC_KEY_LENGTH = Sign.PUBLICKEYBYTES;
+    /** the length of the public key in bytes */
+    static final int PUBLIC_KEY_LENGTH = Sign.PUBLICKEYBYTES;
 
-	/**
-	 * the length of the private key in bytes
-	 */
-	static final int PRIVATE_KEY_LENGTH = Sign.SECRETKEYBYTES;
+    /** the length of the private key in bytes */
+    static final int PRIVATE_KEY_LENGTH = Sign.SECRETKEYBYTES;
 
-	/**
-	 * the length of the signature and the public key combined
-	 */
-	static final int SIG_KEY_LENGTH = SIGNATURE_LENGTH + PUBLIC_KEY_LENGTH;
-	/**
-	 * log all exceptions, and serious problems. These should never happen unless we are either receiving packets from
-	 * an attacker, or there is a bug in the code. In most cases, this should include a full stack trace of the
-	 * exception.
-	 */
-	static final Marker LOGM_EXCEPTION = MarkerManager.getMarker("EXCEPTION");
-	/**
-	 * logs events related to the startup of the application
-	 */
-	static final Marker LOGM_STARTUP = MarkerManager.getMarker("STARTUP");
-	/**
-	 * logs events related to the startup of the application
-	 */
-	static final Marker LOGM_ADV_CRYPTO_SYSTEM = MarkerManager.getMarker("ADV_CRYPTO_SYSTEM");
-	/**
-	 * use this for all logging, as controlled by the optional data/log4j2.xml file
-	 */
-	private static final Logger log = LogManager.getLogger();
-	private boolean transactionLogged = false;
+    /** the length of the signature and the public key combined */
+    static final int SIG_KEY_LENGTH = SIGNATURE_LENGTH + PUBLIC_KEY_LENGTH;
+    /**
+     * log all exceptions, and serious problems. These should never happen unless we are either
+     * receiving packets from an attacker, or there is a bug in the code. In most cases, this should
+     * include a full stack trace of the exception.
+     */
+    static final Marker LOGM_EXCEPTION = MarkerManager.getMarker("EXCEPTION");
+    /** logs events related to the startup of the application */
+    static final Marker LOGM_STARTUP = MarkerManager.getMarker("STARTUP");
+    /** logs events related to the startup of the application */
+    static final Marker LOGM_ADV_CRYPTO_SYSTEM = MarkerManager.getMarker("ADV_CRYPTO_SYSTEM");
+    /** use this for all logging, as controlled by the optional data/log4j2.xml file */
+    private static final Logger log = LogManager.getLogger();
 
-	private int poolSize;
+    private boolean transactionLogged = false;
 
-	/**
-	 * the list of transactions
-	 */
-	private ArrayList<SwirldTransaction> transactions;
+    private int poolSize;
 
-	/**
-	 * the fixed size of each transaction, not including the signature and public key
-	 */
-	private int transactionSize;
+    /** the list of transactions */
+    private ArrayList<SwirldTransaction> transactions;
 
-	/**
-	 * indicates whether the transactions should be signed
-	 */
-	private boolean signed;
+    /** the fixed size of each transaction, not including the signature and public key */
+    private int transactionSize;
 
-	/**
-	 * the standard psuedo-random number generator
-	 */
-	private Random random;
+    /** indicates whether the transactions should be signed */
+    private boolean signed;
 
-	/**
-	 * indicates whether there is an available algorithm implementation & keypair
-	 */
-	private boolean algorithmAvailable;
+    /** the standard psuedo-random number generator */
+    private Random random;
 
-	/**
-	 * the private key to use when signing each transaction
-	 */
-	private byte[] privateKey;
+    /** indicates whether there is an available algorithm implementation & keypair */
+    private boolean algorithmAvailable;
 
-	/**
-	 * the public key for each signed transaction
-	 */
-	private byte[] publicKey;
+    /** the private key to use when signing each transaction */
+    private byte[] privateKey;
 
-	/**
-	 * the native NaCl signing interface
-	 */
-	private Sign.Native signer;
+    /** the public key for each signed transaction */
+    private byte[] publicKey;
 
-	private AtomicInteger readPosition;
+    /** the native NaCl signing interface */
+    private Sign.Native signer;
 
-	/**
-	 * Constructs a SignaturePool instance with a fixed pool size, fixed transaction size, and whether to pre-sign each
-	 * transaction.
-	 *
-	 * @param poolSize
-	 * 		the number of pre-generated transactions
-	 * @param transactionSize
-	 * 		the size of randomly generated transaction
-	 * @param signed
-	 * 		whether to pre-sign each random transaction
-	 * @throws IllegalArgumentException
-	 * 		if the {@code poolSize} or the {@code transactionSize} parameters are less than
-	 * 		one (1)
-	 */
-	public SignaturePool(final int poolSize, final int transactionSize, final boolean signed) {
-		if (poolSize < 1) {
-			throw new IllegalArgumentException("poolSize");
-		}
+    private AtomicInteger readPosition;
 
-		if (transactionSize < 1) {
-			throw new IllegalArgumentException("transactionSize");
-		}
+    /**
+     * Constructs a SignaturePool instance with a fixed pool size, fixed transaction size, and
+     * whether to pre-sign each transaction.
+     *
+     * @param poolSize the number of pre-generated transactions
+     * @param transactionSize the size of randomly generated transaction
+     * @param signed whether to pre-sign each random transaction
+     * @throws IllegalArgumentException if the {@code poolSize} or the {@code transactionSize}
+     *     parameters are less than one (1)
+     */
+    public SignaturePool(final int poolSize, final int transactionSize, final boolean signed) {
+        if (poolSize < 1) {
+            throw new IllegalArgumentException("poolSize");
+        }
 
-		this.random = new Random();
-		this.signed = signed;
+        if (transactionSize < 1) {
+            throw new IllegalArgumentException("transactionSize");
+        }
 
-		this.transactionSize = transactionSize;
-		this.transactions = new ArrayList<>(poolSize);
-		this.poolSize = poolSize;
-		this.readPosition = new AtomicInteger(0);
+        this.random = new Random();
+        this.signed = signed;
 
-		this.algorithmAvailable = false;
+        this.transactionSize = transactionSize;
+        this.transactions = new ArrayList<>(poolSize);
+        this.poolSize = poolSize;
+        this.readPosition = new AtomicInteger(0);
 
-		init();
-	}
+        this.algorithmAvailable = false;
 
-	/**
-	 * Retrieves a random transaction from the pool of pre-generated transactions.
-	 *
-	 * @return a random transaction from the pool
-	 */
-	public TransactionSignature next() {
-		int nextIdx = readPosition.getAndIncrement();
+        init();
+    }
 
-		if (nextIdx >= transactions.size()) {
-			nextIdx = 0;
-			readPosition.set(1);
-		}
+    /**
+     * Retrieves a random transaction from the pool of pre-generated transactions.
+     *
+     * @return a random transaction from the pool
+     */
+    public TransactionSignature next() {
+        int nextIdx = readPosition.getAndIncrement();
 
-		final SwirldTransaction tx = transactions.get(nextIdx);
-		tx.clearSignatures();
-		tx.extractSignature(transactionSize + PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH, transactionSize, PUBLIC_KEY_LENGTH,
-				0, transactionSize, SignatureType.ED25519);
+        if (nextIdx >= transactions.size()) {
+            nextIdx = 0;
+            readPosition.set(1);
+        }
 
-		final List<TransactionSignature> signatures = tx.getSignatures();
+        final SwirldTransaction tx = transactions.get(nextIdx);
+        tx.clearSignatures();
+        tx.extractSignature(
+                transactionSize + PUBLIC_KEY_LENGTH,
+                SIGNATURE_LENGTH,
+                transactionSize,
+                PUBLIC_KEY_LENGTH,
+                0,
+                transactionSize,
+                SignatureType.ED25519);
 
-		if (signatures.isEmpty()) {
-			return null;
-		}
+        final List<TransactionSignature> signatures = tx.getSignatures();
 
-		return signatures.get(0);
-	}
+        if (signatures.isEmpty()) {
+            return null;
+        }
 
-	/**
-	 * Performs one-time initialization of this instance.
-	 */
-	private void init() {
-		if (signed) {
-			tryAcquireSignature();
-		}
+        return signatures.get(0);
+    }
 
-		final int bufferSize = transactionSize + ((signed) ? SIG_KEY_LENGTH : 0);
-		final byte[] buffer = new byte[bufferSize];
+    /** Performs one-time initialization of this instance. */
+    private void init() {
+        if (signed) {
+            tryAcquireSignature();
+        }
 
-		for (int i = 0; i < poolSize; i++) {
-			random.nextBytes(buffer);
+        final int bufferSize = transactionSize + ((signed) ? SIG_KEY_LENGTH : 0);
+        final byte[] buffer = new byte[bufferSize];
 
-			if (signed) {
-				if (!algorithmAvailable) {
-					Arrays.fill(buffer, buffer.length - SIG_KEY_LENGTH, buffer.length, (byte) 0);
-				} else {
-					sign(buffer);
-				}
-			}
+        for (int i = 0; i < poolSize; i++) {
+            random.nextBytes(buffer);
 
-			transactions.add(new SwirldTransaction(buffer));
-		}
-	}
+            if (signed) {
+                if (!algorithmAvailable) {
+                    Arrays.fill(buffer, buffer.length - SIG_KEY_LENGTH, buffer.length, (byte) 0);
+                } else {
+                    sign(buffer);
+                }
+            }
 
-	/**
-	 * Signs a transaction buffer where the first {@link #transactionSize} bytes represent the transaction data.
-	 *
-	 * @param buffer
-	 * 		the pre-allocated buffer of at least {@link #transactionSize} long, if {@link #signed} is true then
-	 * 		length must be at least ({@link #transactionSize} + {@link #SIG_KEY_LENGTH}) long
-	 * @throws SignatureException
-	 * 		if {@link Sign.Native#cryptoSignDetached(byte[], byte[], long, byte[])}
-	 * 		returns a failure code
-	 */
-	private void sign(final byte[] buffer) {
+            transactions.add(new SwirldTransaction(buffer));
+        }
+    }
 
-		final int dataLength = buffer.length - SIG_KEY_LENGTH;
+    /**
+     * Signs a transaction buffer where the first {@link #transactionSize} bytes represent the
+     * transaction data.
+     *
+     * @param buffer the pre-allocated buffer of at least {@link #transactionSize} long, if {@link
+     *     #signed} is true then length must be at least ({@link #transactionSize} + {@link
+     *     #SIG_KEY_LENGTH}) long
+     * @throws SignatureException if {@link Sign.Native#cryptoSignDetached(byte[], byte[], long,
+     *     byte[])} returns a failure code
+     */
+    private void sign(final byte[] buffer) {
 
-		try {
-			int offset = dataLength;
+        final int dataLength = buffer.length - SIG_KEY_LENGTH;
 
-			final byte[] data = new byte[dataLength];
-			final byte[] sig = new byte[SIGNATURE_LENGTH];
+        try {
+            int offset = dataLength;
 
-			System.arraycopy(buffer, 0, data, 0, dataLength);
-			System.arraycopy(publicKey, 0, buffer, offset, publicKey.length);
-			offset += publicKey.length;
+            final byte[] data = new byte[dataLength];
+            final byte[] sig = new byte[SIGNATURE_LENGTH];
 
-			if (!signer.cryptoSignDetached(sig, data, (long) data.length, privateKey)) {
-				throw new SignatureException();
-			}
+            System.arraycopy(buffer, 0, data, 0, dataLength);
+            System.arraycopy(publicKey, 0, buffer, offset, publicKey.length);
+            offset += publicKey.length;
 
-			if (!transactionLogged) {
-				log.trace(LOGM_STARTUP,
-						"StatsSigningDemo: Signed Message { publicKey = '{}', privateKey ='{}', signature = '{}', " +
-								"message = '{}' }",
-						hex(publicKey), hex(privateKey), hex(sig), hex(data));
+            if (!signer.cryptoSignDetached(sig, data, (long) data.length, privateKey)) {
+                throw new SignatureException();
+            }
 
-				transactionLogged = true;
-			}
+            if (!transactionLogged) {
+                log.trace(
+                        LOGM_STARTUP,
+                        "StatsSigningDemo: Signed Message { publicKey = '{}', privateKey ='{}',"
+                                + " signature = '{}', message = '{}' }",
+                        hex(publicKey),
+                        hex(privateKey),
+                        hex(sig),
+                        hex(data));
 
-			System.arraycopy(sig, 0, buffer, offset, sig.length);
-		} catch (Exception ex) {
-			log.error(LOGM_EXCEPTION, "Adv Crypto Subsystem: Failed to sign transaction", ex);
-		}
-	}
+                transactionLogged = true;
+            }
 
-	/**
-	 * Initializes the {@link #signer} instance and creates the public/private keys.
-	 */
-	private void tryAcquireSignature() {
-		try {
-			final SodiumJava sodium = new SodiumJava();
-			signer = new LazySodiumJava(sodium);
+            System.arraycopy(sig, 0, buffer, offset, sig.length);
+        } catch (Exception ex) {
+            log.error(LOGM_EXCEPTION, "Adv Crypto Subsystem: Failed to sign transaction", ex);
+        }
+    }
 
-			publicKey = new byte[PUBLIC_KEY_LENGTH];
-			privateKey = new byte[PRIVATE_KEY_LENGTH];
+    /** Initializes the {@link #signer} instance and creates the public/private keys. */
+    private void tryAcquireSignature() {
+        try {
+            final SodiumJava sodium = new SodiumJava();
+            signer = new LazySodiumJava(sodium);
 
-			algorithmAvailable = signer.cryptoSignKeypair(publicKey, privateKey);
-			log.trace(LOGM_STARTUP, "StatsSigningDemo: Public Key -> hex('{}')", hex(publicKey));
-		} catch (Exception ex) {
-			algorithmAvailable = false;
-		}
-	}
+            publicKey = new byte[PUBLIC_KEY_LENGTH];
+            privateKey = new byte[PRIVATE_KEY_LENGTH];
 
-	/**
-	 * Converts a byte array to a hexadecimal string.
-	 *
-	 * @param bytes
-	 * 		the bytes to convert to a hexadecimal string
-	 * @return a hex encoded string representation of the bytes
-	 */
-	private String hex(final byte[] bytes) {
-		StringBuilder sb = new StringBuilder(bytes.length * 2);
-		sb.append("0x");
+            algorithmAvailable = signer.cryptoSignKeypair(publicKey, privateKey);
+            log.trace(LOGM_STARTUP, "StatsSigningDemo: Public Key -> hex('{}')", hex(publicKey));
+        } catch (Exception ex) {
+            algorithmAvailable = false;
+        }
+    }
 
-		for (byte b : bytes) {
-			sb.append(String.format("%02X", b));
-		}
+    /**
+     * Converts a byte array to a hexadecimal string.
+     *
+     * @param bytes the bytes to convert to a hexadecimal string
+     * @return a hex encoded string representation of the bytes
+     */
+    private String hex(final byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        sb.append("0x");
 
-		return sb.toString();
-	}
+        for (byte b : bytes) {
+            sb.append(String.format("%02X", b));
+        }
+
+        return sb.toString();
+    }
 }

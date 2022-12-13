@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,39 +13,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.io.extendable.extensions.internal;
 
-/**
- * An interface for a counter
- */
+/** An interface for a counter */
 public interface Counter {
 
-	/**
-	 * Resets the count to 0
-	 */
-	void resetCount();
+    /** Resets the count to 0 */
+    void resetCount();
 
-	/**
-	 * get the current count
-	 *
-	 * @return the current count
-	 */
-	long getCount();
+    /**
+     * get the current count
+     *
+     * @return the current count
+     */
+    long getCount();
 
-	/**
-	 * Returns the current count and resets it to 0
-	 *
-	 * @return the count before the reset
-	 */
-	long getAndResetCount();
+    /**
+     * Returns the current count and resets it to 0
+     *
+     * @return the count before the reset
+     */
+    long getAndResetCount();
 
-	/**
-	 * Adds the specified value to the count
-	 *
-	 * @param value
-	 * 		the value to be added
-	 * @return the new count
-	 */
-	long addToCount(long value);
+    /**
+     * Adds the specified value to the count
+     *
+     * @param value the value to be added
+     * @return the new count
+     */
+    long addToCount(long value);
 }

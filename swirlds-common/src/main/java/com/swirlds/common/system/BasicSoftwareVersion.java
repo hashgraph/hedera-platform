@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,12 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.system;
 
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-
 import java.io.IOException;
 
 /**
@@ -26,95 +24,80 @@ import java.io.IOException;
  */
 public class BasicSoftwareVersion implements SoftwareVersion {
 
-	private static final long CLASS_ID = 0x777ea397b73c9830L;
+    private static final long CLASS_ID = 0x777ea397b73c9830L;
 
-	private static class ClassVersion {
-		public static final int ORIGINAL = 1;
-	}
+    private static class ClassVersion {
+        public static final int ORIGINAL = 1;
+    }
 
-	private long softwareVersion;
+    private long softwareVersion;
 
-	/**
-	 * Zero arg constructor used for deserialization.
-	 */
-	public BasicSoftwareVersion() {
+    /** Zero arg constructor used for deserialization. */
+    public BasicSoftwareVersion() {}
 
-	}
+    /**
+     * Create a new software version.
+     *
+     * @param softwareVersion the version number
+     */
+    public BasicSoftwareVersion(final long softwareVersion) {
+        this.softwareVersion = softwareVersion;
+    }
 
-	/**
-	 * Create a new software version.
-	 *
-	 * @param softwareVersion
-	 * 		the version number
-	 */
-	public BasicSoftwareVersion(final long softwareVersion) {
-		this.softwareVersion = softwareVersion;
-	}
+    /**
+     * Get the software version number. Distinct from {@link #getVersion()}, which returns the
+     * serialization version for this object.
+     *
+     * @return the software version number
+     */
+    public long getSoftwareVersion() {
+        return softwareVersion;
+    }
 
-	/**
-	 * Get the software version number. Distinct from {@link #getVersion()}, which returns the serialization version
-	 * for this object.
-	 *
-	 * @return the software version number
-	 */
-	public long getSoftwareVersion() {
-		return softwareVersion;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public long getClassId() {
+        return CLASS_ID;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public long getClassId() {
-		return CLASS_ID;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void serialize(final SerializableDataOutputStream out) throws IOException {
+        out.writeLong(softwareVersion);
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void serialize(final SerializableDataOutputStream out) throws IOException {
-		out.writeLong(softwareVersion);
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void deserialize(final SerializableDataInputStream in, final int version)
+            throws IOException {
+        softwareVersion = in.readLong();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
-		softwareVersion = in.readLong();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public int getVersion() {
+        return ClassVersion.ORIGINAL;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getVersion() {
-		return ClassVersion.ORIGINAL;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public int compareTo(final SoftwareVersion that) {
+        if (that == NO_VERSION) {
+            // No version always comes before all other versions
+            return 1;
+        }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int compareTo(final SoftwareVersion that) {
-		if (that == NO_VERSION) {
-			// No version always comes before all other versions
-			return 1;
-		}
+        if (that instanceof BasicSoftwareVersion thatVersion) {
+            return Long.compare(softwareVersion, thatVersion.softwareVersion);
+        } else {
+            throw new IllegalArgumentException(
+                    "Can not compare BasicSoftwareVersion to " + that.getClass().getName());
+        }
+    }
 
-		if (that instanceof BasicSoftwareVersion thatVersion) {
-			return Long.compare(softwareVersion, thatVersion.softwareVersion);
-		} else {
-			throw new IllegalArgumentException("Can not compare BasicSoftwareVersion to " + that.getClass().getName());
-		}
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public String toString() {
-		return Long.toString(softwareVersion);
-	}
+    /** {@inheritDoc} */
+    @Override
+    public String toString() {
+        return Long.toString(softwareVersion);
+    }
 }

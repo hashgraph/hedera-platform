@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,49 +13,43 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.threading;
+
+import static com.swirlds.logging.LogMarker.THREADS;
 
 import com.swirlds.common.threading.framework.StoppableThread;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import static com.swirlds.logging.LogMarker.THREADS;
-
-/**
- * Utility class for performing common actions with threads.
- */
+/** Utility class for performing common actions with threads. */
 public final class ThreadUtils {
 
-	private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger();
 
-	// Prevent instantiation of a static utility class
-	private ThreadUtils() {
+    // Prevent instantiation of a static utility class
+    private ThreadUtils() {}
 
-	}
+    /**
+     * Stop the provided threads, and block until they have all stopped.
+     *
+     * @param threadsToStop an array of queue threads to stop. Must not be null.
+     */
+    public static void stopThreads(final StoppableThread... threadsToStop)
+            throws InterruptedException {
+        LOG.info(THREADS.getMarker(), "{} thread(s) will be terminated", threadsToStop.length);
+        for (final StoppableThread thread : threadsToStop) {
+            if (thread != null) {
+                LOG.info(THREADS.getMarker(), "stopping thread {}", thread.getName());
+                thread.stop();
+            }
+        }
 
-	/**
-	 * Stop the provided threads, and block until they have all stopped.
-	 *
-	 * @param threadsToStop
-	 * 		an array of queue threads to stop. Must not be null.
-	 */
-	public static void stopThreads(final StoppableThread... threadsToStop) throws InterruptedException {
-		LOG.info(THREADS.getMarker(), "{} thread(s) will be terminated", threadsToStop.length);
-		for (final StoppableThread thread : threadsToStop) {
-			if (thread != null) {
-				LOG.info(THREADS.getMarker(), "stopping thread {}", thread.getName());
-				thread.stop();
-			}
-		}
-
-		for (final StoppableThread thread : threadsToStop) {
-			if (thread != null) {
-				LOG.info(THREADS.getMarker(), "joining thread {}", thread.getName());
-				thread.join();
-			}
-		}
-		LOG.info(THREADS.getMarker(), "{} thread(s) terminated", threadsToStop.length);
-	}
-
+        for (final StoppableThread thread : threadsToStop) {
+            if (thread != null) {
+                LOG.info(THREADS.getMarker(), "joining thread {}", thread.getName());
+                thread.join();
+            }
+        }
+        LOG.info(THREADS.getMarker(), "{} thread(s) terminated", threadsToStop.length);
+    }
 }

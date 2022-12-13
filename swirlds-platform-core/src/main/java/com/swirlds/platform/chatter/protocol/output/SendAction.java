@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,17 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.platform.chatter.protocol.output;
 
-/**
- * Returned by a {@link SendCheck} to describe the appropriate action to take
- */
+/** Returned by a {@link SendCheck} to describe the appropriate action to take */
 public enum SendAction {
-	/** send the message */
-	SEND,
-	/** discard the message, it never needs to be sent */
-	DISCARD,
-	/** do not send the message now, but do not discard it either, it will be sent at a later time */
-	WAIT
+    /** send the message */
+    SEND,
+    /** discard the message, it never needs to be sent */
+    DISCARD,
+    /**
+     * do not send the message now, but do not discard it either, it will be sent at a later time
+     */
+    WAIT
 }

@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,79 +13,74 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.merkle.synchronization.settings;
 
 import java.time.Duration;
 
-/**
- * Utility class for fetching reconnect settings.
- */
+/** Utility class for fetching reconnect settings. */
 public final class ReconnectSettingsFactory {
 
-	private static ReconnectSettings reconnectSettings;
+    private static ReconnectSettings reconnectSettings;
 
-	private ReconnectSettingsFactory() {
+    private ReconnectSettingsFactory() {}
 
-	}
+    public static void configure(ReconnectSettings reconnectSettings) {
+        ReconnectSettingsFactory.reconnectSettings = reconnectSettings;
+    }
 
-	public static void configure(ReconnectSettings reconnectSettings) {
-		ReconnectSettingsFactory.reconnectSettings = reconnectSettings;
-	}
+    public static ReconnectSettings get() {
+        if (reconnectSettings == null) {
+            reconnectSettings = getDefaultSettings();
+        }
+        return reconnectSettings;
+    }
 
-	public static ReconnectSettings get() {
-		if (reconnectSettings == null) {
-			reconnectSettings = getDefaultSettings();
-		}
-		return reconnectSettings;
-	}
+    private static ReconnectSettings getDefaultSettings() {
+        return new ReconnectSettings() {
+            @Override
+            public boolean isActive() {
+                return true;
+            }
 
-	private static ReconnectSettings getDefaultSettings() {
-		return new ReconnectSettings() {
-			@Override
-			public boolean isActive() {
-				return true;
-			}
+            @Override
+            public int getReconnectWindowSeconds() {
+                return -1;
+            }
 
-			@Override
-			public int getReconnectWindowSeconds() {
-				return -1;
-			}
+            @Override
+            public double getFallenBehindThreshold() {
+                return 0.5;
+            }
 
-			@Override
-			public double getFallenBehindThreshold() {
-				return 0.5;
-			}
+            @Override
+            public int getAsyncStreamTimeoutMilliseconds() {
+                return 10_000;
+            }
 
-			@Override
-			public int getAsyncStreamTimeoutMilliseconds() {
-				return 10_000;
-			}
+            @Override
+            public int getAsyncOutputStreamFlushMilliseconds() {
+                return 100;
+            }
 
-			@Override
-			public int getAsyncOutputStreamFlushMilliseconds() {
-				return 100;
-			}
+            @Override
+            public int getAsyncStreamBufferSize() {
+                return 100_000;
+            }
 
-			@Override
-			public int getAsyncStreamBufferSize() {
-				return 100_000;
-			}
+            @Override
+            public int getMaxAckDelayMilliseconds() {
+                return 10;
+            }
 
-			@Override
-			public int getMaxAckDelayMilliseconds() {
-				return 10;
-			}
+            @Override
+            public int getMaximumReconnectFailuresBeforeShutdown() {
+                return 10;
+            }
 
-			@Override
-			public int getMaximumReconnectFailuresBeforeShutdown() {
-				return 10;
-			}
-
-			@Override
-			public Duration getMinimumTimeBetweenReconnects() {
-				return Duration.ofMinutes(10);
-			}
-		};
-	}
+            @Override
+            public Duration getMinimumTimeBetweenReconnects() {
+                return Duration.ofMinutes(10);
+            }
+        };
+    }
 }

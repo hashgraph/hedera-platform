@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,179 +13,177 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.system.transaction.internal;
 
-import com.swirlds.common.io.streams.AugmentedDataOutputStream;
+import static com.swirlds.common.io.streams.AugmentedDataOutputStream.getArraySerializedLength;
+import static com.swirlds.common.system.transaction.SystemTransactionType.SYS_TRANS_STATE_SIG;
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
+
+import com.swirlds.common.crypto.DigestType;
+import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.crypto.Signature;
+import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.system.transaction.SystemTransactionType;
-
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Objects;
 
-import static com.swirlds.common.io.streams.SerializableStreamConstants.BOOLEAN_BYTES;
-import static com.swirlds.common.system.transaction.SystemTransactionType.SYS_TRANS_STATE_SIG;
-
 /**
- * Every round, the signature of a signed state is put in this transaction
- * and gossiped to other nodes
+ * Every round, the signature of a signed state is put in this transaction and gossiped to other
+ * nodes
  */
 public final class StateSignatureTransaction extends SystemTransaction {
 
-	/** class identifier for the purposes of serialization */
-	private static final long SIG_CLASS_ID = 0xaf7024c653caabf4L;
-	/** current class version */
-	private static final int SIG_CLASS_VERSION = 1;
-	/** maximum number of bytes allowed when deserializing signature */
-	public static final int MAX_SIGNATURE_BYTES = 1024;
+    /** class identifier for the purposes of serialization */
+    private static final long CLASS_ID = 0xaf7024c653caabf4L;
 
-	/**
-	 * whether this is freeze transaction or just normal signature transaction
-	 *
-	 * @deprecated do not use this variable. It deprecated because there is no need to track state signatures that are
-	 * 		for a freeze state separately from regular state signatures. It will be removed in a future release.
-	 */
-	@Deprecated
-	private boolean isFreeze;
+    private static class ClassVersion {
+        public static final int ORIGINAL = 1;
+        public static final int ADDED_SELF_HASH = 2;
+    }
 
-	/** signature of signed state */
-	private byte[] stateSignature;
+    /** signature of signed state */
+    private Signature stateSignature;
 
-	/** round number of signed state */
-	private long lastRoundReceived = 0;
+    /** the hash that was signed */
+    private Hash stateHash;
 
-	/**
-	 * No-argument constructor used by ConstructableRegistry
-	 */
-	public StateSignatureTransaction() {
-	}
+    /** round number of signed state */
+    private long round = 0;
 
-	/**
-	 * Create a state signature transaction
-	 *
-	 * @param lastRoundReceived
-	 * 		The round number of the signed state that this transaction belongs to
-	 * @param stateSignature
-	 * 		The byte array of signature of the signed state
-	 */
-	public StateSignatureTransaction(final long lastRoundReceived, final byte[] stateSignature) {
-		this.stateSignature = stateSignature;
-		this.lastRoundReceived = lastRoundReceived;
-	}
+    /** No-argument constructor used by ConstructableRegistry */
+    public StateSignatureTransaction() {}
 
-	/**
-	 * @return the round number of the signed state that this transaction belongs to
-	 */
-	public long getLastRoundReceived() {
-		return lastRoundReceived;
-	}
+    /**
+     * Create a state signature transaction
+     *
+     * @param round The round number of the signed state that this transaction belongs to
+     * @param stateSignature The byte array of signature of the signed state
+     */
+    public StateSignatureTransaction(
+            final long round, final Signature stateSignature, final Hash stateHash) {
+        this.stateSignature = throwArgNull(stateSignature, "stateSignature");
+        this.stateHash = throwArgNull(stateHash, "stateHash");
+        this.round = round;
+    }
 
-	/**
-	 * @return the byte array of signature of the signed state
-	 */
-	public byte[] getStateSignature() {
-		return stateSignature;
-	}
+    /**
+     * @return the round number of the signed state that this transaction belongs to
+     */
+    public long getRound() {
+        return round;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getSize() {
-		return getSerializedLength();
-	}
+    /**
+     * @return the signature on the state
+     */
+    public Signature getStateSignature() {
+        return stateSignature;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public SystemTransactionType getType() {
-		return SYS_TRANS_STATE_SIG;
-	}
+    /**
+     * @return the hash that was signed
+     */
+    public Hash getStateHash() {
+        return stateHash;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void serialize(final SerializableDataOutputStream dos) throws IOException {
-		dos.writeBoolean(isFreeze);
-		dos.writeByteArray(stateSignature);
-		dos.writeLong(lastRoundReceived);
-	}
+    /** {@inheritDoc} */
+    @Override
+    public int getSize() {
+        return getSerializedLength();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
-		this.isFreeze = in.readBoolean();
-		this.stateSignature = in.readByteArray(MAX_SIGNATURE_BYTES);
-		this.lastRoundReceived = in.readLong();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public SystemTransactionType getType() {
+        return SYS_TRANS_STATE_SIG;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getMinimumSupportedVersion() {
-		return SIG_CLASS_VERSION;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void serialize(final SerializableDataOutputStream out) throws IOException {
+        out.writeByteArray(stateSignature.getSignatureBytes());
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public long getClassId() {
-		return SIG_CLASS_ID;
-	}
+        // state hash will only be null for objects originally serialized with version ORIGINAL
+        if (stateHash == null) {
+            out.writeByteArray(new byte[0]);
+        } else {
+            out.writeByteArray(stateHash.getValue());
+        }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getVersion() {
-		return SIG_CLASS_VERSION;
-	}
+        out.writeLong(round);
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getSerializedLength() {
-		return BOOLEAN_BYTES        // size of isFreeze
-				+ AugmentedDataOutputStream.getArraySerializedLength(
-				stateSignature)    // size of signature byte array
-				+ Long.BYTES;        // size of lastRoundReceived
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void deserialize(final SerializableDataInputStream in, final int version)
+            throws IOException {
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean equals(final Object o) {
-		if (this == o) {
-			return true;
-		}
-		if (o == null || getClass() != o.getClass()) {
-			return false;
-		}
+        if (version == ClassVersion.ORIGINAL) {
+            in.readBoolean();
+        }
 
-		final StateSignatureTransaction that = (StateSignatureTransaction) o;
+        stateSignature =
+                new Signature(
+                        SignatureType.RSA, in.readByteArray(SignatureType.RSA.signatureLength()));
 
-		if (isFreeze != that.isFreeze) {
-			return false;
-		}
-		return Arrays.equals(stateSignature, that.stateSignature);
-	}
+        // state hash will only be null for objects originally serialized with version ORIGINAL
+        if (version >= ClassVersion.ADDED_SELF_HASH) {
+            final byte[] hashBytes = in.readByteArray(DigestType.SHA_384.digestLength());
+            if (hashBytes.length != 0) {
+                stateHash = new Hash(hashBytes, DigestType.SHA_384);
+            }
+        }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int hashCode() {
-		return Objects.hash(isFreeze, stateSignature);
-	}
+        round = in.readLong();
+    }
 
+    /** {@inheritDoc} */
+    @Override
+    public int getMinimumSupportedVersion() {
+        return ClassVersion.ORIGINAL;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public long getClassId() {
+        return CLASS_ID;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int getVersion() {
+        return ClassVersion.ADDED_SELF_HASH;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int getSerializedLength() {
+        return getArraySerializedLength(stateSignature.getSignatureBytes())
+                + getArraySerializedLength(stateHash == null ? new byte[0] : stateHash.getValue())
+                + Long.BYTES;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean equals(final Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        final StateSignatureTransaction that = (StateSignatureTransaction) o;
+        return round == that.round
+                && Objects.equals(stateSignature, that.stateSignature)
+                && Objects.equals(stateHash, that.stateHash);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int hashCode() {
+        return Objects.hash(stateSignature, stateHash, round);
+    }
 }

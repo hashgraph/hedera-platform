@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,37 +13,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.settings;
+
+import static com.swirlds.common.settings.ParsingUtils.parseDuration;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
-
 import java.io.IOException;
 import java.time.Duration;
 
-import static com.swirlds.common.settings.ParsingUtils.parseDuration;
-
 /**
  * This object is capable of parsing durations, e.g. "3 seconds", "1 day", "2.5 hours", "32ms".
- * <p>
- * This deserializer currently utilizes a regex for parsing, which may have superlinear time complexity
- * for arbitrary input. Until that is addressed, do not use this parser on untrusted strings.
+ *
+ * <p>This deserializer currently utilizes a regex for parsing, which may have superlinear time
+ * complexity for arbitrary input. Until that is addressed, do not use this parser on untrusted
+ * strings.
  */
+@Deprecated(forRemoval = true)
 public class DurationDeserializer extends StdDeserializer<Duration> {
 
-	private static final long serialVersionUID = 1;
+    private static final long serialVersionUID = 1;
 
-	public DurationDeserializer() {
-		super(Duration.class);
-	}
+    public DurationDeserializer() {
+        super(Duration.class);
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public Duration deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
-		return parseDuration(p.readValueAs(String.class));
-	}
+    /** {@inheritDoc} */
+    @Override
+    public Duration deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+        return parseDuration(p.readValueAs(String.class));
+    }
 }

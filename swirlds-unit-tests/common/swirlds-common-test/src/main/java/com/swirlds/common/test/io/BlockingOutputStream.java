@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,87 +13,72 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test.io;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.concurrent.CountDownLatch;
 
-/**
- * A stream wrapper that can be configured to block.
- */
+/** A stream wrapper that can be configured to block. */
 public class BlockingOutputStream extends OutputStream {
 
-	private final OutputStream baseStream;
-	boolean block;
+    private final OutputStream baseStream;
+    boolean block;
 
-	private final CountDownLatch latch = new CountDownLatch(1);
+    private final CountDownLatch latch = new CountDownLatch(1);
 
-	public BlockingOutputStream(final OutputStream baseStream) {
-		this.baseStream = baseStream;
-	}
+    public BlockingOutputStream(final OutputStream baseStream) {
+        this.baseStream = baseStream;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void write(final int b) throws IOException {
-		if (block) {
-			try {
-				latch.await();
-			} catch (final InterruptedException e) {
-				throw new IOException(e);
-			}
-		}
+    /** {@inheritDoc} */
+    @Override
+    public void write(final int b) throws IOException {
+        if (block) {
+            try {
+                latch.await();
+            } catch (final InterruptedException e) {
+                throw new IOException(e);
+            }
+        }
 
-		baseStream.write(b);
-	}
+        baseStream.write(b);
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void write(final byte[] b, final int off, final int len) throws IOException {
-		if (block) {
-			try {
-				latch.await();
-			} catch (final InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
-		}
+    /** {@inheritDoc} */
+    @Override
+    public void write(final byte[] b, final int off, final int len) throws IOException {
+        if (block) {
+            try {
+                latch.await();
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
 
-		baseStream.write(b, off, len);
-	}
+        baseStream.write(b, off, len);
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void flush() throws IOException {
-		baseStream.flush();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void flush() throws IOException {
+        baseStream.flush();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void close() throws IOException {
-		latch.countDown();
-		baseStream.close();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void close() throws IOException {
+        latch.countDown();
+        baseStream.close();
+    }
 
-	/**
-	 * Once called, this stream will block all writes until it is closed
-	 */
-	public void blockAllWrites() {
-		block = true;
-	}
+    /** Once called, this stream will block all writes until it is closed */
+    public void blockAllWrites() {
+        block = true;
+    }
 
-	/**
-	 * Check if the stream has been closed.
-	 */
-	public boolean isClosed() {
-		return latch.getCount() == 0;
-	}
+    /** Check if the stream has been closed. */
+    public boolean isClosed() {
+        return latch.getCount() == 0;
+    }
 }

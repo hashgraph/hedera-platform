@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test.stream;
+
+import static com.swirlds.common.utility.ByteUtils.intToByteArray;
 
 import com.swirlds.common.AbstractHashable;
 import com.swirlds.common.crypto.RunningHash;
@@ -24,26 +25,19 @@ import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.stream.StreamAligned;
 import com.swirlds.common.stream.Timestamped;
-import org.apache.commons.lang3.builder.EqualsBuilder;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
-
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.time.Instant;
+import org.apache.commons.lang3.builder.EqualsBuilder;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
 
-import static com.swirlds.common.utility.ByteUtils.intToByteArray;
-
-/**
- * Defines a RunningHashable &amp; SerializableHashable class for testing LinkedObjectStream
- */
+/** Defines a RunningHashable &amp; SerializableHashable class for testing LinkedObjectStream */
 public class ObjectForTestStream extends AbstractHashable
         implements RunningHashable, SerializableHashable, StreamAligned, Timestamped {
 
     private static final long CLASS_ID = 0xeecf8388d5496ba4L;
 
-    /**
-     * each ObjectForTestStream has a byte array and an Instant
-     */
+    /** each ObjectForTestStream has a byte array and an Instant */
     private static final int CLASS_VERSION_PAYLOAD = 2;
 
     private static final int CLASS_VERSION = CLASS_VERSION_PAYLOAD;
@@ -56,27 +50,26 @@ public class ObjectForTestStream extends AbstractHashable
     private long streamAlignment;
 
     // For RuntimeConstructable
-    public ObjectForTestStream() {
-    }
+    public ObjectForTestStream() {}
 
     public ObjectForTestStream(final int number, final Instant consensusTimestamp) {
         this(number, consensusTimestamp, NO_ALIGNMENT);
     }
 
-    public ObjectForTestStream(final int number, final Instant consensusTimestamp, final long streamAlignment) {
+    public ObjectForTestStream(
+            final int number, final Instant consensusTimestamp, final long streamAlignment) {
         this(intToByteArray(number), consensusTimestamp, streamAlignment);
     }
 
-    public ObjectForTestStream(final byte[] payload, final Instant consensusTimestamp, final long streamAlignment) {
+    public ObjectForTestStream(
+            final byte[] payload, final Instant consensusTimestamp, final long streamAlignment) {
         this.payload = payload;
         this.consensusTimestamp = consensusTimestamp;
         runningHash = new RunningHash();
         this.streamAlignment = streamAlignment;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public long getStreamAlignment() {
         return streamAlignment;
@@ -122,7 +115,9 @@ public class ObjectForTestStream extends AbstractHashable
 
     @Override
     public String toString() {
-        return String.format("ObjectForTestStream[payload size: %d, time: %s]", payload.length, consensusTimestamp);
+        return String.format(
+                "ObjectForTestStream[payload size: %d, time: %s]",
+                payload.length, consensusTimestamp);
     }
 
     @Override
@@ -136,14 +131,13 @@ public class ObjectForTestStream extends AbstractHashable
         ObjectForTestStream that = (ObjectForTestStream) o;
         return new EqualsBuilder()
                 .append(payload, that.payload)
-                .append(consensusTimestamp, that.consensusTimestamp).build();
+                .append(consensusTimestamp, that.consensusTimestamp)
+                .build();
     }
 
     @Override
     public int hashCode() {
-        return new HashCodeBuilder(17, 37)
-                .append(payload)
-                .append(consensusTimestamp).build();
+        return new HashCodeBuilder(17, 37).append(payload).append(consensusTimestamp).build();
     }
 
     /**

@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2021 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,40 +13,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test.crypto;
 
 import java.security.SignatureException;
 
 public interface SigningProvider {
-	/**
-	 * Signs a message and returns its signgature
-	 * @param msg
-	 * 		raw byte array of message
-	 * @return
-	 * 		raw byte array of signature
-	 * @throws SignatureException
-	 */
-	byte [] sign(final byte[] msg) throws SignatureException;
+    /**
+     * Signs a message and returns its signgature
+     *
+     * @param msg raw byte array of message
+     * @return raw byte array of signature
+     * @throws SignatureException
+     */
+    byte[] sign(final byte[] msg) throws SignatureException;
 
-	/**
-	 * Return the public key used for signature
-	 * @return
-	 * 		raw byte array of signature of public key
-	 */
-	byte [] getPublicKeyBytes();
+    /**
+     * Return the public key used for signature
+     *
+     * @return raw byte array of signature of public key
+     */
+    byte[] getPublicKeyBytes();
 
-	/**
-	 * return number of bytes in signature
-	 */
-	int getSignatureLength();
+    /** return number of bytes in signature */
+    int getSignatureLength();
 
-	/**
-	 * Return the private key used for signature
-	 * @return
-	 * 		raw byte array of signature of private key
-	 */
-	byte [] getPrivateKeyBytes();
+    /**
+     * Return the private key used for signature
+     *
+     * @return raw byte array of signature of private key
+     */
+    byte[] getPrivateKeyBytes();
 
     boolean isAlgorithmAvailable();
 }

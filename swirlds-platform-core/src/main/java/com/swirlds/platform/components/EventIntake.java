@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,8 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.platform.components;
+
+import static com.swirlds.logging.LogMarker.INTAKE_EVENT;
+import static com.swirlds.logging.LogMarker.STALE_EVENTS;
+import static com.swirlds.logging.LogMarker.SYNC;
 
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.address.AddressBook;
@@ -29,184 +32,180 @@ import com.swirlds.platform.internal.ConsensusRound;
 import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.observers.EventObserverDispatcher;
 import com.swirlds.platform.sync.ShadowGraph;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
-
-import static com.swirlds.logging.LogMarker.INTAKE_EVENT;
-import static com.swirlds.logging.LogMarker.STALE_EVENTS;
-import static com.swirlds.logging.LogMarker.SYNC;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
- * This class is responsible for adding events to {@link Consensus} and notifying event observers, including
- * {@link ConsensusRoundHandler} and
- * {@link com.swirlds.platform.eventhandling.PreConsensusEventHandler}.
+ * This class is responsible for adding events to {@link Consensus} and notifying event observers,
+ * including {@link ConsensusRoundHandler} and {@link
+ * com.swirlds.platform.eventhandling.PreConsensusEventHandler}.
  */
 public class EventIntake {
-	private static final Logger log = LogManager.getLogger();
-	/** The ID of this node */
-	private final NodeId selfId;
-	private final EventLinker eventLinker;
-	/** A functor that provides access to a {@code Consensus} instance. */
-	private final Supplier<Consensus> consensusSupplier;
-	private final ConsensusWrapper consensusWrapper;
-	/** A reference to the initial address book for this node. */
-	private final AddressBook addressBook;
-	/** An {@link EventObserverDispatcher} instance */
-	private final EventObserverDispatcher dispatcher;
-	/** Collects statistics */
-	private final IntakeCycleStats stats;
-	/** Stores events, expires them, provides event lookup methods */
-	private final ShadowGraph shadowGraph;
+    private static final Logger log = LogManager.getLogger();
+    /** The ID of this node */
+    private final NodeId selfId;
 
-	/**
-	 * Constructor
-	 *
-	 * @param selfId
-	 * 		the ID of this node
-	 * @param consensusSupplier
-	 * 		a functor which provides access to the {@code Consensus} interface
-	 * @param addressBook
-	 * 		the current address book
-	 * @param dispatcher
-	 * 		an event observer dispatcher
-	 */
-	public EventIntake(
-			final NodeId selfId,
-			final EventLinker eventLinker,
-			final Supplier<Consensus> consensusSupplier,
-			final AddressBook addressBook,
-			final EventObserverDispatcher dispatcher,
-			final IntakeCycleStats stats,
-			final ShadowGraph shadowGraph) {
-		this.selfId = selfId;
-		this.eventLinker = eventLinker;
-		this.consensusSupplier = consensusSupplier;
-		this.consensusWrapper = new ConsensusWrapper(consensusSupplier);
-		this.addressBook = addressBook;
-		this.dispatcher = dispatcher;
-		this.stats = stats;
-		this.shadowGraph = shadowGraph;
-	}
+    private final EventLinker eventLinker;
+    /** A functor that provides access to a {@code Consensus} instance. */
+    private final Supplier<Consensus> consensusSupplier;
 
-	/**
-	 * Adds an event received from gossip that has been validated without its parents. It must be linked to its parents
-	 * before being added to consensus. The linking is done by the {@link EventLinker} provided.
-	 *
-	 * @param event
-	 * 		the event
-	 */
-	public void addUnlinkedEvent(final GossipEvent event) {
-		stats.receivedUnlinkedEvent();
-		dispatcher.receivedEvent(event);
-		stats.dispatchedReceived();
-		eventLinker.linkEvent(event);
-		stats.doneLinking();
-		while (eventLinker.hasLinkedEvents()) {
-			addEvent(eventLinker.pollLinkedEvent());
-		}
-	}
+    private final ConsensusWrapper consensusWrapper;
+    /** A reference to the initial address book for this node. */
+    private final AddressBook addressBook;
+    /** An {@link EventObserverDispatcher} instance */
+    private final EventObserverDispatcher dispatcher;
+    /** Collects statistics */
+    private final IntakeCycleStats stats;
+    /** Stores events, expires them, provides event lookup methods */
+    private final ShadowGraph shadowGraph;
 
-	/**
-	 * Add an event to the hashgraph
-	 *
-	 * @param event
-	 * 		an event to be added
-	 */
-	public void addEvent(final EventImpl event) {
-		// an expired event will cause ShadowGraph to throw an exception, so we just to discard it
-		if (consensus().isExpired(event)) {
-			return;
-		}
-		stats.startIntake();
-		if (!StaticValidators.isValidTimeCreated(event)) {
-			event.clear();
-			return;
-		}
-		stats.doneValidation();
-		log.debug(SYNC.getMarker(), "{} sees {}", selfId, event);
-		dispatcher.preConsensusEvent(event);
-		log.debug(INTAKE_EVENT.getMarker(), "Adding {} ", event::toShortString);
-		stats.dispatchedPreConsensus();
-		final long minGenNonAncientBeforeAdding = consensus().getMinGenerationNonAncient();
-		// #5762 if we cannot calculate its roundCreated, then we use the one that was sent to us
-		final boolean hasAtLeastOneParent = event.getSelfParentHash() != null || event.getOtherParentHash() != null;
-		final boolean noParentsFound = event.getSelfParent() == null && event.getOtherParent() == null;
-		if (hasAtLeastOneParent && noParentsFound) {
-			if (event.getBaseEvent().isRoundCreatedSet()) {
-				// we then use the round created sent to us
-				event.setRoundCreated(event.getBaseEvent().getRoundCreated());
-			} else {
-				log.error(LogMarker.EXCEPTION.getMarker(),
-						"cannot determine round created for event {}",
-						event::toMediumString);
-			}
-		}
-		// record the event in the hashgraph, which results in the events in consEvent reaching consensus
-		final List<ConsensusRound> consRounds = consensusWrapper.addEvent(event, addressBook);
-		// #5762 after we calculate roundCreated, se set its value in GossipEvent so that it can be shared with other
-		// nodes
-		event.getBaseEvent().setRoundCreated(event.getRoundCreated());
-		stats.addedToConsensus();
-		dispatcher.eventAdded(event);
-		stats.dispatchedAdded();
-		if (consRounds != null) {
-			consRounds.forEach(this::handleConsensus);
-			stats.dispatchedRound();
-		}
-		if (consensus().getMinGenerationNonAncient() > minGenNonAncientBeforeAdding) {
-			// consensus rounds can be null and the minNonAncient might change, this is probably because of a round
-			// with no consensus events, so we check the diff in generations to look for stale events
-			handleStale(minGenNonAncientBeforeAdding);
-			stats.dispatchedStale();
-		}
-	}
+    /**
+     * Constructor
+     *
+     * @param selfId the ID of this node
+     * @param consensusSupplier a functor which provides access to the {@code Consensus} interface
+     * @param addressBook the current address book
+     * @param dispatcher an event observer dispatcher
+     */
+    public EventIntake(
+            final NodeId selfId,
+            final EventLinker eventLinker,
+            final Supplier<Consensus> consensusSupplier,
+            final AddressBook addressBook,
+            final EventObserverDispatcher dispatcher,
+            final IntakeCycleStats stats,
+            final ShadowGraph shadowGraph) {
+        this.selfId = selfId;
+        this.eventLinker = eventLinker;
+        this.consensusSupplier = consensusSupplier;
+        this.consensusWrapper = new ConsensusWrapper(consensusSupplier);
+        this.addressBook = addressBook;
+        this.dispatcher = dispatcher;
+        this.stats = stats;
+        this.shadowGraph = shadowGraph;
+    }
 
-	/**
-	 * Notify observer of stale events, of all event in the consensus stale event queue.
-	 */
-	private void handleStale(final long previousNonAncient) {
-		// find all events that just became ancient and did not reach consensus, these events will be considered stale
-		final Collection<EventImpl> staleEvents = shadowGraph.findByGeneration(
-				previousNonAncient,
-				consensus().getMinGenerationNonAncient(),
-				EventIntake::isNotConsensus
-		);
-		for (final EventImpl e : staleEvents) {
-			e.setStale(true);
-			dispatcher.staleEvent(e);
-			log.warn(STALE_EVENTS.getMarker(), "Stale event {}", e::toShortString);
-		}
-	}
+    /**
+     * Adds an event received from gossip that has been validated without its parents. It must be
+     * linked to its parents before being added to consensus. The linking is done by the {@link
+     * EventLinker} provided.
+     *
+     * @param event the event
+     */
+    public void addUnlinkedEvent(final GossipEvent event) {
+        stats.receivedUnlinkedEvent();
+        dispatcher.receivedEvent(event);
+        stats.dispatchedReceived();
+        eventLinker.linkEvent(event);
+        stats.doneLinking();
+        while (eventLinker.hasLinkedEvents()) {
+            addEvent(eventLinker.pollLinkedEvent());
+        }
+    }
 
-	private static boolean isNotConsensus(final EventImpl event) {
-		return !event.isConsensus();
-	}
+    /**
+     * Add an event to the hashgraph
+     *
+     * @param event an event to be added
+     */
+    public void addEvent(final EventImpl event) {
+        // an expired event will cause ShadowGraph to throw an exception, so we just to discard it
+        if (consensus().isExpired(event)) {
+            return;
+        }
+        stats.startIntake();
+        if (!StaticValidators.isValidTimeCreated(event)) {
+            event.clear();
+            return;
+        }
+        stats.doneValidation();
+        log.debug(SYNC.getMarker(), "{} sees {}", selfId, event);
+        dispatcher.preConsensusEvent(event);
+        log.debug(INTAKE_EVENT.getMarker(), "Adding {} ", event::toShortString);
+        stats.dispatchedPreConsensus();
+        final long minGenNonAncientBeforeAdding = consensus().getMinGenerationNonAncient();
+        // #5762 if we cannot calculate its roundCreated, then we use the one that was sent to us
+        final boolean hasAtLeastOneParent =
+                event.getSelfParentHash() != null || event.getOtherParentHash() != null;
+        final boolean noParentsFound =
+                event.getSelfParent() == null && event.getOtherParent() == null;
+        if (hasAtLeastOneParent && noParentsFound) {
+            if (event.getBaseEvent().isRoundCreatedSet()) {
+                // we then use the round created sent to us
+                event.setRoundCreated(event.getBaseEvent().getRoundCreated());
+            } else {
+                log.error(
+                        LogMarker.EXCEPTION.getMarker(),
+                        "cannot determine round created for event {}",
+                        event::toMediumString);
+            }
+        }
+        // record the event in the hashgraph, which results in the events in consEvent reaching
+        // consensus
+        final List<ConsensusRound> consRounds = consensusWrapper.addEvent(event, addressBook);
+        // #5762 after we calculate roundCreated, se set its value in GossipEvent so that it can be
+        // shared with other
+        // nodes
+        event.getBaseEvent().setRoundCreated(event.getRoundCreated());
+        stats.addedToConsensus();
+        dispatcher.eventAdded(event);
+        stats.dispatchedAdded();
+        if (consRounds != null) {
+            consRounds.forEach(this::handleConsensus);
+            stats.dispatchedRound();
+        }
+        if (consensus().getMinGenerationNonAncient() > minGenNonAncientBeforeAdding) {
+            // consensus rounds can be null and the minNonAncient might change, this is probably
+            // because of a round
+            // with no consensus events, so we check the diff in generations to look for stale
+            // events
+            handleStale(minGenNonAncientBeforeAdding);
+            stats.dispatchedStale();
+        }
+    }
 
-	/**
-	 * Notify observers that an event has reach consensus. Called on a list of
-	 * events returned from {@code Consensus.addEvent}.
-	 *
-	 * @param consensusRound
-	 * 		the (new) consensus round to be observed
-	 */
-	private void handleConsensus(final ConsensusRound consensusRound) {
-		if (consensusRound != null) {
-			eventLinker.updateGenerations(consensusRound.getGenerations());
-			dispatcher.consensusRound(consensusRound);
-		}
-	}
+    /** Notify observer of stale events, of all event in the consensus stale event queue. */
+    private void handleStale(final long previousNonAncient) {
+        // find all events that just became ancient and did not reach consensus, these events will
+        // be considered stale
+        final Collection<EventImpl> staleEvents =
+                shadowGraph.findByGeneration(
+                        previousNonAncient,
+                        consensus().getMinGenerationNonAncient(),
+                        EventIntake::isNotConsensus);
+        for (final EventImpl e : staleEvents) {
+            e.setStale(true);
+            dispatcher.staleEvent(e);
+            log.warn(STALE_EVENTS.getMarker(), "Stale event {}", e::toShortString);
+        }
+    }
 
-	/**
-	 * Get a reference to the consensus instance to use
-	 *
-	 * @return a reference to the consensus instance
-	 */
-	private Consensus consensus() {
-		return consensusSupplier.get();
-	}
+    private static boolean isNotConsensus(final EventImpl event) {
+        return !event.isConsensus();
+    }
 
+    /**
+     * Notify observers that an event has reach consensus. Called on a list of events returned from
+     * {@code Consensus.addEvent}.
+     *
+     * @param consensusRound the (new) consensus round to be observed
+     */
+    private void handleConsensus(final ConsensusRound consensusRound) {
+        if (consensusRound != null) {
+            eventLinker.updateGenerations(consensusRound.getGenerations());
+            dispatcher.consensusRound(consensusRound);
+        }
+    }
+
+    /**
+     * Get a reference to the consensus instance to use
+     *
+     * @return a reference to the consensus instance
+     */
+    private Consensus consensus() {
+        return consensusSupplier.get();
+    }
 }

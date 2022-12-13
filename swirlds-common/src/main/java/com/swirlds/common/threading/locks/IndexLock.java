@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,144 +13,80 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.threading.locks;
 
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import com.swirlds.common.threading.locks.locked.Locked;
 
 /**
- * <p>
- * This class provides a useful abstraction of locking on an index value. That is, two threads could lock on the
- * primitive value "17" and will contend for the same lock.
- * </p>
+ * This interface provides a useful abstraction of locking on an index value. That is, two threads
+ * could lock on the primitive value "17" and will contend for the same lock.
  *
- * <p>
- * It is possible that a lock on two different indices will contend for the same lock. That probability
- * can be reduced by increasing the parallelism, at the cost of additional memory overhead.
- * </p>
+ * <p>It is possible that a lock on two different indices will contend for the same lock. That
+ * probability can be reduced by increasing the parallelism, at the cost of additional memory
+ * overhead.
  *
- * <p>
- * The locks acquired by this class are reentrant.
- * </p>
+ * <p>The locks acquired by this interface are reentrant.
  */
-public class IndexLock {
+public interface IndexLock {
 
-	private final int parallelism;
-	private final Lock[] locks;
+    /**
+     * Lock on a given index value. May contend for the same lock as other index values.
+     *
+     * @param index the value to lock
+     */
+    void lock(final long index);
 
-	/**
-	 * Create a new lock for index values.
-	 *
-	 * @param parallelism
-	 * 		the number of unique locks. Higher parallelism reduces chances of collision for non-identical
-	 * 		indexes at the cost of additional memory overhead.
-	 */
-	public IndexLock(final int parallelism) {
+    /**
+     * Lock using the hash code of an object as the index. Two objects with the same hash code will
+     * contend for the same lock.
+     *
+     * @param object the object to lock, can be null
+     */
+    void lock(final Object object);
 
-		this.parallelism = parallelism;
+    /**
+     * Unlock on a given index value.
+     *
+     * @param index the value to unlock
+     */
+    void unlock(final long index);
 
-		this.locks = new Lock[parallelism];
-		for (int lockIndex = 0; lockIndex < parallelism; lockIndex++) {
-			locks[lockIndex] = new ReentrantLock();
-		}
-	}
+    /**
+     * Unlock using the hash code of an object as the index. Two objects with the same hash code
+     * will contend for the same lock.
+     *
+     * @param object the object to unlock, can be null
+     */
+    void unlock(final Object object);
 
-	/**
-	 * Lock on a given index value. May contend for the same lock as other index values.
-	 *
-	 * @param index
-	 * 		the value to lock
-	 */
-	public void lock(final long index) {
-		locks[(int) (Math.abs(index) % parallelism)].lock();
-	}
+    /**
+     * Acquire a lock and return an autocloseable object that will release the lock.
+     *
+     * @param index the index to lock
+     * @return an object that will unlock the lock once it is closed
+     */
+    Locked autoLock(final long index);
 
-	/**
-	 * Lock using the hash code of an object as the index. Two objects with the same hash code will contend
-	 * for the same lock.
-	 *
-	 * @param object
-	 * 		the object to lock, can be null
-	 */
-	public void lock(final Object object) {
-		final int hash = object == null ? 0 : object.hashCode();
-		lock(hash);
-	}
+    /**
+     * Acquire a lock and return an autocloseable object that will release the lock. Uses the hash
+     * code of the provided object.
+     *
+     * @param object the object to lock, can be null
+     * @return an object that will unlock the lock once it is closed
+     */
+    Locked autoLock(final Object object);
 
-	/**
-	 * Unlock on a given index value.
-	 *
-	 * @param index
-	 * 		the value to unlock
-	 */
-	public void unlock(final long index) {
-		locks[(int) (Math.abs(index) % parallelism)].unlock();
-	}
+    /** Lock every index. This is expensive, use with caution. */
+    void fullyLock();
 
-	/**
-	 * Unlock using the hash code of an object as the index. Two objects with the same hash code will contend
-	 * for the same lock.
-	 *
-	 * @param object
-	 * 		the object to unlock, can be null
-	 */
-	public void unlock(final Object object) {
-		final int hash = object == null ? 0 : object.hashCode();
-		unlock(hash);
-	}
+    /** Lock every index. This is expensive, use with caution. */
+    void fullyUnlock();
 
-	/**
-	 * Acquire a lock and return an autocloseable object that will release the lock.
-	 *
-	 * @param index
-	 * 		the index to lock
-	 * @return an object that will unlock the lock once it is closed
-	 */
-	public Locked autoLock(final long index) {
-		lock(index);
-		return () -> unlock(index);
-	}
-
-	/**
-	 * Acquire a lock and return an autocloseable object that will release the lock. Uses the hash
-	 * code of the provided object.
-	 *
-	 * @param object
-	 * 		the object to lock, can be null
-	 * @return an object that will unlock the lock once it is closed
-	 */
-	public Locked autoLock(final Object object) {
-		final int hash = object == null ? 0 : object.hashCode();
-		return autoLock(hash);
-	}
-
-	/**
-	 * Lock every index. This is expensive, use with caution.
-	 */
-	public void fullyLock() {
-		for (int index = 0; index < parallelism; index++) {
-			locks[index].lock();
-		}
-	}
-
-	/**
-	 * Lock every index. This is expensive, use with caution.
-	 */
-	public void fullyUnlock() {
-		for (int index = 0; index < parallelism; index++) {
-			locks[index].unlock();
-		}
-	}
-
-	/**
-	 * Acquire a lock on every index and return an autocloseable object that will release the lock.
-	 * This is expensive, use with caution.
-	 *
-	 * @return an object that will unlock the lock once it is closed
-	 */
-	public Locked autoFullLock() {
-		fullyLock();
-		return this::fullyUnlock;
-	}
+    /**
+     * Acquire a lock on every index and return an autocloseable object that will release the lock.
+     * This is expensive, use with caution.
+     *
+     * @return an object that will unlock the lock once it is closed
+     */
+    Locked autoFullLock();
 }

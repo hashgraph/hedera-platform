@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.platform.event.validation;
+
+import static com.swirlds.logging.LogMarker.INVALID_EVENT_ERROR;
 
 import com.swirlds.common.system.transaction.Transaction;
 import com.swirlds.platform.EventStrings;
@@ -22,45 +23,41 @@ import com.swirlds.platform.event.GossipEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import static com.swirlds.logging.LogMarker.INVALID_EVENT_ERROR;
-
-/**
- * Determines whether total size of all transactions in a given event is too large
- */
+/** Determines whether total size of all transactions in a given event is too large */
 public class TransactionSizeValidator implements GossipEventValidator {
-	private static final Logger LOG = LogManager.getLogger();
-	private final int maxTransactionBytesPerEvent;
+    private static final Logger LOG = LogManager.getLogger();
+    private final int maxTransactionBytesPerEvent;
 
-	public TransactionSizeValidator(final int maxTransactionBytesPerEvent) {
-		this.maxTransactionBytesPerEvent = maxTransactionBytesPerEvent;
-	}
+    public TransactionSizeValidator(final int maxTransactionBytesPerEvent) {
+        this.maxTransactionBytesPerEvent = maxTransactionBytesPerEvent;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean isEventValid(final GossipEvent event) {
-		if (event.getHashedData().getTransactions() == null) {
-			return true;
-		}
+    /** {@inheritDoc} */
+    @Override
+    public boolean isEventValid(final GossipEvent event) {
+        if (event.getHashedData().getTransactions() == null) {
+            return true;
+        }
 
-		// Sum the total size of all transactions about to be included in this event
-		int tmpEventTransSize = 0;
-		for (final Transaction t : event.getHashedData().getTransactions()) {
-			tmpEventTransSize += t.getSerializedLength();
-		}
-		final int finalEventTransSize = tmpEventTransSize;
+        // Sum the total size of all transactions about to be included in this event
+        int tmpEventTransSize = 0;
+        for (final Transaction t : event.getHashedData().getTransactions()) {
+            tmpEventTransSize += t.getSerializedLength();
+        }
+        final int finalEventTransSize = tmpEventTransSize;
 
-		// Ignore & log if we have encountered a transaction larger than the limit
-		// This might be due to a malicious node in the network
-		if (tmpEventTransSize > maxTransactionBytesPerEvent) {
-			LOG.error(INVALID_EVENT_ERROR.getMarker(),
-					"maxTransactionBytesPerEvent exceeded by event {} with a total size of {} bytes",
-					() -> EventStrings.toShortString(event),
-					() -> finalEventTransSize);
-			return false;
-		}
+        // Ignore & log if we have encountered a transaction larger than the limit
+        // This might be due to a malicious node in the network
+        if (tmpEventTransSize > maxTransactionBytesPerEvent) {
+            LOG.error(
+                    INVALID_EVENT_ERROR.getMarker(),
+                    "maxTransactionBytesPerEvent exceeded by event {} with a total size of {}"
+                            + " bytes",
+                    () -> EventStrings.toShortString(event),
+                    () -> finalEventTransSize);
+            return false;
+        }
 
-		return true;
-	}
+        return true;
+    }
 }

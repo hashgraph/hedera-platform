@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,177 +13,143 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.metrics;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
-import java.util.EnumSet;
-
-import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
-
 /**
  * An {@code LongGauge} stores a single {@code long} value.
- * <p>
- * Only the current value is stored, no history or distribution is kept.
+ *
+ * <p>Only the current value is stored, no history or distribution is kept.
  */
-public interface LongGauge extends Metric {
+public interface LongGauge extends BaseLongMetric {
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	default EnumSet<ValueType> getValueTypes() {
-		return EnumSet.of(VALUE);
-	}
+    /**
+     * Set the current value
+     *
+     * @param newValue the new value
+     */
+    void set(final long newValue);
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	default Long get(final ValueType valueType) {
-		if (valueType == VALUE) {
-			return get();
-		}
-		throw new IllegalArgumentException("Unsupported ValueType: " + valueType);
-	}
+    /** Configuration of a {@link LongGauge} */
+    final class Config extends MetricConfig<LongGauge, LongGauge.Config> {
 
-	/**
-	 * Get the current value
-	 *
-	 * @return the current value
-	 */
-	long get();
+        private final long initialValue;
 
-	/**
-	 * Set the current value
-	 *
-	 * @param newValue
-	 * 		the new value
-	 */
-	void set(final long newValue);
+        /**
+         * Constructor of {@code LongGauge.Config}
+         *
+         * <p>The {@link #getInitialValue() initialValue} is by default set to {@code 0L}, the
+         * {@link #getFormat() format} is set to "%d".
+         *
+         * @param category the kind of metric (metrics are grouped or filtered by this)
+         * @param name a short name for the metric
+         * @throws IllegalArgumentException if one of the parameters is {@code null} or consists
+         *     only of whitespaces
+         */
+        public Config(final String category, final String name) {
+            super(category, name, "%d");
+            this.initialValue = 0L;
+        }
 
-	/**
-	 * Configuration of a {@link LongGauge}
-	 */
-	final class Config extends MetricConfig<LongGauge, LongGauge.Config> {
+        private Config(
+                final String category,
+                final String name,
+                final String description,
+                final String unit,
+                final String format,
+                final long initialValue) {
 
-		private final long initialValue;
+            super(category, name, description, unit, format);
+            this.initialValue = initialValue;
+        }
 
-		/**
-		 * Constructor of {@code LongGauge.Config}
-		 *
-		 *
-		 * The {@link #getInitialValue() initialValue} is by default set to {@code 0L},
-		 * the {@link #getFormat() format} is set to "%d".
-		 *
-		 * @param category
-		 * 		the kind of metric (metrics are grouped or filtered by this)
-		 * @param name
-		 * 		a short name for the metric
-		 * @throws IllegalArgumentException
-		 * 		if one of the parameters is {@code null} or consists only of whitespaces
-		 */
-		public Config(final String category, final String name) {
-			super(category, name, "%d");
-			this.initialValue = 0L;
-		}
+        /** {@inheritDoc} */
+        @Override
+        public LongGauge.Config withDescription(final String description) {
+            return new LongGauge.Config(
+                    getCategory(),
+                    getName(),
+                    description,
+                    getUnit(),
+                    getFormat(),
+                    getInitialValue());
+        }
 
-		private Config(
-				final String category,
-				final String name,
-				final String description,
-				final String unit,
-				final String format,
-				final long initialValue) {
+        /** {@inheritDoc} */
+        @Override
+        public LongGauge.Config withUnit(final String unit) {
+            return new LongGauge.Config(
+                    getCategory(),
+                    getName(),
+                    getDescription(),
+                    unit,
+                    getFormat(),
+                    getInitialValue());
+        }
 
-			super(category, name, description, unit, format);
-			this.initialValue = initialValue;
-		}
+        /**
+         * Sets the {@link Metric#getFormat() Metric.format} in fluent style.
+         *
+         * @param format the format-string
+         * @return a new configuration-object with updated {@code format}
+         * @throws IllegalArgumentException if {@code format} is {@code null} or consists only of
+         *     whitespaces
+         */
+        public LongGauge.Config withFormat(final String format) {
+            return new LongGauge.Config(
+                    getCategory(),
+                    getName(),
+                    getDescription(),
+                    getUnit(),
+                    format,
+                    getInitialValue());
+        }
 
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		public LongGauge.Config withDescription(final String description) {
-			return new LongGauge.Config(
-					getCategory(), getName(), description, getUnit(), getFormat(), getInitialValue()
-			);
-		}
+        /**
+         * Getter of the {@code initialValue}
+         *
+         * @return the {@code initialValue}
+         */
+        public long getInitialValue() {
+            return initialValue;
+        }
 
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		public LongGauge.Config withUnit(final String unit) {
-			return new LongGauge.Config(
-					getCategory(), getName(), getDescription(), unit, getFormat(), getInitialValue()
-			);
-		}
+        /**
+         * Fluent-style setter of the initial value.
+         *
+         * @param initialValue the initial value
+         * @return a new configuration-object with updated {@code initialValue}
+         */
+        public LongGauge.Config withInitialValue(final long initialValue) {
+            return new LongGauge.Config(
+                    getCategory(),
+                    getName(),
+                    getDescription(),
+                    getUnit(),
+                    getFormat(),
+                    initialValue);
+        }
 
-		/**
-		 * Sets the {@link Metric#getFormat() Metric.format} in fluent style.
-		 *
-		 * @param format
-		 * 		the format-string
-		 * @return a new configuration-object with updated {@code format}
-		 * @throws IllegalArgumentException
-		 * 		if {@code format} is {@code null} or consists only of whitespaces
-		 */
-		public LongGauge.Config withFormat(final String format) {
-			return new LongGauge.Config(
-					getCategory(), getName(), getDescription(), getUnit(), format, getInitialValue()
-			);
-		}
+        /** {@inheritDoc} */
+        @Override
+        Class<LongGauge> getResultClass() {
+            return LongGauge.class;
+        }
 
-		/**
-		 * Getter of the {@code initialValue}
-		 *
-		 * @return the {@code initialValue}
-		 */
-		public long getInitialValue() {
-			return initialValue;
-		}
+        /** {@inheritDoc} */
+        @Override
+        LongGauge create(final MetricsFactory factory) {
+            return factory.createLongGauge(this);
+        }
 
-		/**
-		 * Fluent-style setter of the initial value.
-		 *
-		 * @param initialValue
-		 * 		the initial value
-		 * @return a new configuration-object with updated {@code initialValue}
-		 */
-		public LongGauge.Config withInitialValue(final long initialValue) {
-			return new LongGauge.Config(
-					getCategory(), getName(), getDescription(), getUnit(), getFormat(), initialValue
-			);
-		}
-
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		Class<LongGauge> getResultClass() {
-			return LongGauge.class;
-		}
-
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		LongGauge create(final MetricsFactory factory) {
-			return factory.createLongGauge(this);
-		}
-
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		public String toString() {
-			return new ToStringBuilder(this)
-					.appendSuper(super.toString())
-					.append("initialValue", initialValue)
-					.toString();
-		}
-	}
-
+        /** {@inheritDoc} */
+        @Override
+        public String toString() {
+            return new ToStringBuilder(this)
+                    .appendSuper(super.toString())
+                    .append("initialValue", initialValue)
+                    .toString();
+        }
+    }
 }

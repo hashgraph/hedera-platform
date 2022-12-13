@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,29 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.logging.payloads;
 
-/**
- * This payload is logged when a recovered state is saved.
- */
+/** This payload is logged when a recovered state is saved. */
 public class RecoveredStateSavedPayload extends AbstractLogPayload {
 
-	/**
-	 * The round of the state that was saved.
-	 */
-	private long round;
+    /** The round of the state that was saved. */
+    private long round;
 
-	public RecoveredStateSavedPayload(String message, long round) {
-		super(message);
-		this.round = round;
-	}
+    public RecoveredStateSavedPayload(String message, long round) {
+        super(message);
+        this.round = round;
+    }
 
-	public long getRound() {
-		return round;
-	}
+    public long getRound() {
+        return round;
+    }
 
-	public void setRound(long round) {
-		this.round = round;
-	}
+    public void setRound(long round) {
+        this.round = round;
+    }
 }

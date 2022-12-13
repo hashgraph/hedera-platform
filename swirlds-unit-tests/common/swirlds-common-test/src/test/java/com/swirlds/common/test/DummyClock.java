@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,23 +16,22 @@
 package com.swirlds.common.test;
 
 import com.swirlds.common.Clock;
-
 import java.time.Duration;
 
 public class DummyClock implements Clock {
 
-	private Duration duration = Duration.ZERO;
+    private Duration duration = Duration.ZERO;
 
-	public void setSeconds(int seconds) {
-		this.duration = Duration.ofSeconds(seconds);
-	}
+    public void setSeconds(int seconds) {
+        this.duration = Duration.ofSeconds(seconds);
+    }
 
-	public void set(Duration duration) {
-		this.duration = duration;
-	}
+    public void set(Duration duration) {
+        this.duration = duration;
+    }
 
-	@Override
-	public long now() {
-		return duration.toNanos();
-	}
+    @Override
+    public long now() {
+        return duration.toNanos();
+    }
 }

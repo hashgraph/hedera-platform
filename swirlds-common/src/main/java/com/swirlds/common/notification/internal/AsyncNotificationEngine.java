@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.notification.internal;
 
 import com.swirlds.common.notification.DispatchMode;
@@ -23,169 +22,163 @@ import com.swirlds.common.notification.NoListenersAvailableException;
 import com.swirlds.common.notification.Notification;
 import com.swirlds.common.notification.NotificationResult;
 import com.swirlds.common.threading.futures.StandardFuture;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
-/**
- * {@inheritDoc}
- */
+/** {@inheritDoc} */
 public class AsyncNotificationEngine extends AbstractNotificationEngine {
 
-	/**
-	 * the internal listener registry that associates a given type of {@link Listener} with a {@link Dispatcher}
-	 */
-	private final Map<Class<? extends Listener<?>>, Dispatcher<? extends Listener<?>>> listenerRegistry;
+    /**
+     * the internal listener registry that associates a given type of {@link Listener} with a {@link
+     * Dispatcher}
+     */
+    private final Map<Class<? extends Listener<?>>, Dispatcher<? extends Listener<?>>>
+            listenerRegistry;
 
+    /** Default Constructor. */
+    public AsyncNotificationEngine() {
+        this.listenerRegistry = new ConcurrentHashMap<>();
+        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+    }
 
-	/**
-	 * Default Constructor.
-	 */
-	public AsyncNotificationEngine() {
-		this.listenerRegistry = new ConcurrentHashMap<>();
-		Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void initialize() {}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void initialize() {
+    /** {@inheritDoc} */
+    @Override
+    public void shutdown() {
+        for (Dispatcher<?> dispatcher : listenerRegistry.values()) {
+            if (dispatcher.isRunning()) {
+                dispatcher.stop();
+            }
+        }
+    }
 
-	}
+    /** {@inheritDoc} */
+    @Override
+    public <L extends Listener<N>, N extends Notification> Future<NotificationResult<N>> dispatch(
+            final Class<L> listenerClass,
+            final N notification,
+            final StandardFuture.CompletionCallback<NotificationResult<N>>
+                    notificationsCompletedCallback) {
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void shutdown() {
-		for (Dispatcher<?> dispatcher : listenerRegistry.values()) {
-			if (dispatcher.isRunning()) {
-				dispatcher.stop();
-			}
-		}
-	}
+        checkArguments(listenerClass, notification);
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public <L extends Listener<N>, N extends Notification> Future<NotificationResult<N>> dispatch(
-			final Class<L> listenerClass,
-			final N notification,
-			final StandardFuture.CompletionCallback<NotificationResult<N>> notificationsCompletedCallback) {
+        final DispatchOrder dispatchOrder = dispatchOrder(listenerClass);
+        final DispatchMode dispatchMode = dispatchMode(listenerClass);
 
-		checkArguments(listenerClass, notification);
+        final StandardFuture<NotificationResult<N>> future =
+                new StandardFuture<>(notificationsCompletedCallback);
 
-		final DispatchOrder dispatchOrder = dispatchOrder(listenerClass);
-		final DispatchMode dispatchMode = dispatchMode(listenerClass);
+        try {
+            invokeWithDispatcher(
+                    dispatchOrder,
+                    listenerClass,
+                    (dispatcher) -> {
+                        assignSequence(notification);
 
-		final StandardFuture<NotificationResult<N>> future = new StandardFuture<>(notificationsCompletedCallback);
+                        if (dispatchMode == DispatchMode.ASYNC) {
+                            dispatcher.notifyAsync(notification, future::complete);
+                        } else {
+                            dispatcher.notifySync(notification, future::complete);
+                        }
+                    });
+        } catch (NoListenersAvailableException ex) {
+            future.complete(new NotificationResult<>(notification, 0));
+        }
 
-		try {
-			invokeWithDispatcher(dispatchOrder, listenerClass, (dispatcher) -> {
-				assignSequence(notification);
+        return future;
+    }
 
-				if (dispatchMode == DispatchMode.ASYNC) {
-					dispatcher.notifyAsync(notification, future::complete);
-				} else {
-					dispatcher.notifySync(notification, future::complete);
-				}
-			});
-		} catch (NoListenersAvailableException ex) {
-			future.complete(new NotificationResult<>(notification, 0));
-		}
+    /** {@inheritDoc} */
+    @Override
+    public <L extends Listener<?>> boolean register(
+            final Class<L> listenerClass, final L callback) {
 
-		return future;
-	}
+        checkArguments(listenerClass, callback);
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public <L extends Listener<?>> boolean register(final Class<L> listenerClass, final L callback) {
+        final Dispatcher<L> dispatcher = ensureDispatcherExists(listenerClass);
 
-		checkArguments(listenerClass, callback);
+        return dispatcher.addListener(callback);
+    }
 
-		final Dispatcher<L> dispatcher = ensureDispatcherExists(listenerClass);
+    /** {@inheritDoc} */
+    @Override
+    public <L extends Listener<?>> boolean unregister(
+            final Class<L> listenerClass, final L callback) {
 
-		return dispatcher.addListener(callback);
-	}
+        checkArguments(listenerClass, callback);
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public <L extends Listener<?>> boolean unregister(final Class<L> listenerClass, final L callback) {
+        final Dispatcher<L> dispatcher = ensureDispatcherExists(listenerClass);
 
-		checkArguments(listenerClass, callback);
+        return dispatcher.removeListener(callback);
+    }
 
-		final Dispatcher<L> dispatcher = ensureDispatcherExists(listenerClass);
+    /** {@inheritDoc} */
+    @Override
+    public void unregisterAll() {
+        listenerRegistry.clear();
+    }
 
-		return dispatcher.removeListener(callback);
-	}
+    private <L extends Listener<N>, N extends Notification> void checkArguments(
+            final Class<L> listenerClass, final N notification) {
+        if (listenerClass == null) {
+            throw new IllegalArgumentException("listenerClass");
+        }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void unregisterAll() {
-		listenerRegistry.clear();
-	}
+        if (notification == null) {
+            throw new IllegalArgumentException("notification");
+        }
+    }
 
-	private <L extends Listener<N>, N extends Notification> void checkArguments(final Class<L> listenerClass,
-			final N notification) {
-		if (listenerClass == null) {
-			throw new IllegalArgumentException("listenerClass");
-		}
+    private static <L extends Listener<?>> void checkArguments(
+            final Class<L> listenerClass, final L callback) {
+        if (listenerClass == null) {
+            throw new IllegalArgumentException("listenerClass");
+        }
 
-		if (notification == null) {
-			throw new IllegalArgumentException("notification");
-		}
-	}
+        if (callback == null) {
+            throw new IllegalArgumentException("callback");
+        }
+    }
 
-	private static <L extends Listener<?>> void checkArguments(final Class<L> listenerClass, final L callback) {
-		if (listenerClass == null) {
-			throw new IllegalArgumentException("listenerClass");
-		}
+    private <L extends Listener<?>> Dispatcher<L> ensureDispatcherExists(
+            final Class<L> listenerClass) {
+        @SuppressWarnings("unchecked")
+        Dispatcher<L> dispatcher =
+                (Dispatcher<L>)
+                        listenerRegistry.putIfAbsent(
+                                listenerClass, new Dispatcher<>(listenerClass));
 
-		if (callback == null) {
-			throw new IllegalArgumentException("callback");
-		}
-	}
+        if (dispatcher == null) {
+            dispatcher = new Dispatcher<>(listenerClass);
+            listenerRegistry.put(listenerClass, dispatcher);
+        }
 
-	private <L extends Listener<?>> Dispatcher<L> ensureDispatcherExists(final Class<L> listenerClass) {
-		@SuppressWarnings("unchecked") Dispatcher<L> dispatcher = (Dispatcher<L>) listenerRegistry.putIfAbsent(
-				listenerClass,
-				new Dispatcher<>(listenerClass));
+        return dispatcher;
+    }
 
-		if (dispatcher == null) {
-			dispatcher = new Dispatcher<>(listenerClass);
-			listenerRegistry.put(listenerClass, dispatcher);
-		}
+    private <L extends Listener<N>, N extends Notification> void invokeWithDispatcher(
+            final DispatchOrder order,
+            final Class<L> listenerClass,
+            final Consumer<Dispatcher<L>> method)
+            throws NoListenersAvailableException {
+        @SuppressWarnings("unchecked")
+        final Dispatcher<L> dispatcher = (Dispatcher<L>) listenerRegistry.get(listenerClass);
 
-		return dispatcher;
-	}
+        if (dispatcher == null) {
+            throw new NoListenersAvailableException();
+        }
 
-	private <L extends Listener<N>, N extends Notification> void invokeWithDispatcher(final DispatchOrder order,
-			final Class<L> listenerClass, final Consumer<Dispatcher<L>> method) throws NoListenersAvailableException {
-		@SuppressWarnings("unchecked") final Dispatcher<L> dispatcher = (Dispatcher<L>) listenerRegistry.get(
-				listenerClass);
-
-		if (dispatcher == null) {
-			throw new NoListenersAvailableException();
-		}
-
-		if (order == DispatchOrder.ORDERED) {
-			synchronized (dispatcher.getMutex()) {
-				method.accept(dispatcher);
-			}
-		} else {
-			method.accept(dispatcher);
-		}
-	}
-
-
+        if (order == DispatchOrder.ORDERED) {
+            synchronized (dispatcher.getMutex()) {
+                method.accept(dispatcher);
+            }
+        } else {
+            method.accept(dispatcher);
+        }
+    }
 }

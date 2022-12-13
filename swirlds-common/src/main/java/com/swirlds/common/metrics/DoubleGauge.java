@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,180 +13,148 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.metrics;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
-import java.util.EnumSet;
-
-import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
-
 /**
  * A {@code DoubleGauge} stores a single {@code double} value.
- * <p>
- * Only the current value is stored, no history or distribution is kept. Special values ({@link Double#NaN},
- * {@link Double#POSITIVE_INFINITY}, {@link Double#NEGATIVE_INFINITY}) are supported.
+ *
+ * <p>Only the current value is stored, no history or distribution is kept. Special values ({@link
+ * Double#NaN}, {@link Double#POSITIVE_INFINITY}, {@link Double#NEGATIVE_INFINITY}) are supported.
  */
-public interface DoubleGauge extends Metric {
+public interface DoubleGauge extends BaseDoubleMetric {
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	default EnumSet<ValueType> getValueTypes() {
-		return EnumSet.of(VALUE);
-	}
+    /**
+     * Set the current value
+     *
+     * <p>{@link Double#NaN}, {@link Double#POSITIVE_INFINITY}, {@link Double#NEGATIVE_INFINITY} are
+     * supported.
+     *
+     * @param newValue the new value
+     */
+    void set(final double newValue);
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	default Double get(final ValueType valueType) {
-		if (valueType == VALUE) {
-			return get();
-		}
-		throw new IllegalArgumentException("Unsupported ValueType: " + valueType);
-	}
+    /** Configuration of a {@link DoubleGauge} */
+    final class Config extends MetricConfig<DoubleGauge, DoubleGauge.Config> {
 
-	/**
-	 * Get the current value
-	 *
-	 * @return the current value
-	 */
-	double get();
+        private final double initialValue;
 
-	/**
-	 * Set the current value
-	 *
-	 * {@link Double#NaN}, {@link Double#POSITIVE_INFINITY}, {@link Double#NEGATIVE_INFINITY} are supported.
-	 *
-	 * @param newValue
-	 * 		the new value
-	 */
-	void set(final double newValue);
+        /**
+         * Constructor of {@code DoubleGauge.Config}
+         *
+         * <p>The {@link #getInitialValue() initialValue} is by default set to {@code 0.0}
+         *
+         * <p>The initial value is set to {@code 0.0}.
+         *
+         * @param category the kind of metric (metrics are grouped or filtered by this)
+         * @param name a short name for the metric
+         * @throws IllegalArgumentException if one of the parameters is {@code null} or consists
+         *     only of whitespaces
+         */
+        public Config(final String category, final String name) {
+            super(category, name, FloatFormats.FORMAT_11_3);
+            this.initialValue = 0.0;
+        }
 
-	/**
-	 * Configuration of a {@link DoubleGauge}
-	 */
-	final class Config extends MetricConfig<DoubleGauge, DoubleGauge.Config> {
+        private Config(
+                final String category,
+                final String name,
+                final String description,
+                final String unit,
+                final String format,
+                final double initialValue) {
 
-		private final double initialValue;
+            super(category, name, description, unit, format);
+            this.initialValue = initialValue;
+        }
 
-		/**
-		 * Constructor of {@code DoubleGauge.Config}
-		 *
-		 * The {@link #getInitialValue() initialValue} is by default set to {@code 0.0}
-		 *
-		 * The initial value is set to {@code 0.0}.
-		 *
-		 * @param category
-		 * 		the kind of metric (metrics are grouped or filtered by this)
-		 * @param name
-		 * 		a short name for the metric
-		 * @throws IllegalArgumentException
-		 * 		if one of the parameters is {@code null} or consists only of whitespaces
-		 */
-		public Config(final String category, final String name) {
-			super(category, name, FloatFormats.FORMAT_11_3);
-			this.initialValue = 0.0;
-		}
+        /** {@inheritDoc} */
+        @Override
+        public DoubleGauge.Config withDescription(final String description) {
+            return new DoubleGauge.Config(
+                    getCategory(),
+                    getName(),
+                    description,
+                    getUnit(),
+                    getFormat(),
+                    getInitialValue());
+        }
 
-		private Config(
-				final String category,
-				final String name,
-				final String description,
-				final String unit,
-				final String format,
-				final double initialValue) {
+        /** {@inheritDoc} */
+        @Override
+        public DoubleGauge.Config withUnit(final String unit) {
+            return new DoubleGauge.Config(
+                    getCategory(),
+                    getName(),
+                    getDescription(),
+                    unit,
+                    getFormat(),
+                    getInitialValue());
+        }
 
-			super(category, name, description, unit, format);
-			this.initialValue = initialValue;
-		}
+        /**
+         * Sets the {@link Metric#getFormat() Metric.format} in fluent style.
+         *
+         * @param format the format-string
+         * @return a new configuration-object with updated {@code format}
+         * @throws IllegalArgumentException if {@code format} is {@code null} or consists only of
+         *     whitespaces
+         */
+        public DoubleGauge.Config withFormat(final String format) {
+            return new DoubleGauge.Config(
+                    getCategory(),
+                    getName(),
+                    getDescription(),
+                    getUnit(),
+                    format,
+                    getInitialValue());
+        }
 
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		public DoubleGauge.Config withDescription(final String description) {
-			return new DoubleGauge.Config(
-					getCategory(), getName(), description, getUnit(), getFormat(), getInitialValue()
-			);
-		}
+        /**
+         * Getter of the {@code initialValue}
+         *
+         * @return the {@code initialValue}
+         */
+        public double getInitialValue() {
+            return initialValue;
+        }
 
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		public DoubleGauge.Config withUnit(final String unit) {
-			return new DoubleGauge.Config(
-					getCategory(), getName(), getDescription(), unit, getFormat(), getInitialValue()
-			);
-		}
+        /**
+         * Fluent-style setter of the initial value.
+         *
+         * @param initialValue the initial value
+         * @return a new configuration-object with updated {@code initialValue}
+         */
+        public DoubleGauge.Config withInitialValue(final double initialValue) {
+            return new DoubleGauge.Config(
+                    getCategory(),
+                    getName(),
+                    getDescription(),
+                    getUnit(),
+                    getFormat(),
+                    initialValue);
+        }
 
-		/**
-		 * Sets the {@link Metric#getFormat() Metric.format} in fluent style.
-		 *
-		 * @param format
-		 * 		the format-string
-		 * @return a new configuration-object with updated {@code format}
-		 * @throws IllegalArgumentException
-		 * 		if {@code format} is {@code null} or consists only of whitespaces
-		 */
-		public DoubleGauge.Config withFormat(final String format) {
-			return new DoubleGauge.Config(
-					getCategory(), getName(), getDescription(), getUnit(), format, getInitialValue()
-			);
-		}
+        /** {@inheritDoc} */
+        @Override
+        Class<DoubleGauge> getResultClass() {
+            return DoubleGauge.class;
+        }
 
-		/**
-		 * Getter of the {@code initialValue}
-		 *
-		 * @return the {@code initialValue}
-		 */
-		public double getInitialValue() {
-			return initialValue;
-		}
+        /** {@inheritDoc} */
+        @Override
+        DoubleGauge create(final MetricsFactory factory) {
+            return factory.createDoubleGauge(this);
+        }
 
-		/**
-		 * Fluent-style setter of the initial value.
-		 *
-		 * @param initialValue
-		 * 		the initial value
-		 * @return a new configuration-object with updated {@code initialValue}
-		 */
-		public DoubleGauge.Config withInitialValue(final double initialValue) {
-			return new DoubleGauge.Config(
-					getCategory(), getName(), getDescription(), getUnit(), getFormat(), initialValue
-			);
-		}
-
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		Class<DoubleGauge> getResultClass() {
-			return DoubleGauge.class;
-		}
-
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		DoubleGauge create(final MetricsFactory factory) {
-			return factory.createDoubleGauge(this);
-		}
-
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		public String toString() {
-			return new ToStringBuilder(this)
-					.appendSuper(super.toString())
-					.append("initialValue", initialValue)
-					.toString();
-		}
-	}
-
+        /** {@inheritDoc} */
+        @Override
+        public String toString() {
+            return new ToStringBuilder(this)
+                    .appendSuper(super.toString())
+                    .append("initialValue", initialValue)
+                    .toString();
+        }
+    }
 }

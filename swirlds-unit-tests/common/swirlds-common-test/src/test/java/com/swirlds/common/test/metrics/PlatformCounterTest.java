@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,20 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test.metrics;
-
-import com.swirlds.common.metrics.Counter;
-import com.swirlds.common.metrics.IntegerGauge;
-import com.swirlds.common.metrics.Metric;
-import com.swirlds.common.metrics.platform.PlatformCounter;
-import com.swirlds.common.metrics.platform.PlatformIntegerGauge;
-import com.swirlds.common.metrics.platform.Snapshot.SnapshotValue;
-import com.swirlds.common.statistics.StatsBuffered;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 import static com.swirlds.common.metrics.Metric.ValueType.COUNTER;
 import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
@@ -35,23 +22,41 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.swirlds.common.metrics.Counter;
+import com.swirlds.common.metrics.IntegerGauge;
+import com.swirlds.common.metrics.Metric;
+import com.swirlds.common.metrics.platform.PlatformCounter;
+import com.swirlds.common.metrics.platform.PlatformIntegerGauge;
+import com.swirlds.common.metrics.platform.Snapshot.SnapshotValue;
+import com.swirlds.common.statistics.StatsBuffered;
+import java.util.List;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
 class PlatformCounterTest {
 
     private static final String CATEGORY = "CaTeGoRy";
     private static final String NAME = "NaMe";
     private static final String DESCRIPTION = "DeScRiPtIoN";
-	private static final String UNIT = "UnIt";
+    private static final String UNIT = "UnIt";
 
     @Test
     @DisplayName("Constructor should store values")
     void testConstructor() {
-        final Counter.Config config = new Counter.Config(CATEGORY, NAME).withDescription(DESCRIPTION).withUnit(UNIT);
+        final Counter.Config config =
+                new Counter.Config(CATEGORY, NAME).withDescription(DESCRIPTION).withUnit(UNIT);
         final Counter counter = new PlatformCounter(config);
 
-        assertEquals(CATEGORY, counter.getCategory(), "The category was not set correctly in the constructor");
+        assertEquals(
+                CATEGORY,
+                counter.getCategory(),
+                "The category was not set correctly in the constructor");
         assertEquals(NAME, counter.getName(), "The name was not set correctly in the constructor");
-        assertEquals(DESCRIPTION, counter.getDescription(), "The description was not set correctly in the constructor");
-		assertEquals(UNIT, counter.getUnit(), "The unit was not set correctly in the constructor");
+        assertEquals(
+                DESCRIPTION,
+                counter.getDescription(),
+                "The description was not set correctly in the constructor");
+        assertEquals(UNIT, counter.getUnit(), "The unit was not set correctly in the constructor");
         assertEquals("%d", counter.getFormat(), "The format was not set correctly in constructor");
         assertEquals(0L, counter.get(), "The value was not initialized correctly");
         assertEquals(0L, counter.get(COUNTER), "The value was not initialized correctly");
@@ -88,9 +93,13 @@ class PlatformCounterTest {
     void testAddingNegativeValueShouldFail() {
         final Counter.Config config = new Counter.Config(CATEGORY, NAME);
         final Counter counter = new PlatformCounter(config);
-        assertThrows(IllegalArgumentException.class, () -> counter.add(-1L),
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> counter.add(-1L),
                 "Calling add() with negative value should throw IAE");
-        assertThrows(IllegalArgumentException.class, () -> counter.add(0),
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> counter.add(0),
                 "Calling add() with negative value should throw IAE");
     }
 
@@ -142,13 +151,21 @@ class PlatformCounterTest {
         final Counter counter = new PlatformCounter(config);
 
         // then
-        assertThrows(IllegalArgumentException.class, () -> counter.get(null),
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> counter.get(null),
                 "Calling get() with null should throw an IAE");
-        assertThrows(IllegalArgumentException.class, () -> counter.get(Metric.ValueType.MIN),
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> counter.get(Metric.ValueType.MIN),
                 "Calling get() with an unsupported MetricType should throw an IAE");
-        assertThrows(IllegalArgumentException.class, () -> counter.get(Metric.ValueType.MAX),
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> counter.get(Metric.ValueType.MAX),
                 "Calling get() with an unsupported MetricType should throw an IAE");
-        assertThrows(IllegalArgumentException.class, () -> counter.get(Metric.ValueType.STD_DEV),
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> counter.get(Metric.ValueType.STD_DEV),
                 "Calling get() with an unsupported MetricType should throw an IAE");
     }
 
@@ -195,11 +212,13 @@ class PlatformCounterTest {
     @Test
     void testToString() {
         // given
-        final Counter.Config config = new Counter.Config(CATEGORY, NAME).withDescription(DESCRIPTION).withUnit(UNIT);
+        final Counter.Config config =
+                new Counter.Config(CATEGORY, NAME).withDescription(DESCRIPTION).withUnit(UNIT);
         final Counter counter = new PlatformCounter(config);
         counter.add(42L);
 
         // then
-        assertThat(counter.toString()).contains(CATEGORY, NAME, DESCRIPTION, UNIT, "42");
+        assertThat(counter.toString())
+                .contains(CATEGORY, NAME, DESCRIPTION, UNIT, Metric.DataType.INT.toString(), "42");
     }
 }

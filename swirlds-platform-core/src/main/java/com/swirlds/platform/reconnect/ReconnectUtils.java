@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,11 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.platform.reconnect;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import static com.swirlds.logging.LogMarker.EXCEPTION;
+import static com.swirlds.logging.LogMarker.RECONNECT;
+
 import com.swirlds.common.io.exceptions.BadIOException;
+import com.swirlds.common.merkle.crypto.MerkleCryptoFactory;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.logging.payloads.ReconnectFailurePayload;
 import com.swirlds.platform.Connection;
@@ -25,106 +27,105 @@ import com.swirlds.platform.network.ByteConstants;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.sync.SyncInputStream;
 import com.swirlds.platform.sync.SyncOutputStream;
+import java.io.IOException;
+import java.util.concurrent.ExecutionException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
-import java.util.concurrent.ExecutionException;
-
-import static com.swirlds.logging.LogMarker.EXCEPTION;
-import static com.swirlds.logging.LogMarker.RECONNECT;
-
-/**
- * A set of static methods to aid with reconnect
- */
+/** A set of static methods to aid with reconnect */
 public final class ReconnectUtils {
-	private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger();
 
-	private ReconnectUtils() {
-	}
+    private ReconnectUtils() {}
 
-	/**
-	 * Validate that the other node is willing to reconnect with us.
-	 *
-	 * @param connection
-	 * 		the connection to use
-	 * @return true if the other node is willing to assist with reconnect
-	 * @throws IOException
-	 * 		thrown when any I/O related errors occur
-	 * @throws ReconnectException
-	 * 		thrown when the other node is unwilling to reconnect right now
-	 */
-	public static boolean isNodeReadyForReconnect(final Connection connection)
-			throws IOException, ReconnectException {
-		final NodeId otherId = connection.getOtherId();
-		final SyncInputStream dis = connection.getDis();
-		final SyncOutputStream dos = connection.getDos();
+    /**
+     * Validate that the other node is willing to reconnect with us.
+     *
+     * @param connection the connection to use
+     * @return true if the other node is willing to assist with reconnect
+     * @throws IOException thrown when any I/O related errors occur
+     * @throws ReconnectException thrown when the other node is unwilling to reconnect right now
+     */
+    public static boolean isNodeReadyForReconnect(final Connection connection)
+            throws IOException, ReconnectException {
+        final NodeId otherId = connection.getOtherId();
+        final SyncInputStream dis = connection.getDis();
+        final SyncOutputStream dos = connection.getDos();
 
-		// send the request
-		dos.write(ByteConstants.COMM_STATE_REQUEST);
-		dos.flush();
-		LOG.info(RECONNECT.getMarker(), "Requesting to reconnect with node {}.", otherId);
+        // send the request
+        dos.write(ByteConstants.COMM_STATE_REQUEST);
+        dos.flush();
+        LOG.info(RECONNECT.getMarker(), "Requesting to reconnect with node {}.", otherId);
 
-		// read the response
-		final byte stateResponse = dis.readByte();
-		if (stateResponse == ByteConstants.COMM_STATE_ACK) {
-			LOG.info(RECONNECT.getMarker(),
-					"Node {} is willing to help this node to reconnect.", otherId);
-			return true;
-		} else if (stateResponse == ByteConstants.COMM_STATE_NACK) {
-			LOG.info(RECONNECT.getMarker(),
-					new ReconnectFailurePayload("Node " + otherId
-							+ " is unwilling to help this node to reconnect.",
-							ReconnectFailurePayload.CauseOfFailure.REJECTION));
-			return false;
-		} else {
-			throw new BadIOException("COMM_STATE_REQUEST was sent but reply was " + stateResponse +
-					" instead of COMM_STATE_ACK or COMM_STATE_NACK");
-		}
-	}
+        // read the response
+        final byte stateResponse = dis.readByte();
+        if (stateResponse == ByteConstants.COMM_STATE_ACK) {
+            LOG.info(
+                    RECONNECT.getMarker(),
+                    "Node {} is willing to help this node to reconnect.",
+                    otherId);
+            return true;
+        } else if (stateResponse == ByteConstants.COMM_STATE_NACK) {
+            LOG.info(
+                    RECONNECT.getMarker(),
+                    new ReconnectFailurePayload(
+                            "Node " + otherId + " is unwilling to help this node to reconnect.",
+                            ReconnectFailurePayload.CauseOfFailure.REJECTION));
+            return false;
+        } else {
+            throw new BadIOException(
+                    "COMM_STATE_REQUEST was sent but reply was "
+                            + stateResponse
+                            + " instead of COMM_STATE_ACK or COMM_STATE_NACK");
+        }
+    }
 
-	/**
-	 * Write a flag to the stream. Informs the receiver that reconnect will proceed.
-	 *
-	 * @param connection
-	 * 		the connection to use
-	 * @throws IOException
-	 * 		thrown when any I/O related errors occur
-	 */
-	static void confirmReconnect(final Connection connection) throws IOException {
-		connection.getDos().write(ByteConstants.COMM_STATE_ACK);
-		connection.getDos().flush();
-	}
+    /**
+     * Write a flag to the stream. Informs the receiver that reconnect will proceed.
+     *
+     * @param connection the connection to use
+     * @throws IOException thrown when any I/O related errors occur
+     */
+    static void confirmReconnect(final Connection connection) throws IOException {
+        connection.getDos().write(ByteConstants.COMM_STATE_ACK);
+        connection.getDos().flush();
+    }
 
-	/**
-	 * Write a flag to the stream. Informs the receiver that reconnect will not proceed.
-	 *
-	 * @param connection
-	 * 		the connection to use
-	 * @throws IOException
-	 * 		thrown when any I/O related errors occur
-	 */
-	static void denyReconnect(final Connection connection) throws IOException {
-		connection.getDos().write(ByteConstants.COMM_STATE_NACK);
-		connection.getDos().flush();
-	}
+    /**
+     * Write a flag to the stream. Informs the receiver that reconnect will not proceed.
+     *
+     * @param connection the connection to use
+     * @throws IOException thrown when any I/O related errors occur
+     */
+    static void denyReconnect(final Connection connection) throws IOException {
+        connection.getDos().write(ByteConstants.COMM_STATE_NACK);
+        connection.getDos().flush();
+    }
 
-	/**
-	 * Hash the working state to prepare for reconnect
-	 */
-	static void hashStateForReconnect(final State workingState) {
-		try {
-			CryptoFactory.getInstance().digestTreeAsync(workingState).get();
-		} catch (final ExecutionException e) {
-			LOG.error(EXCEPTION.getMarker(), () -> new ReconnectFailurePayload(
-					"Error encountered while hashing state for reconnect",
-					ReconnectFailurePayload.CauseOfFailure.ERROR).toString(), e);
-			throw new ReconnectException(e);
-		} catch (final InterruptedException e) {
-			Thread.currentThread().interrupt();
-			LOG.error(EXCEPTION.getMarker(), () -> new ReconnectFailurePayload(
-					"Interrupted while attempting to hash state",
-					ReconnectFailurePayload.CauseOfFailure.ERROR).toString(), e);
-		}
-	}
+    /** Hash the working state to prepare for reconnect */
+    static void hashStateForReconnect(final State workingState) {
+        try {
+            MerkleCryptoFactory.getInstance().digestTreeAsync(workingState).get();
+        } catch (final ExecutionException e) {
+            LOG.error(
+                    EXCEPTION.getMarker(),
+                    () ->
+                            new ReconnectFailurePayload(
+                                            "Error encountered while hashing state for reconnect",
+                                            ReconnectFailurePayload.CauseOfFailure.ERROR)
+                                    .toString(),
+                    e);
+            throw new ReconnectException(e);
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.error(
+                    EXCEPTION.getMarker(),
+                    () ->
+                            new ReconnectFailurePayload(
+                                            "Interrupted while attempting to hash state",
+                                            ReconnectFailurePayload.CauseOfFailure.ERROR)
+                                    .toString(),
+                    e);
+        }
+    }
 }

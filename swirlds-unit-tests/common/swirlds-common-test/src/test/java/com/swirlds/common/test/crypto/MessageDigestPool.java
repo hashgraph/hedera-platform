@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,11 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test.crypto;
 
 import com.swirlds.common.crypto.Message;
-
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -28,145 +26,146 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class MessageDigestPool {
 
-	private ArrayList<KnownDigest> messages;
-	private int poolSize;
-	private int messageSize;
-	private AtomicInteger readPosition;
-	private Random random;
+    private ArrayList<KnownDigest> messages;
+    private int poolSize;
+    private int messageSize;
+    private AtomicInteger readPosition;
+    private Random random;
 
-	private MessageDigest digest;
+    private MessageDigest digest;
 
-	public MessageDigestPool(final int poolSize, final int messageSize) throws NoSuchAlgorithmException {
-		if (poolSize < 1) {
-			throw new IllegalArgumentException("poolSize");
-		}
+    public MessageDigestPool(final int poolSize, final int messageSize)
+            throws NoSuchAlgorithmException {
+        if (poolSize < 1) {
+            throw new IllegalArgumentException("poolSize");
+        }
 
-		if (messageSize < 1) {
-			throw new IllegalArgumentException("messageSize");
-		}
+        if (messageSize < 1) {
+            throw new IllegalArgumentException("messageSize");
+        }
 
-		this.poolSize = poolSize;
-		this.messageSize = messageSize;
-		this.messages = new ArrayList<>(poolSize);
-		this.readPosition = new AtomicInteger(0);
-		this.random = new Random();
-		this.digest = MessageDigest.getInstance("SHA-384");
+        this.poolSize = poolSize;
+        this.messageSize = messageSize;
+        this.messages = new ArrayList<>(poolSize);
+        this.readPosition = new AtomicInteger(0);
+        this.random = new Random();
+        this.digest = MessageDigest.getInstance("SHA-384");
 
-		init();
-	}
+        init();
+    }
 
-	public Message next() {
-		int nextIdx = readPosition.getAndIncrement();
+    public Message next() {
+        int nextIdx = readPosition.getAndIncrement();
 
-		if (nextIdx >= messages.size()) {
-			nextIdx = 0;
-			readPosition.set(1);
-		}
+        if (nextIdx >= messages.size()) {
+            nextIdx = 0;
+            readPosition.set(1);
+        }
 
-		return messages.get(nextIdx).provide();
-	}
+        return messages.get(nextIdx).provide();
+    }
 
-	public int size() {
-		return messages.size();
-	}
+    public int size() {
+        return messages.size();
+    }
 
-	public boolean isValid(final Message message) {
-		final int index = messages.indexOf(new KnownDigest(null, message));
+    public boolean isValid(final Message message) {
+        final int index = messages.indexOf(new KnownDigest(null, message));
 
-		if (index < 0) {
-			return false;
-		}
+        if (index < 0) {
+            return false;
+        }
 
-		KnownDigest kd = messages.get(index);
+        KnownDigest kd = messages.get(index);
 
-		return (kd != null && kd.isValid(message.getHash().getValue()));
-	}
+        return (kd != null && kd.isValid(message.getHash().getValue()));
+    }
 
-	public boolean isValid(final Message message, final byte[] hash) {
-		final int index = messages.indexOf(new KnownDigest(null, message));
+    public boolean isValid(final Message message, final byte[] hash) {
+        final int index = messages.indexOf(new KnownDigest(null, message));
 
-		if (index < 0) {
-			return false;
-		}
+        if (index < 0) {
+            return false;
+        }
 
-		KnownDigest kd = messages.get(index);
+        KnownDigest kd = messages.get(index);
 
-		return (kd != null && kd.isValid(hash));
-	}
+        return (kd != null && kd.isValid(hash));
+    }
 
-	private void init() {
-		for (int i = 0; i < poolSize; i++) {
-			final byte[] payload = new byte[messageSize];
-			random.nextBytes(payload);
-			digest.update(payload);
+    private void init() {
+        for (int i = 0; i < poolSize; i++) {
+            final byte[] payload = new byte[messageSize];
+            random.nextBytes(payload);
+            digest.update(payload);
 
-			final byte[] hash = digest.digest();
+            final byte[] hash = digest.digest();
 
-			messages.add(new KnownDigest(hash, new Message(payload)));
-		}
-	}
+            messages.add(new KnownDigest(hash, new Message(payload)));
+        }
+    }
 
-	final class KnownDigest implements Comparable<KnownDigest> {
+    final class KnownDigest implements Comparable<KnownDigest> {
 
-		private byte[] hash;
-		private Message message;
+        private byte[] hash;
+        private Message message;
 
-		KnownDigest(final byte[] hash, final Message message) {
-			this.hash = hash;
-			this.message = message;
-		}
+        KnownDigest(final byte[] hash, final Message message) {
+            this.hash = hash;
+            this.message = message;
+        }
 
-		public byte[] getHash() {
-			return hash;
-		}
+        public byte[] getHash() {
+            return hash;
+        }
 
-		public Message getMessage() {
-			return message;
-		}
+        public Message getMessage() {
+            return message;
+        }
 
-		public boolean isValid(final byte[] hash) {
-			if (hash == null || hash.length != this.hash.length) {
-				return false;
-			}
+        public boolean isValid(final byte[] hash) {
+            if (hash == null || hash.length != this.hash.length) {
+                return false;
+            }
 
-			return Arrays.compare(this.hash, hash) == 0;
-		}
+            return Arrays.compare(this.hash, hash) == 0;
+        }
 
-		public Message provide() {
-			message.setHash(null);
-			return message;
-		}
+        public Message provide() {
+            message.setHash(null);
+            return message;
+        }
 
-		@Override
-		public int hashCode() {
-			return Objects.hash(message);
-		}
+        @Override
+        public int hashCode() {
+            return Objects.hash(message);
+        }
 
-		@Override
-		public boolean equals(final Object o) {
-			if (this == o) {
-				return true;
-			}
+        @Override
+        public boolean equals(final Object o) {
+            if (this == o) {
+                return true;
+            }
 
-			if (!(o instanceof KnownDigest)) {
-				return false;
-			}
+            if (!(o instanceof KnownDigest)) {
+                return false;
+            }
 
-			KnownDigest that = (KnownDigest) o;
-			return message.equals(that.message);
-		}
+            KnownDigest that = (KnownDigest) o;
+            return message.equals(that.message);
+        }
 
-		@Override
-		public int compareTo(final KnownDigest that) {
-			if (this == that) {
-				return 0;
-			}
+        @Override
+        public int compareTo(final KnownDigest that) {
+            if (this == that) {
+                return 0;
+            }
 
-			if (that == null) {
-				return 1;
-			}
+            if (that == null) {
+                return 1;
+            }
 
-			return message.compareTo(that.message);
-		}
-	}
+            return message.compareTo(that.message);
+        }
+    }
 }

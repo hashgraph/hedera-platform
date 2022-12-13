@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,26 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.platform.state.signed;
-
-import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.io.streams.MerkleDataInputStream;
-import com.swirlds.common.system.NodeId;
-import com.swirlds.logging.LogMarker;
-import com.swirlds.platform.state.State;
-import org.apache.commons.lang3.tuple.Triple;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import java.io.BufferedInputStream;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.TreeMap;
 
 import static com.swirlds.common.io.streams.StreamDebugUtils.deserializeAndDebugOnFailure;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
@@ -45,124 +26,139 @@ import static com.swirlds.platform.system.SystemUtils.exitSystem;
 import static java.nio.file.Files.exists;
 import static java.nio.file.Files.isDirectory;
 
-/**
- * Utility methods for reading a signed state from disk.
- */
+import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.io.streams.MerkleDataInputStream;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.logging.LogMarker;
+import com.swirlds.platform.state.State;
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.TreeMap;
+import org.apache.commons.lang3.tuple.Triple;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+/** Utility methods for reading a signed state from disk. */
 public final class SignedStateFileReader {
 
-	private static final Logger LOG = LogManager.getLogger(SignedStateFileReader.class);
+    private static final Logger LOG = LogManager.getLogger(SignedStateFileReader.class);
 
-	private SignedStateFileReader() {
+    private SignedStateFileReader() {}
 
-	}
+    /**
+     * Looks for saved state files locally and returns an array of them sorted from newest to oldest
+     *
+     * @param mainClassName the name of the main app class
+     * @param platformId the ID of the plaform
+     * @param swirldName the swirld name
+     * @return Information about saved states on disk, or null if none are found
+     */
+    @SuppressWarnings("resource")
+    public static SavedStateInfo[] getSavedStateFiles(
+            final String mainClassName, final NodeId platformId, final String swirldName) {
 
-	/**
-	 * Looks for saved state files locally and returns an array of them sorted from newest to oldest
-	 *
-	 * @param mainClassName
-	 * 		the name of the main app class
-	 * @param platformId
-	 * 		the ID of the plaform
-	 * @param swirldName
-	 * 		the swirld name
-	 * @return Information about saved states on disk, or null if none are found
-	 */
-	@SuppressWarnings("resource")
-	public static SavedStateInfo[] getSavedStateFiles(
-			final String mainClassName,
-			final NodeId platformId,
-			final String swirldName) {
+        try {
+            final Path dir =
+                    getSignedStatesDirectoryForSwirld(mainClassName, platformId, swirldName);
 
-		try {
-			final Path dir = getSignedStatesDirectoryForSwirld(mainClassName, platformId, swirldName);
+            if (!exists(dir) || !isDirectory(dir)) {
+                return new SavedStateInfo[0];
+            }
 
-			if (!exists(dir) || !isDirectory(dir)) {
-				return new SavedStateInfo[0];
-			}
+            final List<Path> dirs = Files.list(dir).filter(Files::isDirectory).toList();
 
-			final List<Path> dirs = Files.list(dir).filter(Files::isDirectory).toList();
+            final TreeMap<Long, SavedStateInfo> savedStates = new TreeMap<>();
+            for (final Path subDir : dirs) {
+                try {
+                    final long round = Long.parseLong(subDir.getFileName().toString());
+                    final Path stateFile = subDir.resolve(SIGNED_STATE_FILE_NAME);
+                    if (!exists(stateFile)) {
+                        LOG.warn(
+                                LogMarker.ERROR.getMarker(),
+                                "Saved state file ({}) not found, but directory exists '{}'",
+                                stateFile.getFileName(),
+                                subDir.toAbsolutePath());
+                        continue;
+                    }
 
-			final TreeMap<Long, SavedStateInfo> savedStates = new TreeMap<>();
-			for (final Path subDir : dirs) {
-				try {
-					final long round = Long.parseLong(subDir.getFileName().toString());
-					final Path stateFile = subDir.resolve(SIGNED_STATE_FILE_NAME);
-					if (!exists(stateFile)) {
-						LOG.warn(LogMarker.ERROR.getMarker(),
-								"Saved state file ({}) not found, but directory exists '{}'",
-								stateFile.getFileName(), subDir.toAbsolutePath());
-						continue;
-					}
+                    savedStates.put(round, new SavedStateInfo(round, stateFile));
+                } catch (final NumberFormatException e) {
+                    LOG.warn(
+                            LogMarker.ERROR.getMarker(),
+                            "Unexpected directory '{}' in '{}'",
+                            subDir.getFileName(),
+                            dir.toAbsolutePath());
+                }
+            }
+            return savedStates.descendingMap().values().toArray(new SavedStateInfo[] {});
+        } catch (final IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 
-					savedStates.put(round, new SavedStateInfo(round, stateFile));
-				} catch (final NumberFormatException e) {
-					LOG.warn(LogMarker.ERROR.getMarker(),
-							"Unexpected directory '{}' in '{}'",
-							subDir.getFileName(), dir.toAbsolutePath());
-				}
+    /**
+     * Reads a SignedState from disk
+     *
+     * @param stateFile the file to read from
+     * @return a signed state with it's associated hash (as computed when the state was serialized)
+     * @throws IOException if there is any problems with reading from a file
+     */
+    public static DeserializedSignedState readStateFile(final Path stateFile) throws IOException {
 
-			}
-			return savedStates.descendingMap().values().toArray(new SavedStateInfo[] { });
-		} catch (final IOException e) {
-			throw new UncheckedIOException(e);
-		}
-	}
+        if (!exists(stateFile)) {
+            throw new IOException("File " + stateFile.toAbsolutePath() + " does not exist!");
+        }
+        if (!Files.isRegularFile(stateFile)) {
+            throw new IOException("File " + stateFile.toAbsolutePath() + " is not a file!");
+        }
 
-	/**
-	 * Reads a SignedState from disk
-	 *
-	 * @param stateFile
-	 * 		the file to read from
-	 * @return a signed state with it's associated hash (as computed when the state was serialized)
-	 * @throws IOException
-	 * 		if there is any problems with reading from a file
-	 */
-	public static DeserializedSignedState readStateFile(final Path stateFile) throws IOException {
+        final DeserializedSignedState returnState;
 
-		if (!exists(stateFile)) {
-			throw new IOException(
-					"File " + stateFile.toAbsolutePath() + " does not exist!");
-		}
-		if (!Files.isRegularFile(stateFile)) {
-			throw new IOException(
-					"File " + stateFile.toAbsolutePath() + " is not a file!");
-		}
+        final Triple<State, Hash, SigSet> data =
+                deserializeAndDebugOnFailure(
+                        () -> new BufferedInputStream(new FileInputStream(stateFile.toFile())),
+                        (final MerkleDataInputStream in) -> {
+                            final byte versionByte = in.readByte();
+                            if (versionByte != VERSIONED_FILE_BYTE) {
+                                throw new IOException(
+                                        "File is not versioned -- data corrupted or is an"
+                                                + " unsupported legacy state");
+                            }
 
-		final DeserializedSignedState returnState;
+                            in.readInt(); // file version
+                            in.readProtocolVersion();
 
-		final Triple<State, Hash, SigSet> data = deserializeAndDebugOnFailure(
-				() -> new BufferedInputStream(new FileInputStream(stateFile.toFile())),
-				(final MerkleDataInputStream in) -> {
-					final byte versionByte = in.readByte();
-					if (versionByte != VERSIONED_FILE_BYTE) {
-						throw new IOException(
-								"File is not versioned -- data corrupted or is an unsupported legacy state");
-					}
+                            final Path directory = stateFile.getParent();
 
-					in.readInt();// file version
-					in.readProtocolVersion();
+                            final State state =
+                                    in.readMerkleTree(directory, MAX_MERKLE_NODES_IN_STATE);
+                            final Hash hash = in.readSerializable();
+                            final SigSet sigSet =
+                                    in.readSerializable(
+                                            true,
+                                            () ->
+                                                    new SigSet(
+                                                            state.getPlatformState()
+                                                                    .getAddressBook()));
 
-					final Path directory = stateFile.getParent();
+                            return Triple.of(state, hash, sigSet);
+                        },
+                        () -> {
+                            LOG.error(EXCEPTION.getMarker(), "failed to load state");
+                            exitSystem(SAVED_STATE_NOT_LOADED);
+                        });
 
-					final State state = in.readMerkleTree(directory, MAX_MERKLE_NODES_IN_STATE);
-					final Hash hash = in.readSerializable();
-					final SigSet sigSet = in.readSerializable(true, () ->
-							new SigSet(state.getPlatformState().getAddressBook()));
+        final SignedState newSignedState = new SignedState(data.getLeft());
 
-					return Triple.of(state, hash, sigSet);
-				},
-				() -> {
-					LOG.error(EXCEPTION.getMarker(), "failed to load state");
-					exitSystem(SAVED_STATE_NOT_LOADED);
-				}
-		);
+        newSignedState.setSigSet(data.getRight());
 
-		final SignedState newSignedState = new SignedState(data.getLeft());
+        returnState = new DeserializedSignedState(newSignedState, data.getMiddle());
 
-		newSignedState.setSigSet(data.getRight());
-
-		returnState = new DeserializedSignedState(newSignedState, data.getMiddle());
-
-		return returnState;
-	}
+        return returnState;
+    }
 }

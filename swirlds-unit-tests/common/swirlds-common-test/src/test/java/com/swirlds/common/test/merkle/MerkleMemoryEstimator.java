@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test.merkle;
 
 import com.swirlds.common.merkle.MerkleInternal;
@@ -29,38 +28,36 @@ import org.junit.jupiter.api.Test;
 
 public class MerkleMemoryEstimator {
 
-	double measureMemoryUsedMb() {
-		double memoryUsed = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
-		return memoryUsed / 1024 / 1024;
-	}
+    double measureMemoryUsedMb() {
+        double memoryUsed = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        return memoryUsed / 1024 / 1024;
+    }
 
-	/**
-	 * Estimate the memory size of a merkle tree.
-	 */
-	@Test
-	@Tag(TestTypeTags.PERFORMANCE)
-	@Tag(TestComponentTags.MERKLE)
-	@DisplayName("Estimate Balanced Tree Size")
-	void estimateBalancedTreeSize() {
+    /** Estimate the memory size of a merkle tree. */
+    @Test
+    @Tag(TestTypeTags.PERFORMANCE)
+    @Tag(TestComponentTags.MERKLE)
+    @DisplayName("Estimate Balanced Tree Size")
+    void estimateBalancedTreeSize() {
 
-		double initialMemoryUsed = measureMemoryUsedMb();
+        double initialMemoryUsed = measureMemoryUsedMb();
 
-		MerkleNode node = MerkleTestUtils.generateRandomBalancedTree(
-				1337, 20, 2, 100, 50);
+        MerkleNode node = MerkleTestUtils.generateRandomBalancedTree(1337, 20, 2, 100, 50);
 
-		MerkleInternal root = new DummyMerkleInternal();
-		root.setChild(0, node);
-		root.setChild(1, new DummyMerkleLeaf("A"));
-		root.setChild(2, new DummyMerkleLeaf("B"));
-		root.setChild(3, new DummyMerkleLeaf("C"));
-		root.setChild(4, new DummyMerkleLeaf("D"));
+        MerkleInternal root = new DummyMerkleInternal();
+        root.setChild(0, node);
+        root.setChild(1, new DummyMerkleLeaf("A"));
+        root.setChild(2, new DummyMerkleLeaf("B"));
+        root.setChild(3, new DummyMerkleLeaf("C"));
+        root.setChild(4, new DummyMerkleLeaf("D"));
 
-		double finalMemoryUsed = measureMemoryUsedMb();
+        double finalMemoryUsed = measureMemoryUsedMb();
 
-		System.out.println("Initial memory used: " + initialMemoryUsed + " Mb");
-		System.out.println("Final memory used: " + finalMemoryUsed + " Mb");
-		System.out.println("Memory used by tree (estimated): " + (finalMemoryUsed - initialMemoryUsed) + " Mb");
-
-	}
-
+        System.out.println("Initial memory used: " + initialMemoryUsed + " Mb");
+        System.out.println("Final memory used: " + finalMemoryUsed + " Mb");
+        System.out.println(
+                "Memory used by tree (estimated): "
+                        + (finalMemoryUsed - initialMemoryUsed)
+                        + " Mb");
+    }
 }

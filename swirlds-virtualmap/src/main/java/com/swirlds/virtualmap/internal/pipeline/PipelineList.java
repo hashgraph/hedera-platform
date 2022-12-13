@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,123 +13,106 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.virtualmap.internal.pipeline;
 
 import java.util.function.Predicate;
 
 /**
- * <p>
- * A simple linked list implementation that exposes the actual links to the user. Adding elements and removing elements
- * are thread safe with respect to iteration. Adding and removing elements are not thread safe with respect to other
- * add/remove operations.
- * </p>
+ * A simple linked list implementation that exposes the actual links to the user. Adding elements
+ * and removing elements are thread safe with respect to iteration. Adding and removing elements are
+ * not thread safe with respect to other add/remove operations.
  *
- * <p>
- * This class was specially designed to meet an algorithmic need by {@link VirtualPipeline}. This class needs a list
- * of elements with the following properties:
- * </p>
+ * <p>This class was specially designed to meet an algorithmic need by {@link VirtualPipeline}. This
+ * class needs a list of elements with the following properties:
  *
  * <ul>
- * <li>
- * forward/backward movement during traversal
- * </li>
- * <li>
- * the ability to remove an element in the middle of the list in O(1) time during traversal
- * </li>
- * <li>
- * thread safety between modification and traversal
- * </li>
+ *   <li>forward/backward movement during traversal
+ *   <li>the ability to remove an element in the middle of the list in O(1) time during traversal
+ *   <li>thread safety between modification and traversal
  * </ul>
  *
- * @param <T>
- * 		the type of the thing in the list
+ * @param <T> the type of the thing in the list
  */
 class PipelineList<T> {
 
-	private PipelineListNode<T> first;
-	private PipelineListNode<T> last;
+    private PipelineListNode<T> first;
+    private PipelineListNode<T> last;
 
-	private int size;
+    private int size;
 
-	PipelineList() {
+    PipelineList() {}
 
-	}
+    /**
+     * Get the first node in the list.
+     *
+     * @return the first node
+     */
+    synchronized PipelineListNode<T> getFirst() {
+        return first;
+    }
 
-	/**
-	 * Get the first node in the list.
-	 *
-	 * @return the first node
-	 */
-	synchronized PipelineListNode<T> getFirst() {
-		return first;
-	}
+    /**
+     * Add a value onto the end of the list.
+     *
+     * @param value the value to add
+     */
+    synchronized void add(final T value) {
+        final PipelineListNode<T> node = new PipelineListNode<>(value);
 
-	/**
-	 * Add a value onto the end of the list.
-	 *
-	 * @param value
-	 * 		the value to add
-	 */
-	synchronized void add(final T value) {
-		final PipelineListNode<T> node = new PipelineListNode<>(value);
+        if (first == null) {
+            first = node;
+        } else {
+            last.addNext(node);
+        }
+        last = node;
 
-		if (first == null) {
-			first = node;
-		} else {
-			last.addNext(node);
-		}
-		last = node;
+        size++;
+    }
 
-		size++;
-	}
+    /**
+     * Remove a node from the list.
+     *
+     * @param node the node to remove
+     */
+    synchronized void remove(final PipelineListNode<T> node) {
+        if (first == node) {
+            first = node.getNext();
+        }
+        if (last == node) {
+            last = node.getPrevious();
+        }
+        node.remove();
 
-	/**
-	 * Remove a node from the list.
-	 *
-	 * @param node
-	 * 		the node to remove
-	 */
-	synchronized void remove(final PipelineListNode<T> node) {
-		if (first == node) {
-			first = node.getNext();
-		}
-		if (last == node) {
-			last = node.getPrevious();
-		}
-		node.remove();
+        size--;
+    }
 
-		size--;
-	}
+    /**
+     * Check each value in the list with a predicate. Return true iff each value tested causes the
+     * predicate to return true. Also returns true if list is empty. Performed while the data
+     * structure is locked.
+     *
+     * @param predicate the test to run on each value
+     * @return true if the predicate returns true for each value in the list
+     */
+    synchronized boolean testAll(final Predicate<T> predicate) {
+        PipelineListNode<T> target = first;
+        while (target != null) {
 
-	/**
-	 * Check each value in the list with a predicate. Return true iff each value tested
-	 * causes the predicate to return true. Also returns true if list is empty.
-	 * Performed while the data structure is locked.
-	 *
-	 * @param predicate
-	 * 		the test to run on each value
-	 * @return true if the predicate returns true for each value in the list
-	 */
-	synchronized boolean testAll(final Predicate<T> predicate) {
-		PipelineListNode<T> target = first;
-		while (target != null) {
+            if (!predicate.test(target.getValue())) {
+                return false;
+            }
 
-			if (!predicate.test(target.getValue())) {
-				return false;
-			}
+            target = target.getNext();
+        }
+        return true;
+    }
 
-			target = target.getNext();
-		}
-		return true;
-	}
-
-	/**
-	 * Get the current size of this list.
-	 *
-	 * @return the current size
-	 */
-	synchronized int getSize() {
-		return size;
-	}
+    /**
+     * Get the current size of this list.
+     *
+     * @return the current size
+     */
+    synchronized int getSize() {
+        return size;
+    }
 }

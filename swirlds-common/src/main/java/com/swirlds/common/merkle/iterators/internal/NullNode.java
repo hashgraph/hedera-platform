@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.merkle.iterators.internal;
 
 import com.swirlds.common.constructable.ConstructableIgnored;
@@ -22,7 +21,6 @@ import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.route.MerkleRoute;
-
 import java.io.IOException;
 
 /**
@@ -33,134 +31,103 @@ import java.io.IOException;
 @ConstructableIgnored
 public class NullNode implements MerkleLeaf {
 
-	public static final long CLASS_ID = 0x654cf5401e13e7e1L;
+    public static final long CLASS_ID = 0x654cf5401e13e7e1L;
 
-	private final MerkleRoute route;
+    private final MerkleRoute route;
 
-	/**
-	 * Create a placeholder for a null node.
-	 */
-	public NullNode(final MerkleRoute route) {
-		this.route = route;
-	}
+    /** Create a placeholder for a null node. */
+    public NullNode(final MerkleRoute route) {
+        this.route = route;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void reserve() {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void reserve() {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean tryReserve() {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public boolean tryReserve() {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean release() {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public boolean release() {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean isDestroyed() {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public boolean isDestroyed() {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getReservationCount() {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public int getReservationCount() {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public long getClassId() {
-		return CLASS_ID;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public long getClassId() {
+        return CLASS_ID;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public Hash getHash() {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public Hash getHash() {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void setHash(final Hash hash) {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void setHash(final Hash hash) {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void serialize(final SerializableDataOutputStream out) throws IOException {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void serialize(final SerializableDataOutputStream out) throws IOException {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void deserialize(final SerializableDataInputStream in, final int version) throws IOException {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void deserialize(final SerializableDataInputStream in, final int version)
+            throws IOException {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public int getVersion() {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public int getVersion() {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public MerkleRoute getRoute() {
-		return route;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public MerkleRoute getRoute() {
+        return route;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void setRoute(final MerkleRoute route) {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void setRoute(final MerkleRoute route) {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public MerkleLeaf copy() {
-		throw new UnsupportedOperationException();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public MerkleLeaf copy() {
+        throw new UnsupportedOperationException();
+    }
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public boolean isLeaf() {
-		return true;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public boolean isLeaf() {
+        return true;
+    }
 }

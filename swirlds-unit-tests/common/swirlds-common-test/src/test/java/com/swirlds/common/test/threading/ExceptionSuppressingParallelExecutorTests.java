@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,35 +13,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test.threading;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-
-
 class ExceptionSuppressingParallelExecutorTests {
 
-	@Test
-	@DisplayName("Test exception suppressed")
-	void testExceptionsSuppressed() {
-		ExceptionSuppressingParallelExecutor executor = new ExceptionSuppressingParallelExecutor();
+    @Test
+    @DisplayName("Test exception suppressed")
+    void testExceptionsSuppressed() {
+        ExceptionSuppressingParallelExecutor executor = new ExceptionSuppressingParallelExecutor();
 
-		assertDoesNotThrow(() -> executor.doParallel(
-				() -> {
-					throw new NullPointerException();
-				},
-				() -> null
-		), "Exceptions from task 1 should be suppressed.");
+        assertDoesNotThrow(
+                () ->
+                        executor.doParallel(
+                                () -> {
+                                    throw new NullPointerException();
+                                },
+                                () -> null),
+                "Exceptions from task 1 should be suppressed.");
 
-		assertDoesNotThrow(() -> executor.doParallel(
-				() -> null,
-				() -> {
-					throw new NullPointerException();
-				}
-		), "Exceptions from task 2 should be suppressed.");
-	}
-
+        assertDoesNotThrow(
+                () ->
+                        executor.doParallel(
+                                () -> null,
+                                () -> {
+                                    throw new NullPointerException();
+                                }),
+                "Exceptions from task 2 should be suppressed.");
+    }
 }

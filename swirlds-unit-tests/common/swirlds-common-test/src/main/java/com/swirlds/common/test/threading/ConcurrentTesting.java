@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test.threading;
 
-import com.swirlds.common.threading.ThrowingRunnable;
+import static com.swirlds.common.test.AssertionUtils.assertEventuallyTrue;
 
+import com.swirlds.common.threading.ThrowingRunnable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,62 +27,56 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import static com.swirlds.common.test.AssertionUtils.assertEventuallyTrue;
-
-/**
- * A utility class for unit testing where multiple threads are executed at the same time
- */
+/** A utility class for unit testing where multiple threads are executed at the same time */
 public class ConcurrentTesting {
-	private final List<Future<?>> futures = new ArrayList<>();
-	private final List<Runnable> runnables = new ArrayList<>();
+    private final List<Future<?>> futures = new ArrayList<>();
+    private final List<Runnable> runnables = new ArrayList<>();
 
-	/**
-	 * Add a runnable to execute in parallel
-	 *
-	 * @param runnable
-	 * 		the runnable to execute
-	 */
-	public void addRunnable(final ThrowingRunnable runnable) {
-		runnables.add(printExceptions(runnable));
-	}
+    /**
+     * Add a runnable to execute in parallel
+     *
+     * @param runnable the runnable to execute
+     */
+    public void addRunnable(final ThrowingRunnable runnable) {
+        runnables.add(printExceptions(runnable));
+    }
 
-	/**
-	 * Run all previously submitted runnables in parallel. Waits at most the time specified for them to finish. Rethrows
-	 * any exceptions thrown by these runnables.
-	 *
-	 * @param timeout
-	 * 		the amount of time to wait
-	 * @param unit
-	 * 		the unit of time used
-	 */
-	public void runFor(final long timeout, final TimeUnit unit) throws ExecutionException, InterruptedException {
-		final ExecutorService executor = Executors.newFixedThreadPool(runnables.size());
-		for (final Runnable runnable : runnables) {
-			futures.add(executor.submit(runnable));
-		}
-		assertEventuallyTrue(() -> futures.stream().allMatch(Future::isDone),
-				Duration.of(timeout, unit.toChronoUnit()), "operation did not complete on time");
+    /**
+     * Run all previously submitted runnables in parallel. Waits at most the time specified for them
+     * to finish. Rethrows any exceptions thrown by these runnables.
+     *
+     * @param timeout the amount of time to wait
+     * @param unit the unit of time used
+     */
+    public void runFor(final long timeout, final TimeUnit unit)
+            throws ExecutionException, InterruptedException {
+        final ExecutorService executor = Executors.newFixedThreadPool(runnables.size());
+        for (final Runnable runnable : runnables) {
+            futures.add(executor.submit(runnable));
+        }
+        assertEventuallyTrue(
+                () -> futures.stream().allMatch(Future::isDone),
+                Duration.of(timeout, unit.toChronoUnit()),
+                "operation did not complete on time");
 
-		for (final Future<?> future : futures) {
-			future.get();// in case any exceptions were thrown
-		}
-	}
+        for (final Future<?> future : futures) {
+            future.get(); // in case any exceptions were thrown
+        }
+    }
 
-	/**
-	 * Same as {@link #runFor(long, TimeUnit)} where the unit is seconds
-	 */
-	public void runForSeconds(final long timeout) throws ExecutionException, InterruptedException {
-		runFor(timeout, TimeUnit.SECONDS);
-	}
+    /** Same as {@link #runFor(long, TimeUnit)} where the unit is seconds */
+    public void runForSeconds(final long timeout) throws ExecutionException, InterruptedException {
+        runFor(timeout, TimeUnit.SECONDS);
+    }
 
-	private static Runnable printExceptions(final ThrowingRunnable runnable) {
-		return () -> {
-			try {
-				runnable.run();
-			} catch (final Exception e) {
-				e.printStackTrace();
-				throw new RuntimeException(e);
-			}
-		};
-	}
+    private static Runnable printExceptions(final ThrowingRunnable runnable) {
+        return () -> {
+            try {
+                runnable.run();
+            } catch (final Exception e) {
+                e.printStackTrace();
+                throw new RuntimeException(e);
+            }
+        };
+    }
 }

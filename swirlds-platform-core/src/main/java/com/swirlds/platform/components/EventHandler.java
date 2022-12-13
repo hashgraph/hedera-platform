@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,23 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.platform.components;
 
 import com.swirlds.platform.internal.EventImpl;
 
-/**
- * An object that is capable of accepting events and handling them.
- */
+/** An object that is capable of accepting events and handling them. */
 @FunctionalInterface
 public interface EventHandler {
 
-	/**
-	 * Handle a given event.
-	 *
-	 * @param event
-	 * 		the event to handle, will never be null
-	 */
-	void handleEvent(EventImpl event);
-
+    /**
+     * Handle a given event.
+     *
+     * @param event the event to handle, will never be null
+     */
+    void handleEvent(EventImpl event);
 }

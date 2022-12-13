@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,26 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.common.test;
 
 import java.util.List;
 
 /**
- * Generates a list of node stakes given a seed and number of nodes. The list of stake values must have a size equal to
- * the specified number of nodes.
+ * Generates a list of node stakes given a seed and number of nodes. The list of stake values must
+ * have a size equal to the specified number of nodes.
  */
 @FunctionalInterface
 public interface StakeGenerator {
 
-	/**
-	 * Generate a list of stake values.
-	 *
-	 * @param seed
-	 * 		the seed to use for randomization. May or may not be used depending on the implementation.
-	 * @param numberOfNodes
-	 * 		the number of nodes to generate stake for
-	 * @return a list of stakes equal in size to {@code numberOfNodes}
-	 */
-	List<Long> getStakes(Long seed, int numberOfNodes);
+    /**
+     * Generate a list of stake values.
+     *
+     * @param seed the seed to use for randomization. May or may not be used depending on the
+     *     implementation.
+     * @param numberOfNodes the number of nodes to generate stake for
+     * @return a list of stakes equal in size to {@code numberOfNodes}
+     */
+    List<Long> getStakes(Long seed, int numberOfNodes);
 }

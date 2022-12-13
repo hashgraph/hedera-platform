@@ -19,10 +19,10 @@ limitations under the License.
 
 ### Acknowledgments
 
-Portions of this Hedera Hashgraph, LLC Software may utilize the following copyrighted material, the use of which is hereby 
+Portions of this Hedera Hashgraph, LLC Software may utilize the following copyrighted material, the use of which is hereby
 acknowledged.
 
-The full list of acknowledgements is available at 
+The full list of acknowledgements is available at
 [https://github.com/hashgraph/swirlds-open-review/raw/master/acknowledgments.html](/acknowledgments.html)
 
 
@@ -34,14 +34,14 @@ The full list of acknowledgements is available at
   - Available from [http://jdk.java.net/17/](http://jdk.java.net/17/)
 - **Apache Maven 3**
   - Available from [http://maven.apache.org/download.cgi](http://maven.apache.org/download.cgi)
-  
+
 #### Standard Build Command
 
-The entire project may be built by executing `mvn deploy` from the root of this repository. 
+The entire project may be built by executing `mvn deploy` from the root of this repository.
 
-##### **NOTE:** 
-The `deploy` phase is required to produce a complete build. 
-The maven `compile` and `install` phases will not install all necessary dependencies. 
+##### **NOTE:**
+The `deploy` phase is required to produce a complete build.
+The maven `compile` and `install` phases will not install all necessary dependencies.
 
 #### Contributing
 

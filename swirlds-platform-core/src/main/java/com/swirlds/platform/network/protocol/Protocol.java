@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,54 +13,48 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.swirlds.platform.network.protocol;
 
 import com.swirlds.platform.Connection;
 
 /**
- * A network protocol that run over a provided connection. The decision to run the protocol is made outside it, it can
- * only communicate its willingness to run through the provided interface. An instance of this class must be created per
- * peer.
+ * A network protocol that run over a provided connection. The decision to run the protocol is made
+ * outside it, it can only communicate its willingness to run through the provided interface. An
+ * instance of this class must be created per peer.
  */
 public interface Protocol extends ProtocolRunnable {
-	/**
-	 * Used to ask the protocol if we should initiate it. If this method returns true, one of two things will
-	 * always subsequently happen:
-	 * <ul>
-	 *     <li>The initiate will be successful and {@link #runProtocol(Connection)} will be called</li>
-	 *     <li>The initiate will fail and {@link #initiateFailed()} will be called</li>
-	 * </ul>
-	 *
-	 * @return true iff we should we try and initiate this protocol with our peer
-	 */
-	boolean shouldInitiate();
+    /**
+     * Used to ask the protocol if we should initiate it. If this method returns true, one of two
+     * things will always subsequently happen:
+     *
+     * <ul>
+     *   <li>The initiate will be successful and {@link #runProtocol(Connection)} will be called
+     *   <li>The initiate will fail and {@link #initiateFailed()} will be called
+     * </ul>
+     *
+     * @return true iff we should we try and initiate this protocol with our peer
+     */
+    boolean shouldInitiate();
 
-	/**
-	 * Notifies the protocol that initiating it failed
-	 */
-	default void initiateFailed() {
+    /** Notifies the protocol that initiating it failed */
+    default void initiateFailed() {}
 
-	}
+    /**
+     * Our peer initiated this protocol, should we accept? If this method returns true, {@link
+     * #runProtocol(Connection)} will be called immediately after
+     *
+     * @return true if we should accept, false if we should reject
+     */
+    boolean shouldAccept();
 
-	/**
-	 * Our peer initiated this protocol, should we accept? If this method returns true,
-	 * {@link #runProtocol(Connection)} will be called immediately after
-	 *
-	 * @return true if we should accept, false if we should reject
-	 */
-	boolean shouldAccept();
-
-	/**
-	 * <p>
-	 * If both sides initiated this protocol simultaneously, should we proceed with running the protocol?
-	 * </p>
-	 * <p>
-	 * IMPORTANT: the value returned should remain consistent for a protocol, it should never change depending on the
-	 * state of the instance.
-	 * </p>
-	 *
-	 * @return true if we should run, false otherwise
-	 */
-	boolean acceptOnSimultaneousInitiate();
+    /**
+     * If both sides initiated this protocol simultaneously, should we proceed with running the
+     * protocol?
+     *
+     * <p>IMPORTANT: the value returned should remain consistent for a protocol, it should never
+     * change depending on the state of the instance.
+     *
+     * @return true if we should run, false otherwise
+     */
+    boolean acceptOnSimultaneousInitiate();
 }
