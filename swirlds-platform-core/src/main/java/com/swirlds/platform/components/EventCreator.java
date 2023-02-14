@@ -17,7 +17,7 @@ package com.swirlds.platform.components;
 
 import static com.swirlds.logging.LogMarker.CREATE_EVENT;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.stream.Signer;
 import com.swirlds.common.system.EventCreationRuleResponse;
 import com.swirlds.common.system.NodeId;
@@ -36,10 +36,7 @@ import org.apache.logging.log4j.Logger;
 
 /** This class encapsulates the workflow required to create new events. */
 public class EventCreator {
-    private static final Logger log = LogManager.getLogger();
-
-    /** An implementor of {@link SwirldMainManager} */
-    private final SwirldMainManager swirldMainManager;
+    private static final Logger log = LogManager.getLogger(EventCreator.class);
 
     /** This node's address book ID */
     private final NodeId selfId;
@@ -77,7 +74,6 @@ public class EventCreator {
     /**
      * Construct a new EventCreator.
      *
-     * @param swirldMainManager responsible for interacting with SwirldMain
      * @param selfId the ID of this node
      * @param signer responsible for signing new events
      * @param graphGenerationsSupplier supplies the key generation number from the hashgraph
@@ -92,7 +88,6 @@ public class EventCreator {
      * @param eventCreationRules the object used for checking if we should create an event or not
      */
     public EventCreator(
-            final SwirldMainManager swirldMainManager,
             final NodeId selfId,
             final Signer signer,
             final Supplier<GraphGenerations> graphGenerationsSupplier,
@@ -104,7 +99,6 @@ public class EventCreator {
             final TransactionPool transactionPool,
             final BooleanSupplier inFreeze,
             final EventCreationRules eventCreationRules) {
-        this.swirldMainManager = swirldMainManager;
         this.selfId = selfId;
         this.signer = signer;
         this.ancientParentsCheck = new AncientParentsRule(graphGenerationsSupplier);
@@ -127,10 +121,6 @@ public class EventCreator {
         if (eventCreationRules.shouldCreateEvent() == EventCreationRuleResponse.DONT_CREATE) {
             return false;
         }
-
-        // Give the app one last chance to create a non-system transaction and give the platform
-        // one last chance to create a system transaction.
-        swirldMainManager.preEvent();
 
         // We don't want to create multiple events with the same other parent, so we have to check
         // if we
@@ -187,7 +177,7 @@ public class EventCreator {
                         EventUtils.getEventHash(otherParent),
                         EventUtils.getChildTimeCreated(Instant.now(), selfParent),
                         transactionSupplier.getTransactions());
-        CryptoFactory.getInstance().digestSync(hashedData);
+        CryptographyHolder.get().digestSync(hashedData);
 
         final BaseEventUnhashedData unhashedData =
                 new BaseEventUnhashedData(

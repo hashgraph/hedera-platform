@@ -29,7 +29,12 @@ import java.time.format.DateTimeParseException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** This class contains utilities for parsing various types of settings. */
+/**
+ * This class contains utilities for parsing various types of settings.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
 @Deprecated(forRemoval = true)
 public final class ParsingUtils {
 

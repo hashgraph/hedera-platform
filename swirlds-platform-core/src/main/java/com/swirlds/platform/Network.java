@@ -18,6 +18,7 @@ package com.swirlds.platform;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.p2p.portforwarding.PortMapping;
 import com.swirlds.p2p.portforwarding.PortMappingListener;
@@ -44,7 +45,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class Network {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(Network.class);
 
     private static Collection<InetAddress> ownAddresses;
     private static String[] addresses;
@@ -104,8 +105,14 @@ public class Network {
         return getOwnAddresses2()[0];
     }
 
-    /** Forwards the ports for every platform so they can be accessed externally */
-    static void doPortForwarding(List<PortMapping> portsToBeMapped) {
+    /**
+     * Forwards the ports for every platform so they can be accessed externally
+     *
+     * @param threadManager responsible for managing thread lifecycles
+     * @param portsToBeMapped a list of ports that require mapping
+     */
+    static void doPortForwarding(
+            final ThreadManager threadManager, List<PortMapping> portsToBeMapped) {
         PortMappingListener listener =
                 new PortMappingListener() {
                     public void noForwardingDeviceFound() {
@@ -126,13 +133,13 @@ public class Network {
                 };
 
         // open a port for incoming connections
-        portForwarder = new PortMapperPortForwarder();
+        portForwarder = new PortMapperPortForwarder(threadManager);
         portForwarder.addListener(listener);
         portForwarder.setPortMappings(portsToBeMapped);
 
         // execute tries to open the ports specified above
         portForwarderThread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(threadManager)
                         .setComponent("network")
                         .setThreadName("PortForwarder")
                         .setRunnable(portForwarder)

@@ -18,7 +18,7 @@ package com.swirlds.common.merkle.synchronization.views;
 import static com.swirlds.common.constructable.ClassIdFormatter.classIdString;
 
 import com.swirlds.common.constructable.ConstructableRegistry;
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.merkle.MerkleInternal;
@@ -82,7 +82,7 @@ public class StandardLearnerTreeView implements LearnerTreeView<MerkleNode> {
     @Override
     public Hash getNodeHash(final MerkleNode node) {
         if (node == null) {
-            return CryptoFactory.getInstance().getNullHash();
+            return CryptographyHolder.get().getNullHash();
         } else {
             return node.getHash();
         }
@@ -159,7 +159,7 @@ public class StandardLearnerTreeView implements LearnerTreeView<MerkleNode> {
 
         final long classId = in.readLong();
 
-        final MerkleInternal internal = ConstructableRegistry.createObject(classId);
+        final MerkleInternal internal = ConstructableRegistry.getInstance().createObject(classId);
         if (internal == null) {
             throw new MerkleSynchronizationException(
                     "unable to construct object with class ID " + classIdString(classId));

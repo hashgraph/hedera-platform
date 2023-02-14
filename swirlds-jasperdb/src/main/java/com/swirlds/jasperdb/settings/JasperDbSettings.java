@@ -17,7 +17,13 @@ package com.swirlds.jasperdb.settings;
 
 import java.time.temporal.ChronoUnit;
 
-/** Instance-wide settings for {@code VirtualDataSourceJasperDB}. */
+/**
+ * Instance-wide settings for {@code VirtualDataSourceJasperDB}.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
+@Deprecated(forRemoval = true)
 public interface JasperDbSettings {
 
     /**
@@ -191,4 +197,12 @@ public interface JasperDbSettings {
      * those indexes from data files,
      */
     boolean isIndexRebuildingEnforced();
+
+    /**
+     * Virtual leaf record cache size at data source level, in records. If zero, no leaf records are
+     * cached.
+     *
+     * @return Virtual leaf record cache size
+     */
+    int getLeafRecordCacheSize();
 }

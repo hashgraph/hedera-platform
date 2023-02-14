@@ -20,13 +20,14 @@ import static com.swirlds.virtualmap.internal.Path.getChildPath;
 import static com.swirlds.virtualmap.internal.Path.getParentPath;
 import static com.swirlds.virtualmap.internal.Path.isLeft;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.synchronization.internal.ExpectedLesson;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
 import com.swirlds.common.merkle.synchronization.views.LearnerTreeView;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.threading.pool.StandardWorkGroup;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
@@ -34,7 +35,7 @@ import com.swirlds.virtualmap.datasource.VirtualKeySet;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
 import com.swirlds.virtualmap.datasource.VirtualRecord;
 import com.swirlds.virtualmap.internal.RecordAccessor;
-import com.swirlds.virtualmap.internal.StateAccessor;
+import com.swirlds.virtualmap.internal.VirtualStateAccessor;
 import com.swirlds.virtualmap.internal.merkle.VirtualRootNode;
 import java.io.IOException;
 import java.util.Objects;
@@ -62,7 +63,7 @@ public final class VirtualLearnerTreeView<K extends VirtualKey<? super K>, V ext
      * A stashed null hash, which is used for any leaves which are null that we need to send
      * (specifically, leaf 2 for a tree with only a single leaf).
      */
-    private static final Hash NULL_HASH = CryptoFactory.getInstance().getNullHash();
+    private static final Hash NULL_HASH = CryptographyHolder.get().getNullHash();
 
     /** Handles removal of old nodes. */
     private ReconnectNodeRemover<K, V> nodeRemover;
@@ -99,18 +100,18 @@ public final class VirtualLearnerTreeView<K extends VirtualKey<? super K>, V ext
      * @param root The root node of the <strong>reconnect</strong> tree. Cannot be null.
      * @param originalRecords A {@link RecordAccessor} for accessing records from the unmodified
      *     <strong>original</strong> tree. Cannot be null.
-     * @param originalState A {@link StateAccessor} for accessing state (first and last paths) from
-     *     the unmodified <strong>original</strong> tree. Cannot be null.
-     * @param reconnectState A {@link StateAccessor} for accessing state (first and last paths) from
-     *     the modified <strong>reconnect</strong> tree. We only use first and last leaf path from
-     *     this state. Cannot be null.
+     * @param originalState A {@link VirtualStateAccessor} for accessing state (first and last
+     *     paths) from the unmodified <strong>original</strong> tree. Cannot be null.
+     * @param reconnectState A {@link VirtualStateAccessor} for accessing state (first and last
+     *     paths) from the modified <strong>reconnect</strong> tree. We only use first and last leaf
+     *     path from this state. Cannot be null.
      */
     public VirtualLearnerTreeView(
             final VirtualRootNode<K, V> root,
             final RecordAccessor<K, V> originalRecords,
             final VirtualKeySet<K> encounteredKeys,
-            final StateAccessor originalState,
-            final StateAccessor reconnectState) {
+            final VirtualStateAccessor originalState,
+            final VirtualStateAccessor reconnectState) {
 
         super(root, originalState, reconnectState);
         this.originalRecords = Objects.requireNonNull(originalRecords);
@@ -247,9 +248,10 @@ public final class VirtualLearnerTreeView<K extends VirtualKey<? super K>, V ext
 
     /** {@inheritDoc} */
     @Override
-    public void startThreads(final StandardWorkGroup workGroup) {
+    public void startThreads(final ThreadManager threadManager, final StandardWorkGroup workGroup) {
         nodeRemover =
                 new ReconnectNodeRemover<>(
+                        threadManager,
                         workGroup,
                         originalRecords,
                         encounteredKeys,

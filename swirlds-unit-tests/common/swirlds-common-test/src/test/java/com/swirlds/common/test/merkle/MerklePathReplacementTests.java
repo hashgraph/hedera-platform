@@ -55,7 +55,7 @@ class MerklePathReplacementTests {
 
     @BeforeAll
     public static void setUp() throws ConstructableRegistryException {
-        ConstructableRegistry.registerConstructables("com.swirlds.*");
+        ConstructableRegistry.getInstance().registerConstructables("com.swirlds.*");
     }
 
     /**

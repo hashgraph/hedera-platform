@@ -17,7 +17,7 @@ package com.swirlds.common.test;
 
 import static com.swirlds.common.test.RandomUtils.randomHash;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.KeyType;
 import com.swirlds.common.crypto.SerializablePublicKey;
 import com.swirlds.common.system.address.Address;
@@ -241,7 +241,7 @@ public class RandomAddressBookGenerator {
         if (hashStrategy == HashStrategy.FAKE_HASH) {
             addressBook.setHash(randomHash(random));
         } else if (hashStrategy == HashStrategy.REAL_HASH) {
-            CryptoFactory.getInstance().digestSync(addressBook);
+            CryptographyHolder.get().digestSync(addressBook);
         }
 
         return addressBook;

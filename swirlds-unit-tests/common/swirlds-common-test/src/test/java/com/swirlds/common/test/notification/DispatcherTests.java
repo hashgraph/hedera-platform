@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test.notification;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -37,7 +38,7 @@ class DispatcherTests {
     @DisplayName("Notification Engine: Dispatcher Sync Exception Handling")
     void validateSyncExceptionHandling() throws InterruptedException, TimeoutException {
         final Dispatcher<SyncOrderedIntegerListener> syncDispatcher =
-                new Dispatcher<>(SyncOrderedIntegerListener.class);
+                new Dispatcher<>(getStaticThreadManager(), SyncOrderedIntegerListener.class);
 
         syncDispatcher.addListener(
                 (n) -> {
@@ -80,7 +81,7 @@ class DispatcherTests {
     @DisplayName("Notification Engine: Dispatcher ASync Exception Handling")
     void validateASyncExceptionHandling() throws InterruptedException, TimeoutException {
         final Dispatcher<AsyncOrderedIntegerListener> asyncDispatcher =
-                new Dispatcher<>(AsyncOrderedIntegerListener.class);
+                new Dispatcher<>(getStaticThreadManager(), AsyncOrderedIntegerListener.class);
 
         asyncDispatcher.addListener(
                 (n) -> {

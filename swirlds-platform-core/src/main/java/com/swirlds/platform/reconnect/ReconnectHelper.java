@@ -28,6 +28,7 @@ import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateSettings;
 import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateValidator;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -44,7 +45,7 @@ import org.apache.logging.log4j.Logger;
  * </ol>
  */
 public class ReconnectHelper {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ReconnectHelper.class);
 
     /** stops all gossiping */
     private final Runnable stopGossip;

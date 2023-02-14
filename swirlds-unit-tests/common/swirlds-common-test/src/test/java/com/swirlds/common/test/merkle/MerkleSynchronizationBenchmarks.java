@@ -50,7 +50,7 @@ public class MerkleSynchronizationBenchmarks {
 
     @BeforeEach
     void registerClasses() throws ConstructableRegistryException {
-        ConstructableRegistry.registerConstructables("com.swirlds.common");
+        ConstructableRegistry.getInstance().registerConstructables("com.swirlds.common");
     }
 
     /** Synchronize two merkle trees and return the time in microseconds. */

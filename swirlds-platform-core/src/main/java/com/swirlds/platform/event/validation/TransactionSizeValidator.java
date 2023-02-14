@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Determines whether total size of all transactions in a given event is too large */
 public class TransactionSizeValidator implements GossipEventValidator {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(TransactionSizeValidator.class);
     private final int maxTransactionBytesPerEvent;
 
     public TransactionSizeValidator(final int maxTransactionBytesPerEvent) {

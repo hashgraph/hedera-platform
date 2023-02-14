@@ -21,6 +21,11 @@ import com.swirlds.common.merkle.synchronization.streams.AsyncOutputStream;
 import com.swirlds.platform.internal.SubSetting;
 import java.time.Duration;
 
+/**
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
+@Deprecated(forRemoval = true)
 public class ReconnectSettingsImpl extends SubSetting implements ReconnectSettings {
 
     /**

@@ -18,7 +18,6 @@ package com.swirlds.jasperdb.collections;
 import static java.nio.ByteBuffer.allocateDirect;
 
 import com.swirlds.jasperdb.utilities.JasperDBFileUtils;
-import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -46,7 +45,7 @@ import java.util.concurrent.atomic.AtomicLongArray;
  * https://philosopherdeveloper.com/posts/how-to-build-a-thread-safe-lock-free-resizable-array.html).
  */
 @SuppressWarnings("unused")
-public final class LongListHeap extends LongList implements Closeable {
+public final class LongListHeap extends LongList {
 
     /** A copy-on-write list of data arrays. Expands as needed. */
     private final CopyOnWriteArrayList<AtomicLongArray> data = new CopyOnWriteArrayList<>();

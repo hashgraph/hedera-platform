@@ -15,7 +15,7 @@
  */
 package com.swirlds.common.test.threading;
 
-import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.threading.pool.ParallelExecutionException;
 import com.swirlds.common.threading.pool.ParallelExecutor;
 import java.time.Duration;
@@ -47,22 +47,30 @@ public class SyncPhaseParallelExecutor implements ParallelExecutor {
 
     private final boolean waitForSecondThread;
 
-    public SyncPhaseParallelExecutor(final Runnable afterPhase1, final Runnable afterPhase2) {
-        this(afterPhase1, afterPhase2, null, true);
+    public SyncPhaseParallelExecutor(
+            final ThreadManager threadManager,
+            final Runnable afterPhase1,
+            final Runnable afterPhase2) {
+
+        this(threadManager, afterPhase1, afterPhase2, null, true);
     }
 
     public SyncPhaseParallelExecutor(
+            final ThreadManager threadManager,
             final Runnable afterPhase1,
             final Runnable afterPhase2,
             final boolean waitForSecondThread) {
-        this(afterPhase1, afterPhase2, null, waitForSecondThread);
+
+        this(threadManager, afterPhase1, afterPhase2, null, waitForSecondThread);
     }
 
     public SyncPhaseParallelExecutor(
+            final ThreadManager threadManager,
             final Runnable afterPhase1,
             final Runnable afterPhase2,
             final Runnable beforePhase3,
             final boolean waitForSecondThread) {
+
         this.afterPhase1 = noopIfNull(afterPhase1);
         this.afterPhase2 = noopIfNull(afterPhase2);
         this.beforePhase3 = noopIfNull(beforePhase3);
@@ -70,10 +78,7 @@ public class SyncPhaseParallelExecutor implements ParallelExecutor {
 
         executor =
                 Executors.newCachedThreadPool(
-                        new ThreadConfiguration()
-                                .setThreadName("SyncPhase")
-                                .setComponent("SyncPhase")
-                                .buildFactory());
+                        threadManager.createThreadFactory("SyncPhase", "SyncPhase"));
         threadStatus = new AtomicReference<>(ThreadStatus.WAITING_FOR_FIRST_THREAD);
         phase = PHASE_1;
     }
@@ -182,6 +187,14 @@ public class SyncPhaseParallelExecutor implements ParallelExecutor {
         }
         return runnable;
     }
+
+    @Override
+    public boolean isImmutable() {
+        return false;
+    }
+
+    @Override
+    public void start() {}
 
     private enum ThreadStatus {
         WAITING_FOR_FIRST_THREAD,

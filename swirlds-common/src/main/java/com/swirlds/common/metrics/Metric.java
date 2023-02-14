@@ -26,7 +26,6 @@ public interface Metric {
      * MetricType}
      */
     enum ValueType {
-        COUNTER,
         VALUE,
         MAX,
         MIN,

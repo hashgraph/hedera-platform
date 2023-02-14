@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2023 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,13 @@
  */
 package com.swirlds.config.impl.validators.annotation.internal;
 
+import com.swirlds.common.config.reflection.ConfigReflectionUtils;
 import com.swirlds.config.api.Configuration;
 import com.swirlds.config.api.validation.ConfigValidator;
 import com.swirlds.config.api.validation.ConfigViolation;
+import com.swirlds.config.api.validation.annotation.Positive;
 import com.swirlds.config.impl.internal.ConfigNumberUtils;
-import com.swirlds.config.impl.internal.ConfigReflectionUtils;
 import com.swirlds.config.impl.validators.DefaultConfigViolation;
-import com.swirlds.config.impl.validators.annotation.Positive;
 import java.util.stream.Stream;
 
 /**

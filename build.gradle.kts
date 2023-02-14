@@ -26,9 +26,13 @@ repositories {
 tasks.register<JavaExec>("run") {
     group = "application"
     val sdkDir = File(rootProject.projectDir, "sdk")
-    val jarFile = "${project(":swirlds").name}.jar"
     workingDir = sdkDir
-    jvmArgs = listOf("-jar", jarFile)
+    jvmArgs = listOf(
+        "-agentlib:jdwp=transport=dt_socket,address=8888,server=y,suspend=n",
+        "-cp",
+        "swirlds.jar:data/lib/*",
+        "com.swirlds.platform.Browser"
+    )
     classpath = rootProject.files(File(sdkDir, "data/lib"))
     maxHeapSize = "8g"
     project(":swirlds-platform-apps:demos").subprojects.forEach {

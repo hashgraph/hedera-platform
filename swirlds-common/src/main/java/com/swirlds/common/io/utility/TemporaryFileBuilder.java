@@ -19,7 +19,9 @@ import static com.swirlds.common.io.utility.FileUtils.deleteDirectoryAndLog;
 import static com.swirlds.common.io.utility.FileUtils.getAbsolutePath;
 import static java.nio.file.Files.exists;
 
-import com.swirlds.common.io.settings.TemporaryFileSettingsFactory;
+import com.swirlds.common.config.StateConfig;
+import com.swirlds.common.config.singleton.ConfigurationHolder;
+import com.swirlds.common.io.config.TemporaryFileConfig;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,8 +41,11 @@ public final class TemporaryFileBuilder {
      */
     public static synchronized Path getTemporaryFileLocation() throws IOException {
         if (temporaryFileLocation == null) {
+            final TemporaryFileConfig config =
+                    ConfigurationHolder.getConfigData(TemporaryFileConfig.class);
+            final StateConfig stateConfig = ConfigurationHolder.getConfigData(StateConfig.class);
             overrideTemporaryFileLocation(
-                    getAbsolutePath(TemporaryFileSettingsFactory.get().getTemporaryFilePath()));
+                    getAbsolutePath(config.getTemporaryFilePath(stateConfig)));
         }
 
         return temporaryFileLocation;

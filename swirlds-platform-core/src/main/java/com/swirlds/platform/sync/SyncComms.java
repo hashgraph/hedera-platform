@@ -31,13 +31,14 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public final class SyncComms {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(SyncComms.class);
     /**
      * send a {@link ByteConstants#COMM_SYNC_ONGOING} every this many milliseconds after we are done
      * writing events, until we are done reading events
@@ -176,10 +177,22 @@ public final class SyncComms {
         };
     }
 
+    /**
+     * Returns a {@link Callable} that executes the writing side of phase 3 of a sync. Writes all
+     * the events that are supplied, unless it encounters a signed state event in which case it will
+     * abort writing and set writeAborted to true.
+     *
+     * @param conn the connection to write to
+     * @param events the events to write
+     * @param eventReadingDone used to know when the writing thread is done
+     * @param writeAborted set to true if writing is aborted
+     * @return A {@link Callable} that executes this part of the sync
+     */
     public static Callable<Void> phase3Write(
             final Connection conn,
             final List<EventImpl> events,
-            final CountDownLatch eventReadingDone) {
+            final CountDownLatch eventReadingDone,
+            final AtomicBoolean writeAborted) {
         return () -> {
             LOG.info(
                     SYNC_INFO.getMarker(),
@@ -187,17 +200,33 @@ public final class SyncComms {
                     conn.getDescription(),
                     events.size());
             for (final EventImpl event : events) {
+                if (event.isFromSignedState()) {
+                    // if we encounter an event from a signed state, we should not send that event
+                    // because it will have
+                    // had its transactions removed. the receiver would get the wrong hash and the
+                    // signature check
+                    // would fail
+                    conn.getDos().writeByte(ByteConstants.COMM_EVENT_ABORT);
+                    writeAborted.set(true);
+                    break;
+                }
                 conn.getDos().writeByte(ByteConstants.COMM_EVENT_NEXT);
                 conn.getDos().writeEventData(event);
             }
-            conn.getDos().writeByte(ByteConstants.COMM_EVENT_DONE);
+            if (!writeAborted.get()) {
+                conn.getDos().writeByte(ByteConstants.COMM_EVENT_DONE);
+            }
             conn.getDos().flush();
 
-            LOG.info(
-                    SYNC_INFO.getMarker(),
-                    "{} writing events done, wrote {} events",
-                    conn.getDescription(),
-                    events.size());
+            if (writeAborted.get()) {
+                LOG.info(SYNC_INFO.getMarker(), "{} writing events aborted", conn.getDescription());
+            } else {
+                LOG.info(
+                        SYNC_INFO.getMarker(),
+                        "{} writing events done, wrote {} events",
+                        conn.getDescription(),
+                        events.size());
+            }
 
             // if we are still reading events, send keepalive messages
             while (!eventReadingDone.await(SYNC_ONGOING_SEND_EVERY_MS, TimeUnit.MILLISECONDS)) {
@@ -220,6 +249,17 @@ public final class SyncComms {
         };
     }
 
+    /**
+     * Returns a {@link Callable} that executes the reading side of phase 3 of a sync. Reads events
+     * and passes them to the supplied eventHandler. The {@link Callable} will return the number of
+     * events read, or a negative number if event reading was aborted.
+     *
+     * @param conn the connection to read from
+     * @param eventHandler the consumer of received events
+     * @param syncMetrics tracks event reading metrics
+     * @param eventReadingDone used to notify the writing thread that reading is done
+     * @return A {@link Callable} that executes this part of the sync
+     */
     public static Callable<Integer> phase3Read(
             final Connection conn,
             final Consumer<GossipEvent> eventHandler,
@@ -242,6 +282,16 @@ public final class SyncComms {
                             final GossipEvent gossipEvent = conn.getDis().readEventData();
                             eventHandler.accept(gossipEvent);
                             eventsRead++;
+                        }
+                        case ByteConstants.COMM_EVENT_ABORT -> {
+                            LOG.info(
+                                    SYNC_INFO.getMarker(),
+                                    "{} reading events aborted",
+                                    conn.getDescription());
+                            // event reading was aborted, tell the writer thread to send a
+                            // COMM_SYNC_DONE
+                            eventReadingDone.countDown();
+                            eventsRead = Integer.MIN_VALUE;
                         }
                         case ByteConstants.COMM_EVENT_DONE -> {
                             syncMetrics.eventsReceived(startTime, eventsRead);

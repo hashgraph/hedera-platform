@@ -29,6 +29,7 @@ import com.swirlds.common.metrics.Metric.ValueType;
 import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.utility.ThresholdLimitingHandler;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -45,8 +46,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
- * This implementation of {@link MetricWriter} writes the current CSV-format. It is called "legacy",
- * because we plan to replace the CSV-format with something that is closer to the CSV standard.
+ * This implementation of {@link SnapshotReceiver} writes the current CSV-format. It is called
+ * "legacy", because we plan to replace the CSV-format with something that is closer to the CSV
+ * standard.
  *
  * <p>The {@code LegacyCsvWriter} can be configured with the following settings:
  *
@@ -65,7 +67,7 @@ import org.apache.logging.log4j.Logger;
  *       CSV-file
  * </dl>
  */
-public class LegacyCsvWriter implements MetricWriter {
+public class LegacyCsvWriter implements SnapshotReceiver {
 
     private static final Logger LOGGER = LogManager.getLogger(LegacyCsvWriter.class);
 
@@ -94,7 +96,7 @@ public class LegacyCsvWriter implements MetricWriter {
     /** {@inheritDoc} */
     @SuppressWarnings("deprecation")
     @Override
-    public void prepareFile(final List<Metric> metrics) throws IOException {
+    public void init(final List<Metric> metrics) {
         LOGGER.info(
                 STARTUP.getMarker(),
                 "CsvWriter: Initializing statistics output in CSV format [ csvOutputFolder = '{}',"
@@ -114,34 +116,40 @@ public class LegacyCsvWriter implements MetricWriter {
             cellCount.add(showAllEntries(metric) ? metric.getValueTypes().size() : 1);
         }
 
-        // create parent folder, if it does not exist
-        ensureFolderExists();
+        try {
+            // create parent folder, if it does not exist
+            ensureFolderExists();
 
-        if (SettingsCommon.csvAppend && Files.exists(csvFilePath)) {
-            // make sure last line of previous test was ended, and a blank line is inserted between
-            // tests.
-            Files.writeString(csvFilePath, "\n\n", StandardOpenOption.APPEND);
-        } else {
-            // if csvAppend is off, or it is on but the file does not exist, write the definitions
-            // and the headings.
-            // otherwise, they will already be there, so we can skip it
-            final ContentBuilder builder = new ContentBuilder();
-            // add the definitions at the top
-            builder.addCell("filename:").addCell(csvFilePath).newRow();
+            if (SettingsCommon.csvAppend && Files.exists(csvFilePath)) {
+                // make sure last line of previous test was ended, and a blank line is inserted
+                // between tests.
+                Files.writeString(csvFilePath, "\n\n", StandardOpenOption.APPEND);
+            } else {
+                // if csvAppend is off, or it is on but the file does not exist, write the
+                // definitions and the headings.
+                // otherwise, they will already be there, so we can skip it
+                final ContentBuilder builder = new ContentBuilder();
+                // add the definitions at the top
+                builder.addCell("filename:").addCell(csvFilePath).newRow();
 
-            // add descriptions
-            for (final Metric metric : filteredMetrics) {
-                builder.addCell(metric.getName() + ":").addCell(metric.getDescription()).newRow();
+                // add descriptions
+                for (final Metric metric : filteredMetrics) {
+                    builder.addCell(metric.getName() + ":")
+                            .addCell(metric.getDescription())
+                            .newRow();
+                }
+
+                // add empty row
+                builder.newRow();
+
+                // add rows with categories and names
+                addHeaderRows(builder, filteredMetrics);
+
+                // write to file
+                Files.writeString(csvFilePath, builder.toString(), CREATE, TRUNCATE_EXISTING);
             }
-
-            // add empty row
-            builder.newRow();
-
-            // add rows with categories and names
-            addHeaderRows(builder, filteredMetrics);
-
-            // write to file
-            Files.writeString(csvFilePath, builder.toString(), CREATE, TRUNCATE_EXISTING);
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
         }
     }
 
@@ -176,20 +184,20 @@ public class LegacyCsvWriter implements MetricWriter {
         for (final ValueType metricType : metric.getValueTypes()) {
             categories.add(metric.getCategory());
             switch (metricType) {
-                case VALUE, COUNTER -> names.add(metric.getName());
                 case MAX -> names.add(metric.getName() + "Max");
                 case MIN -> names.add(metric.getName() + "Min");
                 case STD_DEV -> names.add(metric.getName() + "Std");
+                default -> names.add(metric.getName());
             }
         }
     }
 
     /** {@inheritDoc} */
     @Override
-    public void writeMetrics(final List<Snapshot> allSnapshots) throws IOException {
+    public void handleSnapshots(final List<Snapshot> allSnapshots) {
         final Snapshot[] snapshots = new Snapshot[indexLookup.size()];
         for (final Snapshot snapshot : allSnapshots) {
-            final Metric metric = snapshot.getMetric();
+            final Metric metric = snapshot.metric();
             final Integer index = indexLookup.get(Pair.of(metric.getCategory(), metric.getName()));
             if (index != null) {
                 snapshots[index] = snapshot;
@@ -210,30 +218,34 @@ public class LegacyCsvWriter implements MetricWriter {
                 builder.addEmptyCells(cellCount.get(i));
             }
         }
+        builder.newRow();
 
         // write to file
-        builder.newRow();
-        Files.writeString(csvFilePath, builder.toString(), APPEND);
+        try {
+            Files.writeString(csvFilePath, builder.toString(), APPEND);
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
     }
 
     private void addSnapshotData(final ContentBuilder builder, final Snapshot snapshot) {
-        if (showAllEntries(snapshot.getMetric())) {
+        if (showAllEntries(snapshot.metric())) {
             // add all supported value-types
-            snapshot.getEntries()
-                    .forEach(entry -> builder.addCell(format(snapshot.getMetric(), entry.value())));
+            snapshot.entries()
+                    .forEach(entry -> builder.addCell(format(snapshot.metric(), entry.value())));
         } else {
             // add only main value
-            final List<Snapshot.SnapshotValue> entries = snapshot.getEntries();
+            final List<Snapshot.SnapshotEntry> entries = snapshot.entries();
             final Object value =
                     entries.size() == 1
                             ? entries.get(0).value()
                             : entries.stream()
                                     .filter(entry -> entry.valueType() == ValueType.VALUE)
                                     .findAny()
-                                    .map(Snapshot.SnapshotValue::value)
+                                    .map(Snapshot.SnapshotEntry::value)
                                     .orElse(null);
 
-            builder.addCell(format(snapshot.getMetric(), value));
+            builder.addCell(format(snapshot.metric(), value));
         }
     }
 

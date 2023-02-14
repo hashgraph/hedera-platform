@@ -24,7 +24,6 @@ import static com.swirlds.platform.SettingConstants.APPS_STRING;
 import static com.swirlds.platform.SettingConstants.BUFFER_SIZE_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.CALLER_SKIPS_BEFORE_SLEEP_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.CHECK_SIGNED_STATE_FROM_DISK_DEFAULT_VALUE;
-import static com.swirlds.platform.SettingConstants.COIN_FREQ_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.CONFIG_TXT;
 import static com.swirlds.platform.SettingConstants.CSV_APPEND_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.CSV_FILE_NAME_DEFAULT_VALUE;
@@ -33,11 +32,11 @@ import static com.swirlds.platform.SettingConstants.CSV_WRITE_FREQUENCY_DEFAULT_
 import static com.swirlds.platform.SettingConstants.DATA_STRING;
 import static com.swirlds.platform.SettingConstants.DEADLOCK_CHECK_PERIOD_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.DELAY_SHUFFLE_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.DISABLE_METRICS_OUTPUT_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.DO_UPNP_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.EMERGENCY_STATE_FILE_NAME_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.ENABLE_BETA_MIRROR_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.ENABLE_EVENT_STREAMING_DEFAULT_VALUE;
-import static com.swirlds.platform.SettingConstants.ENABLE_STATE_RECOVERY_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.EVENTS_LOG_DIR_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.EVENTS_LOG_PERIOD_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.EVENT_INTAKE_QUEUE_SIZE_DEFAULT_VALUE;
@@ -60,12 +59,14 @@ import static com.swirlds.platform.SettingConstants.MAX_TRANSACTION_BYTES_PER_EV
 import static com.swirlds.platform.SettingConstants.MAX_TRANSACTION_COUNT_PER_EVENT_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.NUM_CONNECTIONS_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.NUM_CRYPTO_THREADS_DEFAULT_VALUE;
-import static com.swirlds.platform.SettingConstants.PLAYBACK_END_TIME_STAMP_DEFAULT_VALUE;
-import static com.swirlds.platform.SettingConstants.PLAYBACK_STREAM_FILE_DIRECTORY_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.PROMETHEUS_ENDPOINT_ENABLED_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.PROMETHEUS_ENDPOINT_MAX_BACKLOG_ALLOWED_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.PROMETHEUS_ENDPOINT_PORT_NUMBER_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.RANDOM_EVENT_PROBABILITY_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.REQUIRE_STATE_LOAD_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.RESCUE_CHILDLESS_INVERSE_PROBABILITY_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.RUN_PAUSE_CHECK_TIMER_DEFAULT_VALUE;
+import static com.swirlds.platform.SettingConstants.SAVED_STRING;
 import static com.swirlds.platform.SettingConstants.SETTINGS_TXT;
 import static com.swirlds.platform.SettingConstants.SHOW_INTERNAL_STATS_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.SIGNED_STATE_FREQ_DEFAULT_VALUE;
@@ -97,18 +98,23 @@ import static com.swirlds.platform.SettingConstants.VERBOSE_STATISTICS_DEFAULT_V
 import static com.swirlds.platform.SettingConstants.VERIFY_EVENT_SIGS_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.WAIT_AT_STARTUP_DEFAULT_VALUE;
 
+import com.swirlds.common.internal.SettingsCommon;
+import com.swirlds.common.merkle.synchronization.settings.ReconnectSettingsFactory;
 import com.swirlds.common.settings.SettingsException;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.common.utility.PlatformVersion;
+import com.swirlds.config.api.Configuration;
+import com.swirlds.fchashmap.FCHashMapSettingsFactory;
+import com.swirlds.jasperdb.settings.JasperDbSettingsFactory;
+import com.swirlds.merkledb.settings.MerkleDbSettingsFactory;
 import com.swirlds.platform.chatter.ChatterSubSetting;
-import com.swirlds.platform.internal.CryptoSettings;
 import com.swirlds.platform.internal.SubSetting;
 import com.swirlds.platform.reconnect.ReconnectSettingsImpl;
 import com.swirlds.platform.state.StateSettings;
-import com.swirlds.platform.state.address.AddressBookSettingsImpl;
 import com.swirlds.platform.state.signed.SignedStateFileManager;
 import com.swirlds.platform.state.signed.SignedStateManager;
+import com.swirlds.virtualmap.VirtualMapSettingsFactory;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -140,11 +146,14 @@ import org.apache.logging.log4j.Logger;
  * <p>After the config.txt and settings.txt files have been read and the Platform objects
  * instantiated, the Browser should then call writeSettings() to write all the final settings values
  * to settingsUsed.txt (though only if settings.txt exists).
+ *
+ * @deprecated will be replaced by the {@link Configuration} API in near future. If you need to use
+ *     this class please try to do as less static access as possible.
  */
+@Deprecated(forRemoval = true)
 public class Settings {
 
     // The following paths are for 4 files and 2 directories, such as:
-
     // /FULL/PATH/sdk/config.txt
     // /FULL/PATH/sdk/settings.txt
     // /FULL/PATH/sdk/settingsUsed.txt
@@ -157,7 +166,7 @@ public class Settings {
     // -Djavax.net.debug=ssl,handshake
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(Settings.class);
 
     private static final Settings INSTANCE = new Settings();
     /** path to config.txt (which might not exist) */
@@ -262,10 +271,7 @@ public class Settings {
      * seconds)
      */
     private double halfLife = HALF_LIFE_DEFAULT_VALUE;
-    /**
-     * a coin round happens every coinFreq rounds during an election (every other one is all true)
-     */
-    private int coinFreq = COIN_FREQ_DEFAULT_VALUE;
+
     /** when converting an exception to a string for logging, should it include the stack trace? */
     private boolean logStack = LOG_STACK_DEFAULT_VALUE;
     /** should TLS be turned on, rather than making all sockets unencrypted? */
@@ -347,16 +353,38 @@ public class Settings {
      */
     private String csvOutputFolder = CSV_OUTPUT_FOLDER_DEFAULT_VALUE;
     /**
+     * Disable all metrics-outputs. If {@code true}, this overrides all other specific settings
+     * concerning metrics-output.
+     */
+    private boolean disableMetricsOutput = DISABLE_METRICS_OUTPUT_DEFAULT_VALUE;
+    /**
      * The prefix of the name of the CSV file that the platform will write statistics to. If this
      * value is null or an empty string, the platform will not write any statistics.
      */
     private String csvFileName = CSV_FILE_NAME_DEFAULT_VALUE;
     /** The CSV file name of the emergency state recovery file */
     private String emergencyStateFileName = EMERGENCY_STATE_FILE_NAME_DEFAULT_VALUE;
+    /**
+     * The path to look for an emergency recovery file on node start. If a file is present in this
+     * directory at startup, emergency recovery will begin.
+     */
+    private Path emergencyRecoveryFileLoadDir =
+            getAbsolutePath().resolve(DATA_STRING).resolve(SAVED_STRING);
     /** The frequency, in milliseconds, at which values are written to the statistics CSV file. */
     private int csvWriteFrequency = CSV_WRITE_FREQUENCY_DEFAULT_VALUE;
     /** Indicates whether statistics should be appended to the CSV file. */
     private boolean csvAppend = CSV_APPEND_DEFAULT_VALUE;
+    /** Indicates if a prometheus endpoint should be offered * */
+    private boolean prometheusEndpointEnabled = PROMETHEUS_ENDPOINT_ENABLED_DEFAULT_VALUE;
+    /** Port of the Prometheus endpoint * */
+    private int prometheusEndpointPortNumber = PROMETHEUS_ENDPOINT_PORT_NUMBER_DEFAULT_VALUE;
+    /**
+     * Backlog of the Prometheus endpoint (= number of incoming TCP connections the system will
+     * queue) *
+     */
+    private int prometheusEndpointMaxBacklogAllowed =
+            PROMETHEUS_ENDPOINT_MAX_BACKLOG_ALLOWED_DEFAULT_VALUE;
+
     /** The value for the event intake queue at which the node should stop syncing */
     private int eventIntakeQueueThrottleSize = EVENT_INTAKE_QUEUE_THROTTLE_SIZE_DEFAULT_VALUE;
     /**
@@ -430,39 +458,29 @@ public class Settings {
      * log an error when JVMPauseDetectorThread detect a pause greater than this many milliseconds
      */
     private int JVMPauseReportMs = JVM_PAUSE_REPORT_MS_DEFAULT_VALUE;
-    ///////////////////////////////////////////
-    // Setting for state recover
-    private boolean enableStateRecovery = ENABLE_STATE_RECOVERY_DEFAULT_VALUE;
-    /** directory where event stream files are stored */
-    private String playbackStreamFileDirectory = PLAYBACK_STREAM_FILE_DIRECTORY_DEFAULT_VALUE;
-    /**
-     * last time stamp (inclusive) to stop the playback, format is "2019-10-02T19:46:30.037063163Z"
-     */
-    private String playbackEndTimeStamp = PLAYBACK_END_TIME_STAMP_DEFAULT_VALUE;
     /**
      * if set to false, the platform will refuse to gossip with a node which has a different version
      * of either platform or application
      */
     private boolean gossipWithDifferentVersions = GOSSIP_WITH_DIFFERENT_VERSIONS_DEFAULT_VALUE;
+
     /**
      * settings that control the {@link SignedStateManager} and {@link SignedStateFileManager}
      * behaviors
      */
     private StateSettings state = new StateSettings();
-    /** settings related to the {@link com.swirlds.common.crypto.Cryptography} implementation */
-    private CryptoSettings crypto = new CryptoSettings();
+
     /** settings controlling the reconnect feature, ie. enabled/disabled, fallen behind, etc */
     private ReconnectSettingsImpl reconnect = new ReconnectSettingsImpl();
     /** Settings controlling FCHashMap. */
     private FCHashMapSettingsImpl fcHashMap = new FCHashMapSettingsImpl();
     /** Settings controlling VirtualMap. */
     private VirtualMapSettingsImpl virtualMap = new VirtualMapSettingsImpl();
-    /** Settings controlling address books and related components. */
-    private AddressBookSettingsImpl addressBook = new AddressBookSettingsImpl();
     /** Settings controlling JasperDB. */
     private JasperDbSettingsImpl jasperDb = new JasperDbSettingsImpl();
-    /** Settings for temporary files. */
-    private TemporaryFileSettingsImpl temporaryFiles = new TemporaryFileSettingsImpl();
+    /** Settings controlling MerkleDb. */
+    private MerkleDbSettingsImpl merkleDb = new MerkleDbSettingsImpl();
+
     /** All chatter related settings */
     private ChatterSubSetting chatter = new ChatterSubSetting();
 
@@ -477,8 +495,69 @@ public class Settings {
         getInstance().writeSettingsUsed();
     }
 
+    public static void populateSettingsCommon() {
+        SettingsCommon.maxTransactionCountPerEvent = getInstance().getMaxTransactionCountPerEvent();
+        SettingsCommon.maxTransactionBytesPerEvent = getInstance().getMaxTransactionBytesPerEvent();
+        SettingsCommon.maxAddressSizeAllowed = getInstance().getMaxAddressSizeAllowed();
+        SettingsCommon.transactionMaxBytes = getInstance().getTransactionMaxBytes();
+        SettingsCommon.halfLife = getInstance().getHalfLife();
+        SettingsCommon.logStack = getInstance().isLogStack();
+        SettingsCommon.showInternalStats = getInstance().isShowInternalStats();
+        SettingsCommon.verboseStatistics = getInstance().isVerboseStatistics();
+        SettingsCommon.enableBetaMirror = getInstance().isEnableBetaMirror();
+        SettingsCommon.disableMetricsOutput = getInstance().isDisableMetricsOutput();
+        SettingsCommon.threadPriorityNonSync = getInstance().getThreadPriorityNonSync();
+        SettingsCommon.csvFileName = getInstance().getCsvFileName();
+        SettingsCommon.csvOutputFolder = getInstance().getCsvOutputFolder();
+        SettingsCommon.csvAppend = getInstance().isCsvAppend();
+        SettingsCommon.csvWriteFrequency = getInstance().getCsvWriteFrequency();
+        SettingsCommon.prometheusEndpointEnabled =
+                Settings.getInstance().getPrometheusEndpointEnabled();
+        SettingsCommon.prometheusEndpointPortNumber =
+                Settings.getInstance().getPrometheusEndpointPortNumber();
+        SettingsCommon.prometheusEndpointMaxBacklogAllowed =
+                Settings.getInstance().getPrometheusEndpointMaxBacklogAllowed();
+
+        ReconnectSettingsFactory.configure(getInstance().getReconnect());
+        FCHashMapSettingsFactory.configure(getInstance().getFcHashMap());
+        VirtualMapSettingsFactory.configure(getInstance().getVirtualMap());
+        JasperDbSettingsFactory.configure(getInstance().getJasperDb());
+        MerkleDbSettingsFactory.configure(getInstance().getMerkleDb());
+    }
+
+    /**
+     * Split the given string on its commas, and trim each result
+     *
+     * @param line the string of comma-separated values to split
+     * @return the array of trimmed elements.
+     */
+    public static String[] splitLine(final String line) {
+        final String[] elms = line.split(",");
+        for (int i = 0; i < elms.length; i++) {
+            elms[i] = elms[i].trim();
+        }
+
+        return elms;
+    }
+
     public void writeSettingsUsed() {
         writeSettingsUsed(settingsUsedDir);
+    }
+
+    public void addSettingsUsed(final StringBuilder builder) {
+        final String[][] settings = currSettings();
+        builder.append(PlatformVersion.locateOrDefault().license());
+        builder.append(System.lineSeparator());
+        builder.append(System.lineSeparator());
+
+        builder.append(
+                "The following are all the settings, as modified by settings.txt, but not"
+                        + " reflecting any changes made by config.txt.");
+        builder.append(System.lineSeparator());
+        builder.append(System.lineSeparator());
+        for (final String[] pair : settings) {
+            builder.append(String.format("%15s = %s%n", pair[1], pair[0]));
+        }
     }
 
     /**
@@ -561,7 +640,7 @@ public class Settings {
             line = line.trim();
             count++;
             if (!line.isEmpty()) {
-                final String[] pars = Browser.splitLine(line);
+                final String[] pars = splitLine(line);
                 if (pars.length > 0) { // ignore empty lines
                     try {
                         if (!handleSetting(pars)) {
@@ -768,6 +847,10 @@ public class Settings {
         return settingsPath;
     }
 
+    public Path getSettingsUsedDir() {
+        return settingsUsedDir;
+    }
+
     public Path getKeysDirPath() {
         return keysDirPath;
     }
@@ -806,6 +889,10 @@ public class Settings {
 
     public boolean isRequireStateLoad() {
         return requireStateLoad;
+    }
+
+    public void setRequireStateLoad(final boolean value) {
+        requireStateLoad = value;
     }
 
     public int getSignedStateFreq() {
@@ -878,10 +965,6 @@ public class Settings {
 
     public double getHalfLife() {
         return halfLife;
-    }
-
-    public int getCoinFreq() {
-        return coinFreq;
     }
 
     public boolean isLogStack() {
@@ -968,10 +1051,6 @@ public class Settings {
         return freezeSecondsAfterStartup;
     }
 
-    public CryptoSettings getCrypto() {
-        return crypto;
-    }
-
     public boolean isLoadKeysFromPfxFiles() {
         return loadKeysFromPfxFiles;
     }
@@ -996,16 +1075,12 @@ public class Settings {
         return virtualMap;
     }
 
-    public AddressBookSettingsImpl getAddressBook() {
-        return addressBook;
-    }
-
     public JasperDbSettingsImpl getJasperDb() {
         return jasperDb;
     }
 
-    public TemporaryFileSettingsImpl getTemporaryFiles() {
-        return temporaryFiles;
+    public MerkleDbSettingsImpl getMerkleDb() {
+        return merkleDb;
     }
 
     public boolean isTransThrottle() {
@@ -1020,6 +1095,10 @@ public class Settings {
         return csvOutputFolder;
     }
 
+    public boolean isDisableMetricsOutput() {
+        return disableMetricsOutput;
+    }
+
     public String getCsvFileName() {
         return csvFileName;
     }
@@ -1030,6 +1109,18 @@ public class Settings {
 
     public boolean isCsvAppend() {
         return csvAppend;
+    }
+
+    public boolean getPrometheusEndpointEnabled() {
+        return prometheusEndpointEnabled;
+    }
+
+    public int getPrometheusEndpointPortNumber() {
+        return prometheusEndpointPortNumber;
+    }
+
+    public int getPrometheusEndpointMaxBacklogAllowed() {
+        return prometheusEndpointMaxBacklogAllowed;
     }
 
     public int getEventIntakeQueueThrottleSize() {
@@ -1046,6 +1137,10 @@ public class Settings {
 
     public boolean isCheckSignedStateFromDisk() {
         return checkSignedStateFromDisk;
+    }
+
+    public void setCheckSignedStateFromDisk(final boolean value) {
+        checkSignedStateFromDisk = value;
     }
 
     public int getRandomEventProbability() {
@@ -1104,22 +1199,6 @@ public class Settings {
         return JVMPauseReportMs;
     }
 
-    public boolean isEnableStateRecovery() {
-        return enableStateRecovery;
-    }
-
-    public void setEnableStateRecovery(final boolean value) {
-        enableStateRecovery = value;
-    }
-
-    public String getPlaybackStreamFileDirectory() {
-        return playbackStreamFileDirectory;
-    }
-
-    public String getPlaybackEndTimeStamp() {
-        return playbackEndTimeStamp;
-    }
-
     public ChatterSubSetting getChatter() {
         return chatter;
     }
@@ -1130,5 +1209,9 @@ public class Settings {
 
     public String getEmergencyRecoveryStateFileName() {
         return emergencyStateFileName;
+    }
+
+    public Path getEmergencyRecoveryFileLoadDir() {
+        return emergencyRecoveryFileLoadDir;
     }
 }

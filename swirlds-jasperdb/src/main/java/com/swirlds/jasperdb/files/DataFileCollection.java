@@ -19,10 +19,8 @@ import static com.swirlds.common.utility.Units.GIBIBYTES_TO_BYTES;
 import static com.swirlds.common.utility.Units.MEBIBYTES_TO_BYTES;
 import static com.swirlds.jasperdb.KeyRange.INVALID_KEY_RANGE;
 import static com.swirlds.jasperdb.files.DataFileCommon.byteOffsetFromDataLocation;
-import static com.swirlds.jasperdb.files.DataFileCommon.dataLocationToString;
 import static com.swirlds.jasperdb.files.DataFileCommon.fileIndexFromDataLocation;
 import static com.swirlds.jasperdb.files.DataFileCommon.isFullyWrittenDataFile;
-import static com.swirlds.jasperdb.files.DataFileCommon.waitIfMergingPaused;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.JASPER_DB;
 import static java.util.Collections.singletonList;
@@ -33,7 +31,6 @@ import com.swirlds.jasperdb.collections.CASable;
 import com.swirlds.jasperdb.collections.ImmutableIndexedObjectList;
 import com.swirlds.jasperdb.collections.ImmutableIndexedObjectListUsingArray;
 import com.swirlds.jasperdb.collections.LongList;
-import com.swirlds.jasperdb.collections.LongListBufferedWrapper;
 import com.swirlds.jasperdb.collections.ThreeLongsList;
 import com.swirlds.jasperdb.settings.JasperDbSettings;
 import com.swirlds.jasperdb.settings.JasperDbSettingsFactory;
@@ -140,8 +137,6 @@ public class DataFileCollection<D> implements Snapshotable {
     /** Constructor for creating ImmutableIndexedObjectLists */
     private final Function<List<DataFileReader<D>>, ImmutableIndexedObjectList<DataFileReader<D>>>
             indexedObjectListConstructor;
-    /** Set of files being used by current snapshot */
-    private List<DataFileReader<D>> snapshotIndexedFiles = null;
     /**
      * Set if all indexes of new files currently being written. This is only maintained if logging
      * is trace level
@@ -248,15 +243,16 @@ public class DataFileCollection<D> implements Snapshotable {
     public List<DataFileReader<D>> getAllFullyWrittenFiles(final int maxSizeMb) {
         final ImmutableIndexedObjectList<DataFileReader<D>> activeIndexedFiles =
                 indexedFileList.get();
+        if (activeIndexedFiles == null) {
+            return Collections.emptyList();
+        }
         if (maxSizeMb == Integer.MAX_VALUE) {
             return activeIndexedFiles.stream().collect(Collectors.toList());
         }
         final long maxSizeBytes = maxSizeMb * (long) MEBIBYTES_TO_BYTES;
-        return activeIndexedFiles == null
-                ? Collections.emptyList()
-                : activeIndexedFiles.stream()
-                        .filter(file -> file.getSize() < maxSizeBytes)
-                        .collect(Collectors.toList());
+        return activeIndexedFiles.stream()
+                .filter(file -> file.getSize() < maxSizeBytes)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -264,12 +260,7 @@ public class DataFileCollection<D> implements Snapshotable {
      * only
      */
     public List<DataFileReader<D>> getAllFullyWrittenFiles() {
-        final ImmutableIndexedObjectList<DataFileReader<D>> activeIndexedFiles =
-                indexedFileList.get();
-        if (activeIndexedFiles == null) {
-            return Collections.emptyList();
-        }
-        return activeIndexedFiles.stream().collect(Collectors.toList());
+        return getAllFullyWrittenFiles(Integer.MAX_VALUE);
     }
 
     /**
@@ -327,17 +318,6 @@ public class DataFileCollection<D> implements Snapshotable {
             return Collections.emptyList();
         }
 
-        // Check if we need to pause. We do this periodically through this method at convenient
-        // places,
-        // so we can pause if we're in the middle of a huge merge and need to pause for a snapshot
-        // or
-        // for any other reason.
-        waitIfMergingPaused(mergingPaused);
-
-        // get list of files
-        final ImmutableIndexedObjectList<DataFileReader<D>> activeIndexedFiles =
-                indexedFileList.get();
-
         // create a merge time stamp, this timestamp is the newest time of the set of files we are
         // merging
         @SuppressWarnings("OptionalGetWithoutIsPresent")
@@ -368,8 +348,6 @@ public class DataFileCollection<D> implements Snapshotable {
         for (final DataFileReader<D> fileReader : filesToMerge) {
             blockIterators.add(fileReader.createIterator());
         }
-        // check if we need to pause
-        waitIfMergingPaused(mergingPaused);
         // move all iterators to first block
         ListIterator<DataFileIterator> blockIteratorsIterator = blockIterators.listIterator();
         while (blockIteratorsIterator.hasNext()) {
@@ -392,9 +370,6 @@ public class DataFileCollection<D> implements Snapshotable {
         long[] thisRoundsKeys = new long[blockIterators.size()];
         long[] lastRoundsKeys = new long[blockIterators.size()];
         while (!blockIterators.isEmpty()) {
-            // check if we need to pause
-            waitIfMergingPaused(mergingPaused);
-
             // find the lowest key any iterator has
             long lowestKey = Long.MAX_VALUE;
             for (int i = 0; i < blockIterators.size(); i++) {
@@ -472,7 +447,7 @@ public class DataFileCollection<D> implements Snapshotable {
                                     >= settings.getMaxDataFileBytes()) {
                         // finish writing current file, add it for reading then open new file for
                         // writing
-                        closeCurrentMergeFile(newFileWriter, index, movesMap);
+                        closeCurrentMergeFile(newFileWriter, index, movesMap, mergingPaused);
                         LOG.info(JASPER_DB.getMarker(), "MovesMap.size() = {}", movesMap.size());
                         movesMap.clear();
                         newFileWriter = newDataFile(mergeTime, true);
@@ -505,11 +480,14 @@ public class DataFileCollection<D> implements Snapshotable {
             }
         }
         // close current file
-        closeCurrentMergeFile(newFileWriter, index, movesMap);
-        // check if we need to pause
-        waitIfMergingPaused(mergingPaused);
+        closeCurrentMergeFile(newFileWriter, index, movesMap, mergingPaused);
         // delete old files
-        deleteFiles(new HashSet<>(filesToMerge));
+        try {
+            mergingPaused.acquire();
+            deleteFiles(new HashSet<>(filesToMerge));
+        } finally {
+            mergingPaused.release();
+        }
         // return list of files created
         return newFilesCreated;
     }
@@ -530,14 +508,6 @@ public class DataFileCollection<D> implements Snapshotable {
         if (fileList != null) {
             for (DataFileReader<D> file :
                     (Iterable<DataFileReader<D>>) fileList.stream()::iterator) {
-                file.close();
-            }
-        }
-        // close any snapshot index files
-        List<DataFileReader<D>> snapshotIndexedFilesCopy = snapshotIndexedFiles;
-        snapshotIndexedFiles = null;
-        if (snapshotIndexedFilesCopy != null) {
-            for (DataFileReader<D> file : snapshotIndexedFilesCopy) {
                 file.close();
             }
         }
@@ -609,6 +579,32 @@ public class DataFileCollection<D> implements Snapshotable {
      *     checking if file is open and reading
      */
     protected D readDataItem(final long dataLocation) throws IOException {
+        return readDataItem(dataLocation, true);
+    }
+
+    /**
+     * Read a data item from any file that has finished being written. This is not 100% thread safe
+     * with concurrent merging, it is possible it will throw a ClosedChannelException or return
+     * null. So it should be retried if those happen.
+     *
+     * @param dataLocation the location of the data item to read. This contains both the file and
+     *     the location within the file.
+     * @param deserialize flag to prevent deserialization, introduced for use when warming the OS
+     *     cache
+     * @return Data item if the data location was found in files. <br>
+     *     <br>
+     *     A null is returned :
+     *     <ol>
+     *       <li>if not found
+     *       <li>if deserialize flag is false
+     *     </ol>
+     *
+     * @throws IOException If there was a problem reading the data item.
+     * @throws ClosedChannelException In the very rare case merging closed the file between us
+     *     checking if file is open and reading
+     */
+    protected D readDataItem(final long dataLocation, final boolean deserialize)
+            throws IOException {
         // check if found
         if (dataLocation == 0) {
             return null;
@@ -635,7 +631,7 @@ public class DataFileCollection<D> implements Snapshotable {
         }
         // read data, check at last second that file is not closed
         if (file.isOpen()) {
-            return file.readDataItem(dataLocation);
+            return file.readDataItem(dataLocation, deserialize);
         } else {
             // Let's log this as it should happen very rarely but if we see it a lot then we should
             // have a rethink.
@@ -646,7 +642,6 @@ public class DataFileCollection<D> implements Snapshotable {
             return null;
         }
     }
-
     /**
      * Read a data item from any file that has finished being written. Uses a LongList that maps
      * key-&gt;dataLocation, this allows for multiple retries going back to the index each time. The
@@ -663,6 +658,34 @@ public class DataFileCollection<D> implements Snapshotable {
      * @throws IOException If there was a problem reading the data item.
      */
     public D readDataItemUsingIndex(LongList index, long keyIntoIndex) throws IOException {
+        return readDataItemUsingIndex(index, keyIntoIndex, true);
+    }
+
+    /**
+     * Read a data item from any file that has finished being written. Uses a LongList that maps
+     * key-&gt;dataLocation, this allows for multiple retries going back to the index each time. The
+     * allows us to cover the cracks where threads can slip though.
+     *
+     * <p>This depends on the fact that LongList has a nominal value of
+     * LongList.IMPERMISSIBLE_VALUE=0 for non-existent values.
+     *
+     * @param index key-&gt;dataLocation index
+     * @param keyIntoIndex The key to lookup in index
+     * @param deserialize flag to prevent deserialization, introduced for use when warming the OS
+     *     cache
+     * @return Data item if the data location was found in files. If contained in the index but not
+     *     in files after a number of retries then an exception is thrown. <br>
+     *     A null is returned :
+     *     <ol>
+     *       <li>if not found in index
+     *       <li>if deserialize flag is false
+     *     </ol>
+     *
+     * @throws IOException If there was a problem reading the data item.
+     */
+    public D readDataItemUsingIndex(
+            final LongList index, final long keyIntoIndex, final boolean deserialize)
+            throws IOException {
         // Try reading up to 5 times, 99.999% should work first try but there is a small chance the
         // file was closed by
         // merging when we are half way though reading, and we will see  file.isOpen() = false or a
@@ -673,15 +696,15 @@ public class DataFileCollection<D> implements Snapshotable {
             // get from index
             final long dataLocation = index.get(keyIntoIndex, LongList.IMPERMISSIBLE_VALUE);
             // check if found
-            if (dataLocation == 0) {
+            if (dataLocation == LongList.IMPERMISSIBLE_VALUE) {
                 return null;
             }
             // read data
             try {
-                final D readData = readDataItem(dataLocation);
+                final D readData = readDataItem(dataLocation, deserialize);
                 // check we actually read data, this could be null if the file was closed half way
                 // though us reading
-                if (readData != null) {
+                if ((readData != null) || !deserialize) {
                     return readData;
                 }
             } catch (IOException e) {
@@ -694,19 +717,6 @@ public class DataFileCollection<D> implements Snapshotable {
                 LOG.warn(
                         EXCEPTION.getMarker(),
                         () -> {
-                            String wrappedIndexValue = "Not Wrapped";
-                            if (index instanceof LongListBufferedWrapper) {
-                                final long wrappedDataLocation =
-                                        ((LongListBufferedWrapper) index)
-                                                .getWrappedLongList()
-                                                .get(keyIntoIndex, LongList.IMPERMISSIBLE_VALUE);
-                                if (wrappedDataLocation == LongList.IMPERMISSIBLE_VALUE) {
-                                    wrappedIndexValue = "None Found";
-                                } else {
-                                    wrappedIndexValue = dataLocationToString(wrappedDataLocation);
-                                }
-                            }
-
                             final String currentFiles =
                                     indexedFileList.get() == null
                                             ? "UNKNOWN"
@@ -730,8 +740,6 @@ public class DataFileCollection<D> implements Snapshotable {
                                     + "Current files are ["
                                     + currentFiles
                                     + "]"
-                                    + ", wrappedDataLocation="
-                                    + wrappedIndexValue
                                     + ", validKeyRange="
                                     + this.validKeyRange
                                     + ", storeDir=["
@@ -744,44 +752,14 @@ public class DataFileCollection<D> implements Snapshotable {
         throw new IOException("Read failed after 5 retries");
     }
 
-    /**
-     * Start snapshot, this is called while saving is blocked. It is expected to complete as fast as
-     * possible and only do the minimum needed to capture/write state that could be changed by
-     * saving.
-     *
-     * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
-     *     exist.
-     * @throws IOException If there was a problem snapshotting
-     */
-    @Override
-    public void startSnapshot(Path snapshotDirectory) throws IOException {
+    /** {@inheritDoc} */
+    public void snapshot(final Path snapshotDirectory) throws IOException {
         saveMetadata(snapshotDirectory);
-        // capture set of files at this point in time
-        snapshotIndexedFiles = getAllFullyWrittenFiles();
-    }
-
-    /**
-     * Do the bulk of snapshot work, as much as possible. Saving is not blocked while this method is
-     * running, and it is expected that saving can happen concurrently without problems. This will
-     * block till the snapshot is completely created.
-     *
-     * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
-     *     exist.
-     * @throws IOException If there was a problem snapshotting
-     */
-    @Override
-    public void middleSnapshot(Path snapshotDirectory) throws IOException {
+        final List<DataFileReader<D>> snapshotIndexedFiles = getAllFullyWrittenFiles();
         for (DataFileReader<D> fileReader : snapshotIndexedFiles) {
             Path existingFile = fileReader.getPath();
             Files.createLink(snapshotDirectory.resolve(existingFile.getFileName()), existingFile);
         }
-        snapshotIndexedFiles = null;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public void endSnapshot(Path snapshotDirectory) {
-        // No cleanup work is needed for DataFileCollection
     }
 
     /**
@@ -818,15 +796,24 @@ public class DataFileCollection<D> implements Snapshotable {
     private void closeCurrentMergeFile(
             final DataFileWriter<D> newFileWriter,
             final CASable index,
-            final ThreeLongsList movesMap)
-            throws IOException {
+            final ThreeLongsList movesMap,
+            final Semaphore mergingPaused)
+            throws IOException, InterruptedException {
         // close current file
         final DataFileMetadata metadata = newFileWriter.finishWriting();
         // add it for reading
         final DataFileReader<D> dataFileReader =
                 addNewDataFileReader(newFileWriter.getPath(), metadata);
         // apply index changes
-        movesMap.forEach(index::putIfEqual);
+        movesMap.forEach(
+                (key, oldValue, newValue) -> {
+                    try {
+                        mergingPaused.acquire();
+                        index.putIfEqual(key, oldValue, newValue);
+                    } finally {
+                        mergingPaused.release();
+                    }
+                });
         // we have updated all indexes now so can now include this file in future merges
         dataFileReader.setFileAvailableForMerging(true);
     }

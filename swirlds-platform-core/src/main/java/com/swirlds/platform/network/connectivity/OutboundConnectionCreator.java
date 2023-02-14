@@ -42,7 +42,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Creates outbound connections to the requested peers */
 public class OutboundConnectionCreator {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(OutboundConnectionCreator.class);
     private static final byte[] LOCALHOST = new byte[] {127, 0, 0, 1};
     private final NodeId selfId;
     private final SettingsProvider settings;

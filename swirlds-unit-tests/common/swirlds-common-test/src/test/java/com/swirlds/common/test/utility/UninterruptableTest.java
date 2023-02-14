@@ -22,6 +22,7 @@ import static com.swirlds.common.threading.interrupt.Uninterruptable.abortAndThr
 import static com.swirlds.common.threading.interrupt.Uninterruptable.abortIfInterrupted;
 import static com.swirlds.common.threading.interrupt.Uninterruptable.retryIfInterrupted;
 import static com.swirlds.common.threading.interrupt.Uninterruptable.tryToSleep;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -48,7 +49,7 @@ class UninterruptableTest {
         final AtomicBoolean exceptionEncountered = new AtomicBoolean(false);
 
         final Thread thread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setRunnable(
                                 () -> {
                                     retryIfInterrupted(() -> queue.put(0));
@@ -90,7 +91,7 @@ class UninterruptableTest {
         final AtomicBoolean exceptionEncountered = new AtomicBoolean(false);
 
         final Thread thread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setRunnable(
                                 () ->
                                         assertEquals(
@@ -125,7 +126,7 @@ class UninterruptableTest {
         final BlockingQueue<Integer> queue = new LinkedBlockingDeque<>(1);
 
         final Thread thread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setRunnable(
                                 () -> {
                                     abortIfInterrupted(() -> queue.put(0));
@@ -155,7 +156,7 @@ class UninterruptableTest {
         final BlockingQueue<Integer> queue = new LinkedBlockingDeque<>(1);
 
         final Thread thread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setRunnable(
                                 () -> {
                                     abortAndLogIfInterrupted(
@@ -186,7 +187,7 @@ class UninterruptableTest {
         final BlockingQueue<Integer> queue = new LinkedBlockingDeque<>(1);
 
         final Thread thread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setRunnable(
                                 () -> {
                                     abortAndThrowIfInterrupted(
@@ -216,7 +217,7 @@ class UninterruptableTest {
         final AtomicBoolean exceptionEncountered = new AtomicBoolean(false);
 
         final Thread thread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setRunnable(
                                 () -> {
                                     tryToSleep(Duration.ofSeconds(1000));

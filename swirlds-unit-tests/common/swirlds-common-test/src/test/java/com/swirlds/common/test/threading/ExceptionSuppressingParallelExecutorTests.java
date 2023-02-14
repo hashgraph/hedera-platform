@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test.threading;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import org.junit.jupiter.api.DisplayName;
@@ -25,7 +26,9 @@ class ExceptionSuppressingParallelExecutorTests {
     @Test
     @DisplayName("Test exception suppressed")
     void testExceptionsSuppressed() {
-        ExceptionSuppressingParallelExecutor executor = new ExceptionSuppressingParallelExecutor();
+        ExceptionSuppressingParallelExecutor executor =
+                new ExceptionSuppressingParallelExecutor(getStaticThreadManager());
+        executor.start();
 
         assertDoesNotThrow(
                 () ->

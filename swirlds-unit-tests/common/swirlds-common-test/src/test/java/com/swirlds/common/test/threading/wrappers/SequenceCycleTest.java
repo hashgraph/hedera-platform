@@ -15,9 +15,9 @@
  */
 package com.swirlds.common.test.threading.wrappers;
 
-import com.swirlds.common.threading.ThrowingRunnable;
 import com.swirlds.common.threading.interrupt.InterruptableConsumer;
-import com.swirlds.common.threading.wrappers.SequenceCycle;
+import com.swirlds.common.threading.utility.SequenceCycle;
+import com.swirlds.common.threading.utility.ThrowingRunnable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;

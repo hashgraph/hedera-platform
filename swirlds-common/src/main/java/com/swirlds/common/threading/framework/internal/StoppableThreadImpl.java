@@ -28,6 +28,8 @@ import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.ThreadSeed;
 import com.swirlds.common.threading.framework.TypedStoppableThread;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.utility.DurationUtils;
+import com.swirlds.common.utility.StackTrace;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
@@ -45,7 +47,9 @@ import org.apache.logging.log4j.Logger;
 public class StoppableThreadImpl<T extends InterruptableRunnable>
         implements TypedStoppableThread<T> {
 
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(StoppableThreadImpl.class);
+    /** the minimum await time when waiting for a thread to pause */
+    private static final Duration MINIMUM_PAUSE_AWAIT = Duration.ofMillis(1);
 
     /** The current status of this thread. */
     private final AtomicReference<Status> status = new AtomicReference<>(Status.NOT_STARTED);
@@ -59,6 +63,12 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
      * com.swirlds.common.threading.framework.Stoppable.StopBehavior#INTERRUPTABLE INTERRUPTABLE}.
      */
     private final int joinWaitMs;
+
+    /**
+     * If the {@link #pause()} operation takes longer than this, log a stack trace to help us
+     * understand where the thread is stuck
+     */
+    private final Duration logStackTracePauseDuration;
 
     /** Used to wait until the work thread has started its pause. */
     private final AtomicReference<CountDownLatch> pauseStartedLatch =
@@ -115,6 +125,7 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
 
     /** Create a new stoppable thread. */
     public StoppableThreadImpl(final AbstractStoppableThreadConfiguration<?, T> configuration) {
+
         this.configuration = configuration;
 
         stopBehavior = configuration.getStopBehavior();
@@ -125,6 +136,8 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
         finalCycleWork = configuration.getFinalCycleWork();
 
         minimumPeriod = configuration.getMinimumPeriod();
+
+        logStackTracePauseDuration = configuration.getLogAfterPauseDuration();
 
         configuration.setRunnable(this::run);
     }
@@ -270,7 +283,6 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
     }
 
     /** {@inheritDoc} */
-    @SuppressWarnings("StatementWithEmptyBody")
     @Override
     public synchronized boolean pause() {
 
@@ -291,14 +303,49 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
         // Wait until the target thread is paused or interrupted.
         retryIfInterrupted(
                 () -> {
-                    while (!t.isInterrupted()
-                            && !pauseStartedLatch.get().await(1, TimeUnit.MILLISECONDS)) {
-                        // Spin until loop conditions allow exit. Conditions will block, preventing
-                        // pure busy wait.
+                    // Spin until loop conditions allow exit. Conditions will block, preventing pure
+                    // busy wait.
+                    while (!t.isInterrupted() && !waitForThreadToPause()) {
+                        if (pauseLogStackTrace()) {
+                            // logStackTracePauseDuration has been exceeded, log a stack trace
+                            LOG.error(
+                                    EXCEPTION.getMarker(),
+                                    "pausing thread {} is taking longer than {}",
+                                    this::getName,
+                                    logStackTracePauseDuration::toString);
+                            LOG.error(
+                                    EXCEPTION.getMarker(),
+                                    "stack trace of {}:\n{}",
+                                    this::getName,
+                                    () -> new StackTrace(t.getStackTrace()).toString());
+                        }
                     }
                 });
 
         return true;
+    }
+
+    /**
+     * Blocks waiting for a thread to pause
+     *
+     * @return true if the thread has paused
+     * @throws InterruptedException if this thread is interrupted waiting for the pause started
+     *     latch
+     */
+    private boolean waitForThreadToPause() throws InterruptedException {
+        return pauseStartedLatch
+                .get()
+                .await(
+                        DurationUtils.max(logStackTracePauseDuration, MINIMUM_PAUSE_AWAIT)
+                                .toMillis(),
+                        MILLISECONDS);
+    }
+
+    /**
+     * @return true if we should log a stack trace when the wait time for a pause is exceeded
+     */
+    private boolean pauseLogStackTrace() {
+        return DurationUtils.isLonger(logStackTracePauseDuration, Duration.ZERO);
     }
 
     /** {@inheritDoc} */

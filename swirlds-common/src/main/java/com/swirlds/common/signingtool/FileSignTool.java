@@ -54,6 +54,7 @@ import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
@@ -67,7 +68,7 @@ import org.apache.logging.log4j.core.LoggerContext;
  * <p>It can also be used to sign any single files with any extension. For files except .evts and
  * .rcd, the Hash in the signature file is a SHA384 hash of all bytes in the file to be signed.
  *
- * <p>For .evts and .rcd files, it generate version 5 signature files.
+ * <p>For .evts and .rcd files, it generates version 5 signature files.
  *
  * <p>Please see README.md for format details
  */
@@ -88,7 +89,7 @@ public class FileSignTool {
     public static final String ALIAS_PROPERTY = "alias";
     public static final String PASSWORD_PROPERTY = "password";
     public static final String DIR_PROPERTY = "dir";
-    private static final Logger LOGGER = LogManager.getLogger();
+    private static final Logger LOGGER = LogManager.getLogger(FileSignTool.class);
     private static final Marker MARKER = MarkerManager.getMarker("FILE_SIGN");
     private static final int BYTES_COUNT_IN_INT = 4;
     /** default log4j2 file name */
@@ -354,14 +355,15 @@ public class FileSignTool {
     }
 
     public static void prepare(final StreamType streamType) throws ConstructableRegistryException {
-        ConstructableRegistry.registerConstructables("com.swirlds.common");
+        final ConstructableRegistry registry = ConstructableRegistry.getInstance();
+        registry.registerConstructables("com.swirlds.common");
 
         if (streamType.getExtension().equalsIgnoreCase(RECORD_STREAM_EXTENSION)) {
             LOGGER.info(MARKER, "registering Constructables for parsing record stream files");
             // if we are parsing new record stream files,
             // we need to add HederaNode.jar and hedera-protobuf-java-*.jar into class path,
             // so that we can register for parsing RecordStreamObject
-            ConstructableRegistry.registerConstructables("com.hedera.services.stream");
+            registry.registerConstructables("com.hedera.services.stream");
         }
 
         // set the settings so that when deserialization we would not have transactionMaxBytes be 0
@@ -420,30 +422,48 @@ public class FileSignTool {
                         new File(Files.createDirectories(Paths.get(destDirName)).toUri());
 
                 if (fileDirName != null) {
-                    final File folder = new File(fileDirName);
-                    final StreamType finalStreamType = streamType;
-                    final File[] streamFiles =
-                            folder.listFiles((dir, name) -> finalStreamType.isStreamFile(name));
-                    final File[] accountBalanceFiles =
-                            folder.listFiles(
-                                    (dir, name) -> {
-                                        final String lowerCaseName = name.toLowerCase();
-                                        return lowerCaseName.endsWith(CSV_EXTENSION)
-                                                || lowerCaseName.endsWith(
-                                                        ACCOUNT_BALANCE_EXTENSION);
-                                    });
-                    final List<File> totalList = new ArrayList<>();
-                    totalList.addAll(Arrays.asList(streamFiles));
-                    totalList.addAll(Arrays.asList(accountBalanceFiles));
-                    for (final File item : totalList) {
-                        signSingleFile(sigKeyPair, item, destDir, streamType);
-                    }
+                    signAllFiles(fileDirName, destDirName, streamType, sigKeyPair);
                 } else {
                     signSingleFile(sigKeyPair, new File(fileName), destDir, streamType);
                 }
             } catch (final IOException e) {
                 LOGGER.error(MARKER, "Got IOException", e);
             }
+        }
+    }
+
+    /**
+     * Sign all files in the provided directory
+     *
+     * @param sourceDir the directory where the files to sign are located
+     * @param destDir the directory to which the signature files should be written
+     * @param streamType the type of file being signed
+     * @param sigKeyPair the signing key pair
+     */
+    public static void signAllFiles(
+            final String sourceDir,
+            final String destDir,
+            final StreamType streamType,
+            final KeyPair sigKeyPair)
+            throws IOException {
+        // create directory if necessary
+        final File destDirFile = new File(Files.createDirectories(Paths.get(destDir)).toUri());
+
+        final File folder = new File(sourceDir);
+        final File[] streamFiles = folder.listFiles((dir, name) -> streamType.isStreamFile(name));
+        final File[] accountBalanceFiles =
+                folder.listFiles(
+                        (dir, name) -> {
+                            final String lowerCaseName = name.toLowerCase();
+                            return lowerCaseName.endsWith(CSV_EXTENSION)
+                                    || lowerCaseName.endsWith(ACCOUNT_BALANCE_EXTENSION);
+                        });
+        final List<File> totalList = new ArrayList<>();
+        totalList.addAll(Arrays.asList(Optional.ofNullable(streamFiles).orElse(new File[0])));
+        totalList.addAll(
+                Arrays.asList(Optional.ofNullable(accountBalanceFiles).orElse(new File[0])));
+        for (final File item : totalList) {
+            signSingleFile(sigKeyPair, item, destDirFile, streamType);
         }
     }
 }

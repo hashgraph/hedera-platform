@@ -15,18 +15,19 @@
  */
 package com.swirlds.platform.state;
 
-import com.swirlds.platform.consensus.GraphGenerations;
-import com.swirlds.platform.event.EventConstants;
 import com.swirlds.platform.internal.SubSetting;
 import com.swirlds.platform.state.signed.SignedStateFileManager;
 import com.swirlds.platform.state.signed.SignedStateManager;
 import java.time.Duration;
-import java.util.function.LongUnaryOperator;
 
 /**
  * Settings that control the {@link SignedStateManager} and {@link SignedStateFileManager}
  * behaviors.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
  */
+@Deprecated(forRemoval = true)
 public class StateSettings extends SubSetting {
 
     /**
@@ -58,18 +59,12 @@ public class StateSettings extends SubSetting {
      */
     public int signedStateDisk = 3;
 
-    /** Events this many rounds old are expired, and can be deleted from memory */
-    public int roundsExpired = 500;
-
     /**
-     * The number of consensus rounds that are defined to be non-ancient. There can be more
-     * non-ancient rounds, but these rounds will not have reached consensus. Once consensus is
-     * reached on a new round (i.e.,fame is decided for all its witnesses), another round will
-     * become ancient. Events, whose generation is older than the last non-ancient round generation,
-     * are ancient. If they don't have consensus yet, they're stale, and will never reach consensus
-     * and never have their transactions handled.
+     * The maximum number of rounds that a state will be kept in memory while waiting for it to
+     * gather enough signatures. If a state becomes fully signed prior to reaching this age it may
+     * be removed from memory.
      */
-    public int roundsNonAncient = 26;
+    public int roundsToKeepForSigning = 26;
 
     /** If true, then save the state to disk when there is a fatal exception. */
     public boolean dumpStateOnFatal = true;
@@ -134,11 +129,25 @@ public class StateSettings extends SubSetting {
             true; // NOSONAR: Value is modified and updated by reflection.
 
     /**
+     * If true, then enable extra debug code that tracks signed states. Very useful for debugging
+     * state leaks. This debug code is relatively expensive (it takes and stores stack traces when
+     * operations are performed on signed state objects).
+     */
+    public boolean signedStateSentinelEnabled = false;
+
+    /**
+     * Ignored if {@link #signedStateSentinelEnabled} is not true. The age of a signed state, in
+     * seconds, which is considered to be suspicious. Suspicious states cause a large amount of data
+     * to be logged that helps to debug the potential state leak.
+     */
+    public Duration suspiciousSignedStateAge = Duration.ofMinutes(5);
+
+    /**
      * It's possible to receive state signatures before it's time to process the round signed by the
      * signature. This is the maximum number of rounds, in the future, for which a node will accept
      * a state signature.
      */
-    public int maxAgeOfFutureStateSignatures = 500;
+    public int maxAgeOfFutureStateSignatures = 1_000;
 
     public StateSettings() {}
 
@@ -173,38 +182,5 @@ public class StateSettings extends SubSetting {
      */
     public static int getDebugHashDepth() {
         return debugHashDepth;
-    }
-
-    /**
-     * Returns the oldest round that is non-ancient. If no round is ancient, then it will return the
-     * first round ever
-     *
-     * @param lastRoundDecided the last round that has fame decided
-     * @return oldest non-ancient number
-     */
-    public long getOldestNonAncientRound(final long lastRoundDecided) {
-        // if we have N non-ancient consensus rounds, and the last one is M, then the oldest
-        // non-ancient round is
-        // M-(N-1) which is equal to M-N+1
-        // if no rounds are ancient yet, then the oldest non-ancient round is the first round ever
-        return Math.max(
-                lastRoundDecided - roundsNonAncient + 1, EventConstants.MINIMUM_ROUND_CREATED);
-    }
-
-    /**
-     * Returns the minimum generation below which all events are ancient
-     *
-     * @param lastRoundDecided the last round that has fame decided
-     * @param roundGenerationProvider returns a round generation number for a given round number
-     * @return minimum non-ancient generation
-     */
-    public long getMinGenNonAncient(
-            final long lastRoundDecided, final LongUnaryOperator roundGenerationProvider) {
-        // if a round generation is not defined for the oldest round, it will be
-        // EventConstants.GENERATION_UNDEFINED,
-        // which is -1. in this case we will return FIRST_GENERATION, which is 0
-        return Math.max(
-                roundGenerationProvider.applyAsLong(getOldestNonAncientRound(lastRoundDecided)),
-                GraphGenerations.FIRST_GENERATION);
     }
 }

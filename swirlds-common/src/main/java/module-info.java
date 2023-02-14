@@ -4,14 +4,16 @@ module com.swirlds.common {
     exports com.swirlds.common;
     exports com.swirlds.common.bloom;
     exports com.swirlds.common.bloom.hasher;
+    exports com.swirlds.common.config.sources;
+    exports com.swirlds.common.config.validators;
     exports com.swirlds.common.constructable;
+    exports com.swirlds.common.constructable.internal;
     exports com.swirlds.common.crypto;
     exports com.swirlds.common.exceptions;
     exports com.swirlds.common.io;
     exports com.swirlds.common.io.exceptions;
     exports com.swirlds.common.io.extendable;
     exports com.swirlds.common.io.extendable.extensions;
-    exports com.swirlds.common.io.settings;
     exports com.swirlds.common.io.streams;
     exports com.swirlds.common.io.utility;
     exports com.swirlds.common.merkle;
@@ -43,6 +45,7 @@ module com.swirlds.common {
     exports com.swirlds.common.settings;
     exports com.swirlds.common.statistics;
     exports com.swirlds.common.stream;
+    exports com.swirlds.common.stream.internal;
     exports com.swirlds.common.system;
     exports com.swirlds.common.system.address;
     exports com.swirlds.common.system.events;
@@ -55,10 +58,13 @@ module com.swirlds.common {
     exports com.swirlds.common.threading.interrupt;
     exports com.swirlds.common.threading.locks;
     exports com.swirlds.common.threading.locks.locked;
+    exports com.swirlds.common.threading.manager;
     exports com.swirlds.common.threading.pool;
-    exports com.swirlds.common.threading.wrappers;
+    exports com.swirlds.common.threading.utility;
+    exports com.swirlds.common.time;
     exports com.swirlds.common.utility;
     exports com.swirlds.common.utility.throttle;
+    exports com.swirlds.common.jackson;
 
     /* Targeted exports */
     exports com.swirlds.common.internal to
@@ -110,8 +116,6 @@ module com.swirlds.common {
             com.swirlds.platform,
             com.swirlds.platform.test,
             com.swirlds.common.test;
-    exports com.swirlds.common.stream.internal to
-            com.swirlds.common.test;
 
     opens com.swirlds.common.merkle.impl to
             com.fasterxml.jackson.databind;
@@ -123,6 +127,8 @@ module com.swirlds.common {
             com.fasterxml.jackson.databind;
     opens com.swirlds.common.stream.internal to
             com.fasterxml.jackson.databind;
+    opens com.swirlds.common.cli to
+            info.picocli;
 
     exports com.swirlds.common.merkle.crypto.internal to
             com.swirlds.common.test;
@@ -130,9 +136,24 @@ module com.swirlds.common {
     opens com.swirlds.common.merkle.crypto to
             com.fasterxml.jackson.databind;
 
+    exports com.swirlds.common.config;
+    exports com.swirlds.common.crypto.config;
+    exports com.swirlds.common.io.config;
+    exports com.swirlds.common.merkle.synchronization.config;
+    exports com.swirlds.common.metrics.platform.prometheus;
+    exports com.swirlds.common.context;
+    exports com.swirlds.common.context.internal to
+            com.swirlds.platform;
+    exports com.swirlds.common.config.singleton;
+    exports com.swirlds.common.config.export;
+    exports com.swirlds.common.config.reflection;
+
+    requires com.swirlds.cli;
+    requires com.swirlds.config;
     requires com.swirlds.logging;
     requires java.desktop;
     requires jdk.management;
+    requires jdk.httpserver;
 
     /* Cryptography Libraries */
     requires lazysodium.java;
@@ -146,9 +167,14 @@ module com.swirlds.common {
     requires io.github.classgraph;
     requires org.apache.commons.lang3;
     requires org.apache.commons.codec;
+    requires info.picocli;
 
     /* Jackson JSON */
     requires com.fasterxml.jackson.core;
     requires com.fasterxml.jackson.databind;
     requires com.fasterxml.jackson.datatype.jsr310;
+
+    /* Prometheus Java client */
+    requires io.prometheus.simpleclient;
+    requires io.prometheus.simpleclient.httpserver;
 }

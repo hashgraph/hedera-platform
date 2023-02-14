@@ -15,52 +15,50 @@
  */
 package com.swirlds.config.impl.validators.annotation;
 
-import com.swirlds.config.api.ConfigurationProvider;
+import com.swirlds.common.config.sources.SimpleConfigSource;
+import com.swirlds.config.api.ConfigurationBuilder;
 import com.swirlds.config.api.validation.ConfigViolationException;
-import com.swirlds.config.impl.DummyConfigSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class PositiveTest {
 
-    private final DummyConfigSource dummyConfigSource = new DummyConfigSource();
-
     @Test
     public void testNoViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("positive.intValue", "1");
-        dummyConfigSource.setProperty("positive.longValue", "1");
-        dummyConfigSource.setProperty("positive.doubleValue", "1");
-        dummyConfigSource.setProperty("positive.floatValue", "1");
-        dummyConfigSource.setProperty("positive.shortValue", "1");
-        dummyConfigSource.setProperty("positive.byteValue", "1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(PositiveConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("positive.intValue", 1))
+                        .withSources(new SimpleConfigSource("positive.longValue", 1L))
+                        .withSources(new SimpleConfigSource("positive.doubleValue", 1D))
+                        .withSources(new SimpleConfigSource("positive.floatValue", 1F))
+                        .withSources(new SimpleConfigSource("positive.shortValue", 1))
+                        .withSources(new SimpleConfigSource("positive.byteValue", 1))
+                        .withConfigDataTypes(PositiveConfigData.class);
 
         // then
         Assertions.assertDoesNotThrow(
-                () -> ConfigurationProvider.init(), "No violation should happen");
+                () -> configurationBuilder.build(), "No violation should happen");
     }
 
     @Test
     public void testIntViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("positive.intValue", "-1");
-        dummyConfigSource.setProperty("positive.longValue", "1");
-        dummyConfigSource.setProperty("positive.doubleValue", "1");
-        dummyConfigSource.setProperty("positive.floatValue", "1");
-        dummyConfigSource.setProperty("positive.shortValue", "1");
-        dummyConfigSource.setProperty("positive.byteValue", "1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(PositiveConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("positive.intValue", -1))
+                        .withSources(new SimpleConfigSource("positive.longValue", 1L))
+                        .withSources(new SimpleConfigSource("positive.doubleValue", 1D))
+                        .withSources(new SimpleConfigSource("positive.floatValue", 1F))
+                        .withSources(new SimpleConfigSource("positive.shortValue", 1))
+                        .withSources(new SimpleConfigSource("positive.byteValue", 1))
+                        .withConfigDataTypes(PositiveConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Positive should happen");
 
         // then
@@ -75,21 +73,21 @@ public class PositiveTest {
     @Test
     public void testViolations() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("positive.intValue", "-1");
-        dummyConfigSource.setProperty("positive.longValue", "-1");
-        dummyConfigSource.setProperty("positive.doubleValue", "-1");
-        dummyConfigSource.setProperty("positive.floatValue", "-1");
-        dummyConfigSource.setProperty("positive.shortValue", "-1");
-        dummyConfigSource.setProperty("positive.byteValue", "-1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(PositiveConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("positive.intValue", -1))
+                        .withSources(new SimpleConfigSource("positive.longValue", -1L))
+                        .withSources(new SimpleConfigSource("positive.doubleValue", -1D))
+                        .withSources(new SimpleConfigSource("positive.floatValue", -1F))
+                        .withSources(new SimpleConfigSource("positive.shortValue", -1))
+                        .withSources(new SimpleConfigSource("positive.byteValue", -1))
+                        .withConfigDataTypes(PositiveConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Positive should happen");
 
         // then
@@ -99,21 +97,21 @@ public class PositiveTest {
     @Test
     public void testEdgeCaseViolations() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("positive.intValue", "0");
-        dummyConfigSource.setProperty("positive.longValue", "0");
-        dummyConfigSource.setProperty("positive.doubleValue", "0");
-        dummyConfigSource.setProperty("positive.floatValue", "0");
-        dummyConfigSource.setProperty("positive.shortValue", "0");
-        dummyConfigSource.setProperty("positive.byteValue", "0");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(PositiveConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("positive.intValue", 0))
+                        .withSources(new SimpleConfigSource("positive.longValue", 0L))
+                        .withSources(new SimpleConfigSource("positive.doubleValue", 0D))
+                        .withSources(new SimpleConfigSource("positive.floatValue", 0F))
+                        .withSources(new SimpleConfigSource("positive.shortValue", 0))
+                        .withSources(new SimpleConfigSource("positive.byteValue", 0))
+                        .withConfigDataTypes(PositiveConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Positive should happen");
 
         // then

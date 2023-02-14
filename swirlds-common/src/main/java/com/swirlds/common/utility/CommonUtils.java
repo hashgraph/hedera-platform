@@ -255,9 +255,9 @@ public class CommonUtils {
     /**
      * Throw an {@link IllegalArgumentException} if the supplied {@code String} is blank.
      *
-     * @see StringUtils#isBlank(CharSequence)
      * @param arg the argument checked
      * @param argName the name of the argument
+     * @see StringUtils#isBlank(CharSequence)
      */
     public static String throwArgBlank(final String arg, final String argName) {
         throwArgNull(arg, argName);
@@ -365,7 +365,7 @@ public class CommonUtils {
     }
 
     /**
-     * Combine a list of consumers into a single consumer that calls all of them
+     * Combine an array of consumers into a single consumer that calls all of them
      *
      * @param consumers the consumers to combine
      * @param <T> the type being consumed
@@ -373,6 +373,15 @@ public class CommonUtils {
      */
     @SafeVarargs
     public static <T> Consumer<T> combineConsumers(final Consumer<T>... consumers) {
+        return t -> {
+            for (final Consumer<T> consumer : consumers) {
+                consumer.accept(t);
+            }
+        };
+    }
+
+    /** Same as {@link #combineConsumers(Consumer[])} but with a list instead of an array */
+    public static <T> Consumer<T> combineConsumers(final List<Consumer<T>> consumers) {
         return t -> {
             for (final Consumer<T> consumer : consumers) {
                 consumer.accept(t);

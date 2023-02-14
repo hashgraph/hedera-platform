@@ -23,6 +23,7 @@ import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.platform.state.SwirldStateManagerUtils.fastCopy;
 
+import com.swirlds.common.config.singleton.ConfigurationHolder;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.SwirldDualState;
 import com.swirlds.common.system.SwirldState;
@@ -34,9 +35,11 @@ import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.components.SystemTransactionHandler;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRuleResponse;
+import com.swirlds.platform.config.ThreadConfig;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.eventhandling.SwirldStateSingleTransactionPool;
 import com.swirlds.platform.internal.ConsensusRound;
@@ -75,7 +78,7 @@ import org.apache.logging.log4j.Logger;
 public class SwirldStateManagerSingle implements SwirldStateManager {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(SwirldStateManagerSingle.class);
 
     /** The component name for threads managed by this class. */
     private static final String COMPONENT_NAME = "swirld-state-manager-single";
@@ -178,12 +181,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
     private final SystemTransactionHandler systemTransactionHandler;
 
     /** Executes a runnable in the background */
-    private final ExecutorService executor =
-            Executors.newSingleThreadExecutor(
-                    new ThreadConfiguration()
-                            .setComponent("statemanager")
-                            .setThreadName("worker")
-                            .buildFactory());
+    private final ExecutorService executor;
 
     // Used of creating mock instances in unit testing
     public SwirldStateManagerSingle() {
@@ -201,11 +199,13 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
         pollCurr = null;
         pollWork = null;
         systemTransactionHandler = null;
+        executor = null;
     }
 
     /**
      * Creates a new instance with the provided state and starts the work thread.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param selfId this node's id
      * @param systemTransactionHandler the handler for system transactions
      * @param swirldStateMetrics metrics related to SwirldState
@@ -216,6 +216,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
      * @param initialState the initial state of this application
      */
     public SwirldStateManagerSingle(
+            final ThreadManager threadManager,
             final NodeId selfId,
             final SystemTransactionHandler systemTransactionHandler,
             final SwirldStateMetrics swirldStateMetrics,
@@ -230,6 +231,13 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
         this.settings = settings;
         this.consEstimateSupplier = consEstimateSupplier;
         this.systemTransactionHandler = systemTransactionHandler;
+
+        executor =
+                Executors.newSingleThreadExecutor(
+                        new ThreadConfiguration(threadManager)
+                                .setComponent("statemanager")
+                                .setThreadName("worker")
+                                .buildFactory());
 
         this.transactionPool = new SwirldStateSingleTransactionPool(settings, inFreeze);
         this.transactionHandler = new TransactionHandler(selfId, stats);
@@ -259,7 +267,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
                         });
 
         threadWork =
-                new QueueThreadConfiguration<EventImpl>()
+                new QueueThreadConfiguration<EventImpl>(threadManager)
                         .setNodeId(selfId.getId())
                         .setComponent(COMPONENT_NAME)
                         .setThreadName("thread-work")
@@ -268,6 +276,11 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
                         .setQueue(newQueue())
                         .setHandler(this::doWork)
                         .setWaitForItemRunnable(this::forWorkWaitForItem)
+                        .setLogAfterPauseDuration(
+                                ConfigurationHolder.getInstance()
+                                        .get()
+                                        .getConfigData(ThreadConfig.class)
+                                        .logStackTracePauseDuration())
                         .build();
 
         lastShuffle = Instant.now();
@@ -540,6 +553,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 
         transactionHandler.handleRound(round, stateCons.getState());
         systemTransactionHandler.handlePostConsensusSystemTransactions(round);
+        updateEpoch();
 
         completeTransactionPolling(future, round.getRoundNum());
     }
@@ -784,6 +798,10 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
         // This should be changed to BLOCKING (or this method removed entirely) with ticket
         // swirlds/swirlds-platform#4876
         return Stoppable.StopBehavior.INTERRUPTABLE;
+    }
+
+    private void updateEpoch() {
+        stateCons.getState().getPlatformState().getPlatformData().updateEpochHash();
     }
 
     /** {@inheritDoc} */

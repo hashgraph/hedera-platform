@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test.threading;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static java.lang.String.format;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -53,7 +54,11 @@ class ReplaceSyncPhaseParallelExecutorTests {
         final AtomicInteger replacementTask = new AtomicInteger(0);
         final ReplaceSyncPhaseParallelExecutor executor =
                 new ReplaceSyncPhaseParallelExecutor(
-                        phaseNum, taskNum, toCallable(replacementTask::incrementAndGet));
+                        getStaticThreadManager(),
+                        phaseNum,
+                        taskNum,
+                        toCallable(replacementTask::incrementAndGet));
+        executor.start();
 
         executor.doParallel(
                 toCallable(PhaseTask.PHASE1_TASK1.getTask()::incrementAndGet),

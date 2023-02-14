@@ -29,7 +29,7 @@ import java.io.InputStream;
  * We have already sent a keepalive, this state waits for, and handles, the byte sent by the peer in
  * parallel
  */
-public class SentKeepalive implements NegotiationState {
+public class SentKeepalive extends NegotiationStateWithDescription {
     private final InputStream byteInput;
 
     private final NegotiationState sleep;
@@ -57,9 +57,15 @@ public class SentKeepalive implements NegotiationState {
         final int b = byteInput.read();
         NegotiatorBytes.checkByte(b);
         return switch (b) {
-            case KEEPALIVE -> sleep; // we both sent keepalive
+            case KEEPALIVE -> {
+                setDescription("both sent keepalive");
+                yield sleep;
+            } // we both sent keepalive
             case ACCEPT, REJECT -> throw new NegotiationException("Unexpected ACCEPT or REJECT");
-            default -> receivedInitiate.receivedInitiate(b);
+            default -> {
+                setDescription("received initiate - " + b);
+                yield receivedInitiate.receivedInitiate(b);
+            }
         };
     }
 }

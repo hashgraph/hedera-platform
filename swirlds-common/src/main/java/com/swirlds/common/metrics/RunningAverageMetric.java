@@ -61,7 +61,7 @@ public interface RunningAverageMetric extends Metric {
      * instantiated.
      *
      * <p>If this is called repeatedly with a value of X over a long period, then suddenly all calls
-     * start having a value of Y, then after halflife seconds, the average will have moved halfway
+     * start having a value of Y, then after half-life seconds, the average will have moved halfway
      * from X to Y, regardless of how often update was called, as long as it is called at least once
      * at the end of that period.
      *
@@ -158,7 +158,7 @@ public interface RunningAverageMetric extends Metric {
 
         /** {@inheritDoc} */
         @Override
-        Class<RunningAverageMetric> getResultClass() {
+        public Class<RunningAverageMetric> getResultClass() {
             return RunningAverageMetric.class;
         }
 

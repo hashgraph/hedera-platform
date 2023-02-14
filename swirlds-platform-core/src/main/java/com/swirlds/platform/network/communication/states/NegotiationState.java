@@ -35,4 +35,11 @@ public interface NegotiationState {
     NegotiationState transition()
             throws NegotiationException, NetworkProtocolException, InterruptedException,
                     IOException;
+
+    /**
+     * @return a human-readable description of the last transition this state was involved in
+     */
+    default String getLastTransitionDescription() {
+        return "NO DESCRIPTION";
+    }
 }

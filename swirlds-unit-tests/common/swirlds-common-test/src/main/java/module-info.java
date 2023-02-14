@@ -10,10 +10,7 @@ open module com.swirlds.common.test {
     exports com.swirlds.common.test.map;
     exports com.swirlds.common.test.threading;
     exports com.swirlds.common.test.crypto;
-    exports com.swirlds.common.test.constructable to
-            com.swirlds.common;
-    exports com.swirlds.common.test.constructable.subpackage to
-            com.swirlds.common;
+    exports com.swirlds.common.test.fcqueue;
 
     requires com.swirlds.test.framework;
     requires com.swirlds.common;

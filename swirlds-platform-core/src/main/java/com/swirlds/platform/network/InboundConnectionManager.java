@@ -36,7 +36,7 @@ import org.apache.logging.log4j.Logger;
  * them.
  */
 public class InboundConnectionManager implements ConnectionManager {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(InboundConnectionManager.class);
     /**
      * the current connection in use, initially not connected. there is no synchronization on this
      * variable

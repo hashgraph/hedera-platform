@@ -27,7 +27,7 @@ import java.io.InputStream;
  * A protocol initiate was sent, this state waits for and handles the byte sent by the peer in
  * parallel
  */
-public class SentInitiate implements NegotiationState {
+public class SentInitiate extends NegotiationStateWithDescription {
     private final NegotiationProtocols protocols;
     private final InputStream byteInput;
 
@@ -87,14 +87,20 @@ public class SentInitiate implements NegotiationState {
 
     private NegotiationState transition(final int b) {
         if (b == NegotiatorBytes.KEEPALIVE) {
+            setDescription("waiting for accept or reject from the peer");
             // we wait for ACCEPT or reject
             return waitForAcceptReject;
         }
         if (b == protocolInitiated) { // both initiated the same protocol at the same time
             final Protocol protocol = protocols.getInitiatedProtocol();
             if (protocol.acceptOnSimultaneousInitiate()) {
+                setDescription(
+                        "peer initiated the same protocol, running " + protocol.getProtocolName());
                 return negotiated.runProtocol(protocols.initiateAccepted());
             } else {
+                setDescription(
+                        "peer initiated the same protocol, the protocol will not run - "
+                                + protocol.getProtocolName());
                 protocols.initiateFailed();
                 return sleep;
             }
@@ -103,9 +109,12 @@ public class SentInitiate implements NegotiationState {
         if (b < protocolInitiated) { // lower index means higher priority
             // the one we initiated failed
             protocols.initiateFailed();
+            setDescription("peer initiated a higher priority protocol - " + b);
             // THEIR protocol is higher priority, so we should ACCEPT or REJECT
             return receivedInitiate.receivedInitiate(b);
         } else {
+            setDescription(
+                    "we initiated a higher priority protocol than the peer - " + protocolInitiated);
             // OUR protocol is higher priority, so they should ACCEPT or REJECT
             return waitForAcceptReject;
         }

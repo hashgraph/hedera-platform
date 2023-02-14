@@ -26,20 +26,100 @@ class LongConverterTest {
         final LongConverter converter = new LongConverter();
 
         // then
-        Assertions.assertThrows(NullPointerException.class, () -> converter.convert(null));
+        Assertions.assertThrows(
+                NullPointerException.class,
+                () -> converter.convert(null),
+                "Null values must always throw a NPE");
     }
 
     @Test
-    public void convert() {
+    public void convertMin() {
+        // given
+        final LongConverter converter = new LongConverter();
+        final String rawValue = Long.MIN_VALUE + "";
+
+        // when
+        final long value = converter.convert(rawValue);
+
+        // then
+        Assertions.assertEquals(Long.MIN_VALUE, value, "All valid long values must be supported");
+    }
+
+    @Test
+    public void convertMax() {
+        // given
+        final LongConverter converter = new LongConverter();
+        final String rawValue = Long.MAX_VALUE + "";
+
+        // when
+        final long value = converter.convert(rawValue);
+
+        // then
+        Assertions.assertEquals(Long.MAX_VALUE, value, "All valid long values must be supported");
+    }
+
+    @Test
+    public void convertZero() {
+        // given
+        final LongConverter converter = new LongConverter();
+        final String rawValue = "0";
+
+        // when
+        final long value = converter.convert(rawValue);
+
+        // then
+        Assertions.assertEquals(0, value, "All valid long values must be supported");
+    }
+
+    @Test
+    public void convertPositiveNumber() {
         // given
         final LongConverter converter = new LongConverter();
         final String rawValue = "21";
 
         // when
-        final Long value = converter.convert(rawValue);
+        final long value = converter.convert(rawValue);
 
         // then
-        Assertions.assertNotNull(value);
-        Assertions.assertEquals(21, value);
+        Assertions.assertEquals(21L, value, "All valid long values must be supported");
+    }
+
+    @Test
+    public void convertNegativeNumber() {
+        // given
+        final LongConverter converter = new LongConverter();
+        final String rawValue = "-7";
+
+        // when
+        final long value = converter.convert(rawValue);
+
+        // then
+        Assertions.assertEquals(-7L, value, "All valid long values must be supported");
+    }
+
+    @Test
+    public void convertOutOfRangeNumber() {
+        // given
+        final LongConverter converter = new LongConverter();
+        final String rawValue = Long.MAX_VALUE + "0";
+
+        // then
+        Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> converter.convert(rawValue),
+                "Only the long value range must be supported");
+    }
+
+    @Test
+    public void convertInvalid() {
+        // given
+        final LongConverter converter = new LongConverter();
+        final String rawValue = "1.23";
+
+        // then
+        Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> converter.convert(rawValue),
+                "Only valid long values must be supported");
     }
 }

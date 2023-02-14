@@ -42,7 +42,8 @@ class ObjectForTestStreamTest {
 
     @Test
     void serializeDeserializeTest() throws Exception {
-        ConstructableRegistry.registerConstructables("com.swirlds.common.test.stream");
+        ConstructableRegistry.getInstance()
+                .registerConstructables("com.swirlds.common.test.stream");
         ObjectForTestStream deserialized = SerializationUtils.serializeDeserialize(object);
         assertEquals(object, deserialized, "deserialized object should equal to original object");
     }

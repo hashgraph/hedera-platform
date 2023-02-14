@@ -59,7 +59,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class ShadowGraph implements Clearable {
 
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ShadowGraph.class);
 
     /** The generation value for the first event created by a node. */
     private static final long FIRST_GENERATION = 0;
@@ -573,6 +573,15 @@ public class ShadowGraph implements Clearable {
 
     private ShadowEvent shadow(final Hash h) {
         return hashToShadowEvent.get(h);
+    }
+
+    /**
+     * @param h the hash of the event
+     * @return the event that has the hash provided, or null if none exists
+     */
+    public synchronized EventImpl getEvent(final Hash h) {
+        final ShadowEvent shadowEvent = hashToShadowEvent.get(h);
+        return shadowEvent == null ? null : shadowEvent.getEvent();
     }
 
     /**

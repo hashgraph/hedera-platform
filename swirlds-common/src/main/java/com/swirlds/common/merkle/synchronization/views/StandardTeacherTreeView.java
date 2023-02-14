@@ -15,7 +15,7 @@
  */
 package com.swirlds.common.merkle.synchronization.views;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleInternal;
@@ -181,7 +181,7 @@ public class StandardTeacherTreeView implements TeacherTreeView<NodeToSend> {
             final MerkleNode child = internal.getChild(childIndex);
 
             if (child == null) {
-                hashes.add(CryptoFactory.getInstance().getNullHash());
+                hashes.add(CryptographyHolder.get().getNullHash());
             } else {
                 final Hash hash = child.getHash();
                 if (hash == null) {

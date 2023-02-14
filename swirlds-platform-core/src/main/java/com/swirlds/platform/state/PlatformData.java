@@ -41,10 +41,8 @@ public class PlatformData extends PartialMerkleLeaf implements MerkleLeaf {
 
     private static final class ClassVersion {
         public static final int ORIGINAL = 1;
+        public static final int EPOCH_HASH = 2;
     }
-
-    /** The round number for the genesis state. */
-    public static final long GENESIS_ROUND_NUMBER = 1;
 
     /**
      * The round of this state. When this state becomes a SignedState, it will reflect all
@@ -80,6 +78,15 @@ public class PlatformData extends PartialMerkleLeaf implements MerkleLeaf {
     /** The version of the application software that was responsible for creating this state. */
     private SoftwareVersion creationSoftwareVersion;
 
+    /** The epoch hash of this state. Updated every time emergency recovery is performed. */
+    private Hash epochHash;
+
+    /**
+     * The next epoch hash, used to update the epoch hash at the next round boundary. This field is
+     * not part of the hash and is not serialized.
+     */
+    private Hash nextEpochHash;
+
     public PlatformData() {}
 
     /**
@@ -100,6 +107,25 @@ public class PlatformData extends PartialMerkleLeaf implements MerkleLeaf {
             this.minGenInfo = new ArrayList<>(that.minGenInfo);
         }
         this.lastTransactionTimestamp = that.lastTransactionTimestamp;
+        this.epochHash = that.epochHash;
+        this.nextEpochHash = that.nextEpochHash;
+    }
+
+    /**
+     * Update the epoch hash if the next epoch hash is non-null and different from the current epoch
+     * hash.
+     */
+    public void updateEpochHash() {
+        throwIfImmutable();
+        if (nextEpochHash != null && !nextEpochHash.equals(epochHash)) {
+            // This is the first round after an emergency recovery round
+            // Set the epoch hash to the next value
+            epochHash = nextEpochHash;
+
+            // set this to null so the value is consistent with a
+            // state loaded from disk or received via reconnect
+            nextEpochHash = null;
+        }
     }
 
     /** {@inheritDoc} */
@@ -130,6 +156,7 @@ public class PlatformData extends PartialMerkleLeaf implements MerkleLeaf {
         }
         out.writeInstant(lastTransactionTimestamp);
         out.writeSerializable(creationSoftwareVersion, true);
+        out.writeSerializable(epochHash, false);
     }
 
     /** {@inheritDoc} */
@@ -161,12 +188,16 @@ public class PlatformData extends PartialMerkleLeaf implements MerkleLeaf {
 
         lastTransactionTimestamp = in.readInstant();
         creationSoftwareVersion = in.readSerializable();
+
+        if (version >= ClassVersion.EPOCH_HASH) {
+            epochHash = in.readSerializable(false, Hash::new);
+        }
     }
 
     /** {@inheritDoc} */
     @Override
     public int getVersion() {
-        return ClassVersion.ORIGINAL;
+        return ClassVersion.EPOCH_HASH;
     }
 
     /** {@inheritDoc} */
@@ -353,6 +384,46 @@ public class PlatformData extends PartialMerkleLeaf implements MerkleLeaf {
         return this;
     }
 
+    /**
+     * Sets the epoch hash of this state.
+     *
+     * @param epochHash the epoch hash of this state
+     * @return this object
+     */
+    public PlatformData setEpochHash(final Hash epochHash) {
+        this.epochHash = epochHash;
+        return this;
+    }
+
+    /**
+     * Gets the epoch hash of this state.
+     *
+     * @return the epoch hash of this state
+     */
+    public Hash getEpochHash() {
+        return epochHash;
+    }
+
+    /**
+     * Sets the next epoch hash of this state.
+     *
+     * @param nextEpochHash the next epoch hash of this state
+     * @return this object
+     */
+    public PlatformData setNextEpochHash(final Hash nextEpochHash) {
+        this.nextEpochHash = nextEpochHash;
+        return this;
+    }
+
+    /**
+     * Gets the next epoch hash of this state.
+     *
+     * @return the next epoch hash of this state
+     */
+    public Hash getNextEpochHash() {
+        return nextEpochHash;
+    }
+
     /** {@inheritDoc} */
     @Override
     public boolean equals(final Object o) {
@@ -373,6 +444,7 @@ public class PlatformData extends PartialMerkleLeaf implements MerkleLeaf {
                 .append(events, that.events)
                 .append(consensusTimestamp, that.consensusTimestamp)
                 .append(minGenInfo, that.minGenInfo)
+                .append(epochHash, that.epochHash)
                 .isEquals();
     }
 
@@ -386,6 +458,7 @@ public class PlatformData extends PartialMerkleLeaf implements MerkleLeaf {
                 .append(events)
                 .append(consensusTimestamp)
                 .append(minGenInfo)
+                .append(epochHash)
                 .toHashCode();
     }
 
@@ -399,6 +472,7 @@ public class PlatformData extends PartialMerkleLeaf implements MerkleLeaf {
                 .append("events", events)
                 .append("consensusTimestamp", consensusTimestamp)
                 .append("minGenInfo", minGenInfo)
+                .append("epochHash", epochHash)
                 .toString();
     }
 }

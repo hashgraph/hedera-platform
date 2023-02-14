@@ -18,7 +18,11 @@ package com.swirlds.virtualmap;
 /**
  * Static holder of resolved {@code virtualMap.*} settings, via an instance of {@link
  * VirtualMapSettings}.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
  */
+@Deprecated(forRemoval = true)
 public final class VirtualMapSettingsFactory {
     private static VirtualMapSettings virtualMapSettings;
 

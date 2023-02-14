@@ -29,7 +29,7 @@ public abstract class AbstractReservable implements Reservable {
      * This lambda method is used to increment the reservation count when {@link #reserve()} is
      * called.
      */
-    private static final IntUnaryOperator increment =
+    private static final IntUnaryOperator RESERVE =
             current -> {
                 if (current == DESTROYED_REFERENCE_COUNT) {
                     throw new ReferenceCountException(
@@ -40,10 +40,23 @@ public abstract class AbstractReservable implements Reservable {
             };
 
     /**
+     * This lambda method is used to try to increment the reservation count when {@link
+     * #tryReserve()} is called.
+     */
+    private static final IntUnaryOperator TRY_RESERVE =
+            current -> {
+                if (current == DESTROYED_REFERENCE_COUNT) {
+                    return current;
+                } else {
+                    return current + 1;
+                }
+            };
+
+    /**
      * This lambda method is used to decrement the reservation count when {@link #release()} is
      * called.
      */
-    private static final IntUnaryOperator decrement =
+    private static final IntUnaryOperator RELEASE =
             (final int current) -> {
                 if (current == DESTROYED_REFERENCE_COUNT) {
                     throw new ReferenceCountException(
@@ -57,24 +70,20 @@ public abstract class AbstractReservable implements Reservable {
 
     /** {@inheritDoc} */
     @Override
-    public synchronized void reserve() {
-        reservationCount.getAndUpdate(increment);
+    public void reserve() {
+        reservationCount.updateAndGet(RESERVE);
     }
 
     /** {@inheritDoc} */
     @Override
-    public synchronized boolean tryReserve() {
-        if (isDestroyed()) {
-            return false;
-        }
-        reserve();
-        return true;
+    public boolean tryReserve() {
+        return reservationCount.updateAndGet(TRY_RESERVE) != DESTROYED_REFERENCE_COUNT;
     }
 
     /** {@inheritDoc} */
     @Override
-    public synchronized boolean release() {
-        final int newReservationCount = reservationCount.updateAndGet(decrement);
+    public boolean release() {
+        final int newReservationCount = reservationCount.updateAndGet(RELEASE);
         if (newReservationCount == DESTROYED_REFERENCE_COUNT) {
             onDestroy();
             return true;
@@ -84,13 +93,13 @@ public abstract class AbstractReservable implements Reservable {
 
     /** {@inheritDoc} */
     @Override
-    public synchronized boolean isDestroyed() {
+    public boolean isDestroyed() {
         return reservationCount.get() == DESTROYED_REFERENCE_COUNT;
     }
 
     /** {@inheritDoc} */
     @Override
-    public synchronized int getReservationCount() {
+    public int getReservationCount() {
         return reservationCount.get();
     }
 

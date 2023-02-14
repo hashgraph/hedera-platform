@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
@@ -82,7 +82,7 @@ class MerkleRehashTests {
                     (final MerkleNode node) -> {
                         if (node.isSelfHashing()) {
                             assertEquals(
-                                    CryptoFactory.getInstance().getNullHash(),
+                                    CryptographyHolder.get().getNullHash(),
                                     node.getHash(),
                                     "dummy node should have null hash");
                         } else {
@@ -103,7 +103,7 @@ class MerkleRehashTests {
                     (final MerkleNode node) -> {
                         if (node.isSelfHashing()) {
                             assertEquals(
-                                    CryptoFactory.getInstance().getNullHash(),
+                                    CryptographyHolder.get().getNullHash(),
                                     node.getHash(),
                                     "dummy node should have null hash");
                         } else {
@@ -130,7 +130,7 @@ class MerkleRehashTests {
                     (final MerkleNode node) -> {
                         if (node.isSelfHashing()) {
                             assertEquals(
-                                    CryptoFactory.getInstance().getNullHash(),
+                                    CryptographyHolder.get().getNullHash(),
                                     node.getHash(),
                                     "dummy node should have null hash");
                         } else {
@@ -199,7 +199,7 @@ class MerkleRehashTests {
 
         @Override
         public Hash getHash() {
-            return CryptoFactory.getInstance().getNullHash();
+            return CryptographyHolder.get().getNullHash();
         }
 
         @Override
@@ -239,7 +239,7 @@ class MerkleRehashTests {
 
         @Override
         public Hash getHash() {
-            return CryptoFactory.getInstance().getNullHash();
+            return CryptographyHolder.get().getNullHash();
         }
 
         @Override

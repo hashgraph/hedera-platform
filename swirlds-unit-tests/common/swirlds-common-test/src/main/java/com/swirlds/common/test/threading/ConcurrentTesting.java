@@ -17,7 +17,7 @@ package com.swirlds.common.test.threading;
 
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyTrue;
 
-import com.swirlds.common.threading.ThrowingRunnable;
+import com.swirlds.common.threading.utility.ThrowingRunnable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;

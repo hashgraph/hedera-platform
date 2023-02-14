@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 /** Sends a KEEPALIVE or a protocol ID initiating that protocol */
-public class InitialState implements NegotiationState {
+public class InitialState extends NegotiationStateWithDescription {
     private final NegotiationProtocols protocols;
     private final OutputStream byteOutput;
 
@@ -53,10 +53,13 @@ public class InitialState implements NegotiationState {
         if (protocolByte >= 0) {
             byteOutput.write(protocolByte);
             byteOutput.flush();
+            setDescription(
+                    "initiated protocol " + protocols.getInitiatedProtocol().getProtocolName());
             return stateSentInitiate.initiatedProtocol(protocolByte);
         } else {
             byteOutput.write(NegotiatorBytes.KEEPALIVE);
             byteOutput.flush();
+            setDescription("sent keepalive");
             return stateSentKeepalive;
         }
     }

@@ -29,12 +29,10 @@ public enum FCQHashAlgorithm {
     public static final long HASH_RADIX = 3;
 
     private static final int BYTE_BLOCK = 8;
-    private final TriConsumer<byte[], byte[], Integer> hashCalculator;
-    private final TriConsumer<byte[], byte[], Integer> removalHashCalculator;
+    private final TriConsumer hashCalculator;
+    private final TriConsumer removalHashCalculator;
 
-    FCQHashAlgorithm(
-            final TriConsumer<byte[], byte[], Integer> hashCalculator,
-            final TriConsumer<byte[], byte[], Integer> removalHashCalculator) {
+    FCQHashAlgorithm(final TriConsumer hashCalculator, final TriConsumer removalHashCalculator) {
         this.hashCalculator = hashCalculator;
         this.removalHashCalculator = removalHashCalculator;
     }
@@ -181,8 +179,7 @@ public enum FCQHashAlgorithm {
     }
 
     @FunctionalInterface
-    interface TriConsumer<A, B, C> {
-
-        void accept(A a, B b, C c);
+    interface TriConsumer {
+        void accept(byte[] a, byte[] b, int c);
     }
 }

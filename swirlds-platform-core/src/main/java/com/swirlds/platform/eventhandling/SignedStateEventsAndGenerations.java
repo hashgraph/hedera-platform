@@ -15,9 +15,10 @@
  */
 package com.swirlds.platform.eventhandling;
 
+import com.swirlds.common.config.ConsensusConfig;
+import com.swirlds.platform.consensus.RoundCalculationUtils;
 import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.MinGenInfo;
-import com.swirlds.platform.state.StateSettings;
 import com.swirlds.platform.state.signed.SignedState;
 import java.util.List;
 
@@ -28,12 +29,12 @@ import java.util.List;
  * this class to replace that logic once the refactoring of EventFlow starts.
  */
 public class SignedStateEventsAndGenerations {
-    private final StateSettings settings;
+    private final ConsensusConfig consensusConfig;
     private final SignedStateEventStorage events;
     private final MinGenQueue generations;
 
-    public SignedStateEventsAndGenerations(final StateSettings settings) {
-        this.settings = settings;
+    public SignedStateEventsAndGenerations(final ConsensusConfig consensusConfig) {
+        this.consensusConfig = consensusConfig;
         events = new SignedStateEventStorage();
         generations = new MinGenQueue();
     }
@@ -68,7 +69,8 @@ public class SignedStateEventsAndGenerations {
         }
         // the round whose min generation we need
         final long oldestNonAncientRound =
-                settings.getOldestNonAncientRound(getLastRoundReceived());
+                RoundCalculationUtils.getOldestNonAncientRound(
+                        consensusConfig.roundsNonAncient(), getLastRoundReceived());
 
         // we need to keep all events that are non-ancient
         final long minGenerationNonAncient = generations.getRoundGeneration(oldestNonAncientRound);
@@ -101,8 +103,10 @@ public class SignedStateEventsAndGenerations {
         generations.addAll(signedState.getMinGenInfo());
 
         final long minGenNonAncient =
-                settings.getMinGenNonAncient(
-                        signedState.getRound(), generations::getRoundGeneration);
+                RoundCalculationUtils.getMinGenNonAncient(
+                        consensusConfig.roundsNonAncient(),
+                        signedState.getRound(),
+                        generations::getRoundGeneration);
         events.loadDataFromSignedState(signedState.getEvents(), minGenNonAncient);
     }
 }

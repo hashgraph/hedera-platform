@@ -65,6 +65,16 @@ public class DummyMerkleLeaf extends PartialMerkleLeaf implements DummyMerkleNod
     }
 
     /**
+     * Enable duplicate hashing on this node.
+     *
+     * @return this object
+     */
+    public DummyMerkleLeaf enableDuplicateHashing() {
+        allowDuplicateHashing = true;
+        return this;
+    }
+
+    /**
      * Set the method that is used when migrating all DummyMerkleLeaf objects.
      *
      * @param migrationMapper a method that is used to migrate a dummy merkle leaf

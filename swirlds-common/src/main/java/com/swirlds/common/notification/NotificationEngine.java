@@ -15,7 +15,9 @@
  */
 package com.swirlds.common.notification;
 
+import com.swirlds.common.notification.internal.AsyncNotificationEngine;
 import com.swirlds.common.threading.futures.StandardFuture;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.util.concurrent.Future;
 
 /**
@@ -23,6 +25,16 @@ import java.util.concurrent.Future;
  * asynchronous event models along with unordered or ordered delivery of notifications.
  */
 public interface NotificationEngine {
+
+    /**
+     * Build a new notification engine.
+     *
+     * @param threadManager the thread manager for this node
+     * @return a new notification engine
+     */
+    static NotificationEngine buildEngine(final ThreadManager threadManager) {
+        return new AsyncNotificationEngine(threadManager);
+    }
 
     /** Prepares the engine for use and acquires any necessary threads or external resources. */
     void initialize();
@@ -111,6 +123,7 @@ public interface NotificationEngine {
 
     // FUTURE WORK this method can removed once the notification engine is managed by the
     // PlatformContext
+
     /**
      * Unregister ALL listeners.
      *

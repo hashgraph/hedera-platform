@@ -439,6 +439,8 @@ sdk/data/apps
 sdk/data/stats
 sdk/*.csv
 sdk/settingsUsed.txt
+sdk/configsUsed.txt
+*/platform-components.mermaid
 
 # Hedera Files
 *.rcd

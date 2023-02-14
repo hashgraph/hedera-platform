@@ -28,7 +28,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Executes emergency reconnect in the role of the learner */
 public class EmergencyReconnectLearner {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(EmergencyReconnectLearner.class);
     private final EmergencyRecoveryFile emergencyRecoveryFile;
     private final ReconnectController reconnectController;
     private final EmergencySignedStateValidator validator;

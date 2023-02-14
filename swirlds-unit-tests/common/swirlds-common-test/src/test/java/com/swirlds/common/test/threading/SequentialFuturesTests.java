@@ -19,6 +19,7 @@ import static com.swirlds.common.test.AssertionUtils.assertEventuallyEquals;
 import static com.swirlds.common.test.AssertionUtils.completeBeforeTimeout;
 import static com.swirlds.common.test.AssertionUtils.throwBeforeTimeout;
 import static com.swirlds.common.test.RandomUtils.getRandomPrintSeed;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static com.swirlds.test.framework.TestQualifierTags.TIME_CONSUMING;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -225,7 +226,7 @@ class SequentialFuturesTests {
 
         final CountDownLatch latch = new CountDownLatch(1);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setComponent("sequential-futures-test")
                 .setThreadName("verify-eventual-completion-get()-" + indexToCheck)
                 .setExceptionHandler(
@@ -273,7 +274,7 @@ class SequentialFuturesTests {
 
         final CountDownLatch latch = new CountDownLatch(1);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setComponent("sequential-futures-test")
                 .setThreadName("verify-eventual-cancellation-get()-" + indexToCheck)
                 .setExceptionHandler(

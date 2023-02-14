@@ -44,7 +44,8 @@ public final class MerkleCopy {
         } else if (node.isLeaf()) {
             return node.copy();
         } else {
-            final MerkleNode copy = ConstructableRegistry.createObject(node.getClassId());
+            final MerkleNode copy =
+                    ConstructableRegistry.getInstance().createObject(node.getClassId());
             if (copy == null) {
                 throw new MerkleCopyException(
                         String.format(

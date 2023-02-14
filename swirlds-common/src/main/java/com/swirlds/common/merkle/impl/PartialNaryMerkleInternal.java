@@ -120,6 +120,11 @@ public non-sealed class PartialNaryMerkleInternal extends AbstractMerkleInternal
      */
     @Override
     public void addDeserializedChildren(final List<MerkleNode> children, final int version) {
+        for (final MerkleNode child : this.children) {
+            if (child != null) {
+                child.release();
+            }
+        }
         this.children.clear();
         super.addDeserializedChildren(children, version);
     }

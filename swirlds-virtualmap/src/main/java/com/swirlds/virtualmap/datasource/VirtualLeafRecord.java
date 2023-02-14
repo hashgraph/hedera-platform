@@ -69,6 +69,11 @@ public final class VirtualLeafRecord<K extends VirtualKey, V extends VirtualValu
         this.value = value;
     }
 
+    @SuppressWarnings("unchecked")
+    public VirtualLeafRecord<K, V> copy() {
+        return new VirtualLeafRecord<>(getPath(), getHash(), key, (V) value.copy());
+    }
+
     /**
      * Gets the key.
      *

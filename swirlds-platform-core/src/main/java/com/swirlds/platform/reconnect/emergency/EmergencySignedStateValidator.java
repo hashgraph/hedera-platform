@@ -16,18 +16,20 @@
 package com.swirlds.platform.reconnect.emergency;
 
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
-import static com.swirlds.logging.LogMarker.RECONNECT;
+import static com.swirlds.logging.LogMarker.SIGNED_STATE;
+import static com.swirlds.platform.state.signed.SignedStateUtilities.logStakeInfo;
 
+import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.Crypto;
 import com.swirlds.platform.Utilities;
-import com.swirlds.platform.reconnect.ReconnectException;
-import com.swirlds.platform.reconnect.SignedStateValidator;
 import com.swirlds.platform.state.EmergencyRecoveryFile;
 import com.swirlds.platform.state.StateSettings;
 import com.swirlds.platform.state.signed.SignatureSummary;
 import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateInvalidException;
 import com.swirlds.platform.state.signed.SignedStateUtilities;
+import com.swirlds.platform.state.signed.SignedStateValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,7 +40,7 @@ import org.apache.logging.log4j.Logger;
  * valid. The emergency reconnect scenario is described in disaster-recovery.md.
  */
 public class EmergencySignedStateValidator implements SignedStateValidator {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(EmergencySignedStateValidator.class);
     private final Crypto crypto;
     private final EmergencyRecoveryFile emergencyRecoveryFile;
 
@@ -52,12 +54,19 @@ public class EmergencySignedStateValidator implements SignedStateValidator {
         this.emergencyRecoveryFile = emergencyRecoveryFile;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * <p>If the {@code signedState} is matches the request round and hash exactly, this method
+     * updates the next epoch hash via {@link
+     * com.swirlds.platform.state.PlatformData#setNextEpochHash(Hash)}. Doing so does not modify the
+     * hash, but will trigger the epoch hash to update when the next round reaches consensus.
+     */
     @Override
     public void validate(final SignedState signedState, final AddressBook addressBook)
-            throws ReconnectException {
+            throws SignedStateInvalidException {
         LOG.info(
-                RECONNECT.getMarker(),
+                SIGNED_STATE.getMarker(),
                 "Requested round {} with hash {}, received round {} with hash {}",
                 emergencyRecoveryFile.round(),
                 emergencyRecoveryFile.hash(),
@@ -65,7 +74,7 @@ public class EmergencySignedStateValidator implements SignedStateValidator {
                 signedState.getState().getHash());
 
         if (signedState.getRound() > emergencyRecoveryFile.round()) {
-            verifyStateHasMajoritySigs(signedState, addressBook);
+            verifyLaterRoundIsValid(signedState, addressBook);
         } else if (signedState.getRound() < emergencyRecoveryFile.round()) {
             throwStateTooOld(signedState);
         } else {
@@ -76,76 +85,140 @@ public class EmergencySignedStateValidator implements SignedStateValidator {
     private void verifyStateHashMatches(final SignedState signedState) {
         if (!signedState.getState().getHash().equals(emergencyRecoveryFile.hash())) {
             LOG.error(
-                    RECONNECT.getMarker(),
-                    "Round matches but hash does not.\nFailed emergency reconnect state:\n{}\n{}",
+                    SIGNED_STATE.getMarker(),
+                    """
+							Emergency recovery signed state round matches the request but hash does not.
+							Failed emergency reconnect state:
+							{}
+							{}
+							""",
                     () -> signedState.getState().getPlatformState().getInfoString(),
                     () ->
                             generateHashDebugString(
                                     signedState.getState(), StateSettings.getDebugHashDepth()));
 
-            throw new ReconnectException(
+            throw new SignedStateInvalidException(
                     String.format(
-                            "Received signed state for the requested round but "
+                            "Emergency recovery signed state is for the requested round but "
                                     + "the hash does not match. Requested %s, received %s",
                             emergencyRecoveryFile.hash(), signedState.getState().getHash()));
         }
+
+        // FUTURE WORK: move this to the calling code (saved state loading and emergency reconnect)
+        // when
+        // reconnect is refactored such that it no longer needs to be called by sync
+        signedState
+                .getState()
+                .getPlatformState()
+                .getPlatformData()
+                .setNextEpochHash(emergencyRecoveryFile.hash());
+
         LOG.info(
-                RECONNECT.getMarker(),
-                "Received a state for the requested round and hash. Validation succeeded.");
+                SIGNED_STATE.getMarker(),
+                "Emergency recovery signed state matches the requested round and hash. "
+                        + "Validation succeeded, next epoch hash updated.");
     }
 
     private void throwStateTooOld(final SignedState signedState) {
         LOG.error(
-                RECONNECT.getMarker(),
-                "State is too old.\nFailed emergency reconnect state:\n{}\n{}",
+                SIGNED_STATE.getMarker(),
+                """
+						State is too old. Failed emergency reconnect state:
+						{}
+						{}""",
                 () -> signedState.getState().getPlatformState().getInfoString(),
                 () ->
                         generateHashDebugString(
                                 signedState.getState(), StateSettings.getDebugHashDepth()));
 
-        throw new ReconnectException(
+        throw new SignedStateInvalidException(
                 String.format(
-                        "Received signed state for a round smaller than requested. Requested %d,"
-                                + " received %d",
+                        "Emergency recovery signed state is for a round smaller than requested."
+                                + " Requested %d, received %d",
                         emergencyRecoveryFile.round(), signedState.getRound()));
     }
 
-    private void verifyStateHasMajoritySigs(
+    private void verifyLaterRoundIsValid(
             final SignedState signedState, final AddressBook addressBook) {
         LOG.info(
-                RECONNECT.getMarker(),
-                "Received round later than requested. Validating that the state is signed by a"
-                        + " majority stake.");
+                SIGNED_STATE.getMarker(),
+                "Emergency recovery signed state is for round later than requested. "
+                        + "Validating that the state is signed by a majority stake.");
 
+        // must be fully signed
+        checkSignatures(signedState, addressBook);
+
+        // must have the correct epoch hash
+        checkEpochHash(signedState);
+
+        LOG.info(
+                SIGNED_STATE.getMarker(),
+                "Signed state is a later, fully signed state with the correct epoch hash."
+                        + " Validation succeeded.");
+    }
+
+    private void checkEpochHash(final SignedState signedState) {
+        final Hash epochHash =
+                signedState.getState().getPlatformState().getPlatformData().getEpochHash();
+        if (!emergencyRecoveryFile.hash().equals(epochHash)) {
+            LOG.error(
+                    SIGNED_STATE.getMarker(),
+                    """
+							State is fully signed but has an incorrect epoch hash. Failed emergency recovery state:
+							{}
+							{}""",
+                    () -> signedState.getState().getPlatformState().getInfoString(),
+                    () ->
+                            generateHashDebugString(
+                                    signedState.getState(), StateSettings.getDebugHashDepth()));
+
+            throw new SignedStateInvalidException(
+                    String.format(
+                            """
+							Emergency recovery signed state has an incorrect epoch hash!
+							Expected:\t%s
+							Was:\t%s""",
+                            emergencyRecoveryFile.hash(), epochHash));
+        }
+    }
+
+    private void checkSignatures(final SignedState signedState, final AddressBook addressBook) {
         final SignatureSummary sigSummary =
                 SignedStateUtilities.getSigningStake(signedState, crypto, addressBook);
         final long validStake = sigSummary.validStake();
         final boolean hasEnoughStake =
                 Utilities.isMajority(validStake, addressBook.getTotalStake());
 
-        SignedStateValidator.logStakeInfo(LOG, validStake, hasEnoughStake, addressBook);
+        logStakeInfo(LOG, validStake, hasEnoughStake, addressBook);
 
         if (!hasEnoughStake) {
             LOG.error(
-                    RECONNECT.getMarker(),
-                    "Failed emergency reconnect state:\n{}\n{}",
+                    SIGNED_STATE.getMarker(),
+                    """
+							Not enough signatures. Failed emergency recovery state:
+							{}
+							{}""",
                     () -> signedState.getState().getPlatformState().getInfoString(),
                     () ->
                             generateHashDebugString(
                                     signedState.getState(), StateSettings.getDebugHashDepth()));
 
-            throw new ReconnectException(
+            throw new SignedStateInvalidException(
                     String.format(
-                            "Received signed state does not have enough valid signatures!"
-                                    + " validCount: %d, addressBook size: %d, validStake: %d,"
-                                    + " addressBook total stake: %d",
+                            """
+							Emergency recovery signed state does not have enough valid signatures!
+							validCount:\t%d
+							addressBook size:\t%d
+							validStake:\t%d
+							addressBook total stake:\t%d""",
                             sigSummary.numValidSigs(),
                             addressBook.getSize(),
                             validStake,
                             addressBook.getTotalStake()));
         }
+
         LOG.info(
-                RECONNECT.getMarker(),
-                "Received a later, fully signed state. Validation succeeded.");
+                SIGNED_STATE.getMarker(),
+                "Signed state is a later, fully signed state. Validation succeeded.");
     }
 }

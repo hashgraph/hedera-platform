@@ -20,9 +20,10 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.FREEZE;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
 
+import com.swirlds.common.context.PlatformContext;
+import com.swirlds.common.crypto.config.CryptoConfig;
 import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.notification.NotificationEngine;
-import com.swirlds.common.notification.NotificationFactory;
 import com.swirlds.common.stream.EventStreamManager;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.SoftwareVersion;
@@ -31,6 +32,7 @@ import com.swirlds.common.system.SwirldState2;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.threading.pool.CachedPoolParallelExecutor;
 import com.swirlds.common.threading.pool.ParallelExecutor;
 import com.swirlds.common.utility.AutoCloseableWrapper;
@@ -87,7 +89,7 @@ import org.apache.logging.log4j.Logger;
 final class PlatformConstructor {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(PlatformConstructor.class);
 
     /**
      * The maximum size of the queue holding signed states ready to be hashed and signed by others.
@@ -97,20 +99,27 @@ final class PlatformConstructor {
     /** Private constructor so that this class is never instantiated */
     private PlatformConstructor() {}
 
-    static ParallelExecutor parallelExecutor() {
-        return new CachedPoolParallelExecutor("node-sync");
+    /**
+     * Create a parallel executor.
+     *
+     * @param threadManager responsible for managing thread lifecycles
+     */
+    static ParallelExecutor parallelExecutor(final ThreadManager threadManager) {
+        return new CachedPoolParallelExecutor(threadManager, "node-sync");
     }
 
     static SettingsProvider settingsProvider() {
         return StaticSettingsProvider.getSingleton();
     }
 
-    static SocketFactory socketFactory(final KeysAndCerts keysAndCerts) {
+    static SocketFactory socketFactory(
+            final KeysAndCerts keysAndCerts, final CryptoConfig cryptoConfig) {
         if (!Settings.getInstance().isUseTLS()) {
             return new TcpFactory(PlatformConstructor.settingsProvider());
         }
         try {
-            return new TlsFactory(keysAndCerts, PlatformConstructor.settingsProvider());
+            return new TlsFactory(
+                    keysAndCerts, PlatformConstructor.settingsProvider(), cryptoConfig);
         } catch (final NoSuchAlgorithmException
                 | UnrecoverableKeyException
                 | KeyStoreException
@@ -134,13 +143,16 @@ final class PlatformConstructor {
      * Creates the {@link QueueThread} that stores and handles signed states that need to be hashed
      * and have signatures collected.
      *
+     * @param threadManager responsible for managing thread lifecycles
      * @param selfId this node's id
      * @param signedStateManager the signed state manager that collects signatures
      */
     static QueueThread<SignedState> stateHashSignQueue(
-            final long selfId, final SignedStateManager signedStateManager) {
+            final ThreadManager threadManager,
+            final long selfId,
+            final SignedStateManager signedStateManager) {
 
-        return new QueueThreadConfiguration<SignedState>()
+        return new QueueThreadConfiguration<SignedState>(threadManager)
                 .setNodeId(selfId)
                 .setComponent(PLATFORM_THREAD_POOL_NAME)
                 .setThreadName("state-hash-sign")
@@ -152,6 +164,7 @@ final class PlatformConstructor {
     /**
      * Creates a new instance of {@link SwirldStateManager}.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param selfId this node's id
      * @param systemTransactionHandler the handler of system transactions
      * @param metrics reference to the metrics-system
@@ -161,6 +174,7 @@ final class PlatformConstructor {
      * @return the newly constructed instance of {@link SwirldStateManager}
      */
     public static SwirldStateManager swirldStateManager(
+            final ThreadManager threadManager,
             final NodeId selfId,
             final SystemTransactionHandler systemTransactionHandler,
             final Metrics metrics,
@@ -179,6 +193,7 @@ final class PlatformConstructor {
                     initialState);
         } else if (initialState.getSwirldState() instanceof SwirldState1) {
             return new SwirldStateManagerSingle(
+                    threadManager,
                     selfId,
                     systemTransactionHandler,
                     new SwirldStateMetrics(metrics),
@@ -200,22 +215,26 @@ final class PlatformConstructor {
     /**
      * Constructs a new {@link PreConsensusEventHandler}.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param selfId this node's id
      * @param swirldStateManager the instance of {@link SwirldStateManager}
      * @param consensusMetrics the class that records stats relating to {@link SwirldStateManager}
      * @return the newly constructed instance of {@link PreConsensusEventHandler}
      */
     public static PreConsensusEventHandler preConsensusEventHandler(
+            final ThreadManager threadManager,
             final NodeId selfId,
             final SwirldStateManager swirldStateManager,
             final ConsensusMetrics consensusMetrics) {
 
-        return new PreConsensusEventHandler(selfId, swirldStateManager, consensusMetrics);
+        return new PreConsensusEventHandler(
+                threadManager, selfId, swirldStateManager, consensusMetrics);
     }
 
     /**
      * Constructs a new {@link ConsensusRoundHandler}.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param dispatchBuilder responsible for building dispatchers
      * @param selfId this node's id
      * @param settingsProvider a static settings provider
@@ -230,6 +249,8 @@ final class PlatformConstructor {
      * @return the newly constructed instance of {@link ConsensusRoundHandler}
      */
     public static ConsensusRoundHandler consensusHandler(
+            final PlatformContext platformContext,
+            final ThreadManager threadManager,
             final DispatchBuilder dispatchBuilder,
             final long selfId,
             final SettingsProvider settingsProvider,
@@ -242,6 +263,8 @@ final class PlatformConstructor {
             final SoftwareVersion softwareVersion) {
 
         return new ConsensusRoundHandler(
+                platformContext,
+                threadManager,
                 dispatchBuilder,
                 selfId,
                 settingsProvider,
@@ -259,17 +282,16 @@ final class PlatformConstructor {
      * down.
      */
     public static void registerFatalListener(
+            final NotificationEngine notificationEngine,
             final SignedStateManager signedStateManager,
             final SignedStateFileManager signedStateFileManager) {
 
-        final NotificationEngine engine = NotificationFactory.getEngine();
-
-        engine.register(
+        notificationEngine.register(
                 Fatal.FatalListener.class,
                 (Fatal.FatalNotification notification) -> {
                     if (Settings.getInstance().getState().dumpStateOnFatal) {
                         try (final AutoCloseableWrapper<SignedState> wrapper =
-                                signedStateManager.getLastCompleteSignedState(false)) {
+                                signedStateManager.getLatestSignedState(false)) {
                             final SignedState state = wrapper.get();
                             if (state != null) {
                                 signedStateFileManager.dumpState(state, "fatal", true);
@@ -283,32 +305,31 @@ final class PlatformConstructor {
     public static void registerStateSelfSignedListener(
             final SwirldsPlatform platform, final NodeId selfId) {
 
-        final NotificationEngine engine = NotificationFactory.getEngine();
         final NetworkMetrics networkMetrics = new NetworkMetrics(platform);
 
-        engine.register(
-                StateSelfSignedListener.class,
-                notification -> {
-                    if (notification.getSelfId().equals(selfId)) {
-                        SignatureTransmitter.transmitSignature(
-                                platform,
-                                notification.getRound(),
-                                notification.getSelfSignature(),
-                                notification.getStateHash());
-                        NetworkStatsTransmitter.transmitStats(platform, networkMetrics);
-                    }
-                });
+        platform.getNotificationEngine()
+                .register(
+                        StateSelfSignedListener.class,
+                        notification -> {
+                            if (notification.getSelfId().equals(selfId)) {
+                                SignatureTransmitter.transmitSignature(
+                                        platform,
+                                        notification.getRound(),
+                                        notification.getSelfSignature(),
+                                        notification.getStateHash());
+                                NetworkStatsTransmitter.transmitStats(platform, networkMetrics);
+                            }
+                        });
     }
 
     /** Register a listener for when a signed state gathers enough signatures to become complete. */
     public static void registerStateHasEnoughSignaturesListener(
+            final NotificationEngine notificationEngine,
             final NodeId selfId,
             final FreezeManager freezeManager,
             final SignedStateFileManager signedStateFileManager) {
 
-        final NotificationEngine engine = NotificationFactory.getEngine();
-
-        engine.register(
+        notificationEngine.register(
                 StateHasEnoughSignaturesListener.class,
                 notification -> {
                     if (notification.getSelfId().equals(selfId)) {
@@ -333,14 +354,13 @@ final class PlatformConstructor {
      * before aging out and being discarded.
      */
     public static void registerStateLacksSignaturesListener(
+            final NotificationEngine notificationEngine,
             final NodeId selfId,
             final FreezeManager freezeManager,
             final SignedStateMetrics signedStateMetrics,
             final SignedStateFileManager signedStateFileManager) {
 
-        final NotificationEngine engine = NotificationFactory.getEngine();
-
-        engine.register(
+        notificationEngine.register(
                 StateLacksSignaturesListener.class,
                 notification -> {
                     if (notification.getSelfId().equals(selfId)) {
@@ -356,13 +376,11 @@ final class PlatformConstructor {
                         }
                         if (notification.getSignedState().isStateToSave()) {
                             signedStateMetrics.getTotalUnsignedDiskStatesMetric().increment();
-                            if (!Settings.getInstance().isEnableStateRecovery()) {
-                                LOG.error(
-                                        EXCEPTION.getMarker(),
-                                        "state written to disk for round {} did not have enough"
-                                                + " signatures",
-                                        notification.getSignedState().getRound());
-                            }
+                            LOG.error(
+                                    EXCEPTION.getMarker(),
+                                    "state written to disk for round {} did not have enough"
+                                            + " signatures",
+                                    notification.getSignedState().getRound());
                             signedStateFileManager.saveSignedStateToDisk(
                                     notification.getSignedState());
                         }
@@ -372,15 +390,14 @@ final class PlatformConstructor {
 
     /** Register a listener for when the signed state manager starts tracking a new signed state. */
     public static void registerNewSignedStateBeingTrackedListener(
+            final NotificationEngine notificationEngine,
             final NodeId selfId,
             final SignedStateFileManager signedStateFileManager,
             final HashLogger hashLogger) {
 
-        final NotificationEngine engine = NotificationFactory.getEngine();
-
         // When we begin tracking a new signed state, "introduce" the state to the
         // SignedStateFileManager
-        engine.register(
+        notificationEngine.register(
                 NewSignedStateBeingTrackedListener.class,
                 notification -> {
                     if (notification.getSelfId().equals(selfId)) {

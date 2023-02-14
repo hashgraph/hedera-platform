@@ -18,11 +18,13 @@ package com.swirlds.platform.state.iss;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STATE_HASH;
 
+import com.swirlds.common.config.ConsensusConfig;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.sequence.map.ConcurrentSequenceMap;
 import com.swirlds.common.sequence.map.SequenceMap;
 import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.time.Time;
 import com.swirlds.common.utility.throttle.RateLimiter;
 import com.swirlds.logging.payloads.IssPayload;
 import com.swirlds.platform.Settings;
@@ -59,19 +61,13 @@ public class ConsensusHashManager {
     final AddressBook addressBook;
 
     /** Prevent log messages about a lack of signatures from spamming the logs. */
-    private final RateLimiter lackingSignaturesRateLimiter =
-            new RateLimiter(
-                    Duration.ofSeconds(Settings.getInstance().getState().secondsBetweenIssLogs));
+    private final RateLimiter lackingSignaturesRateLimiter;
 
     /** Prevent log messages about self ISS events from spamming the logs. */
-    private final RateLimiter selfIssRateLimiter =
-            new RateLimiter(
-                    Duration.ofSeconds(Settings.getInstance().getState().secondsBetweenIssLogs));
+    private final RateLimiter selfIssRateLimiter;
 
     /** Prevent log messages about catastrophic ISS events from spamming the logs. */
-    private final RateLimiter catastrophicIssRateLimiter =
-            new RateLimiter(
-                    Duration.ofSeconds(Settings.getInstance().getState().secondsBetweenIssLogs));
+    private final RateLimiter catastrophicIssRateLimiter;
 
     private final SelfIssTrigger selfIssDispatcher;
     private final CatastrophicIssTrigger catastrophicIssDispatcher;
@@ -82,22 +78,45 @@ public class ConsensusHashManager {
      *
      * @param dispatchBuilder responsible for building dispatchers
      * @param addressBook the address book for the network
+     * @param consensusConfig consensus configuration
      */
     public ConsensusHashManager(
-            final DispatchBuilder dispatchBuilder, final AddressBook addressBook) {
+            final Time time,
+            final DispatchBuilder dispatchBuilder,
+            final AddressBook addressBook,
+            final ConsensusConfig consensusConfig) {
 
-        this.selfIssDispatcher = dispatchBuilder.getDispatcher(SelfIssTrigger.class)::dispatch;
+        final Duration timeBetweenIssLogs =
+                Duration.ofSeconds(Settings.getInstance().getState().secondsBetweenIssLogs);
+        lackingSignaturesRateLimiter = new RateLimiter(time, timeBetweenIssLogs);
+        selfIssRateLimiter = new RateLimiter(time, timeBetweenIssLogs);
+        catastrophicIssRateLimiter = new RateLimiter(time, timeBetweenIssLogs);
+
+        this.selfIssDispatcher =
+                dispatchBuilder.getDispatcher(
+                                ConsensusHashManager.class,
+                                SelfIssTrigger.class,
+                                "self ISS detected")
+                        ::dispatch;
         this.catastrophicIssDispatcher =
-                dispatchBuilder.getDispatcher(CatastrophicIssTrigger.class)::dispatch;
+                dispatchBuilder.getDispatcher(
+                                ConsensusHashManager.class,
+                                CatastrophicIssTrigger.class,
+                                "really bad ISS detected")
+                        ::dispatch;
         this.stateHashValidityDispatcher =
-                dispatchBuilder.getDispatcher(StateHashValidityTrigger.class)::dispatch;
+                dispatchBuilder.getDispatcher(
+                                ConsensusHashManager.class,
+                                StateHashValidityTrigger.class,
+                                "round ISS status known")
+                        ::dispatch;
 
         this.addressBook = addressBook;
 
         this.roundData =
                 new ConcurrentSequenceMap<>(
-                        -Settings.getInstance().getState().roundsNonAncient,
-                        Settings.getInstance().getState().roundsNonAncient,
+                        -consensusConfig.roundsNonAncient(),
+                        consensusConfig.roundsNonAncient(),
                         x -> x);
     }
 
@@ -106,7 +125,7 @@ public class ConsensusHashManager {
      *
      * @param round the round that was just completed
      */
-    @Observer(dispatchType = RoundCompletedTrigger.class)
+    @Observer(value = RoundCompletedTrigger.class, comment = "make final decision on old round")
     public void roundCompletedObserver(final Long round) {
         if (round <= previousRound) {
             throw new IllegalArgumentException(
@@ -173,7 +192,9 @@ public class ConsensusHashManager {
      * @param hash the hash that was signed
      * @param signature the signature on the hash
      */
-    @Observer(dispatchType = PostConsensusStateSignatureTrigger.class)
+    @Observer(
+            value = PostConsensusStateSignatureTrigger.class,
+            comment = "check hash reported by node")
     public void postConsensusSignatureObserver(
             final Long round, final Long signerId, final Hash hash, final Signature signature) {
 
@@ -199,7 +220,7 @@ public class ConsensusHashManager {
      * @param round the round of the state
      * @param hash the hash of the state
      */
-    @Observer(dispatchType = StateHashedTrigger.class)
+    @Observer(value = StateHashedTrigger.class, comment = "check hash derived by this node")
     public void stateHashedObserver(final Long round, final Hash hash) {
         final RoundHashValidator roundHashValidator = roundData.get(round);
         if (roundHashValidator == null) {
@@ -214,25 +235,15 @@ public class ConsensusHashManager {
     }
 
     /**
-     * Observe when a state is obtained via reconnect.
+     * Observe when an overriding state is obtained, i.e. via reconnect or state loading.
      *
      * @param round the round of the state that was obtained
      * @param stateHash the hash of the state that was obtained
      */
-    @Observer(dispatchType = ReconnectStateLoadedTrigger.class)
-    public void reconnectStateLoadedObserver(final Long round, final Hash stateHash) {
-        roundCompletedObserver(round);
-        stateHashedObserver(round, stateHash);
-    }
-
-    /**
-     * Observe when a state is loaded from disk.
-     *
-     * @param round the round of the state that was loaded
-     * @param stateHash the hash of the state that was loaded
-     */
-    @Observer(dispatchType = DiskStateLoadedTrigger.class)
-    public void diskStateLoadedObserver(final Long round, final Hash stateHash) {
+    @Observer(
+            value = {DiskStateLoadedTrigger.class, ReconnectStateLoadedTrigger.class},
+            comment = "ingest completed state")
+    public void overridingStateObserver(final Long round, final Hash stateHash) {
         roundCompletedObserver(round);
         stateHashedObserver(round, stateHash);
     }

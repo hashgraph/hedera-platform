@@ -19,6 +19,7 @@ import com.swirlds.common.threading.framework.StoppableThread;
 import com.swirlds.common.threading.framework.TypedStoppableThread;
 import com.swirlds.common.threading.framework.internal.AbstractStoppableThreadConfiguration;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.threading.manager.ThreadManager;
 
 /**
  * An object responsible for configuring and constructing {@link StoppableThread}s.
@@ -28,9 +29,13 @@ import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 public class StoppableThreadConfiguration<T extends InterruptableRunnable>
         extends AbstractStoppableThreadConfiguration<StoppableThreadConfiguration<T>, T> {
 
-    /** Build a new stoppable thread configuration with default values. */
-    public StoppableThreadConfiguration() {
-        super();
+    /**
+     * Build a new stoppable thread configuration with default values.
+     *
+     * @param threadManager responsible for creating threads
+     */
+    public StoppableThreadConfiguration(final ThreadManager threadManager) {
+        super(threadManager);
     }
 
     /**

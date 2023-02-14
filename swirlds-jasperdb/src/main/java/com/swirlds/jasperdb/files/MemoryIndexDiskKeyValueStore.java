@@ -252,6 +252,25 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
      * @throws IOException If there was a problem reading the value from file
      */
     public D get(final long key) throws IOException {
+        return get(key, true);
+    }
+
+    /**
+     * Get a value by reading it from disk.
+     *
+     * @param key The key to find and read value for
+     * @param deserialize
+     * @return Array of serialization version for data if the value was read or null if not found
+     *     <br>
+     *     A null is returned :
+     *     <ol>
+     *       <li>if not found
+     *       <li>if deserialize flag is false
+     *     </ol>
+     *
+     * @throws IOException If there was a problem reading the value from file
+     */
+    public D get(final long key, final boolean deserialize) throws IOException {
         // Check if out of range
         final KeyRange keyRange = fileCollection.getValidKeyRange();
         if (!keyRange.withinRange(key)) {
@@ -268,7 +287,7 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
             return null;
         }
         // read from files via index lookup
-        return fileCollection.readDataItemUsingIndex(index, key);
+        return fileCollection.readDataItemUsingIndex(index, key, deserialize);
     }
 
     /**
@@ -280,46 +299,9 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
         fileCollection.close();
     }
 
-    /**
-     * Start snapshot, this is called while saving is blocked. It is expected to complete as fast as
-     * possible and only do the minimum needed to capture/write state that could be changed by
-     * saving.
-     *
-     * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
-     *     exist.
-     * @throws IOException If there was a problem snapshotting
-     */
-    @Override
-    public void startSnapshot(Path snapshotDirectory) throws IOException {
-        fileCollection.startSnapshot(snapshotDirectory);
-    }
-
-    /**
-     * Do the bulk of snapshot work, as much as possible. Saving is not blocked while this method is
-     * running, and it is expected that saving can happen concurrently without problems. This will
-     * block till the snapshot is completely created.
-     *
-     * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
-     *     exist.
-     * @throws IOException If there was a problem snapshotting
-     */
-    @Override
-    public void middleSnapshot(Path snapshotDirectory) throws IOException {
-        fileCollection.middleSnapshot(snapshotDirectory);
-    }
-
-    /**
-     * End snapshot, this is called while saving is blocked. It is expected to complete as fast as
-     * possible and only do the minimum needed to finish any work and return state after
-     * snapshotting.
-     *
-     * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
-     *     exist.
-     * @throws IOException If there was a problem snapshotting
-     */
-    @Override
-    public void endSnapshot(Path snapshotDirectory) throws IOException {
-        fileCollection.endSnapshot(snapshotDirectory);
+    /** {@inheritDoc} */
+    public void snapshot(final Path snapshotDirectory) throws IOException {
+        fileCollection.snapshot(snapshotDirectory);
     }
 
     /**

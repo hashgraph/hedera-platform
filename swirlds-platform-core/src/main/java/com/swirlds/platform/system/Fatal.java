@@ -23,7 +23,7 @@ import com.swirlds.common.notification.DispatchMode;
 import com.swirlds.common.notification.DispatchModel;
 import com.swirlds.common.notification.DispatchOrder;
 import com.swirlds.common.notification.Listener;
-import com.swirlds.common.notification.NotificationFactory;
+import com.swirlds.common.notification.NotificationEngine;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,41 +50,55 @@ public final class Fatal {
     /**
      * Declare a fatal error. Causes the system to tear itself down.
      *
+     * @param notificationEngine responsible for sending notifications to the app
      * @param message a description of the error
      */
-    public static void fatalError(final String message) {
-        fatalError(message, null, SystemExitReason.FATAL_ERROR);
+    public static void fatalError(
+            final NotificationEngine notificationEngine, final String message) {
+        fatalError(notificationEngine, message, null, SystemExitReason.FATAL_ERROR);
     }
 
     /**
      * Declare a fatal error. Causes the system to tear itself down.
      *
+     * @param notificationEngine responsible for sending notifications to the app
      * @param message a description of the error
      * @param code the exception code that will be returned on exit
      */
-    public static void fatalError(final String message, final SystemExitReason code) {
-        fatalError(message, null, code);
+    public static void fatalError(
+            final NotificationEngine notificationEngine,
+            final String message,
+            final SystemExitReason code) {
+        fatalError(notificationEngine, message, null, code);
     }
 
     /**
      * Declare a fatal error. Causes the system to tear itself down.
      *
+     * @param notificationEngine responsible for sending notifications to the app
      * @param message a description of the error
      * @param exception the exception that led to the error
      */
-    public static void fatalError(final String message, final Throwable exception) {
-        fatalError(message, exception, SystemExitReason.FATAL_ERROR);
+    public static void fatalError(
+            final NotificationEngine notificationEngine,
+            final String message,
+            final Throwable exception) {
+        fatalError(notificationEngine, message, exception, SystemExitReason.FATAL_ERROR);
     }
 
     /**
      * Declare a fatal error. Causes the system to tear itself down.
      *
+     * @param notificationEngine responsible for sending notifications to the app
      * @param message a description of the error
      * @param exception the exception that led to the error
      * @param code the exception code that will be returned on exit
      */
     public static void fatalError(
-            final String message, final Throwable exception, final SystemExitReason code) {
+            final NotificationEngine notificationEngine,
+            final String message,
+            final Throwable exception,
+            final SystemExitReason code) {
 
         final StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
 
@@ -102,7 +116,7 @@ public final class Fatal {
         }
 
         try {
-            NotificationFactory.getEngine().dispatch(FatalListener.class, new FatalNotification());
+            notificationEngine.dispatch(FatalListener.class, new FatalNotification());
         } catch (final Exception ex) {
             LOG.fatal(EXCEPTION.getMarker(), "Exception in fatal callback", ex);
         }

@@ -26,6 +26,15 @@ open module com.swirlds.jasperdb {
     exports com.swirlds.jasperdb.files.hashmap;
     exports com.swirlds.jasperdb;
     exports com.swirlds.jasperdb.settings;
+    exports com.swirlds.jasperdb.config;
+    exports com.swirlds.merkledb;
+    exports com.swirlds.merkledb.collections;
+    exports com.swirlds.merkledb.config;
+    exports com.swirlds.merkledb.files;
+    exports com.swirlds.merkledb.files.hashmap;
+    exports com.swirlds.merkledb.serialize;
+    exports com.swirlds.merkledb.settings;
+    exports com.swirlds.merkledb.utilities;
 
     requires com.swirlds.common;
     requires com.swirlds.logging;
@@ -37,4 +46,5 @@ open module com.swirlds.jasperdb {
     requires java.management;
     requires jdk.management;
     requires jdk.unsupported;
+    requires com.swirlds.config;
 }

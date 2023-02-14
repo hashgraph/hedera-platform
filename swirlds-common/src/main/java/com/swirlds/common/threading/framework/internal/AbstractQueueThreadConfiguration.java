@@ -19,6 +19,7 @@ import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.interrupt.InterruptableConsumer;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -51,8 +52,8 @@ public abstract class AbstractQueueThreadConfiguration<
     /** An initialized queue to use. */
     private BlockingQueue<T> queue;
 
-    protected AbstractQueueThreadConfiguration() {
-        super();
+    protected AbstractQueueThreadConfiguration(final ThreadManager threadManager) {
+        super(threadManager);
 
         // Queue threads are not interruptable by default
         setStopBehavior(Stoppable.StopBehavior.BLOCKING);

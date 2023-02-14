@@ -25,7 +25,11 @@ import java.time.temporal.ChronoUnit;
  *
  * <p>Necessary for testing {@link JasperDbSettingsFactory} client code running in an environment
  * without Browser-configured settings.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
  */
+@Deprecated(forRemoval = true)
 public class DefaultJasperDbSettings implements JasperDbSettings {
 
     /**
@@ -50,6 +54,7 @@ public class DefaultJasperDbSettings implements JasperDbSettings {
     public static final long DEFAULT_MAX_FILE_SIZE_BYTES = 64L * 1024 * 1024 * 1024;
     public static final boolean DEFAULT_RECONNECT_KEY_LEAK_MITIGATION_ENABLED = false;
     public static final boolean DEFAULT_INDEX_REBUILDING_ENFORCED = false;
+    public static final int DEFAULT_LEAF_RECORD_CACHE_SIZE = 1 << 20;
 
     // These default parameters result in a bloom filter false positive rate of less than 1/1000
     // when 1 billion
@@ -184,5 +189,11 @@ public class DefaultJasperDbSettings implements JasperDbSettings {
     @Override
     public boolean isIndexRebuildingEnforced() {
         return DEFAULT_INDEX_REBUILDING_ENFORCED;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int getLeafRecordCacheSize() {
+        return DEFAULT_LEAF_RECORD_CACHE_SIZE;
     }
 }

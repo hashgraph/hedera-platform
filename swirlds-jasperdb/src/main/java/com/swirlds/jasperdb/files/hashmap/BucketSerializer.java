@@ -112,16 +112,6 @@ public class BucketSerializer<K extends VirtualKey<? super K>>
     }
 
     /**
-     * Get if the number of bytes a data item takes when serialized is variable or fixed
-     *
-     * @return true if getSerializedSize() == DataFileCommon.VARIABLE_DATA_SIZE
-     */
-    @Override
-    public boolean isVariableSize() {
-        return true;
-    }
-
-    /**
      * Get the number of bytes a data item takes when serialized
      *
      * @return Either a number of bytes or DataFileCommon.VARIABLE_DATA_SIZE if size is variable

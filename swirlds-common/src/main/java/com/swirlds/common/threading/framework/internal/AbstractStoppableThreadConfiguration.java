@@ -22,6 +22,7 @@ import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.ThreadSeed;
 import com.swirlds.common.threading.framework.TypedStoppableThread;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.time.Duration;
 
 /**
@@ -39,6 +40,7 @@ public abstract class AbstractStoppableThreadConfiguration<
             Stoppable.StopBehavior.INTERRUPTABLE;
     public static final int DEFAULT_JOIN_WAIT_MS = 50;
     public static final Duration DEFAULT_HANGING_PERIOD = Duration.ofMinutes(1);
+    public static final Duration DEFAULT_LOG_AFTER_PAUSE_DURATION = Duration.ZERO;
 
     /** The stop behavior of threads created by this object */
     private Stoppable.StopBehavior stopBehavior = DEFAULT_STOP_BEHAVIOR;
@@ -48,6 +50,12 @@ public abstract class AbstractStoppableThreadConfiguration<
      * interrupting?
      */
     private int joinWaitMs = DEFAULT_JOIN_WAIT_MS;
+
+    /**
+     * The amount of time to wait for the thread to pause before logging a stack trace. A value of
+     * {@link Duration#ZERO} means never log.
+     */
+    private Duration logAfterPauseDuration = DEFAULT_LOG_AFTER_PAUSE_DURATION;
 
     /** If not null, then this is the minimum amount of time that a cycle is allowed to take. */
     private Duration minimumPeriod;
@@ -66,8 +74,8 @@ public abstract class AbstractStoppableThreadConfiguration<
      */
     private Duration hangingThreadPeriod = DEFAULT_HANGING_PERIOD;
 
-    protected AbstractStoppableThreadConfiguration() {
-        super();
+    protected AbstractStoppableThreadConfiguration(final ThreadManager threadManager) {
+        super(threadManager);
     }
 
     /**
@@ -274,6 +282,26 @@ public abstract class AbstractStoppableThreadConfiguration<
     public C setHangingThreadPeriod(final Duration hangingThreadPeriod) {
         throwIfImmutable();
         this.hangingThreadPeriod = hangingThreadPeriod;
+        return (C) this;
+    }
+
+    /**
+     * Get the amount of time to wait for the thread to pause before logging a stack trace. A value
+     * of * {@link Duration#ZERO} means never log.
+     */
+    public Duration getLogAfterPauseDuration() {
+        return logAfterPauseDuration;
+    }
+
+    /**
+     * Set the amount of time to wait for the thread to pause before logging a stack trace. A value
+     * of {@link Duration#ZERO} means never log.
+     *
+     * @return this object
+     */
+    @SuppressWarnings("unchecked")
+    public C setLogAfterPauseDuration(final Duration logAfterPauseDuration) {
+        this.logAfterPauseDuration = logAfterPauseDuration;
         return (C) this;
     }
 }

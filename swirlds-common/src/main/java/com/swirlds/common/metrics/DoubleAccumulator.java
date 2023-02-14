@@ -16,8 +16,10 @@
 package com.swirlds.common.metrics;
 
 import static com.swirlds.common.metrics.FloatFormats.FORMAT_11_3;
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
+import java.util.EnumSet;
 import java.util.function.DoubleBinaryOperator;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
@@ -29,7 +31,36 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
  * <p>A {@code DoubleAccumulator} is reset to the {@link #getInitialValue() initialValue}. If no
  * {@code initialValue} was specified, the {@code DoubleAccumulator} is reset to {@code 0.0}.
  */
-public interface DoubleAccumulator extends BaseDoubleMetric {
+public interface DoubleAccumulator extends Metric {
+
+    /** {@inheritDoc} */
+    @Override
+    default DataType getDataType() {
+        return DataType.FLOAT;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    default EnumSet<ValueType> getValueTypes() {
+        return EnumSet.of(VALUE);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    default Double get(final ValueType valueType) {
+        throwArgNull(valueType, "valueType");
+        if (valueType == VALUE) {
+            return get();
+        }
+        throw new IllegalArgumentException("Unsupported ValueType: " + valueType);
+    }
+
+    /**
+     * Get the current value
+     *
+     * @return the current value
+     */
+    double get();
 
     /**
      * Returns the {@code initialValue} of the {@code DoubleAccumulator}
@@ -189,7 +220,7 @@ public interface DoubleAccumulator extends BaseDoubleMetric {
 
         /** {@inheritDoc} */
         @Override
-        Class<DoubleAccumulator> getResultClass() {
+        public Class<DoubleAccumulator> getResultClass() {
             return DoubleAccumulator.class;
         }
 

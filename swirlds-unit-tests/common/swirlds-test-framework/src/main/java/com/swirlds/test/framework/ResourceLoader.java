@@ -151,6 +151,8 @@ public abstract class ResourceLoader {
                         "src/test/resources",
                         // If no config is provided, use config from platform
                         "../../../swirlds-platform-core/src/test/resources",
+                        // If no config is provided, use config from platform
+                        "../swirlds-platform-core/src/test/resources",
                         // AWS location
                         "swirlds-platform-core/src/test/java/main/resources"));
     }

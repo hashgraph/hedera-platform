@@ -16,6 +16,7 @@
 package com.swirlds.platform.state.signed;
 
 import static com.swirlds.common.io.utility.FileUtils.deleteDirectoryAndLog;
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STATE_TO_DISK;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
@@ -24,19 +25,22 @@ import static com.swirlds.platform.state.signed.SignedStateFileUtils.getSignedSt
 import static com.swirlds.platform.state.signed.SignedStateFileUtils.getSignedStatesBaseDirectory;
 import static com.swirlds.platform.state.signed.SignedStateFileWriter.writeSignedStateToDisk;
 
-import com.swirlds.common.notification.NotificationFactory;
+import com.swirlds.common.notification.NotificationEngine;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteListener;
 import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteNotification;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
 import com.swirlds.common.threading.interrupt.Uninterruptable;
+import com.swirlds.common.threading.manager.ThreadManager;
+import com.swirlds.common.time.Time;
 import com.swirlds.common.utility.Startable;
 import com.swirlds.platform.Settings;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import org.apache.logging.log4j.LogManager;
@@ -61,6 +65,9 @@ public class SignedStateFileManager implements Startable {
 
     private final AtomicLong lastRoundSavedToDisk = new AtomicLong(-1);
 
+    /** Sends notifications to the app. */
+    private final NotificationEngine notificationEngine;
+
     /** The ID of this node. */
     private final NodeId selfId;
 
@@ -73,27 +80,41 @@ public class SignedStateFileManager implements Startable {
     /** A background queue of tasks. */
     private final QueueThread<Runnable> taskQueue;
 
+    /** Metrics provider */
+    private final SignedStateMetrics metrics;
+
+    /** Provides system time */
+    private final Time time;
+
     /**
      * Creates a new instance.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param mainClassName the main class name of this node
      * @param selfId the ID of this node
      * @param swirldName the name of the swirld
      * @param freezeComplete a runnable that tells the system a freeze is complete
      */
     public SignedStateFileManager(
+            final ThreadManager threadManager,
+            final NotificationEngine notificationEngine,
+            final SignedStateMetrics metrics,
+            final Time time,
             final String mainClassName,
             final NodeId selfId,
             final String swirldName,
             final Runnable freezeComplete) {
 
+        this.notificationEngine = notificationEngine;
+        this.metrics = throwArgNull(metrics, "metrics");
+        this.time = time;
         this.selfId = selfId;
         this.mainClassName = mainClassName;
         this.swirldName = swirldName;
         this.freezeComplete = freezeComplete;
 
         this.taskQueue =
-                new QueueThreadConfiguration<Runnable>()
+                new QueueThreadConfiguration<Runnable>(threadManager)
                         .setCapacity(Settings.getInstance().getState().stateSavingQueueSize)
                         .setMaxBufferSize(1)
                         .setPriority(Settings.getInstance().getThreadPriorityNonSync())
@@ -134,16 +155,17 @@ public class SignedStateFileManager implements Startable {
      * @param savedStateDirectory the directory that contains the saved state
      */
     private static void notifySavedStateListeners(
-            final SignedState signedState, final Path savedStateDirectory) {
-        NotificationFactory.getEngine()
-                .dispatch(
-                        StateWriteToDiskCompleteListener.class,
-                        new StateWriteToDiskCompleteNotification(
-                                signedState.getRound(),
-                                signedState.getConsensusTimestamp(),
-                                signedState.getSwirldState(),
-                                savedStateDirectory,
-                                signedState.isFreezeState()));
+            final NotificationEngine notificationEngine,
+            final SignedState signedState,
+            final Path savedStateDirectory) {
+        notificationEngine.dispatch(
+                StateWriteToDiskCompleteListener.class,
+                new StateWriteToDiskCompleteNotification(
+                        signedState.getRound(),
+                        signedState.getConsensusTimestamp(),
+                        signedState.getSwirldState(),
+                        savedStateDirectory,
+                        signedState.isFreezeState()));
     }
 
     /**
@@ -172,10 +194,17 @@ public class SignedStateFileManager implements Startable {
         final boolean accepted =
                 taskQueue.offer(
                         () -> {
+                            final long start = time.nanoTime();
                             boolean success = false;
                             try {
                                 writeSignedStateToDisk(directory, signedState, taskDescription);
-                                notifySavedStateListeners(signedState, directory);
+                                metrics.getWriteStateToDiskTimeMetric()
+                                        .update(
+                                                TimeUnit.NANOSECONDS.toMillis(
+                                                        time.nanoTime() - start));
+
+                                notifySavedStateListeners(
+                                        notificationEngine, signedState, directory);
                                 success = true;
                             } catch (final Throwable e) {
                                 LOG.error(
@@ -192,6 +221,10 @@ public class SignedStateFileManager implements Startable {
                                 if (finishedCallback != null) {
                                     finishedCallback.accept(success);
                                 }
+                                metrics.getStateToDiskTimeMetric()
+                                        .update(
+                                                TimeUnit.NANOSECONDS.toMillis(
+                                                        time.nanoTime() - start));
                             }
                         });
 
@@ -309,7 +342,7 @@ public class SignedStateFileManager implements Startable {
      *
      * @param signedState the signed state in question
      */
-    public void determineIfStateShouldBeSaved(final SignedState signedState) {
+    public synchronized void determineIfStateShouldBeSaved(final SignedState signedState) {
         if (shouldSaveToDisk(signedState, previousSavedStateTimestamp)) {
 
             LOG.info(
@@ -342,6 +375,7 @@ public class SignedStateFileManager implements Startable {
         for (int index = savedStates.length - 1;
                 index >= Settings.getInstance().getState().getSignedStateDisk();
                 index--) {
+
             final SavedStateInfo savedStateInfo = savedStates[index];
             try {
                 deleteDirectoryAndLog(savedStateInfo.getDir());

@@ -28,28 +28,18 @@ import com.swirlds.common.merkle.interfaces.Archivable;
 import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.common.merkle.utility.DebugIterationEndpoint;
 import com.swirlds.common.merkle.utility.Keyed;
+import com.swirlds.common.utility.Labeled;
 import com.swirlds.common.utility.RuntimeObjectRecord;
 import com.swirlds.common.utility.RuntimeObjectRegistry;
 import com.swirlds.fchashmap.FCHashMap;
 import com.swirlds.fchashmap.FCHashMapSettings;
 import com.swirlds.fchashmap.FCHashMapSettingsFactory;
+import com.swirlds.merkle.map.internal.MerkleMapEntrySet;
+import com.swirlds.merkle.map.internal.MerkleMapInfo;
 import com.swirlds.merkle.tree.MerkleBinaryTree;
 import com.swirlds.merkle.tree.MerkleTreeInternalNode;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.StampedLock;
 import org.apache.commons.lang3.time.StopWatch;
 
@@ -77,7 +67,7 @@ import org.apache.commons.lang3.time.StopWatch;
  */
 @DebugIterationEndpoint
 public class MerkleMap<K, V extends MerkleNode & Keyed<K>> extends PartialBinaryMerkleInternal
-        implements Archivable, Map<K, V>, MerkleInternal {
+        implements Archivable, Labeled, Map<K, V>, MerkleInternal {
 
     public static final long CLASS_ID = 0x941550bf023ad8f6L;
 
@@ -87,6 +77,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>> extends PartialBinary
      */
     private static class ClassVersion {
         public static final int ORIGINAL = 1;
+        public static final int ADDED_INFO_LEAF = 2;
     }
 
     private static final int DEFAULT_INITIAL_MAP_CAPACITY = 2_000_000;
@@ -110,7 +101,8 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>> extends PartialBinary
         /** Internal Merkle Tree */
         public static final int TREE = 0;
 
-        public static final int CHILD_COUNT = 1;
+        /** Contains extra information about the map. */
+        public static final int INFO = 1;
     }
 
     /**
@@ -122,6 +114,51 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>> extends PartialBinary
      */
     private static final boolean LOCKS_DISABLED_FOR_DEBUGGING =
             false; // this MUST be false at commit time
+
+    /** Creates an instance of {@link MerkleMap} */
+    public MerkleMap() {
+        this(DEFAULT_INITIAL_MAP_CAPACITY);
+    }
+
+    /**
+     * Creates an instance of {@link MerkleMap}
+     *
+     * @param initialCapacity Initial capacity of internal hash map
+     */
+    public MerkleMap(final int initialCapacity) {
+        index = new FCHashMap<>(initialCapacity);
+        setTree(new MerkleBinaryTree<>());
+        setInfo(new MerkleMapInfo());
+        setImmutable(false);
+        lock = new StampedLock();
+        registryRecord = RuntimeObjectRegistry.createRecord(getClass());
+    }
+
+    /**
+     * Creates an immutable MerkleMap based a provided MerkleMap
+     *
+     * @param that a MerkleMap to copy
+     */
+    private MerkleMap(final MerkleMap<K, V> that) {
+        super(that);
+        setTree(that.getTree().copy());
+
+        if (that.getInfo() != null) {
+            setInfo(that.getInfo().copy());
+        } else {
+            // Backwards compatability from when a merkle map didn't have the info leaf
+            setInfo(new MerkleMapInfo());
+        }
+
+        // The internal map will never be deleted from a mutable copy
+        index = that.index.copy();
+        lock = new StampedLock();
+
+        setImmutable(false);
+        that.setImmutable(true);
+
+        registryRecord = RuntimeObjectRegistry.createRecord(getClass());
+    }
 
     /**
      * Acquire a read lock. Released by {@link #releaseReadLock(long)}.
@@ -184,48 +221,24 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>> extends PartialBinary
         return true;
     }
 
-    protected MerkleBinaryTree<V> getTree() {
+    /** Get the binary tree held by this map. */
+    private MerkleBinaryTree<V> getTree() {
         return getChild(ChildIndices.TREE);
     }
 
+    /** Set the binary tree held by this map. */
     private void setTree(final MerkleBinaryTree<V> tree) {
         setChild(ChildIndices.TREE, tree);
     }
 
-    /** Creates an instance of {@link MerkleMap} */
-    public MerkleMap() {
-        this(DEFAULT_INITIAL_MAP_CAPACITY);
+    /** Get the map info object. */
+    private MerkleMapInfo getInfo() {
+        return getChild(ChildIndices.INFO);
     }
 
-    /**
-     * Creates an instance of {@link MerkleMap}
-     *
-     * @param initialCapacity Initial capacity of internal hash map
-     */
-    public MerkleMap(final int initialCapacity) {
-        index = new FCHashMap<>(initialCapacity);
-        setTree(new MerkleBinaryTree<>());
-        setImmutable(false);
-        lock = new StampedLock();
-        registryRecord = RuntimeObjectRegistry.createRecord(getClass());
-    }
-
-    /**
-     * Creates an immutable MerkleMap based a provided MerkleMap
-     *
-     * @param that a MerkleMap to copy
-     */
-    protected MerkleMap(final MerkleMap<K, V> that) {
-        super(that);
-        setTree(that.getTree().copy());
-        // The internal map will never be deleted from a mutable copy
-        index = that.index.copy();
-        lock = new StampedLock();
-
-        setImmutable(false);
-        that.setImmutable(true);
-
-        registryRecord = RuntimeObjectRegistry.createRecord(getClass());
+    /** Set the map info object. */
+    private void setInfo(final MerkleMapInfo info) {
+        setChild(ChildIndices.INFO, info);
     }
 
     /**
@@ -244,6 +257,24 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>> extends PartialBinary
         } finally {
             releaseReadLock(stamp);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @param children A list of children.
+     * @param version The version of the node when these children were serialized.
+     */
+    @Override
+    public void addDeserializedChildren(final List<MerkleNode> children, final int version) {
+        if (children.size() == 1) {
+            if (version == ClassVersion.ORIGINAL) {
+                children.add(new MerkleMapInfo());
+            } else {
+                throw new IllegalArgumentException("Missing MerkleMapInfo child");
+            }
+        }
+        super.addDeserializedChildren(children, version);
     }
 
     /**
@@ -800,8 +831,19 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>> extends PartialBinary
 
     /** {@inheritDoc} */
     @Override
+    public String getLabel() {
+        return getInfo().getLabel();
+    }
+
+    /** {@inheritDoc} */
+    public void setLabel(final String label) {
+        getInfo().setLabel(label);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public int getVersion() {
-        return ClassVersion.ORIGINAL;
+        return ClassVersion.ADDED_INFO_LEAF;
     }
 
     @SuppressWarnings("unchecked")

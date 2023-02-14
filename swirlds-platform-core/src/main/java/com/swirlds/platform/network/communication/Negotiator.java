@@ -15,6 +15,7 @@
  */
 package com.swirlds.platform.network.communication;
 
+import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.communication.states.InitialState;
@@ -28,14 +29,18 @@ import com.swirlds.platform.network.communication.states.WaitForAcceptReject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /** A state machine responsible for negotiating the protocol to run over the provided connection */
 public class Negotiator {
+    private static final Logger LOG = LogManager.getLogger(Negotiator.class);
     private final NegotiationProtocols protocols;
     private final NegotiationState initialState;
     private final ProtocolNegotiated protocolNegotiated;
     private final Sleep sleep;
     private boolean errorState;
+    private final String negotiatorName;
 
     /**
      * @param protocols all possible protocols that could run over this connection
@@ -64,6 +69,7 @@ public class Negotiator {
         final SentKeepalive sentKeepalive = new SentKeepalive(in, sleep, receivedInitiate);
         this.initialState = new InitialState(protocols, out, sentKeepalive, sentInitiate);
         this.errorState = false;
+        this.negotiatorName = connection.getDescription();
     }
 
     /**
@@ -86,6 +92,11 @@ public class Negotiator {
             try {
                 prev = current;
                 current = current.transition();
+                LOG.debug(
+                        LogMarker.PROTOCOL_NEGOTIATION.getMarker(),
+                        "Negotiator {} last transition: {}",
+                        negotiatorName,
+                        prev.getLastTransitionDescription());
             } catch (final RuntimeException
                     | NegotiationException
                     | NetworkProtocolException

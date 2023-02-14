@@ -18,6 +18,7 @@ package com.swirlds.common.stream;
 import com.swirlds.common.crypto.RunningHashable;
 import com.swirlds.common.stream.internal.LinkedObjectStream;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 
 /**
  * Configures and builds {@link QueueThreadObjectStream} instances.
@@ -29,9 +30,11 @@ public class QueueThreadObjectStreamConfiguration<T extends RunningHashable> {
     private final QueueThreadConfiguration<T> queueThreadConfiguration;
     private LinkedObjectStream<T> forwardTo;
 
-    /** Intentionally private, use static factory method. */
-    public QueueThreadObjectStreamConfiguration() {
-        queueThreadConfiguration = new QueueThreadConfiguration<>();
+    /**
+     * @param threadManager responsible for managing thread lifecycles
+     */
+    public QueueThreadObjectStreamConfiguration(final ThreadManager threadManager) {
+        queueThreadConfiguration = new QueueThreadConfiguration<>(threadManager);
     }
 
     /** Build a new thread. */

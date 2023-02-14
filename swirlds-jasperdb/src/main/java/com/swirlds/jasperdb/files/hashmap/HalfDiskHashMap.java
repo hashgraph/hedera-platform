@@ -24,7 +24,7 @@ import static com.swirlds.logging.LogMarker.JASPER_DB;
 
 import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.Snapshotable;
-import com.swirlds.jasperdb.collections.LongListBufferedWrapper;
+import com.swirlds.jasperdb.collections.LongList;
 import com.swirlds.jasperdb.collections.LongListDisk;
 import com.swirlds.jasperdb.collections.LongListOffHeap;
 import com.swirlds.jasperdb.files.DataFileCollection;
@@ -90,7 +90,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
      * Long list used for mapping bucketIndex(index into list) to disk location for latest copy of
      * bucket
      */
-    private final LongListBufferedWrapper bucketIndexToBucketLocation;
+    private final LongList bucketIndexToBucketLocation;
     /** DataFileCollection manages the files storing the buckets on disk */
     private final DataFileCollection<Bucket<K>> fileCollection;
     /**
@@ -184,18 +184,16 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
             final boolean forceIndexRebuilding = settings.isIndexRebuildingEnforced();
             if (Files.exists(indexFile) && !forceIndexRebuilding) {
                 bucketIndexToBucketLocation =
-                        new LongListBufferedWrapper(
-                                preferDiskBasedIndexes
-                                        ? new LongListDisk(indexFile)
-                                        : new LongListOffHeap(indexFile));
+                        preferDiskBasedIndexes
+                                ? new LongListDisk(indexFile)
+                                : new LongListOffHeap(indexFile);
                 loadedDataCallback = null;
             } else {
                 // create new index and setup call back to rebuild
                 bucketIndexToBucketLocation =
-                        new LongListBufferedWrapper(
-                                preferDiskBasedIndexes
-                                        ? new LongListDisk(indexFile)
-                                        : new LongListOffHeap());
+                        preferDiskBasedIndexes
+                                ? new LongListDisk(indexFile)
+                                : new LongListOffHeap();
                 loadedDataCallback =
                         (key, dataLocation, dataValue) ->
                                 bucketIndexToBucketLocation.put(key, dataLocation);
@@ -205,10 +203,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
             Files.createDirectories(storeDir);
             // create new index
             bucketIndexToBucketLocation =
-                    new LongListBufferedWrapper(
-                            preferDiskBasedIndexes
-                                    ? new LongListDisk(indexFile)
-                                    : new LongListOffHeap());
+                    preferDiskBasedIndexes ? new LongListDisk(indexFile) : new LongListOffHeap();
             // calculate number of entries we can store in a disk page
             minimumBuckets =
                     (int) Math.ceil((mapSize / LOADING_FACTOR) / GOOD_AVERAGE_BUCKET_ENTRY_COUNT);
@@ -292,39 +287,15 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
                 LOG);
     }
 
-    /**
-     * Start snapshot, this is called while saving is blocked. It is expected to complete as fast as
-     * possible and only do the minimum needed to capture/write state that could be changed by
-     * saving.
-     *
-     * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
-     *     exist.
-     * @throws IOException If there was a problem snapshotting
-     */
-    @Override
-    public void startSnapshot(Path snapshotDirectory) throws IOException {
-        bucketIndexToBucketLocation.setUseOverlay(true);
-        fileCollection.startSnapshot(snapshotDirectory);
-    }
-
-    /**
-     * Do the bulk of snapshot work, as much as possible. Saving is not blocked while this method is
-     * running, and it is expected that saving can happen concurrently without problems. This will
-     * block till the snapshot is completely created.
-     *
-     * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
-     *     exist.
-     * @throws IOException If there was a problem snapshotting
-     */
-    @Override
-    public void middleSnapshot(Path snapshotDirectory) throws IOException {
+    /** {@inheritDoc} */
+    public void snapshot(final Path snapshotDirectory) throws IOException {
         // create snapshot directory if needed
         Files.createDirectories(snapshotDirectory);
         // write index to file
         bucketIndexToBucketLocation.writeToFile(
                 snapshotDirectory.resolve(storeName + "_bucket_index.ll"));
         // snapshot files
-        fileCollection.middleSnapshot(snapshotDirectory);
+        fileCollection.snapshot(snapshotDirectory);
         // write metadata
         try (DataOutputStream metaOut =
                 new DataOutputStream(
@@ -335,21 +306,6 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
             metaOut.writeInt(numOfBuckets);
             metaOut.flush();
         }
-    }
-
-    /**
-     * End snapshot, this is called while saving is blocked. It is expected to complete as fast as
-     * possible and only do the minimum needed to finish any work and return state after
-     * snapshotting.
-     *
-     * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
-     *     exist.
-     * @throws IOException If there was a problem snapshotting
-     */
-    @Override
-    public void endSnapshot(Path snapshotDirectory) throws IOException {
-        fileCollection.endSnapshot(snapshotDirectory);
-        bucketIndexToBucketLocation.setUseOverlay(false);
     }
 
     /**

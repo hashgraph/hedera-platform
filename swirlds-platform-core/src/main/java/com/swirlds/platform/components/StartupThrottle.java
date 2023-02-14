@@ -33,7 +33,7 @@ import org.apache.logging.log4j.Logger;
 /** Allows nodes to wait for each other when starting up */
 public class StartupThrottle
         implements EventAddedObserver, EventCreationRule, TransThrottleSyncAndCreateRule {
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(StartupThrottle.class);
 
     /** number of members not started yet */
     private final AtomicLong numNotStarted;

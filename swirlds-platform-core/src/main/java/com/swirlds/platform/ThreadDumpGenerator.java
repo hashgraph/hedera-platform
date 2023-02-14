@@ -26,6 +26,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MonitorInfo;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
+import java.nio.file.Path;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
@@ -40,7 +41,7 @@ import org.apache.logging.log4j.Logger;
 /** This class generates augmented thread dumps which include lock information. */
 class ThreadDumpGenerator {
 
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(ThreadDumpGenerator.class);
 
     /** random used to append to file names in case the timestamp is the same */
     private static final Random random = new Random();
@@ -54,14 +55,14 @@ class ThreadDumpGenerator {
      *
      * @param milliseconds interval at which to generate thread dumps in milliseconds
      */
-    public static synchronized void generateThreadDumpAtIntervals(long milliseconds) {
+    public static synchronized void generateThreadDumpAtIntervals(Path dir, long milliseconds) {
         if (generator != null) {
             return;
         }
         generator =
                 () -> {
                     while (true) {
-                        generateThreadDumpFile(null);
+                        generateThreadDumpFile(dir, null);
                         try {
                             Thread.sleep(milliseconds);
                         } catch (final InterruptedException ex) {
@@ -73,9 +74,9 @@ class ThreadDumpGenerator {
         new Thread(generator).start();
     }
 
-    /** Same as generateThreadDumpFile(String heading) but with no heading */
-    public static void generateThreadDumpFile() {
-        generateThreadDumpFile(null);
+    /** Same as generateThreadDumpFile(Path dir, String heading) but with no heading */
+    public static void generateThreadDumpFile(final Path dir) {
+        generateThreadDumpFile(dir, null);
     }
 
     /**
@@ -84,10 +85,9 @@ class ThreadDumpGenerator {
      * @param heading a heading that is placed at the top of the thread dump file, used if needed to
      *     distinguish a certain file by some additional criteria other than time
      */
-    public static void generateThreadDumpFile(String heading) {
-
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(makeFileName()))) {
-
+    public static void generateThreadDumpFile(final Path dir, final String heading) {
+        final Path threadDumpPath = dir.resolve(Path.of(makeFileName()));
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(threadDumpPath.toFile()))) {
             // write the heading
             if (heading != null) {
                 writer.append(" --- ");
@@ -180,15 +180,11 @@ class ThreadDumpGenerator {
         Set<Long> done = new HashSet<>();
 
         String result =
-                "" //
-                        + "============== LOCK DEPENDENCY GRAPH ==============\n" //
-                        + "|| Below each thread are all the locks it holds, indented one"
-                        + " level.\n" //
-                        + "|| Below each lock are all the threads blocked on it, indented one"
-                        + " level.\n" //
-                        + "|| Each thread lists its location in the code \n" //
-                        + "|| (latest stack frame in Swirlds code, but not in"
-                        + " LoggingReentrantLock).\n";
+                "============== LOCK DEPENDENCY GRAPH ==============\n"
+                    + "|| Below each thread are all the locks it holds, indented one level.\n"
+                    + "|| Below each lock are all the threads blocked on it, indented one level.\n"
+                    + "|| Each thread lists its location in the code \n"
+                    + "|| (latest stack frame in Swirlds code, but not in LoggingReentrantLock).\n";
 
         final ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
         final ThreadInfo[] threadInfos =

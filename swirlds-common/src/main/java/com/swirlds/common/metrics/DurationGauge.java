@@ -17,7 +17,9 @@ package com.swirlds.common.metrics;
 
 import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static com.swirlds.common.utility.CommonUtils.throwArgBlank;
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
+import com.swirlds.common.utility.Units;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
@@ -31,13 +33,16 @@ public interface DurationGauge extends Metric {
         return DataType.FLOAT;
     }
 
+    /** {@inheritDoc} */
     @Override
     default EnumSet<ValueType> getValueTypes() {
         return EnumSet.of(VALUE);
     }
 
+    /** {@inheritDoc} */
     @Override
     default Double get(final ValueType valueType) {
+        throwArgNull(valueType, "valueType");
         if (valueType == VALUE) {
             return get();
         }
@@ -65,46 +70,69 @@ public interface DurationGauge extends Metric {
 
     /** Configuration of a {@link DurationGauge} */
     final class Config extends MetricConfig<DurationGauge, DurationGauge.Config> {
-        private final ChronoUnit unit;
+
+        private static final String TIME_UNIT = "timeUnit";
+        private static final String UNSUPPORTED_TIME_UNIT = "Unsupported time unit: ";
+
+        private final ChronoUnit timeUnit;
 
         /**
          * Constructor of {@code DoubleGauge.Config}
          *
          * @param category the kind of metric (metrics are grouped or filtered by this)
          * @param name a short name for the metric
-         * @param description a one-sentence description of the metric
-         * @param unit the time unit in which to display this duration
+         * @param timeUnit the time unit in which to display this duration
          * @throws IllegalArgumentException if one of the parameters is {@code null} or consists
          *     only of whitespaces
          */
-        public Config(
+        public Config(final String category, final String name, final ChronoUnit timeUnit) {
+            super(category, fixName(name, timeUnit), getFormat(timeUnit));
+            this.timeUnit = timeUnit;
+        }
+
+        private static String fixName(final String name, final ChronoUnit timeUnit) {
+            return throwArgBlank(name, "name") + " " + getAppendix(timeUnit);
+        }
+
+        private Config(
                 final String category,
                 final String name,
                 final String description,
-                final ChronoUnit unit) {
-            super(
-                    category,
-                    throwArgBlank(name, "name") + " " + getAppendix(unit),
-                    description,
-                    unit.name(),
-                    getFormat(unit));
-            this.unit = unit;
+                final ChronoUnit timeUnit) {
+            super(category, name, description, getUnit(timeUnit), getFormat(timeUnit));
+            // at this point, timeUnit was checked for null in getUnit() and getFormat()
+            this.timeUnit = timeUnit;
         }
 
+        /** {@inheritDoc} */
         @Override
         public DurationGauge.Config withDescription(final String description) {
             return new DurationGauge.Config(getCategory(), getName(), description, getTimeUnit());
         }
 
+        /**
+         * The unit of a {@link DurationGauge} depends on the configured {@link ChronoUnit}.
+         * Therefore, it is not possible to specify the unit and this method throws an {@link
+         * UnsupportedOperationException}
+         */
         @Override
         public DurationGauge.Config withUnit(final String unit) {
             throw new UnsupportedOperationException(
                     "a String unit is not compatible with this class");
         }
 
+        /**
+         * Getter of the {@code timeUnit}
+         *
+         * @return the {@code timeUnit}
+         */
+        public ChronoUnit getTimeUnit() {
+            return timeUnit;
+        }
+
         /** {@inheritDoc} */
         @Override
-        Class<DurationGauge> getResultClass() {
+        public Class<DurationGauge> getResultClass() {
             return DurationGauge.class;
         }
 
@@ -114,31 +142,34 @@ public interface DurationGauge extends Metric {
             return factory.createDurationGauge(this);
         }
 
-        public ChronoUnit getTimeUnit() {
-            return unit;
-        }
-
-        private static String getFormat(final ChronoUnit unit) {
-            if (unit == null) {
-                throw new IllegalArgumentException("Unit must not be null!");
-            }
-            return switch (unit) {
+        private static String getFormat(final ChronoUnit timeUnit) {
+            throwArgNull(timeUnit, TIME_UNIT);
+            return switch (timeUnit) {
                 case NANOS, MICROS -> FloatFormats.FORMAT_DECIMAL_0;
                 case MILLIS, SECONDS -> FloatFormats.FORMAT_DECIMAL_3;
-                default -> throw new IllegalArgumentException("Unsupported unit: " + unit);
+                default -> throw new IllegalArgumentException(UNSUPPORTED_TIME_UNIT + timeUnit);
             };
         }
 
-        private static String getAppendix(final ChronoUnit unit) {
-            if (unit == null) {
-                throw new IllegalArgumentException("Unit must not be null!");
-            }
-            return switch (unit) {
+        private static String getUnit(final ChronoUnit timeUnit) {
+            throwArgNull(timeUnit, TIME_UNIT);
+            return switch (timeUnit) {
+                case NANOS -> Units.NANOSECOND_UNIT;
+                case MICROS -> Units.MICROSECOND_UNIT;
+                case MILLIS -> Units.MILLISECOND_UNIT;
+                case SECONDS -> Units.SECOND_UNIT;
+                default -> throw new IllegalArgumentException(UNSUPPORTED_TIME_UNIT + timeUnit);
+            };
+        }
+
+        private static String getAppendix(final ChronoUnit timeUnit) {
+            throwArgNull(timeUnit, TIME_UNIT);
+            return switch (timeUnit) {
                 case NANOS -> "(nanos)";
                 case MICROS -> "(micros)";
                 case MILLIS -> "(millis)";
                 case SECONDS -> "(sec)";
-                default -> throw new IllegalArgumentException("Unsupported unit: " + unit);
+                default -> throw new IllegalArgumentException(UNSUPPORTED_TIME_UNIT + timeUnit);
             };
         }
     }

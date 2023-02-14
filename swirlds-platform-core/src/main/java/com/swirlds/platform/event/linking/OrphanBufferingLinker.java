@@ -15,6 +15,7 @@
  */
 package com.swirlds.platform.event.linking;
 
+import com.swirlds.common.config.ConsensusConfig;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.sequence.map.SequenceMap;
 import com.swirlds.common.sequence.map.StandardSequenceMap;
@@ -38,7 +39,7 @@ import org.apache.logging.log4j.Logger;
  * orphan, it is returned by this linker.
  */
 public class OrphanBufferingLinker extends AbstractEventLinker {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(OrphanBufferingLinker.class);
     private final ParentFinder parentFinder;
     private final Queue<EventImpl> eventOutput;
     private final Queue<EventImpl> newlyLinkedEvents;
@@ -48,10 +49,15 @@ public class OrphanBufferingLinker extends AbstractEventLinker {
     /**
      * Create a new orphan buffer.
      *
+     * @param config consensus configuration
      * @param parentFinder responsible for finding parents of an event
      * @param futureGenerationLimit the maximum number of future generations we are willing to store
      */
-    public OrphanBufferingLinker(final ParentFinder parentFinder, final int futureGenerationLimit) {
+    public OrphanBufferingLinker(
+            final ConsensusConfig config,
+            final ParentFinder parentFinder,
+            final int futureGenerationLimit) {
+        super(config);
         this.parentFinder = parentFinder;
         this.eventOutput = new ArrayDeque<>();
         this.newlyLinkedEvents = new ArrayDeque<>();

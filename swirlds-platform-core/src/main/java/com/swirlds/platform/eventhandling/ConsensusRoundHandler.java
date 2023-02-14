@@ -21,7 +21,10 @@ import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
 import static com.swirlds.platform.event.EventUtils.toShortString;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.config.ConsensusConfig;
+import com.swirlds.common.config.singleton.ConfigurationHolder;
+import com.swirlds.common.context.PlatformContext;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
@@ -31,9 +34,11 @@ import com.swirlds.common.system.SoftwareVersion;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.utility.Clearable;
 import com.swirlds.common.utility.Startable;
 import com.swirlds.platform.SettingsProvider;
+import com.swirlds.platform.config.ThreadConfig;
 import com.swirlds.platform.dispatch.DispatchBuilder;
 import com.swirlds.platform.dispatch.triggers.flow.RoundCompletedTrigger;
 import com.swirlds.platform.internal.ConsensusRound;
@@ -62,7 +67,7 @@ import org.apache.logging.log4j.Logger;
 public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable, Startable {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ConsensusRoundHandler.class);
 
     /** The class responsible for all interactions with the swirld state */
     private final SwirldStateManager swirldStateManager;
@@ -115,6 +120,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
      * Instantiate, but don't start any threads yet. The Platform should first instantiate the
      * {@link ConsensusRoundHandler}. Then the Platform should call start to start the queue thread.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param dispatchBuilder responsible for building dispatchers
      * @param selfId the id of this node
      * @param settings a provider of static settings
@@ -128,6 +134,8 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
      * @param softwareVersion the current version of the software
      */
     public ConsensusRoundHandler(
+            final PlatformContext platformContext,
+            final ThreadManager threadManager,
             final DispatchBuilder dispatchBuilder,
             final long selfId,
             final SettingsProvider settings,
@@ -140,7 +148,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
             final SoftwareVersion softwareVersion) {
 
         this.roundCompletedDispatcher =
-                dispatchBuilder.getDispatcher(RoundCompletedTrigger.class)::dispatch;
+                dispatchBuilder.getDispatcher(this, RoundCompletedTrigger.class)::dispatch;
 
         this.settings = settings;
         this.swirldStateManager = swirldStateManager;
@@ -150,11 +158,13 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
         this.stateHashSignQueue = stateHashSignQueue;
         this.softwareVersion = softwareVersion;
         this.enterFreezePeriod = enterFreezePeriod;
-        eventsAndGenerations = new SignedStateEventsAndGenerations(settings.getStateSettings());
+        eventsAndGenerations =
+                new SignedStateEventsAndGenerations(
+                        platformContext.getConfiguration().getConfigData(ConsensusConfig.class));
         final ConsensusQueue queue =
                 new ConsensusQueue(consensusHandlingMetrics, settings.getMaxEventQueueForCons());
         queueThread =
-                new QueueThreadConfiguration<ConsensusRound>()
+                new QueueThreadConfiguration<ConsensusRound>(threadManager)
                         .setNodeId(selfId)
                         .setHandler(this::applyConsensusRoundToState)
                         .setComponent(PLATFORM_THREAD_POOL_NAME)
@@ -165,6 +175,11 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
                         // runnable returned by the getter.
                         .setWaitForItemRunnable(
                                 swirldStateManager.getConsensusWaitForWorkRunnable())
+                        .setLogAfterPauseDuration(
+                                ConfigurationHolder.getInstance()
+                                        .get()
+                                        .getConfigData(ThreadConfig.class)
+                                        .logStackTracePauseDuration())
                         .setQueue(queue)
                         .build();
     }
@@ -322,7 +337,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
 
         for (final EventImpl event : round.getConsensusEvents()) {
             if (event.getHash() == null) {
-                CryptoFactory.getInstance().digestSync(event);
+                CryptographyHolder.get().digestSync(event);
             }
         }
 

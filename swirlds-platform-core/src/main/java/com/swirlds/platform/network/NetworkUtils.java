@@ -28,7 +28,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
 
 public final class NetworkUtils {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(NetworkUtils.class);
 
     private NetworkUtils() {}
 

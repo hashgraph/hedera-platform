@@ -15,44 +15,41 @@
  */
 package com.swirlds.config.impl.validators.annotation;
 
-import com.swirlds.config.api.ConfigurationProvider;
+import com.swirlds.common.config.sources.SimpleConfigSource;
+import com.swirlds.config.api.ConfigurationBuilder;
 import com.swirlds.config.api.validation.ConfigViolationException;
-import com.swirlds.config.impl.DummyConfigSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class ConstraintMethodTest {
 
-    private final DummyConfigSource dummyConfigSource = new DummyConfigSource();
-
     @Test
     public void testNoViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("method.valueA", "true");
-        dummyConfigSource.setProperty("method.valueB", "true");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(ConstraintMethodConfigData.class);
-
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("method.valueA", "true"))
+                        .withSources(new SimpleConfigSource("method.valueB", "true"))
+                        .withConfigDataTypes(ConstraintMethodConfigData.class);
         // then
         Assertions.assertDoesNotThrow(
-                () -> ConfigurationProvider.init(), "No violation should happen");
+                () -> configurationBuilder.build(), "No violation should happen");
     }
 
     @Test
     public void testViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("method.valueA", "false");
-        dummyConfigSource.setProperty("method.valueB", "true");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(ConstraintMethodConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("method.valueA", "false"))
+                        .withSources(new SimpleConfigSource("method.valueB", "true"))
+                        .withConfigDataTypes(ConstraintMethodConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @ConstraintMethod should happen");
 
         // then
@@ -67,31 +64,31 @@ public class ConstraintMethodTest {
     @Test
     public void testError() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("method.valueA", "true");
-        dummyConfigSource.setProperty("method.valueB", "false");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(ConstraintMethodConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("method.valueA", "true"))
+                        .withSources(new SimpleConfigSource("method.valueB", "false"))
+                        .withConfigDataTypes(ConstraintMethodConfigData.class);
 
         // then
         Assertions.assertThrows(
                 IllegalStateException.class,
-                () -> ConfigurationProvider.init(),
+                () -> configurationBuilder.build(),
                 "Error in validation should end in illegal state");
     }
 
     @Test
     public void testErrorInvalidMethod() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("method.value", "true");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(BrokenConstraintMethodConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("method.value", "true"))
+                        .withConfigDataTypes(BrokenConstraintMethodConfigData.class);
 
         // then
         Assertions.assertThrows(
                 IllegalStateException.class,
-                () -> ConfigurationProvider.init(),
+                () -> configurationBuilder.build(),
                 "Error in validation should end in illegal state");
     }
 }

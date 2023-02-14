@@ -15,6 +15,8 @@
  */
 package com.swirlds.common.test.stream;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
+
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
@@ -57,7 +59,8 @@ public class TestStreamManager {
                 new RunningHashCalculatorForStream<>(countDownLatchStream);
         hashCalculator = new HashCalculatorForStream<>(runningHashCalculator);
         hashQueueThread =
-                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>()
+                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>(
+                                getStaticThreadManager())
                         .setForwardTo(hashCalculator)
                         .build();
         hashQueueThread.start();
@@ -73,7 +76,8 @@ public class TestStreamManager {
                 new RunningHashCalculatorForStream<>();
         hashCalculator = new HashCalculatorForStream<>(runningHashCalculator);
         hashQueueThread =
-                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>()
+                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>(
+                                getStaticThreadManager())
                         .setForwardTo(hashCalculator)
                         .build();
 

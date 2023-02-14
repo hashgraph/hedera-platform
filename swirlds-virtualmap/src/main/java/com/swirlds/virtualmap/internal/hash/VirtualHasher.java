@@ -15,6 +15,7 @@
  */
 package com.swirlds.virtualmap.internal.hash;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.virtualmap.internal.Path.INVALID_PATH;
 import static com.swirlds.virtualmap.internal.Path.ROOT_PATH;
@@ -74,7 +75,7 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
      */
     private static final ExecutorService HASHING_POOL =
             Executors.newCachedThreadPool(
-                    new ThreadConfiguration()
+                    new ThreadConfiguration(getStaticThreadManager())
                             .setThreadGroup(new ThreadGroup("virtual-map-hashers"))
                             .setComponent("virtual-map")
                             .setThreadName("hasher")

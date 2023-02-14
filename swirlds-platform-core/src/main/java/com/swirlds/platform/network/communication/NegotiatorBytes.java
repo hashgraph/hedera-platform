@@ -15,6 +15,8 @@
  */
 package com.swirlds.platform.network.communication;
 
+import java.io.EOFException;
+
 /** Constants use by the {@link Negotiator} */
 public final class NegotiatorBytes {
     /** sent to keep the connection alive */
@@ -31,6 +33,8 @@ public final class NegotiatorBytes {
     public static final int MAX_BYTE = 255;
     /** min value for a byte when converted to an int by an input or output stream */
     public static final int MIN_BYTE = 0;
+    /** the byte returned when the end of stream has been reached */
+    public static final int END_OF_STREAM_BYTE = -1;
 
     private NegotiatorBytes() {}
 
@@ -39,8 +43,12 @@ public final class NegotiatorBytes {
      *
      * @param b the byte to check
      * @throws NegotiationException if the byte is not valid
+     * @throws EOFException if the byte represents the end of the stream
      */
-    public static void checkByte(final int b) throws NegotiationException {
+    public static void checkByte(final int b) throws NegotiationException, EOFException {
+        if (b == END_OF_STREAM_BYTE) {
+            throw new EOFException("the end of the stream has been reached");
+        }
         if (b < MIN_BYTE || b > MAX_BYTE) {
             throw new NegotiationException("not a valid byte: " + b);
         }

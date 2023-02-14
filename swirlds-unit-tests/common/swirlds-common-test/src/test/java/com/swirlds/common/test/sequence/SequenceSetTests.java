@@ -16,6 +16,7 @@
 package com.swirlds.common.test.sequence;
 
 import static com.swirlds.common.test.AssertionUtils.completeBeforeTimeout;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -794,7 +795,7 @@ public class SequenceSetTests {
         final AtomicBoolean error = new AtomicBoolean();
 
         final StoppableThread purgeThread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setMinimumPeriod(Duration.ofMillis(10))
                         .setExceptionHandler(
                                 (t, e) -> {
@@ -833,7 +834,7 @@ public class SequenceSetTests {
         final List<StoppableThread> updaterThreads = new LinkedList<>();
         for (int threadIndex = 0; threadIndex < threadCount; threadIndex++) {
             updaterThreads.add(
-                    new StoppableThreadConfiguration<>()
+                    new StoppableThreadConfiguration<>(getStaticThreadManager())
                             .setExceptionHandler(
                                     (t, e) -> {
                                         e.printStackTrace();

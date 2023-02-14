@@ -51,7 +51,7 @@ import static org.mockito.Mockito.mock;
 
 import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.constructable.ConstructableRegistryException;
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.RunningHashable;
@@ -115,7 +115,7 @@ class StreamUtilitiesTest {
 
     @BeforeAll
     static void setUp() throws ConstructableRegistryException {
-        ConstructableRegistry.registerConstructables("com.swirlds.common");
+        ConstructableRegistry.getInstance().registerConstructables("com.swirlds.common");
         SettingsCommon.maxTransactionCountPerEvent = 245760;
         SettingsCommon.maxTransactionBytesPerEvent = 245760;
         SettingsCommon.transactionMaxBytes = 6144;
@@ -313,9 +313,9 @@ class StreamUtilitiesTest {
                 // endRunningHash should be the last one in the iterator
                 assertFalse(iterator.hasNext());
             } else {
-                Hash objectHash = CryptoFactory.getInstance().digestSync(object);
+                Hash objectHash = CryptographyHolder.get().digestSync(object);
                 runningHash =
-                        CryptoFactory.getInstance()
+                        CryptographyHolder.get()
                                 .calcRunningHash(runningHash, objectHash, DigestType.SHA_384);
             }
             objectsCount++;

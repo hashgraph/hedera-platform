@@ -21,7 +21,7 @@ import static com.swirlds.common.stream.LinkedObjectStreamUtilities.readFirstInt
 import static com.swirlds.logging.LogMarker.EVENT_PARSER;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
@@ -54,7 +54,7 @@ public class StreamEventParser extends Thread {
     /** current event stream version */
     public static final int EVENT_STREAM_FILE_VERSION = 5;
 
-    private static final Logger LOGGER = LogManager.getLogger();
+    private static final Logger LOGGER = LogManager.getLogger(StreamEventParser.class);
     private static final int POLL_WAIT = 5000;
     private final LinkedBlockingQueue<EventImpl> events = new LinkedBlockingQueue<>();
     private final String fileDir;
@@ -100,7 +100,7 @@ public class StreamEventParser extends Thread {
             // or may not
             // read the settings.txt file and follow the normal initialization routines in the
             // Browser class.
-            Browser.populateSettingsCommon();
+            Settings.populateSettingsCommon();
         }
         try {
             final int fileVersion = readFirstIntFromFile(file);
@@ -153,7 +153,7 @@ public class StreamEventParser extends Thread {
             } else {
                 EventImpl event = new EventImpl((DetailedConsensusEvent) object);
                 // set event's baseHash
-                CryptoFactory.getInstance().digestSync(event.getBaseEventHashedData());
+                CryptographyHolder.get().digestSync(event.getBaseEventHashedData());
                 eventHandler.consume(event);
             }
         }

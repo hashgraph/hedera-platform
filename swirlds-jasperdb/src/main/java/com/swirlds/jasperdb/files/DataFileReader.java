@@ -151,7 +151,21 @@ public final class DataFileReader<D>
      * @throws IOException If there was a problem reading from data file
      * @throws ClosedChannelException if the data file was closed
      */
-    public D readDataItem(final long dataLocation) throws IOException {
+    public D readDataItem(long dataLocation) throws IOException {
+        return readDataItem(dataLocation, true);
+    }
+
+    /**
+     * Read a data item from file at dataLocation.
+     *
+     * @param dataLocation The file index combined with the offset for the starting block of the
+     *     data in the file.
+     * @param deserialize flag to avoid deserialization cost
+     * @return deserialized data item, always returns null if deserialize == false
+     * @throws IOException If there was a problem reading from data file
+     * @throws ClosedChannelException if the data file was closed
+     */
+    public D readDataItem(final long dataLocation, final boolean deserialize) throws IOException {
         final long byteOffset = DataFileCommon.byteOffsetFromDataLocation(dataLocation);
         final int bytesToRead;
         if (dataItemSerializer.isVariableSize()) {
@@ -163,8 +177,11 @@ public final class DataFileReader<D>
         } else {
             bytesToRead = dataItemSerializer.getSerializedSize();
         }
-        return dataItemSerializer.deserialize(
-                read(byteOffset, bytesToRead), metadata.getSerializationVersion());
+
+        final ByteBuffer data = read(byteOffset, bytesToRead);
+        return deserialize
+                ? dataItemSerializer.deserialize(data, metadata.getSerializationVersion())
+                : null;
     }
 
     /**
@@ -226,8 +243,8 @@ public final class DataFileReader<D>
     public void close() throws IOException {
         fileChannel.close();
     }
-
     // =================================================================================================================
+
     // Private methods
 
     /**

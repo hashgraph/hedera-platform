@@ -25,6 +25,18 @@ public final class Units {
 
     private Units() {}
 
+    /** Unit of nanoseconds */
+    public static final String NANOSECOND_UNIT = "ns";
+
+    /** Unit of microseconds */
+    public static final String MICROSECOND_UNIT = "µs";
+
+    /** Unit of milliseconds */
+    public static final String MILLISECOND_UNIT = "ms";
+
+    /** Unit of seconds */
+    public static final String SECOND_UNIT = "s";
+
     /** Multiply by this value for converting seconds to nanoseconds. */
     public static final int SECONDS_TO_NANOSECONDS = 1_000_000_000;
 

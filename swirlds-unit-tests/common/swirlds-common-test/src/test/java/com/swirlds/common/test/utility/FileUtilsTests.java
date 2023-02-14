@@ -24,6 +24,7 @@ import static com.swirlds.common.io.utility.FileUtils.writeAndFlush;
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyDoesNotThrow;
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyTrue;
 import static com.swirlds.common.threading.interrupt.Uninterruptable.abortAndThrowIfInterrupted;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static java.nio.file.Files.delete;
 import static java.nio.file.Files.exists;
 import static java.nio.file.Files.isDirectory;
@@ -400,7 +401,7 @@ class FileUtilsTests {
         final CountDownLatch startedLatch = new CountDownLatch(1);
         final CountDownLatch pauseLatch = new CountDownLatch(1);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             try {
@@ -467,7 +468,7 @@ class FileUtilsTests {
         final CountDownLatch startedLatch = new CountDownLatch(1);
         final CountDownLatch pauseLatch = new CountDownLatch(1);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             try {
@@ -526,7 +527,7 @@ class FileUtilsTests {
         final CountDownLatch startedLatch = new CountDownLatch(1);
         final CountDownLatch pauseLatch = new CountDownLatch(1);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setExceptionHandler(
                         (thread, throwable) ->
                                 System.out.println(

@@ -15,45 +15,61 @@
  */
 package com.swirlds.platform.state;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.jackson.HashDeserializer;
 import com.swirlds.platform.Settings;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import org.bouncycastle.util.encoders.Hex;
 
-/**
- * Defines all data related to the emergency recovery file and how it is formatted.
- *
- * @param round the round number of the state this file is for
- * @param hash the hash of the state this file is for
- */
-public record EmergencyRecoveryFile(long round, Hash hash) {
-
-    private static final String OUTPUT_FILENAME = "emergencyRecovery.csv";
+/** Defines all data related to the emergency recovery file and how it is formatted. */
+public record EmergencyRecoveryFile(Recovery recovery) {
+    private static final String OUTPUT_FILENAME = "emergencyRecovery.yaml";
     private static final String INPUT_FILENAME =
             Settings.getInstance().getEmergencyRecoveryStateFileName();
-    private static final String COMMA = ",";
 
     /**
-     * Write the data in this record to a csv file at the specified directory.
+     * Defines all data related to the emergency recovery file and how it is formatted.
+     *
+     * @param round the round number of the state this file is for
+     * @param hash the hash of the state this file is for
+     */
+    public EmergencyRecoveryFile(final long round, final Hash hash) {
+        this(new Recovery(new State(round, hash)));
+    }
+
+    /**
+     * @return the round number of the state this file is for
+     */
+    public long round() {
+        return recovery().state().round();
+    }
+
+    /**
+     * @return the hash of the state this file is for
+     */
+    public Hash hash() {
+        return recovery().state().hash();
+    }
+
+    /**
+     * Write the data in this record to a yaml file at the specified directory.
      *
      * @param directory the directory to write to. Must exist and be writable.
      * @throws IOException if an exception occurs creating or writing to the file
      */
     public void write(final Path directory) throws IOException {
-        final Path csvToWrite = directory.resolve(OUTPUT_FILENAME);
-
-        try (final BufferedWriter file = new BufferedWriter(new FileWriter(csvToWrite.toFile()))) {
-            file.write(String.valueOf(round));
-            file.write(COMMA);
-            file.write(hash.toString());
-            file.flush();
-        }
+        final ObjectMapper mapper =
+                new ObjectMapper(
+                        new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER));
+        mapper.writeValue(directory.resolve(OUTPUT_FILENAME).toFile(), this);
     }
 
     /**
@@ -66,26 +82,26 @@ public record EmergencyRecoveryFile(long round, Hash hash) {
      *     emergency recovery file exists
      * @throws IOException if an exception occurs reading from the file, or the file content is not
      *     properly formatted
-     * @throws NumberFormatException if an exception occurs parsing the round number from the file
      */
     public static EmergencyRecoveryFile read(final Path directory) throws IOException {
-        final Path csvToRead = directory.resolve(INPUT_FILENAME);
-        if (!Files.exists(csvToRead)) {
+        final Path fileToRead = directory.resolve(INPUT_FILENAME);
+        if (!Files.exists(fileToRead)) {
             return null;
         }
-
-        try (final BufferedReader file = new BufferedReader(new FileReader(csvToRead.toFile()))) {
-            final String line = file.readLine();
-            final String[] values = line.split(COMMA);
-            if (values.length != 2) {
-                throw new IOException(
-                        "Invalid emergency recovery file contents. Expected 2 values in CSV format"
-                                + " but was {}"
-                                + line);
-            }
-            final long round = Long.parseLong(values[0]);
-            final Hash hash = new Hash(Hex.decode(values[1]));
-            return new EmergencyRecoveryFile(round, hash);
-        }
+        final ObjectMapper mapper =
+                new ObjectMapper(new YAMLFactory())
+                        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                        .configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, true)
+                        .configure(DeserializationFeature.FAIL_ON_NULL_CREATOR_PROPERTIES, true)
+                        .configure(DeserializationFeature.FAIL_ON_MISSING_CREATOR_PROPERTIES, true);
+        return mapper.readValue(fileToRead.toFile(), EmergencyRecoveryFile.class);
     }
+
+    private record Recovery(State state) {}
+
+    private record State(
+            long round,
+            @JsonSerialize(using = ToStringSerializer.class)
+                    @JsonDeserialize(using = HashDeserializer.class)
+                    Hash hash) {}
 }

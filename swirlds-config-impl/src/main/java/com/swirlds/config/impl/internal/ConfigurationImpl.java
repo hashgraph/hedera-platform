@@ -17,7 +17,6 @@ package com.swirlds.config.impl.internal;
 
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.config.api.Configuration;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -81,13 +80,33 @@ class ConfigurationImpl implements Configuration, ConfigLifecycle {
     }
 
     @Override
+    public List<String> getValues(final String propertyName) {
+        CommonUtils.throwArgBlank(propertyName, "propertyName");
+        final String rawValue = getValue(propertyName);
+        if (rawValue == null) {
+            return null;
+        }
+        return ConfigListUtils.createList(rawValue);
+    }
+
+    @Override
+    public List<String> getValues(final String propertyName, final List<String> defaultValue) {
+        CommonUtils.throwArgBlank(propertyName, "propertyName");
+        if (!exists(propertyName)) {
+            return defaultValue;
+        }
+        return getValues(propertyName);
+    }
+
+    @Override
     public <T> List<T> getValues(final String propertyName, final Class<T> propertyType) {
         CommonUtils.throwArgBlank(propertyName, "propertyName");
         CommonUtils.throwArgNull(propertyType, "propertyType");
-        final String rawValue = getValue(propertyName);
-        return Arrays.stream(rawValue.split(","))
-                .map(v -> converterService.convert(v, propertyType))
-                .toList();
+        final List<String> values = getValues(propertyName);
+        if (values == null) {
+            return null;
+        }
+        return values.stream().map(v -> converterService.convert(v, propertyType)).toList();
     }
 
     @Override

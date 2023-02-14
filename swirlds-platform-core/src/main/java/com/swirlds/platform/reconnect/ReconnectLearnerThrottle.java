@@ -37,7 +37,7 @@ import org.apache.logging.log4j.Logger;
  * <p>NOTE: This class is not thread safe
  */
 public class ReconnectLearnerThrottle {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ReconnectLearnerThrottle.class);
     private final NodeId selfId;
     private final ReconnectSettings settings;
     /** The number of times reconnect has failed since the last succesfull reconnect. */

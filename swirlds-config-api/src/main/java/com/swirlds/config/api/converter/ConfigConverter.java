@@ -20,7 +20,7 @@ package com.swirlds.config.api.converter;
  * a specific data type.
  *
  * <p>Implementations of the interface can be added to the configuration setup by calling {@link
- * com.swirlds.config.api.ConfigurationProvider#addConverter(ConfigConverter)}
+ * com.swirlds.config.api.ConfigurationBuilder#withConverter(ConfigConverter)}
  *
  * @param <T> The data type of the converter
  */

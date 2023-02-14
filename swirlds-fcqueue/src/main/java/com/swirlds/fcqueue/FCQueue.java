@@ -18,8 +18,8 @@ package com.swirlds.fcqueue;
 import static com.swirlds.common.utility.CommonUtils.hex;
 
 import com.swirlds.common.FastCopyable;
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
@@ -878,7 +878,7 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
         if (element == null) {
             return getNullHash();
         }
-        Cryptography crypto = CryptoFactory.getInstance();
+        Cryptography crypto = CryptographyHolder.get();
         // return a hash of a hash, in order to make state proofs smaller in the future
         crypto.digestSync(element);
         return crypto.digestSync(element.getHash()).getValue();

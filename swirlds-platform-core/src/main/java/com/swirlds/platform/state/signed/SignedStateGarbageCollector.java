@@ -17,6 +17,7 @@ package com.swirlds.platform.state.signed;
 
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.utility.Startable;
 import java.time.Duration;
 
@@ -32,24 +33,27 @@ public class SignedStateGarbageCollector implements Startable {
      * <p>If, in the future, state deletion ever becomes a bottleneck, then it is safe to change
      * this into a {@link com.swirlds.common.threading.framework.QueueThreadPool QueueThreadPool}.
      */
-    private final QueueThread<Runnable> deletionQueue =
-            new QueueThreadConfiguration<Runnable>()
-                    .setComponent("platform")
-                    .setThreadName("signed-state-deleter")
-                    .setMaxBufferSize(1)
-                    .setCapacity(DELETION_QUEUE_CAPACITY)
-                    .setHandler(Runnable::run)
-                    .build();
+    private final QueueThread<Runnable> deletionQueue;
 
     private final SignedStateMetrics signedStateMetrics;
 
     /**
      * Create a new garbage collector for signed states.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param signedStateMetrics metrics for signed states
      */
-    public SignedStateGarbageCollector(final SignedStateMetrics signedStateMetrics) {
+    public SignedStateGarbageCollector(
+            final ThreadManager threadManager, final SignedStateMetrics signedStateMetrics) {
         this.signedStateMetrics = signedStateMetrics;
+        deletionQueue =
+                new QueueThreadConfiguration<Runnable>(threadManager)
+                        .setComponent("platform")
+                        .setThreadName("signed-state-deleter")
+                        .setMaxBufferSize(1)
+                        .setCapacity(DELETION_QUEUE_CAPACITY)
+                        .setHandler(Runnable::run)
+                        .build();
     }
 
     /**

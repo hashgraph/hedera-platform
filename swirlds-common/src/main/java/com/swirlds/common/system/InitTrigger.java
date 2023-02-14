@@ -23,4 +23,6 @@ public enum InitTrigger {
     RESTART,
     /** The state was created because this node had to reconnect. */
     RECONNECT,
+    /** The state was created to be used in an event stream recovery workflow. */
+    EVENT_STREAM_RECOVERY
 }

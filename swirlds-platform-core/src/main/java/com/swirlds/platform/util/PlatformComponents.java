@@ -27,9 +27,18 @@ import java.util.List;
 public class PlatformComponents implements Mutable, Startable {
 
     private final List<Object> components = new LinkedList<>();
-    private final DispatchBuilder dispatchBuilder = new DispatchBuilder();
+    private final DispatchBuilder dispatchBuilder;
 
     private boolean immutable = false;
+
+    /**
+     * Create a new container for platform components.
+     *
+     * @param dispatchBuilder the dispatch builder used by this platform instance.
+     */
+    public PlatformComponents(final DispatchBuilder dispatchBuilder) {
+        this.dispatchBuilder = dispatchBuilder;
+    }
 
     /**
      * Add a platform component that needs to be wired and/or started.
@@ -57,11 +66,6 @@ public class PlatformComponents implements Mutable, Startable {
                 startable.start();
             }
         }
-    }
-
-    /** Get the dispatch builder for this session. */
-    public DispatchBuilder getDispatchBuilder() {
-        return dispatchBuilder;
     }
 
     /** {@inheritDoc} */

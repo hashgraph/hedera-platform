@@ -37,7 +37,7 @@ import org.apache.logging.log4j.Logger;
 @Deprecated
 public class Crypto {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(Crypto.class);
 
     private final KeysAndCerts keysAndCerts;
     /** a pool of threads used to verify signatures and generate keys, in parallel */

@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.merkle.synchronization;
 
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 import static com.swirlds.common.utility.Units.MILLISECONDS_TO_SECONDS;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
@@ -34,6 +35,7 @@ import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationEx
 import com.swirlds.common.merkle.synchronization.views.CustomReconnectRoot;
 import com.swirlds.common.merkle.synchronization.views.LearnerTreeView;
 import com.swirlds.common.merkle.synchronization.views.StandardLearnerTreeView;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.threading.pool.StandardWorkGroup;
 import com.swirlds.logging.payloads.SynchronizationCompletePayload;
 import java.util.Deque;
@@ -72,9 +74,13 @@ public class LearningSynchronizer implements ReconnectNodeCount {
     private long hashTimeMilliseconds;
     private long initializationTimeMilliseconds;
 
+    /** Responsible for creating and managing threads used by this object. */
+    private final ThreadManager threadManager;
+
     /**
      * Create a new learning synchronizer.
      *
+     * @param threadManager responsible for managing thread lifecycles
      * @param in the input stream
      * @param out the output stream
      * @param root the root of the tree
@@ -83,10 +89,13 @@ public class LearningSynchronizer implements ReconnectNodeCount {
      *     will never finish due to a failure.
      */
     public LearningSynchronizer(
+            final ThreadManager threadManager,
             final MerkleDataInputStream in,
             final MerkleDataOutputStream out,
             final MerkleNode root,
             final Runnable breakConnection) {
+
+        this.threadManager = throwArgNull(threadManager, "threadManager");
 
         inputStream = in;
         outputStream = out;
@@ -223,7 +232,8 @@ public class LearningSynchronizer implements ReconnectNodeCount {
                 root == null ? "(unknown)" : root.getClass().getName(),
                 root == null ? "[]" : root.getRoute());
 
-        final StandardWorkGroup workGroup = new StandardWorkGroup(WORK_GROUP_NAME, breakConnection);
+        final StandardWorkGroup workGroup =
+                new StandardWorkGroup(threadManager, WORK_GROUP_NAME, breakConnection);
 
         final LearnerTreeView<T> view;
         if (root == null || !root.hasCustomReconnectView()) {
@@ -242,7 +252,15 @@ public class LearningSynchronizer implements ReconnectNodeCount {
 
         final AtomicReference<T> reconstructedRoot = new AtomicReference<>();
 
-        new LearnerThread<>(workGroup, in, out, rootsToReceive, reconstructedRoot, view, this)
+        new LearnerThread<>(
+                        workGroup,
+                        threadManager,
+                        in,
+                        out,
+                        rootsToReceive,
+                        reconstructedRoot,
+                        view,
+                        this)
                 .start();
         InterruptedException interruptException = null;
         try {

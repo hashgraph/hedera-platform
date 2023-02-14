@@ -16,6 +16,7 @@
 package com.swirlds.common.test.threading;
 
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyTrue;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,7 +49,7 @@ class StandardFutureTests {
 
         final AtomicBoolean finished = new AtomicBoolean(false);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             try {
@@ -84,7 +85,7 @@ class StandardFutureTests {
 
         final AtomicBoolean finished = new AtomicBoolean(false);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             try {
@@ -121,7 +122,7 @@ class StandardFutureTests {
 
         final AtomicBoolean finished = new AtomicBoolean(false);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             try {
@@ -148,7 +149,7 @@ class StandardFutureTests {
 
         final AtomicBoolean finished = new AtomicBoolean(false);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             // This one should time out
@@ -188,7 +189,7 @@ class StandardFutureTests {
 
         final AtomicBoolean finished = new AtomicBoolean(false);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             // This one should time out
@@ -233,7 +234,7 @@ class StandardFutureTests {
 
         final AtomicBoolean finished = new AtomicBoolean(false);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             try {
@@ -272,7 +273,7 @@ class StandardFutureTests {
 
         final AtomicBoolean finished = new AtomicBoolean(false);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             try {
@@ -311,7 +312,7 @@ class StandardFutureTests {
 
         final AtomicBoolean finished = new AtomicBoolean(false);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             try {
@@ -359,7 +360,7 @@ class StandardFutureTests {
         assertFalse(future.isDone(), "future should not be done");
         assertFalse(future.isCancelled(), "future should not be cancelled");
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setRunnable(
                         () -> {
                             try {

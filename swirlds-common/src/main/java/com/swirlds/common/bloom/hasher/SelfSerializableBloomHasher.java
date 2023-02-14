@@ -20,7 +20,7 @@ import static com.swirlds.common.utility.NonCryptographicHashing.hash64;
 import static com.swirlds.common.utility.Units.BYTES_PER_LONG;
 
 import com.swirlds.common.bloom.BloomHasher;
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
@@ -43,7 +43,7 @@ public class SelfSerializableBloomHasher<T extends SelfSerializable> implements 
     /** {@inheritDoc} */
     @Override
     public void hash(final T element, final long maxHash, final long[] hashes) {
-        final Hash hash = CryptoFactory.getInstance().digestSync(element);
+        final Hash hash = CryptographyHolder.get().digestSync(element);
         final byte[] hashBytes = hash.getValue();
 
         int index = 0;

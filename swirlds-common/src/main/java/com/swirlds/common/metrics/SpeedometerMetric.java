@@ -164,7 +164,7 @@ public interface SpeedometerMetric extends Metric {
 
         /** {@inheritDoc} */
         @Override
-        Class<SpeedometerMetric> getResultClass() {
+        public Class<SpeedometerMetric> getResultClass() {
             return SpeedometerMetric.class;
         }
 

@@ -15,7 +15,11 @@
  */
 package com.swirlds.common.merkle.crypto;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
+
+import com.swirlds.common.config.singleton.ConfigurationHolder;
+import com.swirlds.common.crypto.CryptographyHolder;
+import com.swirlds.common.crypto.config.CryptoConfig;
 import com.swirlds.common.merkle.crypto.internal.MerkleCryptoEngine;
 import com.swirlds.common.threading.locks.AutoClosableLock;
 import com.swirlds.common.threading.locks.Locks;
@@ -24,7 +28,11 @@ import com.swirlds.common.threading.locks.locked.Locked;
 /**
  * Public factory implementation from which all {@link MerkleCryptography} instances should be
  * acquired.
+ *
+ * @deprecated We will remove this static class in near future after {@link CryptographyHolder} has
+ *     been removed
  */
+@Deprecated(forRemoval = true)
 public class MerkleCryptoFactory {
 
     /** Internal lock */
@@ -46,7 +54,11 @@ public class MerkleCryptoFactory {
                 if (merkleCryptography == null) {
                     merkleCryptography =
                             new MerkleCryptoEngine(
-                                    CryptoFactory.getInstance(), CryptoFactory.getSettings());
+                                    getStaticThreadManager(),
+                                    CryptographyHolder.get(),
+                                    ConfigurationHolder.getInstance()
+                                            .get()
+                                            .getConfigData(CryptoConfig.class));
                 }
             }
         }

@@ -21,9 +21,11 @@ import static com.swirlds.logging.LogMarker.RECONNECT;
 import com.swirlds.common.threading.BlockingResourceProvider;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.threading.locks.locked.LockedResource;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateValidator;
 import com.swirlds.platform.system.SystemExitReason;
 import com.swirlds.platform.system.SystemUtils;
 import java.util.concurrent.Semaphore;
@@ -33,7 +35,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Responsible for executing the whole reconnect process */
 public class ReconnectController implements Runnable {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ReconnectController.class);
     private static final int FAILED_RECONNECT_SLEEP_MILLIS = 1000;
 
     private final ReconnectHelper helper;
@@ -41,12 +43,18 @@ public class ReconnectController implements Runnable {
     private final BlockingResourceProvider<Connection> connectionProvider;
     private final Runnable startChatter;
     private final AtomicReference<SignedStateValidator> validator = new AtomicReference<>();
+    private final ThreadManager threadManager;
 
     /**
+     * @param threadManager responsible for creating and managing threads
      * @param helper executes phases of a reconnect
      * @param startChatter starts chatter if previously suspended
      */
-    public ReconnectController(final ReconnectHelper helper, final Runnable startChatter) {
+    public ReconnectController(
+            final ThreadManager threadManager,
+            final ReconnectHelper helper,
+            final Runnable startChatter) {
+        this.threadManager = threadManager;
         this.helper = helper;
         this.startChatter = startChatter;
         this.threadRunning = new Semaphore(1);
@@ -62,7 +70,7 @@ public class ReconnectController implements Runnable {
             return;
         }
         LOG.info(LogMarker.RECONNECT.getMarker(), "Starting ReconnectController");
-        new ThreadConfiguration()
+        new ThreadConfiguration(threadManager)
                 .setComponent("reconnect")
                 .setThreadName("reconnect-controller")
                 .setRunnable(this)

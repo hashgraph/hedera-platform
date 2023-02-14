@@ -18,7 +18,6 @@ package com.swirlds.jasperdb.collections;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 import com.swirlds.jasperdb.utilities.JasperDBFileUtils;
-import java.io.Closeable;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.Buffer;
@@ -46,7 +45,7 @@ import sun.misc.Unsafe;
  * <p>Per the {@link LongList} contract, this class is thread-safe for both concurrent reads and
  * writes.
  */
-public final class LongListOffHeap extends LongList implements Closeable {
+public final class LongListOffHeap extends LongList {
     private static final Logger LOG = LogManager.getLogger(LongListOffHeap.class);
     /** Offset of the {@code java.nio.Buffer#address} field. */
     private static final long BYTE_BUFFER_ADDRESS_FIELD_OFFSET;

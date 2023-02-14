@@ -26,12 +26,12 @@ import java.nio.charset.StandardCharsets;
  * use-lambdametafactory-to-invoke-one-arg-method-on-class-instance-obtained-from-o
  */
 public class URLClassLoaderWithLookup extends URLClassLoader {
-    public URLClassLoaderWithLookup(URL[] urls, ClassLoader parent) {
+    public URLClassLoaderWithLookup(final URL[] urls, final ClassLoader parent) {
         super(urls, parent);
         defineGimmeLookup();
     }
 
-    public URLClassLoaderWithLookup(URL[] urls) {
+    public URLClassLoaderWithLookup(final URL[] urls) {
         super(urls);
         defineGimmeLookup();
     }
@@ -42,7 +42,7 @@ public class URLClassLoaderWithLookup extends URLClassLoader {
     }
 
     private void defineGimmeLookup() {
-        byte[] code = gimmeLookupClassDef();
+        final byte[] code = gimmeLookupClassDef();
         defineClass("GimmeLookup", code, 0, code.length);
     }
 

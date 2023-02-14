@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Accept inbound connections and executes the platform handshake. This class is thread-safe */
 public class InboundConnectionHandler {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(InboundConnectionHandler.class);
 
     private final ConnectionTracker connectionTracker;
     private final NodeId selfId;

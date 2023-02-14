@@ -15,8 +15,10 @@
  */
 package com.swirlds.common.metrics;
 
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
+import java.util.EnumSet;
 import java.util.function.IntBinaryOperator;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
@@ -28,7 +30,36 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
  * <p>An {@code IntegerAccumulator} is reset to the {@link #getInitialValue() initialValue}. If no
  * {@code initialValue} was specified, the {@code IntegerAccumulator} is reset to {@code 0}.
  */
-public interface IntegerAccumulator extends BaseIntegerMetric {
+public interface IntegerAccumulator extends Metric {
+
+    /** {@inheritDoc} */
+    @Override
+    default DataType getDataType() {
+        return DataType.INT;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    default EnumSet<ValueType> getValueTypes() {
+        return EnumSet.of(VALUE);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    default Integer get(final ValueType valueType) {
+        throwArgNull(valueType, "valueType");
+        if (valueType == VALUE) {
+            return get();
+        }
+        throw new IllegalArgumentException("Unsupported ValueType: " + valueType);
+    }
+
+    /**
+     * Get the current value
+     *
+     * @return the current value
+     */
+    int get();
 
     /**
      * Returns the {@code initialValue} of the {@code IntegerAccumulator}
@@ -189,7 +220,7 @@ public interface IntegerAccumulator extends BaseIntegerMetric {
 
         /** {@inheritDoc} */
         @Override
-        Class<IntegerAccumulator> getResultClass() {
+        public Class<IntegerAccumulator> getResultClass() {
             return IntegerAccumulator.class;
         }
 

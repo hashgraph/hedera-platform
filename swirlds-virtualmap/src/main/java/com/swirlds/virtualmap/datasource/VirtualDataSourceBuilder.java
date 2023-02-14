@@ -21,76 +21,68 @@ import com.swirlds.virtualmap.VirtualValue;
 import java.nio.file.Path;
 
 /**
- * Builds {@link VirtualDataSource}s. Each built data source has a "name". This name is used, along
- * with the path, to form a directory into which the database will be created (or loaded from).
+ * Manages {@link VirtualDataSource} instances. An instance of a data source builder is provided to
+ * every {@link com.swirlds.virtualmap.VirtualMap} and used to get a reference to underlying virtual
+ * data source.
+ *
+ * <p>Virtual data source builder configuration is not a part of this interface. For example, some
+ * implementations that store data on disk may have "storage directory" config, which is used,
+ * together with requested data source labels, to build full data source disk paths.
  *
  * @param <K> The key
  * @param <V> The value
  */
 public interface VirtualDataSourceBuilder<K extends VirtualKey<? super K>, V extends VirtualValue>
         extends SelfSerializable {
-    /**
-     * Builds a new {@link VirtualDataSource} using the configuration of this builder and the given
-     * name.
-     *
-     * @param name The name. Cannot be null. If an existing directory exists, the returned {@link
-     *     VirtualDataSource} will be opened onto that database. This name must be posix compliant.
-     * @param label A label. Can be null.
-     * @param withDbCompactionEnabled If true then the new database will have background compaction
-     *     enabled, false and the new database will not have background compaction enabled.
-     * @return An opened {@link VirtualDataSource}.
-     */
-    VirtualDataSource<K, V> build(String name, String label, final boolean withDbCompactionEnabled);
 
     /**
      * Builds a new {@link VirtualDataSource} using the configuration of this builder and the given
-     * name by creating a snapshot of the given data source.
+     * label. If a data source with the given label already exists, it's used instead.
      *
-     * @param name The name. Cannot be null. If an existing directory exists, the returned {@link
-     *     VirtualDataSource} will be opened onto that database. This name must be posix compliant.
-     * @param label A label. Can be null.
-     * @param snapshotMe The dataSource to invoke snapshot on. Cannot be null.
+     * @param label The label. Cannot be null. Labels can be used in logs and stats, and also to
+     *     build full disk paths to store data source files. This is builder implementation specific
      * @param withDbCompactionEnabled If true then the new database will have background compaction
-     *     enabled, false and the new database will not have background compaction enabled.
+     *     enabled, false and the new database will not have background compaction enabled
      * @return An opened {@link VirtualDataSource}.
      */
-    VirtualDataSource<K, V> build(
-            String name,
-            String label,
-            VirtualDataSource<K, V> snapshotMe,
-            boolean withDbCompactionEnabled);
+    VirtualDataSource<K, V> build(String label, final boolean withDbCompactionEnabled);
+
+    /**
+     * Builds a new {@link VirtualDataSource} using the configuration of this builder by creating a
+     * snapshot of the given data source. The new data source doesn't have background file
+     * compaction enabled.
+     *
+     * <p>This method is used when a virtual map copy is created during reconnects.
+     *
+     * @param snapshotMe The dataSource to invoke snapshot on. Cannot be null
+     * @return An opened {@link VirtualDataSource}
+     */
+    VirtualDataSource<K, V> copy(VirtualDataSource<K, V> snapshotMe);
+
+    /**
+     * Builds a new {@link VirtualDataSource} using the configuration of this builder by creating a
+     * snapshot of the given data source in the specified folder. If the destination folder is
+     * {@code null}, the snapshot is taken into an unspecified, usually temp, folder. The new data
+     * source doesn't have background file compaction enabled.
+     *
+     * <p>This method is used when a virtual map is written to disk during state serialization.
+     *
+     * @param destination The base path into which to snapshot the database. Can be null
+     * @param snapshotMe The dataSource to invoke snapshot on. Cannot be null
+     */
+    void snapshot(Path destination, VirtualDataSource<K, V> snapshotMe);
 
     /**
      * Builds a new {@link VirtualDataSource} using the configuration of this builder and the given
-     * name by creating a snapshot of the given data source.
-     *
-     * @param label A label. Can be null.
-     * @param to The path into which to snapshot the database
-     * @param snapshotMe The dataSource to invoke snapshot on. Cannot be null.
-     * @param withDbCompactionEnabled If true then the new database will have background compaction
-     *     enabled, false and the new database will not have background compaction enabled.
-     * @return An opened {@link VirtualDataSource}.
-     */
-    VirtualDataSource<K, V> build(
-            String label,
-            Path to,
-            VirtualDataSource<K, V> snapshotMe,
-            boolean withDbCompactionEnabled);
-
-    /**
-     * Builds a new {@link VirtualDataSource} using the configuration of this builder and the given
-     * name by copying all the database files from the given path into the new database directory
+     * label by copying all the database files from the given path into the new database directory
      * and then opening that database.
      *
-     * @param name The name. Cannot be null. This must not refer to an existing database. This name
-     *     must be posix compliant.
-     * @param label A label. Can be null.
-     * @param from The path of the database from which to copy all the database files. Cannot be
-     *     null.
-     * @param withDbCompactionEnabled If true then the new database will have background compaction
-     *     enabled, false and the new database will not have background compaction enabled.
-     * @return An opened {@link VirtualDataSource}.
+     * <p>This method is used when a virtual map is deserialized from a state snapshot. for details.
+     *
+     * @param label The label. Cannot be null. This label must be posix compliant
+     * @param source The base path of the database from which to copy all the database files. Cannot
+     *     be null
+     * @return An opened {@link VirtualDataSource}
      */
-    VirtualDataSource<K, V> build(
-            String name, String label, Path from, final boolean withDbCompactionEnabled);
+    VirtualDataSource<K, V> restore(String label, Path source);
 }

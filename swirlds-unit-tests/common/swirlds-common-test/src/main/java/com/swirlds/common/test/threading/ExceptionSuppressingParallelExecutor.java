@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test.threading;
 
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.threading.pool.CachedPoolParallelExecutor;
 import com.swirlds.common.threading.pool.ParallelExecutionException;
 import com.swirlds.common.threading.pool.ParallelExecutor;
@@ -25,8 +26,8 @@ public class ExceptionSuppressingParallelExecutor implements ParallelExecutor {
 
     private final ParallelExecutor executor;
 
-    public ExceptionSuppressingParallelExecutor() {
-        executor = new CachedPoolParallelExecutor("sync-phase-thread");
+    public ExceptionSuppressingParallelExecutor(final ThreadManager threadManager) {
+        executor = new CachedPoolParallelExecutor(threadManager, "sync-phase-thread");
     }
 
     @Override
@@ -38,5 +39,17 @@ public class ExceptionSuppressingParallelExecutor implements ParallelExecutor {
             // suppress exceptions
             return null;
         }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean isImmutable() {
+        return executor.isImmutable();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void start() {
+        executor.start();
     }
 }

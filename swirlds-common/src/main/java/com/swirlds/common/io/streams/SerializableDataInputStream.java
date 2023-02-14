@@ -406,7 +406,7 @@ public class SerializableDataInputStream extends AugmentedDataInputStream {
      * @return a constructor for the class
      */
     private static <T extends SelfSerializable> T registryConstructor(final long classId) {
-        final T rc = ConstructableRegistry.createObject(classId);
+        final T rc = ConstructableRegistry.getInstance().createObject(classId);
         if (rc == null) {
             throw new ClassNotFoundException(classId);
         }

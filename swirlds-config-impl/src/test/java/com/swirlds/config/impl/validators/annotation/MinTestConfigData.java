@@ -16,6 +16,7 @@
 package com.swirlds.config.impl.validators.annotation;
 
 import com.swirlds.config.api.ConfigData;
+import com.swirlds.config.api.validation.annotation.Min;
 
 @ConfigData("min")
 public record MinTestConfigData(

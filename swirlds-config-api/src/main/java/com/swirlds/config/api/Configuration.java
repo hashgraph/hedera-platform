@@ -26,6 +26,9 @@ import java.util.stream.Stream;
  */
 public interface Configuration {
 
+    /** A constant that can be used to define an empty list. */
+    String EMPTY_LIST = "[]";
+
     /**
      * Returns a {@link Stream} of all available property names
      *
@@ -88,6 +91,30 @@ public interface Configuration {
      */
     <T> T getValue(String propertyName, Class<T> propertyType, T defaultValue)
             throws IllegalArgumentException;
+
+    /**
+     * Returns a {@link List} of string elements of the property with the given name
+     *
+     * @param propertyName the name of the property
+     * @return a {@link List} of elements of the property with the given name
+     * @throws NoSuchElementException if the property does not exist.
+     * @throws IllegalArgumentException if the raw {@link String} value of the property can not be
+     *     converted to a list or the given type
+     */
+    List<String> getValues(String propertyName);
+
+    /**
+     * Returns a {@link List} of string elements of the property with the given name or the given
+     * default {@link List}
+     *
+     * @param propertyName the name of the property
+     * @param defaultValue the default {@link List}
+     * @return a {@link List} of elements of the property with the given name
+     * @throws NoSuchElementException if the property does not exist.
+     * @throws IllegalArgumentException if the raw {@link String} value of the property can not be
+     *     converted to a list or the given type
+     */
+    List<String> getValues(String propertyName, List<String> defaultValue);
 
     /**
      * Returns a {@link List} of elements of the property with the given name

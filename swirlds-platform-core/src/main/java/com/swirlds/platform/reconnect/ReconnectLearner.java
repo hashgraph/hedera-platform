@@ -21,12 +21,15 @@ import com.swirlds.common.io.streams.MerkleDataInputStream;
 import com.swirlds.common.io.streams.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.LearningSynchronizer;
 import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.logging.payloads.ReconnectDataUsagePayload;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.metrics.ReconnectMetrics;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.signed.SigSet;
 import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateInvalidException;
+import com.swirlds.platform.state.signed.SignedStateValidator;
 import java.io.IOException;
 import java.net.SocketException;
 import org.apache.logging.log4j.LogManager;
@@ -47,10 +50,22 @@ public class ReconnectLearner {
     private final int reconnectSocketTimeout;
     private final ReconnectMetrics statistics;
     private SignedState signedState;
+    private SigSet sigSet;
     /** After reconnect is finished, restore the socket timeout to the original value. */
     private int originalSocketTimeout;
 
+    private final ThreadManager threadManager;
+
+    /**
+     * @param threadManager responsible for managing thread lifecycles
+     * @param connection the connection to use for the reconnect
+     * @param addressBook the current address book
+     * @param currentState the most recent state from the learner
+     * @param reconnectSocketTimeout the amount of time that should be used for the socet timeout
+     * @param statistics reconnect metrics
+     */
     public ReconnectLearner(
+            final ThreadManager threadManager,
             final Connection connection,
             final AddressBook addressBook,
             final State currentState,
@@ -60,6 +75,7 @@ public class ReconnectLearner {
         currentState.throwIfImmutable("Can not perform reconnect with immutable state");
         currentState.throwIfDestroyed("Can not perform reconnect with destroyed state");
 
+        this.threadManager = threadManager;
         this.connection = connection;
         this.addressBook = addressBook;
         this.currentState = currentState;
@@ -102,16 +118,16 @@ public class ReconnectLearner {
     /**
      * Perform the reconnect operation.
      *
-     * @throws ReconnectException thrown if I/O related errors occur, or when there is an error in
-     *     the underlying protocol
+     * @throws ReconnectException thrown if I/O related errors occur, when there is an error in the
+     *     underlying protocol, or the received state is invalid
      */
     public void execute(final SignedStateValidator validator) throws ReconnectException {
         increaseSocketTimeout();
         try {
-            reconnect();
             receiveSignatures();
+            reconnect();
             validator.validate(signedState, addressBook);
-        } catch (final IOException e) {
+        } catch (final IOException | SignedStateInvalidException e) {
             throw new ReconnectException(e);
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -135,11 +151,13 @@ public class ReconnectLearner {
         connection.getDos().getSyncByteCounter().resetCount();
 
         final LearningSynchronizer synchronizer =
-                new LearningSynchronizer(in, out, currentState, connection::disconnect);
+                new LearningSynchronizer(
+                        threadManager, in, out, currentState, connection::disconnect);
         synchronizer.synchronize();
 
         final State state = (State) synchronizer.getRoot();
         signedState = new SignedState(state);
+        signedState.setSigSet(sigSet);
 
         final double mbReceived = connection.getDis().getSyncByteCounter().getMebiBytes();
         LOG.info(
@@ -158,9 +176,8 @@ public class ReconnectLearner {
      */
     private void receiveSignatures() throws IOException {
         LOG.info(RECONNECT.getMarker(), "Receiving signed state signatures");
-        final SigSet sigSet = new SigSet(addressBook);
+        sigSet = new SigSet(addressBook);
         sigSet.deserialize(connection.getDis(), sigSet.getVersion());
-        signedState.setSigSet(sigSet);
     }
 
     /** Get the signed state that was copied from the other node. */

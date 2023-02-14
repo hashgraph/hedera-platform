@@ -31,7 +31,7 @@ import java.util.function.Consumer;
  * classes. This interface may be changed at any time, in any way, without notice or prior
  * deprecation. Third parties should NOT implement this interface.
  */
-public interface Round {
+public interface Round extends Iterable<ConsensusEvent> {
 
     /**
      * An iterator for all consensus events in this round. Each invocation returns a new iterator
@@ -39,7 +39,8 @@ public interface Round {
      *
      * @return an iterator of consensus events
      */
-    Iterator<ConsensusEvent> eventIterator();
+    @Override
+    Iterator<ConsensusEvent> iterator();
 
     /**
      * Provides the unique round number for this round. Lower numbers reach consensus before higher
@@ -50,12 +51,26 @@ public interface Round {
     long getRoundNum();
 
     /**
+     * Check if the round is empty.
+     *
+     * @return true if this round has no events, else returns false.
+     */
+    boolean isEmpty();
+
+    /**
+     * Get the number of events in this round.
+     *
+     * @return the number of events in the round
+     */
+    int getEventCount();
+
+    /**
      * A convenience method that supplies every transaction in this round to a consumer.
      *
      * @param transactionConsumer a transaction consumer
      */
     default void forEachTransaction(final Consumer<ConsensusTransaction> transactionConsumer) {
-        for (final Iterator<ConsensusEvent> eventIt = eventIterator(); eventIt.hasNext(); ) {
+        for (final Iterator<ConsensusEvent> eventIt = iterator(); eventIt.hasNext(); ) {
             final ConsensusEvent event = eventIt.next();
             for (final Iterator<ConsensusTransaction> transIt =
                             event.consensusTransactionIterator();
@@ -73,7 +88,7 @@ public interface Round {
      */
     default void forEachEventTransaction(
             final BiConsumer<ConsensusEvent, ConsensusTransaction> consumer) {
-        for (final Iterator<ConsensusEvent> eventIt = eventIterator(); eventIt.hasNext(); ) {
+        for (final Iterator<ConsensusEvent> eventIt = iterator(); eventIt.hasNext(); ) {
             final ConsensusEvent event = eventIt.next();
             for (final Iterator<ConsensusTransaction> transIt =
                             event.consensusTransactionIterator();

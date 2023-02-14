@@ -18,6 +18,7 @@ package com.swirlds.config.impl.validators.annotation;
 import com.swirlds.config.api.ConfigData;
 import com.swirlds.config.api.Configuration;
 import com.swirlds.config.api.validation.ConfigViolation;
+import com.swirlds.config.api.validation.annotation.ConstraintMethod;
 import com.swirlds.config.impl.validators.DefaultConfigViolation;
 
 @ConfigData("method")

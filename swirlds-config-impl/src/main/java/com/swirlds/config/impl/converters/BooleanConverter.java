@@ -29,6 +29,11 @@ public final class BooleanConverter implements ConfigConverter<Boolean> {
         if (value == null) {
             throw new NullPointerException("null can not be converted");
         }
+
+        if (value.equals("1")) {
+            return Boolean.TRUE;
+        }
+
         return Boolean.valueOf(value);
     }
 }

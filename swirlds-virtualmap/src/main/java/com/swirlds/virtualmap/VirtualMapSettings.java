@@ -17,7 +17,13 @@ package com.swirlds.virtualmap;
 
 import java.time.Duration;
 
-/** Instance-wide settings for {@code VirtualMap}. */
+/**
+ * Instance-wide settings for {@code VirtualMap}.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
+@Deprecated(forRemoval = true)
 public interface VirtualMapSettings {
     double UNIT_FRACTION_PERCENT = 100.0;
 

@@ -19,6 +19,7 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -37,7 +38,7 @@ public class ConnectionServer implements InterruptableRunnable {
     /** number of milliseconds to sleep when a server socket binds fails until trying again */
     private static final int SLEEP_AFTER_BIND_FAILED_MS = 100;
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ConnectionServer.class);
     /** overrides ip if null */
     private static final byte[] LISTEN_IP = new byte[] {0, 0, 0, 0};
 
@@ -52,7 +53,16 @@ public class ConnectionServer implements InterruptableRunnable {
     /** a thread pool used to handle incoming connections */
     private final ExecutorService incomingConnPool;
 
+    /**
+     * * @param threadManager * responsible for managing thread lifecycles
+     *
+     * @param ip the IP address to use
+     * @param port the port ot use
+     * @param socketFactory responsible for creating new sockets
+     * @param newConnectionHandler handles a new connection after it has been created
+     */
     public ConnectionServer(
+            final ThreadManager threadManager,
             final byte[] ip,
             final int port,
             final SocketFactory socketFactory,
@@ -63,7 +73,9 @@ public class ConnectionServer implements InterruptableRunnable {
         this.socketFactory = socketFactory;
         this.incomingConnPool =
                 Executors.newCachedThreadPool(
-                        new ThreadConfiguration().setThreadName("sync_server").buildFactory());
+                        new ThreadConfiguration(threadManager)
+                                .setThreadName("sync_server")
+                                .buildFactory());
     }
 
     @Override

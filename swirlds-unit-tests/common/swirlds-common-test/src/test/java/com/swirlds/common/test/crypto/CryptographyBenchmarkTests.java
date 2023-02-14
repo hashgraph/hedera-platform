@@ -17,8 +17,8 @@ package com.swirlds.common.test.crypto;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Message;
 import com.swirlds.common.crypto.SignatureType;
@@ -38,7 +38,7 @@ class CryptographyBenchmarkTests {
 
     @BeforeAll
     static void startup() {
-        cryptoProvider = CryptoFactory.getInstance();
+        cryptoProvider = CryptographyHolder.get();
     }
 
     private record TransactionComponents(byte[] message, byte[] publicKey, byte[] signature) {}

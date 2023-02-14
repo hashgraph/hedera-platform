@@ -16,12 +16,12 @@
 package com.swirlds.common.constructable;
 
 /** Exception caused when constructor cannot be registered for any reason */
-public class ConstructableRegistryException extends Exception {
-    ConstructableRegistryException(String msg) {
+public final class ConstructableRegistryException extends Exception {
+    public ConstructableRegistryException(final String msg) {
         super(msg);
     }
 
-    ConstructableRegistryException(String message, Throwable cause) {
+    public ConstructableRegistryException(final String message, final Throwable cause) {
         super(message, cause);
     }
 }

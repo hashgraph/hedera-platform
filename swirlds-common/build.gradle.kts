@@ -17,14 +17,20 @@ plugins {
     id("com.swirlds.platform.conventions")
     id("com.swirlds.platform.library")
     id("com.swirlds.platform.maven-publish")
-    `java-test-fixtures`
 }
 
 dependencies {
     // Individual Dependencies
     api(project(":swirlds-logging"))
+    api(project(":swirlds-config-api"))
+    api(project(":swirlds-cli"))
     implementation(libs.classgraph)
     implementation(libs.commons.codec)
+    implementation(libs.bundles.picocli)
+    implementation(libs.prometheus.httpserver) {
+        exclude("io.prometheus", "simpleclient_tracer_otel")
+        exclude("io.prometheus", "simpleclient_tracer_otel_agent")
+    }
 
     // Bundle Dependencies
     api(libs.bundles.cryptography.core)
@@ -33,12 +39,5 @@ dependencies {
 
     // Test Dependencies
     testImplementation(testLibs.bundles.junit)
-}
-
-tasks.testFixturesJavadoc {
-    enabled = !tasks.getByName("release-maven-central").enabled
-}
-
-tasks.testFixturesJar {
-    enabled = !tasks.getByName("release-maven-central").enabled
+    testImplementation(project(":swirlds-config-impl"))
 }

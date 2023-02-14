@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test.stream;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -69,7 +70,8 @@ class QueueThreadObjectStreamTest {
                         initialHash);
 
         queueThread =
-                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>()
+                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>(
+                                getStaticThreadManager())
                         .setForwardTo(consumer)
                         .build();
         runningHashCalculator = new RunningHashCalculatorForStream<>(queueThread, cryptography);

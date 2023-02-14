@@ -15,13 +15,12 @@
  */
 package com.swirlds.platform.chatter.protocol.heartbeat;
 
-import com.swirlds.common.Clock;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.time.Time;
 import com.swirlds.platform.chatter.protocol.MessageHandler;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.function.BiConsumer;
 
 /** Sends and receives chatter heartbeats */
@@ -30,31 +29,20 @@ public class HeartbeatSendReceive implements MessageProvider, MessageHandler<Hea
     private final HeartbeatSender sender;
 
     /**
-     * Same as {@link #HeartbeatSendReceive(long, BiConsumer, Duration, Clock)} with the clock set
-     * to {@link Instant#now()}
-     */
-    public HeartbeatSendReceive(
-            final long peerId,
-            final BiConsumer<NodeId, Long> pingConsumer,
-            final Duration heartbeatInterval) {
-        this(peerId, pingConsumer, heartbeatInterval, Clock.DEFAULT);
-    }
-
-    /**
+     * @param time provides a point in time in nanoseconds, should only be used to measure relative
+     *     time (from one point to another), not absolute time (wall clock time)
      * @param peerId the ID of the peer we are pinging
      * @param pingConsumer consumes the ping time the heartbeat measures. accepts the ID of the peer
      *     and the number of nanoseconds it took for the peer to respond
      * @param heartbeatInterval the interval at which to send heartbeats
-     * @param clock provides a point in time in nanoseconds, should only be used to measure relative
-     *     time (from one point to another), not absolute time (wall clock time)
      */
     public HeartbeatSendReceive(
+            final Time time,
             final long peerId,
             final BiConsumer<NodeId, Long> pingConsumer,
-            final Duration heartbeatInterval,
-            final Clock clock) {
+            final Duration heartbeatInterval) {
         this.responder = new HeartbeatResponder();
-        this.sender = new HeartbeatSender(peerId, pingConsumer, heartbeatInterval, clock);
+        this.sender = new HeartbeatSender(peerId, pingConsumer, heartbeatInterval, time);
     }
 
     @Override

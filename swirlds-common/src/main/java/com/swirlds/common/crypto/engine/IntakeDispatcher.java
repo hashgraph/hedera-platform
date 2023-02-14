@@ -18,6 +18,7 @@ package com.swirlds.common.crypto.engine;
 import static com.swirlds.common.crypto.engine.CryptoEngine.THREAD_COMPONENT_NAME;
 
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.logging.LogMarker;
 import java.util.List;
 import java.util.Queue;
@@ -77,6 +78,7 @@ public class IntakeDispatcher<
      * Thread#setDaemon(boolean)} value specified as {@code true}. This class will launch a total of
      * {@code parallelism + 1} threads.
      *
+     * @param threadManager responsible for managing thread lifecycles
      * @param elementType the type of Element
      * @param backingQueue the queue of Elements to be processed
      * @param provider the cryptographic transformation provider
@@ -84,6 +86,7 @@ public class IntakeDispatcher<
      * @param handlerSupplier the supplier of the handler
      */
     public IntakeDispatcher(
+            final ThreadManager threadManager,
             final Class<Element> elementType,
             final BlockingQueue<List<Element>> backingQueue,
             final Provider provider,
@@ -94,7 +97,7 @@ public class IntakeDispatcher<
         this.handlerSupplier = handlerSupplier;
 
         final ThreadFactory threadFactory =
-                new ThreadConfiguration()
+                new ThreadConfiguration(threadManager)
                         .setDaemon(true)
                         .setPriority(Thread.NORM_PRIORITY)
                         .setComponent(THREAD_COMPONENT_NAME)
@@ -105,7 +108,7 @@ public class IntakeDispatcher<
         this.executorService = Executors.newFixedThreadPool(parallelism, threadFactory);
 
         this.worker =
-                new ThreadConfiguration()
+                new ThreadConfiguration(threadManager)
                         .setDaemon(true)
                         .setPriority(Thread.NORM_PRIORITY)
                         .setComponent(THREAD_COMPONENT_NAME)

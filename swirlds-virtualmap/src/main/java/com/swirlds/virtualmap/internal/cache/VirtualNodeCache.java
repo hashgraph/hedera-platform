@@ -15,6 +15,7 @@
  */
 package com.swirlds.virtualmap.internal.cache;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 import com.swirlds.common.FastCopyable;
@@ -171,7 +172,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
                             60L,
                             TimeUnit.SECONDS,
                             new LinkedBlockingQueue<>(),
-                            new ThreadConfiguration()
+                            new ThreadConfiguration(getStaticThreadManager())
                                     .setThreadGroup(new ThreadGroup("virtual-cache-cleaners"))
                                     .setComponent("virtual-map")
                                     .setThreadName("cache-cleaner")
@@ -928,7 +929,6 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
 
         final AtomicReference<Mutation<? extends VirtualRecord>> lastSeen = new AtomicReference<>();
         return dirtyInternals
-                .seal()
                 .sortedStream(dirtyInternalComparator())
                 .filter(mutation -> mutation.deleted || mutation.value.getPath() < firstLeafPath)
                 .filter(mutation -> dedupeByPath(mutation, lastSeen))

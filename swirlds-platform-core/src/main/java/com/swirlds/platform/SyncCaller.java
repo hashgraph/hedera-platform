@@ -29,8 +29,8 @@ import com.swirlds.platform.network.ConnectionManager;
 import com.swirlds.platform.network.NetworkUtils;
 import com.swirlds.platform.reconnect.ReconnectHelper;
 import com.swirlds.platform.reconnect.ReconnectUtils;
-import com.swirlds.platform.reconnect.SignedStateValidator;
 import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateValidator;
 import java.io.IOException;
 import java.util.List;
 import org.apache.logging.log4j.LogManager;
@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
 /** A thread can run this to repeatedly initiate syncs with other members. */
 class SyncCaller implements Runnable {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(SyncCaller.class);
     /** ID number for this caller thread (0 is the first created by this platform, 1 next, etc) */
     final int callerNumber;
     /** the Platform object that is using this to call other members */

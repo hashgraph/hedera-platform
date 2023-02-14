@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Logger;
 
 /** A {@link GossipEventValidator} which checks if an event has been created by a zero stake node */
 public class ZeroStakeValidator implements GossipEventValidator {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ZeroStakeValidator.class);
     private final AddressBook addressBook;
 
     public ZeroStakeValidator(final AddressBook addressBook) {

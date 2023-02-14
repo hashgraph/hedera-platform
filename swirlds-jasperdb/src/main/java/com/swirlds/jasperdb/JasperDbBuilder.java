@@ -39,6 +39,12 @@ import java.util.Objects;
  * settings, while others are required. Please see each setter to understand which are optional and
  * which are required.
  *
+ * <p>One of the key JasperDB config options is storage directory. Each builder is configured with a
+ * storage dir, which is used as a parent directory for all data sources managed by the builder.
+ * Data source full path is storageDir + "/" + dataSource.label + "-" + timestamp. Timestamp
+ * suffixes are used to make sure multiple data sources with the same label can be created by a
+ * single builder.
+ *
  * @param <K> The key.
  * @param <V> The value.
  */
@@ -235,21 +241,10 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
         return this;
     }
 
-    /**
-     * Build a database with the given name and label. The name is used for the directory name for
-     * the database, as a direct subdirectory of the specified storageDir. The label is used for
-     * logs and stats reporting.
-     *
-     * @param name The name. Cannot be null. If an existing directory exists, the returned {@link
-     *     VirtualDataSource} will be opened onto that database. This name must be posix compliant.
-     * @param label A label. Can be null.
-     * @param withDbCompactionEnabled If true then the new database will have background compaction
-     *     enabled, false and the new database will not have background compaction enabled.
-     * @return New configured VirtualDataSourceJasperDB instance
-     */
+    /** {@inheritDoc} */
     @Override
     public VirtualDataSourceJasperDB<K, V> build(
-            final String name, final String label, final boolean withDbCompactionEnabled) {
+            final String label, final boolean withDbCompactionEnabled) {
         validateBuilderState();
 
         try {
@@ -257,7 +252,7 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
                     virtualLeafRecordSerializer,
                     virtualInternalRecordSerializer,
                     keySerializer,
-                    getStorageDir(name),
+                    getStorageDir(label),
                     label,
                     maxNumOfKeys,
                     withDbCompactionEnabled,
@@ -268,44 +263,18 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
         }
     }
 
-    /**
-     * Build a database as a snapshot of the database "snapshotMe" with the given name and label.
-     * The name is used for the directory name for the database, as a direct subdirectory of the
-     * specified storageDir. The label is used for logs and stats reporting.
-     *
-     * @param name The name. Cannot be null. If an existing directory exists, the returned {@link
-     *     VirtualDataSource} will be opened onto that database. This name must be posix compliant.
-     * @param label A label. Can be null.
-     * @param snapshotMe The dataSource to invoke snapshot on. Cannot be null.
-     * @param withDbCompactionEnabled If true then the new database will have background compaction
-     *     enabled, false and the new database will not have background compaction enabled.
-     * @return New configured VirtualDataSourceJasperDB instance
-     */
-    @Override
-    public VirtualDataSourceJasperDB<K, V> build(
-            final String name,
-            final String label,
-            final VirtualDataSource<K, V> snapshotMe,
-            boolean withDbCompactionEnabled) {
-        return build(label, getStorageDir(name), snapshotMe, withDbCompactionEnabled);
-    }
-
     /** {@inheritDoc} */
     @Override
-    public VirtualDataSourceJasperDB<K, V> build(
-            final String label,
-            final Path to,
-            final VirtualDataSource<K, V> snapshotMe,
-            boolean withDbCompactionEnabled) {
+    public VirtualDataSourceJasperDB<K, V> copy(final VirtualDataSource<K, V> snapshotMe) {
         validateBuilderState();
-
-        if (!(snapshotMe instanceof VirtualDataSourceJasperDB)) {
+        if (!(snapshotMe instanceof VirtualDataSourceJasperDB<K, V> snapshotMeJasperDB)) {
             throw new IllegalArgumentException(
                     "The datasource must be compatible with the jasperdb");
         }
-
         try {
-            snapshotMe.snapshot(to);
+            final String label = snapshotMeJasperDB.getLabel();
+            final Path to = getStorageDir(createUniqueDataSourceName(label));
+            snapshotMeJasperDB.snapshot(to);
             return createDataSource(
                     virtualLeafRecordSerializer,
                     virtualInternalRecordSerializer,
@@ -313,7 +282,7 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
                     to,
                     label,
                     maxNumOfKeys,
-                    withDbCompactionEnabled,
+                    false,
                     internalHashesRamToDiskThreshold,
                     preferDiskBasedIndexes);
         } catch (IOException ex) {
@@ -321,26 +290,28 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
         }
     }
 
-    /**
-     * Build a database as a copy of the database in the directory "from" with the given name and
-     * label. The name is used for the directory name for the database, as a direct subdirectory of
-     * the specified storageDir. The label is used for logs and stats reporting.
-     *
-     * @param name The name. Cannot be null. This must not refer to an existing database. This name
-     *     must be posix compliant.
-     * @param label A label. Can be null.
-     * @param from The path of the database from which to copy all the database files. Cannot be
-     *     null.
-     * @param withDbCompactionEnabled
-     * @return New configured VirtualDataSourceJasperDB instance
-     */
+    /** {@inheritDoc} */
     @Override
-    public VirtualDataSource<K, V> build(
-            final String name,
-            final String label,
-            final Path from,
-            final boolean withDbCompactionEnabled) {
-        final Path to = getStorageDir(name);
+    public void snapshot(final Path destination, final VirtualDataSource<K, V> snapshotMe) {
+        validateBuilderState();
+        if (!(snapshotMe instanceof VirtualDataSourceJasperDB<K, V> snapshotMeJasperDB)) {
+            throw new IllegalArgumentException(
+                    "The datasource must be compatible with the jasperdb");
+        }
+        final String label = snapshotMeJasperDB.getLabel();
+        final Path to = destination.resolve(label);
+        try {
+            snapshotMeJasperDB.snapshot(to);
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public VirtualDataSource<K, V> restore(final String label, final Path source) {
+        final Path from = source.resolve(label);
+        final Path to = getStorageDir(label);
         rethrowIO(() -> hardLinkTree(from, to));
         try {
             return createDataSource(
@@ -350,7 +321,7 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
                     to,
                     label,
                     maxNumOfKeys,
-                    withDbCompactionEnabled,
+                    true,
                     internalHashesRamToDiskThreshold,
                     preferDiskBasedIndexes);
         } catch (final IOException ex) {
@@ -361,7 +332,7 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
     private Path getStorageDir(String name) {
         if (storageDir == null) {
             try {
-                return TemporaryFileBuilder.buildTemporaryFile("database-" + name);
+                return TemporaryFileBuilder.buildTemporaryFile("jasperdb-" + name);
             } catch (final IOException e) {
                 throw new UncheckedIOException(e);
             }
@@ -469,5 +440,16 @@ public class JasperDbBuilder<K extends VirtualKey<? super K>, V extends VirtualV
                 virtualLeafRecordSerializer,
                 virtualInternalRecordSerializer,
                 keySerializer);
+    }
+
+    /**
+     * Builds a new unique data source name for the given label. This method is used when a data
+     * source is copied (copy, snapshot, restore) to avoid conflicts with the original data source.
+     *
+     * @param label Original data source label
+     * @return A new unique data source name
+     */
+    private static String createUniqueDataSourceName(final String label) {
+        return label + "-" + System.currentTimeMillis();
     }
 }

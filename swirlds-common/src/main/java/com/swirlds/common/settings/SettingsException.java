@@ -15,7 +15,12 @@
  */
 package com.swirlds.common.settings;
 
-/** This exception is thrown when there is a settings problem. */
+/**
+ * This exception is thrown when there is a settings problem.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
 @Deprecated(forRemoval = true)
 public class SettingsException extends RuntimeException {
 

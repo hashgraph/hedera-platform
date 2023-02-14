@@ -36,7 +36,7 @@ import org.apache.logging.log4j.Logger;
 /** Contains any data that is either read or written by the platform and the application */
 public class DualStateImpl extends PartialMerkleLeaf
         implements PlatformDualState, SwirldDualState, MerkleLeaf {
-    private static final Logger LOGGER = LogManager.getLogger();
+    private static final Logger LOGGER = LogManager.getLogger(DualStateImpl.class);
 
     public static final long CLASS_ID = 0x565e2e04ce3782b8L;
 

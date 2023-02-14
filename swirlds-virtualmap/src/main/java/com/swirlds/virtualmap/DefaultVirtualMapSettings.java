@@ -21,7 +21,11 @@ import java.time.Duration;
  * {@link VirtualMapSettings} implementation with all defaults. Necessary for testing {@link
  * VirtualMapSettingsFactory} client code running in an environment without Browser-configured
  * settings.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
  */
+@Deprecated(forRemoval = true)
 public final class DefaultVirtualMapSettings implements VirtualMapSettings {
     public static final int DEFAULT_NUM_HASH_THREADS = -1;
     public static final double DEFAULT_PERCENT_HASH_THREADS = 50.0;

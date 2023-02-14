@@ -18,6 +18,7 @@ package com.swirlds.common.test.threading;
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyEquals;
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyFalse;
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyTrue;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static java.util.concurrent.TimeUnit.HOURS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -59,7 +60,7 @@ class StoppableThreadTests {
     @DisplayName("Test Interruptable Thread")
     void testInterruptableThread() throws InterruptedException {
         final StoppableThread runawayThread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setThreadName("runaway thread")
                         .setWork(() -> Thread.sleep(1_000_000_000))
                         .build();
@@ -81,7 +82,7 @@ class StoppableThreadTests {
 
         // This thread will run for a long time
         final StoppableThread runawayThread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setThreadName("runaway thread")
                         .setStopBehavior(Stoppable.StopBehavior.BLOCKING)
                         .setWork(() -> Thread.sleep(1_000_000_000))
@@ -90,7 +91,9 @@ class StoppableThreadTests {
         // This thread will attempt to close the runaway thread. When the runaway thread dies then
         // this thread dies.
         final Thread reaperThread =
-                new ThreadConfiguration().setRunnable(runawayThread::stop).build();
+                new ThreadConfiguration(getStaticThreadManager())
+                        .setRunnable(runawayThread::stop)
+                        .build();
 
         runawayThread.start();
         // Make sure the runaway thread enters its long sleep before starting the reaper thread
@@ -119,7 +122,7 @@ class StoppableThreadTests {
 
         // This thread will run for a long time
         final StoppableThread runawayThread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setThreadName("runaway thread")
                         .setWork(
                                 () -> {
@@ -132,7 +135,7 @@ class StoppableThreadTests {
         // override the
         // default interruptable behavior. When the runaway thread dies then this thread dies.
         final Thread reaperThread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setRunnable(() -> runawayThread.stop(Stoppable.StopBehavior.BLOCKING))
                         .build();
 
@@ -163,7 +166,7 @@ class StoppableThreadTests {
 
         // This thread will run for a long time
         final StoppableThread runawayThread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setThreadName("runaway thread")
                         .setStopBehavior(Stoppable.StopBehavior.BLOCKING)
                         .setWork(
@@ -214,7 +217,7 @@ class StoppableThreadTests {
         // Thread does not release lock, allowing outside context to control
         // how frequently it cycles.
         final StoppableThread thread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setThreadName("test-thread")
                         .setStopBehavior(Stoppable.StopBehavior.BLOCKING)
                         .setFinalCycleWork(finalCycleWork)
@@ -240,7 +243,7 @@ class StoppableThreadTests {
         MILLISECONDS.sleep(100);
 
         final Thread reaperThread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setThreadName("reaper")
                         .setRunnable(thread::stop)
                         .build(true);
@@ -288,7 +291,9 @@ class StoppableThreadTests {
         final AtomicInteger count = new AtomicInteger(0);
 
         final StoppableThread thread =
-                new StoppableThreadConfiguration<>().setWork(count::getAndIncrement).build();
+                new StoppableThreadConfiguration(getStaticThreadManager())
+                        .setWork(count::getAndIncrement)
+                        .build();
 
         thread.start();
 
@@ -312,6 +317,46 @@ class StoppableThreadTests {
         thread.stop();
     }
 
+    /**
+     * Tests a bug that used to exist where the thread would not pause if LogAfterPauseDuration was
+     * set to ZERO
+     */
+    @Test
+    @Tag(TestTypeTags.FUNCTIONAL)
+    @Tag(TestComponentTags.THREADING)
+    @DisplayName("Pause Test where LogAfterPause is set to 0")
+    void zeroLogPauseTest() throws InterruptedException {
+
+        final AtomicInteger count = new AtomicInteger(0);
+
+        final StoppableThread thread =
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
+                        .setWork(
+                                () -> {
+                                    Thread.sleep(5);
+                                    count.incrementAndGet();
+                                })
+                        .setLogAfterPauseDuration(Duration.ZERO)
+                        .build();
+
+        thread.start();
+
+        // let it start working
+        Thread.sleep(10);
+
+        // try a few times since it doesn't always recreate the exact conditions
+        for (int i = 0; i < 3; i++) {
+            thread.pause();
+            final int beforeSleep = count.get();
+            Thread.sleep(15);
+            final int afterSleep = count.get();
+            assertEquals(beforeSleep, afterSleep, "expected count to not change during pause");
+            thread.resume();
+        }
+
+        thread.stop();
+    }
+
     @Test
     @Tag(TestTypeTags.FUNCTIONAL)
     @Tag(TestComponentTags.THREADING)
@@ -322,7 +367,7 @@ class StoppableThreadTests {
         final AtomicBoolean finish = new AtomicBoolean(false);
 
         final StoppableThread thread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setWork(
                                 () -> {
                                     long value = 0;
@@ -335,7 +380,8 @@ class StoppableThreadTests {
 
         thread.start();
 
-        final Thread stoppingThread = new ThreadConfiguration().setRunnable(thread::stop).build();
+        final Thread stoppingThread =
+                new ThreadConfiguration(getStaticThreadManager()).setRunnable(thread::stop).build();
         stoppingThread.start();
 
         Thread.sleep(100);
@@ -371,7 +417,7 @@ class StoppableThreadTests {
         final AtomicBoolean finish = new AtomicBoolean(false);
 
         final StoppableThread thread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setWork(
                                 () -> {
                                     long value = 0;
@@ -384,7 +430,8 @@ class StoppableThreadTests {
 
         thread.start();
 
-        final Thread stoppingThread = new ThreadConfiguration().setRunnable(thread::stop).build();
+        final Thread stoppingThread =
+                new ThreadConfiguration(getStaticThreadManager()).setRunnable(thread::stop).build();
         stoppingThread.start();
 
         Thread.sleep(100);
@@ -411,7 +458,8 @@ class StoppableThreadTests {
     @Test
     @DisplayName("Rate Configuration Test")
     void rateConfigurationTest() {
-        final StoppableThreadConfiguration<?> configuration = new StoppableThreadConfiguration<>();
+        final StoppableThreadConfiguration<?> configuration =
+                new StoppableThreadConfiguration<>(getStaticThreadManager());
 
         assertNull(configuration.getMinimumPeriod(), "should be null until set");
         assertEquals(-1, configuration.getMaximumRate(), "should have sane default value");
@@ -447,7 +495,10 @@ class StoppableThreadTests {
                 };
 
         final StoppableThread thread0 =
-                new StoppableThreadConfiguration<>().setMaximumRate(5).setWork(work).build(true);
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
+                        .setMaximumRate(5)
+                        .setWork(work)
+                        .build(true);
 
         SECONDS.sleep(1);
         thread0.stop();
@@ -457,7 +508,10 @@ class StoppableThreadTests {
 
         counter.set(0);
         final StoppableThread thread1 =
-                new StoppableThreadConfiguration<>().setMaximumRate(100).setWork(work).build(true);
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
+                        .setMaximumRate(100)
+                        .setWork(work)
+                        .build(true);
 
         SECONDS.sleep(1);
         thread1.stop();
@@ -467,7 +521,10 @@ class StoppableThreadTests {
 
         counter.set(0);
         final StoppableThread thread2 =
-                new StoppableThreadConfiguration<>().setMaximumRate(500).setWork(work).build(true);
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
+                        .setMaximumRate(500)
+                        .setWork(work)
+                        .build(true);
 
         SECONDS.sleep(1);
         thread2.stop();
@@ -484,7 +541,7 @@ class StoppableThreadTests {
         final CountDownLatch longSleepStarted = new CountDownLatch(1);
 
         final StoppableThread stoppableThread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setThreadName("stoppable-thread")
                         .setWork(
                                 () -> {
@@ -503,7 +560,7 @@ class StoppableThreadTests {
 
         // This thread will have the seed injected into it.
         final Thread thread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setThreadName("inject-into-this-thread")
                         .setInterruptableRunnable(
                                 () -> {
@@ -548,7 +605,7 @@ class StoppableThreadTests {
     void configurationMutabilityTest() {
         // Build should make the configuration immutable
         final StoppableThreadConfiguration<?> configuration =
-                new StoppableThreadConfiguration<>().setWork(() -> {});
+                new StoppableThreadConfiguration<>(getStaticThreadManager()).setWork(() -> {});
 
         assertTrue(configuration.isMutable(), "configuration should be mutable");
 
@@ -624,7 +681,7 @@ class StoppableThreadTests {
         // build() should cause future calls to build() to fail, and start() should cause
         // buildSeed() to fail.
         final StoppableThreadConfiguration<?> configuration0 =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setWork(
                                 () -> {
                                     MILLISECONDS.sleep(1);
@@ -648,7 +705,7 @@ class StoppableThreadTests {
 
         // buildSeed() should cause future calls to buildSeed() and start() to fail.
         final StoppableThreadConfiguration<?> configuration1 =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setWork(
                                 () -> {
                                     MILLISECONDS.sleep(1);
@@ -673,7 +730,7 @@ class StoppableThreadTests {
         final AtomicInteger count = new AtomicInteger();
 
         final StoppableThread thread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setWork(
                                 () -> {
                                     count.getAndIncrement();
@@ -704,10 +761,12 @@ class StoppableThreadTests {
     @DisplayName("Join Before Start Test")
     void joinBeforeStartTest() throws InterruptedException {
         final StoppableThread stoppableThread =
-                new StoppableThreadConfiguration<>().setWork(() -> HOURS.sleep(10000000)).build();
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
+                        .setWork(() -> HOURS.sleep(10000000))
+                        .build();
 
         final Thread joinThread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setInterruptableRunnable(stoppableThread::join)
                         .build(true);
 
@@ -726,10 +785,12 @@ class StoppableThreadTests {
     @DisplayName("Join Before Start Seed Test")
     void joinBeforeStartSeedTest() throws InterruptedException {
         final StoppableThread stoppableThread1 =
-                new StoppableThreadConfiguration<>().setWork(() -> HOURS.sleep(10000000)).build();
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
+                        .setWork(() -> HOURS.sleep(10000000))
+                        .build();
 
         final Thread joinThread1 =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setInterruptableRunnable(stoppableThread1::join)
                         .build(true);
 
@@ -739,7 +800,10 @@ class StoppableThreadTests {
 
         final ThreadSeed seed1 = stoppableThread1.buildSeed();
 
-        final Thread seedThread = new ThreadConfiguration().setRunnable(seed1::inject).build(true);
+        final Thread seedThread =
+                new ThreadConfiguration(getStaticThreadManager())
+                        .setRunnable(seed1::inject)
+                        .build(true);
 
         // Give the seed some time to start
         MILLISECONDS.sleep(20);
@@ -759,7 +823,7 @@ class StoppableThreadTests {
         final InterruptableRunnable finalCycleWork = () -> {};
 
         final StoppableThreadConfiguration<?> configuration =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(getStaticThreadManager())
                         .setStopBehavior(Stoppable.StopBehavior.BLOCKING)
                         .setJoinWaitMs(1234)
                         .setWork(work)
@@ -815,7 +879,7 @@ class StoppableThreadTests {
     @DisplayName("Interrupt Flag Test")
     void interruptFlagTest() throws InterruptedException {
         final StoppableThread stoppableThread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration(getStaticThreadManager())
                         .setWork(
                                 () -> {
                                     try {

@@ -15,7 +15,7 @@
  */
 package com.swirlds.platform.components;
 
-import com.swirlds.common.Clock;
+import com.swirlds.common.time.Time;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.event.CreateEventTask;
 import com.swirlds.platform.event.EventIntakeTask;
@@ -33,7 +33,7 @@ import org.apache.logging.log4j.Logger;
  * EventValidator}.
  */
 public class EventTaskDispatcher {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(EventTaskDispatcher.class);
 
     /** An {@link EventValidator} */
     private final EventValidator eventValidator;
@@ -51,28 +51,30 @@ public class EventTaskDispatcher {
     private final EventIntakeMetrics eventIntakeMetrics;
 
     private final IntakeCycleStats cycleStats;
-    private final Clock clock;
+    private final Time time;
 
     /**
      * Constructor
      *
+     * @param time provides the wall clock time
      * @param eventValidator an event validator
      * @param eventCreator an event creator
      * @param validEventHandler handles already validated events
      * @param eventIntakeMetrics dispatching metrics
      */
     public EventTaskDispatcher(
+            final Time time,
             final EventValidator eventValidator,
             final EventCreator eventCreator,
             final Consumer<GossipEvent> validEventHandler,
             final EventIntakeMetrics eventIntakeMetrics,
             final IntakeCycleStats cycleStats) {
+        this.time = time;
         this.eventValidator = eventValidator;
         this.eventCreator = eventCreator;
         this.validEventHandler = validEventHandler;
         this.eventIntakeMetrics = eventIntakeMetrics;
         this.cycleStats = cycleStats;
-        this.clock = Clock.DEFAULT;
     }
 
     /**
@@ -83,7 +85,7 @@ public class EventTaskDispatcher {
      */
     public void dispatchTask(final EventIntakeTask eventIntakeTask) {
         cycleStats.startedIntake();
-        final long start = clock.now();
+        final long start = time.nanoTime();
         // Moving validation to inline model
         if (eventIntakeTask instanceof GossipEvent task) {
             eventValidator.validateEvent(task);

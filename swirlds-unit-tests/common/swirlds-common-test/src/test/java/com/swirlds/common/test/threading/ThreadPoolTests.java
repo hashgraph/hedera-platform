@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test.threading;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -42,7 +43,8 @@ class ThreadPoolTests {
     void basicThreadingTest() {
 
         final AtomicInteger data = new AtomicInteger(0);
-        final StandardWorkGroup threadPool = new StandardWorkGroup("test-pool", null);
+        final StandardWorkGroup threadPool =
+                new StandardWorkGroup(getStaticThreadManager(), "test-pool", null);
 
         threadPool.execute(
                 "first",
@@ -125,7 +127,8 @@ class ThreadPoolTests {
         final AtomicBoolean aborted = new AtomicBoolean(false);
 
         final StandardWorkGroup threadPool =
-                new StandardWorkGroup("test-pool", () -> aborted.set(true));
+                new StandardWorkGroup(
+                        getStaticThreadManager(), "test-pool", () -> aborted.set(true));
 
         threadPool.execute(
                 () -> {

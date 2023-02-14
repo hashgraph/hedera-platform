@@ -30,6 +30,7 @@ import com.swirlds.common.merkle.synchronization.streams.AsyncInputStream;
 import com.swirlds.common.merkle.synchronization.streams.AsyncOutputStream;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
 import com.swirlds.common.merkle.synchronization.views.TeacherTreeView;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.threading.pool.StandardWorkGroup;
 import java.util.LinkedList;
 import java.util.Queue;
@@ -62,9 +63,13 @@ public class TeachingSynchronizer {
 
     private final Runnable breakConnection;
 
+    /** Responsible for creating and managing threads used by this object. */
+    private final ThreadManager threadManager;
+
     /**
      * Create a new teaching synchronizer.
      *
+     * @param threadManager responsible for managing thread lifecycles
      * @param in the input stream
      * @param out the output stream
      * @param root the root of the tree
@@ -73,11 +78,13 @@ public class TeachingSynchronizer {
      *     will never finish due to a failure.
      */
     public TeachingSynchronizer(
+            final ThreadManager threadManager,
             final MerkleDataInputStream in,
             final MerkleDataOutputStream out,
             final MerkleNode root,
             final Runnable breakConnection) {
 
+        this.threadManager = threadManager;
         inputStream = in;
         outputStream = out;
 
@@ -114,7 +121,8 @@ public class TeachingSynchronizer {
                 root == null ? "[]" : root.getRoute());
 
         // A future improvement might be to reuse threads between subtrees.
-        final StandardWorkGroup workGroup = new StandardWorkGroup(WORK_GROUP_NAME, breakConnection);
+        final StandardWorkGroup workGroup =
+                new StandardWorkGroup(threadManager, WORK_GROUP_NAME, breakConnection);
 
         final AsyncInputStream<QueryResponse> in =
                 new AsyncInputStream<>(inputStream, workGroup, QueryResponse::new);

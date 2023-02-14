@@ -17,6 +17,7 @@ package com.swirlds.virtualmap.internal.merkle;
 
 import static com.swirlds.common.metrics.FloatFormats.FORMAT_10_2;
 
+import com.swirlds.common.metrics.Counter;
 import com.swirlds.common.metrics.IntegerGauge;
 import com.swirlds.common.metrics.LongGauge;
 import com.swirlds.common.metrics.Metrics;
@@ -26,7 +27,7 @@ import com.swirlds.common.utility.CommonUtils;
 /** Encapsulates statistics for a virtual map. */
 public class VirtualMapStatistics {
 
-    private static final String STAT_CATEGORY = "virtual-map";
+    public static final String STAT_CATEGORY = "virtual-map";
     private static final double DEFAULT_HALF_LIFE = 5;
 
     private final LongGauge.Config sizeConfig;
@@ -42,8 +43,15 @@ public class VirtualMapStatistics {
 
     private RunningAverageMetric mergeLatency;
 
-    private IntegerGauge flushBacklogSize;
+    /** The average number of virtual root node copies in virtual pipeline flush backlog. */
     private final IntegerGauge.Config flushBacklogSizeConfig;
+
+    private IntegerGauge flushBacklogSize;
+
+    /** The total number of virtual map flushes to disk. */
+    private final Counter.Config flushCounterConfig;
+
+    private Counter flushCounter;
 
     /**
      * Create a new statistics instance for a virtual map family.
@@ -74,6 +82,10 @@ public class VirtualMapStatistics {
                 new IntegerGauge.Config(STAT_CATEGORY, "vMapFlushBacklog_" + label)
                         .withDescription(
                                 "the number of '" + label + "' copies waiting to be flushed");
+
+        flushCounterConfig =
+                new Counter.Config(STAT_CATEGORY, "vMapFlushes_" + label)
+                        .withDescription("the count of '" + label + "' flushes");
     }
 
     /**
@@ -88,6 +100,7 @@ public class VirtualMapStatistics {
         flushLatency = metrics.getOrCreate(flushLatencyConfig);
         mergeLatency = metrics.getOrCreate(mergeLatencyConfig);
         flushBacklogSize = metrics.getOrCreate(flushBacklogSizeConfig);
+        flushCounter = metrics.getOrCreate(flushCounterConfig);
     }
 
     /**
@@ -102,11 +115,14 @@ public class VirtualMapStatistics {
     }
 
     /**
-     * Record the current flush latency for the virtual map.
+     * Record the virtual map is flushed, and flush latency is as specified.
      *
-     * @param flushLatency the current flush latency
+     * @param flushLatency The flush latency
      */
-    public void recordFlushLatency(final double flushLatency) {
+    public void recordFlush(final double flushLatency) {
+        if (this.flushCounter != null) {
+            this.flushCounter.increment();
+        }
         if (this.flushLatency != null) {
             this.flushLatency.update(flushLatency);
         }

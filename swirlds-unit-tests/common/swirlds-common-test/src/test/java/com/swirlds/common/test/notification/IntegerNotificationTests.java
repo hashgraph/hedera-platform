@@ -17,6 +17,7 @@ package com.swirlds.common.test.notification;
 
 import static com.swirlds.common.test.AssertionUtils.completeBeforeTimeout;
 import static com.swirlds.common.threading.interrupt.Uninterruptable.abortAndThrowIfInterrupted;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -73,7 +74,7 @@ public class IntegerNotificationTests {
     @DisplayName("Sync: Unordered Summation")
     public void syncUnorderedSummation(int iterations) {
 
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger sum = new AtomicInteger(0);
         final AtomicLong lastKnownId = new AtomicLong(0);
@@ -109,7 +110,7 @@ public class IntegerNotificationTests {
     @DisplayName("Sync: Unordered Dual Ops")
     public void syncUnorderedDualOps(int iterations) {
 
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger sum = new AtomicInteger(0);
         final AtomicInteger subtract = new AtomicInteger(iterations * 4);
@@ -160,7 +161,7 @@ public class IntegerNotificationTests {
     @DisplayName("Async: Unordered Summation")
     public void asyncUnorderedSummation(int iterations) {
 
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger sum = new AtomicInteger(0);
         final AtomicLong lastKnownId = new AtomicLong(0);
@@ -201,7 +202,7 @@ public class IntegerNotificationTests {
     @DisplayName("Async: Unordered Dual Ops")
     public void asyncUnorderedDualOps(int iterations) {
 
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger sum = new AtomicInteger(0);
         final AtomicInteger subtract = new AtomicInteger(iterations * 4);
@@ -256,7 +257,7 @@ public class IntegerNotificationTests {
     @ValueSource(ints = {1, 2, 5, 21, 57, 1_000, 10_000, 100_000})
     @DisplayName("Sync: Unordered MT Summation")
     public void syncUnorderedThreadedSummation(int iterations) throws InterruptedException {
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger sum = new AtomicInteger(0);
         final AtomicLong lastKnownId = new AtomicLong(0);
@@ -313,7 +314,7 @@ public class IntegerNotificationTests {
     @ValueSource(ints = {1, 2, 5, 21, 57, 1_000, 10_000, 100_000})
     @DisplayName("Sync: Ordered MT Summation")
     public void syncOrderedThreadedSummation(int iterations) throws InterruptedException {
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger sum = new AtomicInteger(0);
         final AtomicLong lastKnownId = new AtomicLong(0);
@@ -371,7 +372,7 @@ public class IntegerNotificationTests {
     @ValueSource(ints = {1, 2, 5, 21, 57, 1_000, 10_000, 100_000})
     @DisplayName("Async: Unordered MT Summation")
     public void asyncUnorderedThreadedSummation(int iterations) throws InterruptedException {
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger sum = new AtomicInteger(0);
         final AtomicLong lastKnownId = new AtomicLong(0);
@@ -433,7 +434,7 @@ public class IntegerNotificationTests {
     @ValueSource(ints = {1, 2, 5, 21, 57, 1_000, 10_000, 100_000})
     @DisplayName("Async: Ordered MT Summation")
     public void asyncOrderedThreadedSummation(int iterations) throws InterruptedException {
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger sum = new AtomicInteger(0);
         final AtomicLong lastKnownId = new AtomicLong(0);
@@ -495,7 +496,7 @@ public class IntegerNotificationTests {
     @ValueSource(ints = {2, 5, 21, 57, 1_000, 10_000, 100_000})
     @DisplayName("Mixed: Unordered MT Summation")
     public void mixedUnorderedThreadedSummation(int iterations) throws InterruptedException {
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger syncSum = new AtomicInteger(0);
         final AtomicInteger asyncSum = new AtomicInteger(0);
@@ -588,7 +589,7 @@ public class IntegerNotificationTests {
     @ValueSource(ints = {2, 5, 21, 57, 1_000, 10_000, 100_000})
     @DisplayName("Mixed: Ordered MT Summation")
     public void mixedOrderedThreadedSummation(int iterations) throws InterruptedException {
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger syncSum = new AtomicInteger(0);
         final AtomicInteger asyncSum = new AtomicInteger(0);
@@ -689,7 +690,7 @@ public class IntegerNotificationTests {
     @ValueSource(ints = {2, 5, 21, 57, 1_000, 10_000, 100_000})
     @DisplayName("SUAO: MT Summation")
     public void suaoThreadedSummation(int iterations) throws InterruptedException {
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final AtomicInteger syncSum = new AtomicInteger(0);
         final AtomicInteger asyncSum = new AtomicInteger(0);
@@ -925,7 +926,7 @@ public class IntegerNotificationTests {
     @Tag(TestQualifierTags.TIME_CONSUMING)
     void completionTest(final CompletionCallbackTestConfiguration config)
             throws InterruptedException {
-        final NotificationEngine engine = new AsyncNotificationEngine();
+        final NotificationEngine engine = new AsyncNotificationEngine(getStaticThreadManager());
 
         final Class<? extends Listener<IntegerNotification>> listenerClass =
                 (Class<? extends Listener<IntegerNotification>>)
@@ -989,7 +990,7 @@ public class IntegerNotificationTests {
         final AtomicReference<NotificationResult<IntegerNotification>> futureNotificationResult =
                 new AtomicReference<>();
         final Thread dispatchThread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setInterruptableRunnable(
                                 () -> {
                                     final Future<NotificationResult<IntegerNotification>> future =

@@ -15,6 +15,7 @@
  */
 package com.swirlds.config.impl.internal;
 
+import com.swirlds.common.config.reflection.ConfigReflectionUtils;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.config.api.ConfigData;
 import com.swirlds.config.api.ConfigProperty;
@@ -40,7 +41,7 @@ class ConfigDataFactory {
     private final Configuration configuration;
 
     /**
-     * The converter servcie that is used to convert raw values from the config to custom data types
+     * The converter service that is used to convert raw values from the config to custom data types
      */
     private final ConverterService converterService;
 
@@ -123,9 +124,12 @@ class ConfigDataFactory {
         if (rawDefaultValue.isEmpty()) {
             throw new IllegalArgumentException("Default value not defined for parameter");
         }
+        final String rawValue = rawDefaultValue.get();
+        if (Objects.equals(ConfigProperty.NULL_DEFAULT_VALUE, rawValue)) {
+            return null;
+        }
         return (List<T>)
-                rawDefaultValue.stream()
-                        .flatMap(defaultValue -> Arrays.stream(defaultValue.split(",")))
+                ConfigListUtils.createList(rawValue).stream()
                         .map(value -> converterService.convert(value, type))
                         .toList();
     }
@@ -138,14 +142,15 @@ class ConfigDataFactory {
 
     @SuppressWarnings("unchecked")
     private <T> T getDefaultValue(final RecordComponent component) {
-        return getRawDefaultValue(component)
-                .map(
-                        defaultValue ->
-                                (T) converterService.convert(defaultValue, component.getType()))
-                .orElseThrow(
-                        () ->
-                                new IllegalArgumentException(
-                                        "Default value not defined for parameter"));
+        final Optional<String> rawDefaultValue = getRawDefaultValue(component);
+        if (rawDefaultValue.isEmpty()) {
+            throw new IllegalArgumentException("Default value not defined for parameter");
+        }
+        final String rawValue = rawDefaultValue.get();
+        if (Objects.equals(ConfigProperty.NULL_DEFAULT_VALUE, rawValue)) {
+            return null;
+        }
+        return (T) converterService.convert(rawValue, component.getType());
     }
 
     private static Optional<String> getRawDefaultValue(final RecordComponent component) {

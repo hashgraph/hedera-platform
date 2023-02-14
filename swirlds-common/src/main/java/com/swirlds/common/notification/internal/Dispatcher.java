@@ -20,6 +20,7 @@ import com.swirlds.common.notification.Listener;
 import com.swirlds.common.notification.Notification;
 import com.swirlds.common.notification.NotificationResult;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -42,7 +43,17 @@ public class Dispatcher<L extends Listener> {
 
     private volatile boolean running;
 
-    public Dispatcher(final Class<L> listenerClass) {
+    /** Responsible for creating and managing threads used by this object. */
+    private final ThreadManager threadManager;
+
+    /**
+     * Create a new dispatcher.
+     *
+     * @param threadManager responsible for creating and managing threads used for dispatches
+     * @param listenerClass the dispatch type
+     */
+    public Dispatcher(final ThreadManager threadManager, final Class<L> listenerClass) {
+        this.threadManager = threadManager;
         this.mutex = new Object();
         this.listeners = new CopyOnWriteArrayList<>();
         this.asyncDispatchQueue = new PriorityBlockingQueue<>();
@@ -63,7 +74,7 @@ public class Dispatcher<L extends Listener> {
         }
 
         dispatchThread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(threadManager)
                         .setComponent(COMPONENT_NAME)
                         .setThreadName(String.format("notify %s", listenerClassName))
                         .setRunnable(this::worker)

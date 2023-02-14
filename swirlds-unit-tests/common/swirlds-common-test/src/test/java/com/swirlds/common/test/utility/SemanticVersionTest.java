@@ -138,8 +138,9 @@ public class SemanticVersionTest {
             final String prerelease,
             final String build)
             throws IOException, ConstructableRegistryException {
-        ConstructableRegistry.registerConstructable(
-                new ClassConstructorPair(SemanticVersion.class, SemanticVersion::new));
+        ConstructableRegistry.getInstance()
+                .registerConstructable(
+                        new ClassConstructorPair(SemanticVersion.class, SemanticVersion::new));
         final SemanticVersion semanticVersion =
                 new SemanticVersion(major, minor, patch, prerelease, build);
         final SemanticVersion copy = SerializationUtils.serializeDeserialize(semanticVersion);

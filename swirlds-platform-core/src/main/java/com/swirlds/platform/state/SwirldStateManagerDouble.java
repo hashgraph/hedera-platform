@@ -49,7 +49,7 @@ import org.apache.logging.log4j.Logger;
 public class SwirldStateManagerDouble implements SwirldStateManager {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(SwirldStateManagerDouble.class);
 
     /** Stats relevant to SwirldState operations. */
     private final SwirldStateMetrics stats;
@@ -138,6 +138,7 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
     public void handleConsensusRound(final ConsensusRound round) {
         transactionHandler.handleRound(round, stateRef.get());
         systemTransactionHandler.handlePostConsensusSystemTransactions(round);
+        updateEpoch();
     }
 
     /** {@inheritDoc} */
@@ -264,6 +265,13 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
                     s.getPlatformDualState().setLastFrozenTimeToBeCurrentFreezeTime();
                     return s;
                 });
+    }
+
+    private void updateEpoch() {
+        final PlatformState platformState = stateRef.get().getPlatformState();
+        if (platformState != null) {
+            platformState.getPlatformData().updateEpochHash();
+        }
     }
 
     /** {@inheritDoc} */

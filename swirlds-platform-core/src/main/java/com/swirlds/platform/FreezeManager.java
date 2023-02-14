@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Logger;
 /** The source freeze related information. */
 public class FreezeManager implements TransThrottleSyncRule, EventCreationRule {
 
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(FreezeManager.class);
 
     /** this boolean states whether events should be created or not */
     private volatile boolean freezeEventCreation = false;

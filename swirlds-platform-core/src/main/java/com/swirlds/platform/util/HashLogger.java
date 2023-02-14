@@ -21,6 +21,7 @@ import static com.swirlds.logging.LogMarker.STATE_HASH;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.platform.Settings;
 import com.swirlds.platform.state.State;
 import com.swirlds.platform.state.StateSettings;
@@ -53,21 +54,22 @@ public class HashLogger {
     /**
      * Construct a HashLogger.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param nodeId the id of the current node that is logging.
      */
-    public HashLogger(final NodeId nodeId) {
-        this(nodeId, LOGGER);
+    public HashLogger(final ThreadManager threadManager, final NodeId nodeId) {
+        this(threadManager, nodeId, LOGGER);
     }
 
     // Visible for testing
-    HashLogger(final NodeId nodeId, final Logger logOutput) {
+    HashLogger(final ThreadManager threadManager, final NodeId nodeId, final Logger logOutput) {
         final boolean enabled = Settings.getInstance().getState().enableHashStreamLogging;
         this.isEnabled = enabled;
         this.nodeId = nodeId;
         this.logQueue =
                 !enabled
                         ? null
-                        : new QueueThreadConfiguration<Runnable>()
+                        : new QueueThreadConfiguration<Runnable>(threadManager)
                                 .setComponent("logging")
                                 .setThreadName("log-hashstream")
                                 .setCapacity(LOGGING_QUEUE_CAPACITY)

@@ -17,10 +17,11 @@ package com.swirlds.platform.chatter.protocol;
 
 import static com.swirlds.common.metrics.FloatFormats.FORMAT_8_1;
 
-import com.swirlds.common.Clock;
+import com.swirlds.common.metrics.DurationGauge;
 import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.sequence.Shiftable;
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.time.Time;
 import com.swirlds.platform.chatter.ChatterSettings;
 import com.swirlds.platform.chatter.protocol.heartbeat.HeartbeatMessage;
 import com.swirlds.platform.chatter.protocol.heartbeat.HeartbeatSendReceive;
@@ -30,6 +31,7 @@ import com.swirlds.platform.chatter.protocol.input.MessageTypeHandlerBuilder;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEvent;
 import com.swirlds.platform.chatter.protocol.messages.ChatterEventDescriptor;
 import com.swirlds.platform.chatter.protocol.output.MessageOutput;
+import com.swirlds.platform.chatter.protocol.output.OtherEventDelay;
 import com.swirlds.platform.chatter.protocol.output.PriorityOutputAggregator;
 import com.swirlds.platform.chatter.protocol.output.SendAction;
 import com.swirlds.platform.chatter.protocol.output.VariableTimeDelay;
@@ -39,13 +41,13 @@ import com.swirlds.platform.chatter.protocol.peer.PeerGossipState;
 import com.swirlds.platform.chatter.protocol.peer.PeerInstance;
 import com.swirlds.platform.chatter.protocol.processing.ProcessingTimeMessage;
 import com.swirlds.platform.chatter.protocol.processing.ProcessingTimeSendReceive;
-import com.swirlds.platform.chatter.protocol.processing.ProcessingTimes;
 import com.swirlds.platform.state.signed.LoadableFromSignedState;
 import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.stats.AverageStat;
 import com.swirlds.platform.stats.PerSecondStat;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -60,6 +62,8 @@ import java.util.function.BiConsumer;
 public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableFromSignedState {
     /** the number of milliseconds to sleep while waiting for the chatter protocol to stop */
     private static final int STOP_WAIT_SLEEP_MILLIS = 10;
+    /** the name of the metrics category */
+    private static final String METRICS_CATEGORY = "chatter";
 
     private final Class<E> eventClass;
     private final MessageHandler<E> prepareReceivedEvent;
@@ -72,9 +76,13 @@ public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableF
 
     private final PerSecondStat msgsPerSecRead;
     private final PerSecondStat msgsPerSecWrit;
-    private final ProcessingTimes processingTimes;
+    /** this node's event processing time */
+    private final DurationGauge selfProcessingTime;
+
+    private final Time time;
 
     /**
+     * @param time provides wall clock time
      * @param eventClass the class of the type of event used
      * @param prepareReceivedEvent the first handler to be called when an event is received, this
      *     should do any preparation work that might be needed by other handlers (such as hashing)
@@ -84,11 +92,13 @@ public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableF
      * @param metrics reference to the metrics-system
      */
     public ChatterCore(
+            final Time time,
             final Class<E> eventClass,
             final MessageHandler<E> prepareReceivedEvent,
             final ChatterSettings settings,
             final BiConsumer<NodeId, Long> pingConsumer,
             final Metrics metrics) {
+        this.time = time;
         this.eventClass = eventClass;
         this.prepareReceivedEvent = prepareReceivedEvent;
         this.settings = settings;
@@ -100,13 +110,12 @@ public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableF
         this.hashOutput =
                 new QueueOutputMain<>("descriptor", settings.getDescriptorQueueCapacity(), metrics);
         this.peerInstances = new HashMap<>();
-        this.processingTimes = new ProcessingTimes(metrics);
 
         this.msgsPerSecRead =
                 new PerSecondStat(
                         new AverageStat(
                                 metrics,
-                                "chatter",
+                                METRICS_CATEGORY,
                                 "msgsPerSecRead",
                                 "number of chatter messages read per second",
                                 FORMAT_8_1,
@@ -115,11 +124,17 @@ public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableF
                 new PerSecondStat(
                         new AverageStat(
                                 metrics,
-                                "chatter",
+                                METRICS_CATEGORY,
                                 "msgsPerSecWrit",
                                 "number of chatter messages written per second",
                                 FORMAT_8_1,
                                 AverageStat.WEIGHT_VOLATILE));
+        selfProcessingTime =
+                metrics.getOrCreate(
+                        new DurationGauge.Config(
+                                        METRICS_CATEGORY, "eventProcTime", ChronoUnit.MILLIS)
+                                .withDescription(
+                                        "the time it takes to process and validate an event"));
     }
 
     /**
@@ -129,17 +144,16 @@ public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableF
      * @param eventHandler a handler that will send the event outside of chatter
      */
     public void newPeerInstance(final long peerId, final MessageHandler<E> eventHandler) {
+
         final PeerGossipState state = new PeerGossipState(settings.getFutureGenerationLimit());
         final CommunicationState communicationState = new CommunicationState();
         final HeartbeatSendReceive heartbeat =
-                new HeartbeatSendReceive(peerId, pingConsumer, settings.getHeartbeatInterval());
+                new HeartbeatSendReceive(
+                        time, peerId, pingConsumer, settings.getHeartbeatInterval());
 
         final ProcessingTimeSendReceive processingTimeSendReceive =
                 new ProcessingTimeSendReceive(
-                        peerId,
-                        settings.getProcessingTimeInterval(),
-                        processingTimes,
-                        Clock.DEFAULT);
+                        time, settings.getProcessingTimeInterval(), selfProcessingTime::getNanos);
 
         final MessageProvider hashPeerInstance =
                 hashOutput.createPeerInstance(
@@ -153,7 +167,13 @@ public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableF
                 otherEventOutput.createPeerInstance(
                         communicationState,
                         new VariableTimeDelay<>(
-                                () -> getOtherEventDelay(peerId, heartbeat), state, Instant::now));
+                                new OtherEventDelay(
+                                                heartbeat::getLastRoundTripNanos,
+                                                processingTimeSendReceive::getPeerProcessingTime,
+                                                settings.getOtherEventDelay())
+                                        ::getOtherEventDelay,
+                                state,
+                                Instant::now));
         final PriorityOutputAggregator outputAggregator =
                 new PriorityOutputAggregator(
                         List.of(
@@ -189,25 +209,6 @@ public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableF
         final PeerInstance peerInstance =
                 new PeerInstance(communicationState, state, outputAggregator, inputDelegate);
         peerInstances.put(peerId, peerInstance);
-    }
-
-    /**
-     * Calculates the delay for sending other events to a peer.
-     *
-     * @param peerId the id of the peer to calculate other event delay for
-     * @param heartbeat the heartbeat instance used to send and receive heartbeats with the peer
-     * @return the other event delay to use, or null if other events should not be sent to the peer
-     *     at this time
-     */
-    private Duration getOtherEventDelay(final long peerId, final HeartbeatSendReceive heartbeat) {
-        final Long peerProcessingNanos = processingTimes.getPeerProcessingTime(peerId);
-        final Long roundTripNanos = heartbeat.getLastRoundTripNanos();
-        if (peerProcessingNanos == null || roundTripNanos == null) {
-            return null;
-        }
-        final long oneWayTripNanos = roundTripNanos / 2;
-        return Duration.ofNanos(oneWayTripNanos + peerProcessingNanos)
-                .plus(settings.getOtherEventDelay());
     }
 
     /**
@@ -247,8 +248,7 @@ public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableF
     }
 
     private void recordProcessingTime(final E event) {
-        processingTimes.recordSelfProcessingTime(
-                Duration.between(event.getTimeReceived(), Instant.now()));
+        selfProcessingTime.update(Duration.between(event.getTimeReceived(), Instant.now()));
     }
 
     /** {@inheritDoc} */

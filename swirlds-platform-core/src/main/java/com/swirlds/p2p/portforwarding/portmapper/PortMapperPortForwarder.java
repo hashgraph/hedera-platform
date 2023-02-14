@@ -26,6 +26,7 @@ import com.offbynull.portmapper.mapper.MappedPort;
 import com.offbynull.portmapper.mapper.PortMapper;
 import com.offbynull.portmapper.mapper.PortType;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.p2p.portforwarding.PortForwarder;
 import com.swirlds.p2p.portforwarding.PortMapping;
 import com.swirlds.p2p.portforwarding.PortMappingListener;
@@ -44,7 +45,7 @@ public class PortMapperPortForwarder implements PortForwarder, Runnable {
     /** log marker related to port forwarding (uPNP & NAT-PMP) */
     private static final Marker MARKER = MarkerManager.getMarker("PORT_FORWARDING");
 
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(PortMapperPortForwarder.class);
 
     private Bus networkBus;
     private Bus processBus;
@@ -54,6 +55,16 @@ public class PortMapperPortForwarder implements PortForwarder, Runnable {
     private boolean successful = false;
     private Thread refresher;
     private final List<PortMappingListener> listeners = new LinkedList<>();
+
+    /** Responsible for creating and managing threads used by this object. */
+    private final ThreadManager threadManager;
+
+    /**
+     * @param threadManager responsible for creating and managing this object's threads
+     */
+    public PortMapperPortForwarder(final ThreadManager threadManager) {
+        this.threadManager = threadManager;
+    }
 
     public void addListener(PortMappingListener listener) {
         listeners.add(listener);
@@ -146,7 +157,7 @@ public class PortMapperPortForwarder implements PortForwarder, Runnable {
             }
             if (minSleep > 0) {
                 refresher =
-                        new ThreadConfiguration()
+                        new ThreadConfiguration(threadManager)
                                 .setComponent("network")
                                 .setThreadName("MappingRefresher")
                                 .setRunnable(new MappingRefresher(this, minSleep))

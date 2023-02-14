@@ -17,9 +17,9 @@ package com.swirlds.virtualmap.internal.reconnect;
 
 import static com.swirlds.virtualmap.internal.Path.INVALID_PATH;
 
-import com.swirlds.virtualmap.internal.StateAccessor;
+import com.swirlds.virtualmap.internal.VirtualStateAccessor;
 
-public class ReconnectState implements StateAccessor {
+public class ReconnectState implements VirtualStateAccessor {
     private long firstLeafPath;
     private long lastLeafPath;
 

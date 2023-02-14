@@ -19,7 +19,6 @@ import static com.swirlds.common.io.utility.FileUtils.executeAndRename;
 import static com.swirlds.common.io.utility.FileUtils.writeAndFlush;
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
-import static com.swirlds.logging.LogMarker.STATE_HASH;
 import static com.swirlds.logging.LogMarker.STATE_TO_DISK;
 import static com.swirlds.platform.state.signed.SignedStateFileUtils.FILE_VERSION;
 import static com.swirlds.platform.state.signed.SignedStateFileUtils.HASH_INFO_FILE_NAME;
@@ -61,11 +60,6 @@ public final class SignedStateFileWriter {
         LOG.info(
                 STATE_TO_DISK.getMarker(),
                 "Information for state written to disk:\n{}\n{}",
-                platformInfo,
-                hashInfo);
-        LOG.info(
-                STATE_HASH.getMarker(),
-                ">>> Information for state written to disk:\n{}\n{}",
                 platformInfo,
                 hashInfo);
 
@@ -117,7 +111,7 @@ public final class SignedStateFileWriter {
      * @param directory the directory where all files should be placed
      * @param signedState the signed state being written to disk
      */
-    private static void writeSignedStateFilesToDirectory(
+    public static void writeSignedStateFilesToDirectory(
             final Path directory, final SignedState signedState) throws IOException {
 
         writeStateFile(directory, signedState);

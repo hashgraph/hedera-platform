@@ -15,6 +15,7 @@
  */
 package com.swirlds.virtualmap.internal.pipeline;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.VIRTUAL_MERKLE_STATS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -148,7 +149,7 @@ public class VirtualPipeline {
         alive = true;
         executorService =
                 Executors.newSingleThreadExecutor(
-                        new ThreadConfiguration()
+                        new ThreadConfiguration(getStaticThreadManager())
                                 .setComponent(PIPELINE_COMPONENT)
                                 .setThreadName(PIPELINE_THREAD_NAME)
                                 .setExceptionHandler(
@@ -270,7 +271,8 @@ public class VirtualPipeline {
         if (remainingCopies < 0) {
             throw new IllegalStateException("copies destroyed too many times");
         } else if (remainingCopies == 0) {
-            shutdown(true);
+            // Let pipeline shutdown gracefully, e.g. complete any flushes in progress
+            shutdown(false);
         } else {
             executorService.submit(this::doWork);
         }
@@ -312,45 +314,30 @@ public class VirtualPipeline {
      * caches. This allows for merges and flushes to continue even if this copy is long-lived.
      *
      * @param copy the copy to detach
-     * @param withDbCompactionEnabled whether to enable background compaction on the new database
      * @return a reference to the detached state
      */
-    public <T> T detachCopy(final VirtualRoot copy, boolean withDbCompactionEnabled) {
-        return detachCopy(copy, null, null, true, withDbCompactionEnabled);
+    public <T> T detachCopy(final VirtualRoot copy) {
+        return detachCopy(copy, null);
     }
 
     /**
      * Given some {@link VirtualRoot}, wait until any current merge or flush operations complete and
-     * then call the copy's {@link VirtualRoot#detach(String, Path, boolean, boolean)} method on the
-     * same thread this method was called on. Prevents any merging or flushing during the {@link
-     * VirtualRoot#detach(String, Path, boolean, boolean)} callback.
+     * then call the copy's {@link VirtualRoot#detach(Path)} method on the same thread this method
+     * was called on. Prevents any merging or flushing during the {@link VirtualRoot#detach(Path)}
+     * callback.
      *
      * @param copy The copy. Cannot be null. Should be a member of this pipeline, but technically
      *     doesn't need to be.
-     * @param label the label of the database that is written. If null then default location is used
      * @param targetDirectory the location where detached files are written. If null then default
      *     location is used.
-     * @param reopen whether during detach we should also reopen the detached database
-     * @param withDbCompactionEnabled whether to enable background compaction on the new database,
-     *     if it is reopened
      * @return a reference to the detached state
      */
-    public <T> T detachCopy(
-            final VirtualRoot copy,
-            final String label,
-            final Path targetDirectory,
-            final boolean reopen,
-            final boolean withDbCompactionEnabled) {
+    public <T> T detachCopy(final VirtualRoot copy, final Path targetDirectory) {
 
         validatePipelineRegistration(copy);
 
         final AtomicReference<T> ret = new AtomicReference<>();
-        pausePipelineAndExecute(
-                "detach",
-                () ->
-                        ret.set(
-                                copy.detach(
-                                        label, targetDirectory, reopen, withDbCompactionEnabled)));
+        pausePipelineAndExecute("detach", () -> ret.set(copy.detach(targetDirectory)));
         if (alive) {
             executorService.submit(this::doWork);
         }

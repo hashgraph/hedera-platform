@@ -16,13 +16,10 @@
 package com.swirlds.platform.state.signed;
 
 import static com.swirlds.common.io.streams.StreamDebugUtils.deserializeAndDebugOnFailure;
-import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.platform.state.signed.SignedStateFileUtils.MAX_MERKLE_NODES_IN_STATE;
 import static com.swirlds.platform.state.signed.SignedStateFileUtils.SIGNED_STATE_FILE_NAME;
 import static com.swirlds.platform.state.signed.SignedStateFileUtils.VERSIONED_FILE_BYTE;
 import static com.swirlds.platform.state.signed.SignedStateFileUtils.getSignedStatesDirectoryForSwirld;
-import static com.swirlds.platform.system.SystemExitReason.SAVED_STATE_NOT_LOADED;
-import static com.swirlds.platform.system.SystemUtils.exitSystem;
 import static java.nio.file.Files.exists;
 import static java.nio.file.Files.isDirectory;
 
@@ -54,7 +51,7 @@ public final class SignedStateFileReader {
      * Looks for saved state files locally and returns an array of them sorted from newest to oldest
      *
      * @param mainClassName the name of the main app class
-     * @param platformId the ID of the plaform
+     * @param platformId the ID of the platform
      * @param swirldName the swirld name
      * @return Information about saved states on disk, or null if none are found
      */
@@ -147,10 +144,6 @@ public final class SignedStateFileReader {
                                                                     .getAddressBook()));
 
                             return Triple.of(state, hash, sigSet);
-                        },
-                        () -> {
-                            LOG.error(EXCEPTION.getMarker(), "failed to load state");
-                            exitSystem(SAVED_STATE_NOT_LOADED);
                         });
 
         final SignedState newSignedState = new SignedState(data.getLeft());

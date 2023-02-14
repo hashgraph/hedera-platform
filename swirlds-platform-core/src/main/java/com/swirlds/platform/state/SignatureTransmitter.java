@@ -47,7 +47,8 @@ public final class SignatureTransmitter {
             final Signature signature,
             final Hash stateHash) {
 
-        if (SettingsCommon.enableBetaMirror && platform.isZeroStakeNode()) {
+        final boolean isZeroStake = platform.getSelfAddress().isZeroStake();
+        if (SettingsCommon.enableBetaMirror && isZeroStake) {
             // If beta mirror logic is enabled and this node is zero stake then do not attempt
             // to send the system transaction
             return;

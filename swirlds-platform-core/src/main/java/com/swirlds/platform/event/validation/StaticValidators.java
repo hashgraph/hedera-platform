@@ -27,7 +27,7 @@ import org.apache.logging.log4j.Logger;
 
 /** A collection of static methods for validating events */
 public final class StaticValidators {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(StaticValidators.class);
 
     private StaticValidators() {}
 

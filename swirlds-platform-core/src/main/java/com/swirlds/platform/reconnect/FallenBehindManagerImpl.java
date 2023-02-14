@@ -114,6 +114,17 @@ public class FallenBehindManagerImpl implements FallenBehindManager, EventCreati
     }
 
     @Override
+    public boolean shouldReconnectFrom(final Long peerId) {
+        if (!hasFallenBehind()) {
+            return false;
+        }
+        synchronized (this) {
+            // if this neighbor has told me I have fallen behind, I will reconnect with him
+            return reportFallenBehind.contains(peerId);
+        }
+    }
+
+    @Override
     public synchronized void resetFallenBehind() {
         numReportFallenBehind = 0;
         reportFallenBehind.clear();

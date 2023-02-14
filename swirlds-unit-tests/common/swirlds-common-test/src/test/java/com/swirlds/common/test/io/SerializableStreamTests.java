@@ -61,9 +61,11 @@ public class SerializableStreamTests {
 
     @BeforeAll
     static void setUp() throws ConstructableRegistryException {
-        ConstructableRegistry.registerConstructables(PACKAGE_PREFIX);
+        final ConstructableRegistry registry = ConstructableRegistry.getInstance();
 
-        ConstructableRegistry.registerConstructable(
+        registry.registerConstructables(PACKAGE_PREFIX);
+
+        registry.registerConstructable(
                 new ClassConstructorPair(
                         SelfSerializableExample.class, SelfSerializableExample::new));
     }

@@ -22,7 +22,6 @@ import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
 import com.swirlds.common.statistics.StatsBuffered;
-import com.swirlds.common.utility.CommonUtils;
 import java.util.EnumSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -47,7 +46,7 @@ public interface StatEntry extends Metric {
     /** {@inheritDoc} */
     @Override
     default Object get(final ValueType valueType) {
-        CommonUtils.throwArgNull(valueType, "valueType");
+        throwArgNull(valueType, "valueType");
         if (getBuffered() == null) {
             if (valueType == VALUE) {
                 return getStatsStringSupplier().get();
@@ -129,11 +128,11 @@ public interface StatEntry extends Metric {
             this.buffered = null;
             this.init = null;
             this.reset = null;
-            this.statsStringSupplier =
-                    CommonUtils.throwArgNull(statsStringSupplier, "statsStringSupplier");
+            this.statsStringSupplier = throwArgNull(statsStringSupplier, "statsStringSupplier");
             this.resetStatsStringSupplier = statsStringSupplier;
         }
 
+        @SuppressWarnings("java:S107")
         private Config(
                 final String category,
                 final String name,
@@ -151,10 +150,9 @@ public interface StatEntry extends Metric {
             this.buffered = buffered;
             this.init = init;
             this.reset = reset;
-            this.statsStringSupplier =
-                    CommonUtils.throwArgNull(statsStringSupplier, "statsStringSupplier");
+            this.statsStringSupplier = throwArgNull(statsStringSupplier, "statsStringSupplier");
             this.resetStatsStringSupplier =
-                    CommonUtils.throwArgNull(resetStatsStringSupplier, "resetStatsStringSupplier");
+                    throwArgNull(resetStatsStringSupplier, "resetStatsStringSupplier");
         }
 
         /** {@inheritDoc} */
@@ -355,7 +353,7 @@ public interface StatEntry extends Metric {
 
         /** {@inheritDoc} */
         @Override
-        Class<StatEntry> getResultClass() {
+        public Class<StatEntry> getResultClass() {
             return StatEntry.class;
         }
 

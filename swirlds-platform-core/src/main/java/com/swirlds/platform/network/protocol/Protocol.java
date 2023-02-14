@@ -57,4 +57,11 @@ public interface Protocol extends ProtocolRunnable {
      * @return true if we should run, false otherwise
      */
     boolean acceptOnSimultaneousInitiate();
+
+    /**
+     * @return a string name representing this protocol
+     */
+    default String getProtocolName() {
+        return this.getClass().getSimpleName();
+    }
 }

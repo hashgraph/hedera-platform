@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2023 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package com.swirlds.jasperdb;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static com.swirlds.common.utility.Units.BYTES_TO_BITS;
 import static com.swirlds.jasperdb.KeyRange.INVALID_KEY_RANGE;
 import static com.swirlds.logging.LogMarker.ERROR;
@@ -27,10 +28,8 @@ import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.utility.Units;
 import com.swirlds.jasperdb.collections.HashList;
-import com.swirlds.jasperdb.collections.HashListBufferedWrapper;
 import com.swirlds.jasperdb.collections.HashListByteBuffer;
 import com.swirlds.jasperdb.collections.LongList;
-import com.swirlds.jasperdb.collections.LongListBufferedWrapper;
 import com.swirlds.jasperdb.collections.LongListDisk;
 import com.swirlds.jasperdb.collections.LongListOffHeap;
 import com.swirlds.jasperdb.files.DataFileCollection.LoadedDataCallback;
@@ -78,7 +77,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 import org.apache.logging.log4j.LogManager;
@@ -154,17 +152,17 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
      * In memory off-heap store for path to disk location, this is used for both internal hashes
      * store.
      */
-    private final LongListBufferedWrapper pathToDiskLocationInternalNodes;
+    private final LongList pathToDiskLocationInternalNodes;
 
     /** In memory off-heap store for path to disk location, this is used by leave store. */
-    private final LongListBufferedWrapper pathToDiskLocationLeafNodes;
+    private final LongList pathToDiskLocationLeafNodes;
 
     /**
      * In memory off-heap store for internal node hashes. This data is never stored on disk so on
      * load from disk, this will be empty. That should cause all internal node hashes to have to be
      * computed on the first round which will be expensive.
      */
-    private final HashListBufferedWrapper internalHashStoreRam;
+    private final HashList internalHashStoreRam;
 
     /**
      * On disk store for internal hashes. Can be null if all hashes are being stored in ram by
@@ -188,7 +186,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
      * In memory off-heap store for key to path map, this is used when isLongKeyMode=true and keys
      * are longs
      */
-    private final LongListBufferedWrapper longKeyToPath;
+    private final LongList longKeyToPath;
 
     /**
      * Mixed disk and off-heap memory store for key to path map, this is used if
@@ -198,6 +196,21 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 
     /** Mixed disk and off-heap memory store for path to leaf key, hash and value */
     private final MemoryIndexDiskKeyValueStore<VirtualLeafRecord<K, V>> pathToHashKeyValue;
+
+    /**
+     * Cache size for reading virtual leaf records. Initialized in data source creation time from
+     * JasperDB settings. If the value is zero, leaf records cache isn't used.
+     */
+    private final int leafRecordCacheSize;
+
+    /**
+     * Virtual leaf records cache. It's a simple array indexed by leaf keys % cache size. Cache
+     * eviction is not needed, as array size is fixed and can be configured in JasperDB settings.
+     * Index conflicts are resolved in a very straightforward way: whatever entry is read last, it's
+     * put to the cache.
+     */
+    @SuppressWarnings("rawtypes")
+    private final VirtualLeafRecord[] leafRecordCache;
 
     /** ScheduledThreadPool for executing merges */
     private final ScheduledThreadPoolExecutor mergingExecutor;
@@ -217,20 +230,23 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
     /** Flag for if a snapshot is in progress */
     private final AtomicBoolean snapshotInProgress = new AtomicBoolean(false);
 
-    /**
-     * We need to protect the beginning and end of snapshot against concurrent saves of new data.
-     * Snapshot can not start while an existing save is happening and save can not start while
-     * snapshot is in the beginning or end parts.
-     */
-    private final ReentrantLock saveSnapshotLock = new ReentrantLock();
-
     /** The range of valid leaf paths for data currently stored by this data source. */
     private volatile KeyRange validLeafPathRange = INVALID_KEY_RANGE;
 
     /**
-     * When all permits cleared, this will pause merging at the point it is currently at, that could
-     * be waiting for next merge or part way though a merge. This is needed for snapshotting so that
-     * snapshotting can be as fast as possible.
+     * A semaphore to sync data source snapshots and store compactions.
+     *
+     * <p>One of the goals is to lock the snapshot thread as little as possible. Compaction can be
+     * paused and resumed at any moment. That's why the semaphore is acquired for the whole run of
+     * snapshot(), while during compaction it is acquired and released for very short periods: when
+     * indices are updated and when merged files are removed. If compaction threads are doing
+     * anything else, e.g. iterating through files to merge, it can be run in parallel to
+     * snapshotting, until compaction thread starts updating store index.
+     *
+     * <p>Since compaction thread can be paused at various points, it's possible that snapshot will
+     * capture files that are already merged (no index entries pointing to them). Some index entries
+     * can be updated to use the new file, some can point to old files, but since both old and new
+     * files are in the snapshot, it shouldn't be a problem.
      */
     private final Semaphore mergingPaused = new Semaphore(1);
 
@@ -309,7 +325,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
         mergingExecutor =
                 new ScheduledThreadPoolExecutor(
                         NUMBER_OF_MERGING_THREADS,
-                        new ThreadConfiguration()
+                        new ThreadConfiguration(getStaticThreadManager())
                                 .setThreadGroup(threadGroup)
                                 .setComponent(JASPER_DB_COMPONENT)
                                 .setThreadName("Merging")
@@ -324,7 +340,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
         // create thread pool storing internal records
         storeInternalExecutor =
                 Executors.newSingleThreadExecutor(
-                        new ThreadConfiguration()
+                        new ThreadConfiguration(getStaticThreadManager())
                                 .setComponent(JASPER_DB_COMPONENT)
                                 .setThreadGroup(threadGroup)
                                 .setThreadName("Store Internal Records")
@@ -339,7 +355,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
         // create thread pool storing key-to-path mappings
         storeKeyToPathExecutor =
                 Executors.newSingleThreadExecutor(
-                        new ThreadConfiguration()
+                        new ThreadConfiguration(getStaticThreadManager())
                                 .setComponent(JASPER_DB_COMPONENT)
                                 .setThreadGroup(threadGroup)
                                 .setThreadName("Store Key to Path")
@@ -355,7 +371,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
         // thread pool creating snapshots, it is unbounded in threads, but we use at most 7
         snapshotExecutor =
                 Executors.newCachedThreadPool(
-                        new ThreadConfiguration()
+                        new ThreadConfiguration(getStaticThreadManager())
                                 .setComponent(JASPER_DB_COMPONENT)
                                 .setThreadGroup(threadGroup)
                                 .setThreadName("Snapshot")
@@ -389,7 +405,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
             } else {
                 LOG.info(
                         JASPER_DB.getMarker(),
-                        "[{}] Loading existing set of data files but now metadata file was found in"
+                        "[{}] Loading existing set of data files but no metadata file was found in"
                                 + " [{}]",
                         label,
                         storageDir.toAbsolutePath());
@@ -405,38 +421,36 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 
         // create path to disk location index
         final boolean forceIndexRebuilding = settings.isIndexRebuildingEnforced();
-        final LongList longListInternalNodes;
         if (preferDiskBasedIndexes) {
-            longListInternalNodes = new LongListDisk(dbPaths.pathToDiskLocationInternalNodesFile);
+            this.pathToDiskLocationInternalNodes =
+                    new LongListDisk(dbPaths.pathToDiskLocationInternalNodesFile);
         } else if (Files.exists(dbPaths.pathToDiskLocationInternalNodesFile)
                 && !forceIndexRebuilding) {
-            longListInternalNodes =
+            this.pathToDiskLocationInternalNodes =
                     new LongListOffHeap(dbPaths.pathToDiskLocationInternalNodesFile);
         } else {
-            longListInternalNodes = new LongListOffHeap();
+            this.pathToDiskLocationInternalNodes = new LongListOffHeap();
         }
-        final LongList longListLeafNodes;
         if (preferDiskBasedIndexes) {
-            longListLeafNodes = new LongListDisk(dbPaths.pathToDiskLocationLeafNodesFile);
+            this.pathToDiskLocationLeafNodes =
+                    new LongListDisk(dbPaths.pathToDiskLocationLeafNodesFile);
         } else if (Files.exists(dbPaths.pathToDiskLocationLeafNodesFile) && !forceIndexRebuilding) {
-            longListLeafNodes = new LongListOffHeap(dbPaths.pathToDiskLocationLeafNodesFile);
+            this.pathToDiskLocationLeafNodes =
+                    new LongListOffHeap(dbPaths.pathToDiskLocationLeafNodesFile);
         } else {
-            longListLeafNodes = new LongListOffHeap();
+            this.pathToDiskLocationLeafNodes = new LongListOffHeap();
         }
-        pathToDiskLocationInternalNodes = new LongListBufferedWrapper(longListInternalNodes);
-        pathToDiskLocationLeafNodes = new LongListBufferedWrapper(longListLeafNodes);
 
         // Create hash stores, they will
         this.hasDiskStoreForInternalHashes = this.internalHashesRamToDiskThreshold < Long.MAX_VALUE;
 
         if (this.internalHashesRamToDiskThreshold > 0) {
-            final HashList hashList;
             if (Files.exists(dbPaths.internalHashStoreRamFile)) {
-                hashList = new HashListByteBuffer(dbPaths.internalHashStoreRamFile);
+                this.internalHashStoreRam =
+                        new HashListByteBuffer(dbPaths.internalHashStoreRamFile);
             } else {
-                hashList = new HashListByteBuffer();
+                this.internalHashStoreRam = new HashListByteBuffer();
             }
-            this.internalHashStoreRam = new HashListBufferedWrapper(hashList);
         } else {
             this.internalHashStoreRam = null;
         }
@@ -456,13 +470,12 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
             isLongKeyMode = true;
             objectKeyToPath = null;
             if (Files.exists(dbPaths.longKeyToPathFile)) {
-                longKeyToPath =
-                        new LongListBufferedWrapper(new LongListOffHeap(dbPaths.longKeyToPathFile));
+                longKeyToPath = new LongListOffHeap(dbPaths.longKeyToPathFile);
                 // we do not need callback longKeyToPath was written to disk, so we can load it
                 // directly
                 loadedDataCallback = null;
             } else {
-                longKeyToPath = new LongListBufferedWrapper(new LongListOffHeap());
+                longKeyToPath = new LongListOffHeap();
                 loadedDataCallback =
                         (path, dataLocation, hashKeyValueData) -> {
                             // read key from hashKeyValueData, as we are in isLongKeyMode mode then
@@ -494,6 +507,12 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                         virtualLeafRecordSerializer,
                         loadedDataCallback,
                         pathToDiskLocationLeafNodes);
+
+        // Leaf records cache
+        leafRecordCacheSize = settings.getLeafRecordCacheSize();
+        leafRecordCache =
+                (leafRecordCacheSize > 0) ? new VirtualLeafRecord[leafRecordCacheSize] : null;
+
         // compute initial merge periods to a randomized value of now +/- 50% of merge period. So
         // each node will do
         // medium and full merges at random times.
@@ -586,6 +605,15 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
         return COUNT_OF_OPEN_DATABASES.sum();
     }
 
+    /**
+     * Get the data source label used for logs and stats
+     *
+     * @return Data source label
+     */
+    String getLabel() {
+        return label;
+    }
+
     /** Get the most recent first leaf path */
     public long getFirstLeafPath() {
         return this.validLeafPathRange.getMinValidKey();
@@ -623,7 +651,6 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
             final Stream<VirtualLeafRecord<K, V>> leafRecordsToAddOrUpdate,
             final Stream<VirtualLeafRecord<K, V>> leafRecordsToDelete)
             throws IOException {
-        saveSnapshotLock.lock();
         try {
             this.validLeafPathRange = new KeyRange(firstLeafPath, lastLeafPath);
             final CountDownLatch countDownLatch = new CountDownLatch(firstLeafPath > 0 ? 1 : 0);
@@ -667,7 +694,6 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                 Thread.currentThread().interrupt();
             }
         } finally {
-            saveSnapshotLock.unlock();
             // update file stats
             updateFileStats();
         }
@@ -681,12 +707,38 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
      * @throws IOException If there was a problem reading record from db
      */
     @Override
+    @SuppressWarnings("unchecked")
     public VirtualLeafRecord<K, V> loadLeafRecord(final K key) throws IOException {
         Objects.requireNonNull(key);
-        final long path =
-                isLongKeyMode
-                        ? longKeyToPath.get(((VirtualLongKey) key).getKeyAsLong(), INVALID_PATH)
-                        : objectKeyToPath.get(key, INVALID_PATH);
+
+        final long path;
+        VirtualLeafRecord<K, V> cached = null;
+        int cacheIndex = -1;
+        if (leafRecordCache != null) {
+            cacheIndex = Math.abs(key.hashCode() % leafRecordCacheSize);
+            // No synchronization is needed here. Java guarantees (JLS 17.7) that reference writes
+            // are atomic, so we will never get corrupted objects from the array. The object may
+            // be overwritten in the cache in a different thread in parallel, but it isn't a
+            // problem as cached entry key is checked below anyway
+            cached = leafRecordCache[cacheIndex];
+        }
+        // If an entry is found in the cache, and entry key is the one requested
+        if ((cached != null) && key.equals(cached.getKey())) {
+            // Some cache entries contain just key and path, but no value. If the value is there,
+            // just return the cached entry. If not, at least make use of the path.
+            if (cached.getValue() != null) {
+                // A copy is returned to ensure cached value immutability.
+                return cached.copy();
+            }
+            // Note that the path may be INVALID_PATH here, this is perfectly legal
+            path = cached.getPath();
+        } else {
+            // Cache miss
+            path =
+                    isLongKeyMode
+                            ? longKeyToPath.get(((VirtualLongKey) key).getKeyAsLong(), INVALID_PATH)
+                            : objectKeyToPath.get(key, INVALID_PATH);
+        }
 
         // If the key didn't map to anything, we just return null
         if (path == INVALID_PATH) {
@@ -702,7 +754,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 
         statistics.cycleLeafByKeyReadsPerSecond();
         // Go ahead and lookup the value.
-        final VirtualLeafRecord<K, V> leafRecord = pathToHashKeyValue.get(path);
+        VirtualLeafRecord<K, V> leafRecord = pathToHashKeyValue.get(path);
 
         // FUTURE WORK: once the reconnect key leak bug is fixed, this block should be removed
         if (!leafRecord.getKey().equals(key)) {
@@ -718,6 +770,12 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                         "leaked key {} encountered, mitigation is disabled, expect problems",
                         key);
             }
+        }
+
+        if (leafRecordCache != null) {
+            // A copy is returned to ensure cached value immutability.
+            leafRecordCache[cacheIndex] = leafRecord;
+            leafRecord = leafRecord.copy();
         }
 
         return leafRecord;
@@ -749,11 +807,31 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
      * @throws IOException If there was a problem locating the key
      */
     @Override
+    @SuppressWarnings("unchecked")
     public long findKey(final K key) throws IOException {
         Objects.requireNonNull(key);
-        return isLongKeyMode
-                ? longKeyToPath.get(((VirtualLongKey) key).getKeyAsLong(), INVALID_PATH)
-                : objectKeyToPath.get(key, INVALID_PATH);
+
+        int cacheIndex = -1;
+        if (leafRecordCache != null) {
+            cacheIndex = Math.abs(key.hashCode() % leafRecordCacheSize);
+            final VirtualLeafRecord<K, V> cached = leafRecordCache[cacheIndex];
+            if (cached != null && key.equals(cached.getKey())) {
+                // Cached path may be a valid path or INVALID_PATH, both are legal here
+                return cached.getPath();
+            }
+        }
+
+        final long path =
+                isLongKeyMode
+                        ? longKeyToPath.get(((VirtualLongKey) key).getKeyAsLong(), INVALID_PATH)
+                        : objectKeyToPath.get(key, INVALID_PATH);
+
+        if (leafRecordCache != null) {
+            // Path may be INVALID_PATH here. Still needs to be cached (negative result)
+            leafRecordCache[cacheIndex] = new VirtualLeafRecord<K, V>(path, null, key, null);
+        }
+
+        return path;
     }
 
     /**
@@ -781,15 +859,15 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
         return leafRecord == null ? null : leafRecord.getHash();
     }
 
-    /**
-     * Load the record for an internal node by path
-     *
-     * @param path the path for a internal
-     * @return the internal node's record if one was stored for the given path or null if not stored
-     * @throws IOException If there was a problem reading the internal record
-     */
+    /** {@inheritDoc} */
     @Override
-    public VirtualInternalRecord loadInternalRecord(final long path) throws IOException {
+    public VirtualInternalRecord loadInternalRecord(long path) throws IOException {
+        return loadInternalRecord(path, true);
+    }
+
+    /** {@inheritDoc} */
+    public VirtualInternalRecord loadInternalRecord(final long path, final boolean deserialize)
+            throws IOException {
         if (path < 0) {
             throw new IllegalArgumentException("path is less than 0");
         }
@@ -803,15 +881,27 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
             return null;
         }
 
+        VirtualInternalRecord record = null;
         if (path < internalHashesRamToDiskThreshold) {
-            final Hash hash = internalHashStoreRam.get(path);
-            if (hash == null) return null;
-            statistics.cycleInternalNodeReadsPerSecond();
-            return new VirtualInternalRecord(path, hash);
+            if (deserialize) {
+                final Hash hash = internalHashStoreRam.get(path);
+                if (hash != null) {
+                    statistics.cycleInternalNodeReadsPerSecond();
+                    record = new VirtualInternalRecord(path, hash);
+                }
+            }
         } else {
+            record = internalHashStoreDisk.get(path, deserialize);
             statistics.cycleInternalNodeReadsPerSecond();
-            return internalHashStoreDisk.get(path);
         }
+
+        return record;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void warmInternalRecord(long path) throws IOException {
+        loadInternalRecord(path, false);
     }
 
     /**
@@ -922,36 +1012,13 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                     "Tried to start a snapshot when one was already in progress");
         }
         try {
-            // pause merging
             mergingPaused.acquireUninterruptibly();
             // start timing snapshot
             final long START = System.currentTimeMillis();
             // create snapshot dir if it doesn't exist
             Files.createDirectories(snapshotDirectory);
             final JasperDbPaths snapshotDbPaths = new JasperDbPaths(snapshotDirectory);
-            // start snapshot
-            saveSnapshotLock.lock();
             final KeyRange leafRange = this.validLeafPathRange;
-            try {
-                pathToDiskLocationInternalNodes.setUseOverlay(true);
-                pathToDiskLocationLeafNodes.setUseOverlay(true);
-                if (internalHashStoreRam != null) {
-                    internalHashStoreRam.setUseOverlay(true);
-                }
-                if (longKeyToPath != null) {
-                    longKeyToPath.setUseOverlay(true);
-                }
-                pathToHashKeyValue.startSnapshot(snapshotDbPaths.pathToHashKeyValueDirectory);
-                if (objectKeyToPath != null) {
-                    objectKeyToPath.startSnapshot(snapshotDbPaths.objectKeyToPathDirectory);
-                }
-                if (internalHashStoreDisk != null) {
-                    internalHashStoreDisk.startSnapshot(
-                            snapshotDbPaths.internalHashStoreDiskDirectory);
-                }
-            } finally {
-                saveSnapshotLock.unlock();
-            }
             // main snapshotting process in multiple-threads
             try {
                 final CountDownLatch countDownLatch = new CountDownLatch(8);
@@ -988,7 +1055,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                         countDownLatch,
                         "internalHashStoreDisk",
                         () -> {
-                            internalHashStoreDisk.middleSnapshot(
+                            internalHashStoreDisk.snapshot(
                                     snapshotDbPaths.internalHashStoreDiskDirectory);
                             return true;
                         });
@@ -1005,8 +1072,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                         countDownLatch,
                         "objectKeyToPath",
                         () -> {
-                            objectKeyToPath.middleSnapshot(
-                                    snapshotDbPaths.objectKeyToPathDirectory);
+                            objectKeyToPath.snapshot(snapshotDbPaths.objectKeyToPathDirectory);
                             return true;
                         });
                 runWithSnapshotExecutor(
@@ -1014,7 +1080,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                         countDownLatch,
                         "pathToHashKeyValue",
                         () -> {
-                            pathToHashKeyValue.middleSnapshot(
+                            pathToHashKeyValue.snapshot(
                                     snapshotDbPaths.pathToHashKeyValueDirectory);
                             return true;
                         });
@@ -1047,28 +1113,6 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                         label,
                         e);
                 Thread.currentThread().interrupt();
-            }
-            // end snapshot
-            saveSnapshotLock.lock();
-            try {
-                pathToHashKeyValue.endSnapshot(snapshotDbPaths.pathToHashKeyValueDirectory);
-                if (objectKeyToPath != null) {
-                    objectKeyToPath.endSnapshot(snapshotDbPaths.objectKeyToPathDirectory);
-                }
-                if (internalHashStoreDisk != null) {
-                    internalHashStoreDisk.endSnapshot(
-                            snapshotDbPaths.internalHashStoreDiskDirectory);
-                }
-                pathToDiskLocationInternalNodes.setUseOverlay(false);
-                pathToDiskLocationLeafNodes.setUseOverlay(false);
-                if (internalHashStoreRam != null) {
-                    internalHashStoreRam.setUseOverlay(false);
-                }
-                if (longKeyToPath != null) {
-                    longKeyToPath.setUseOverlay(false);
-                }
-            } finally {
-                saveSnapshotLock.unlock();
             }
             LOG.info(
                     JASPER_DB.getMarker(),
@@ -1274,6 +1318,31 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
         }
     }
 
+    /**
+     * Updates the record for the given key in virtual leaf record cache, if the cache is enabled.
+     *
+     * <p>If the record is {@code null}, it's still updated in the cache. It means there is no
+     * record with the given key exists in the data source, so further lookups for the key are
+     * skipped.
+     *
+     * <p>Cache index is calculated as the key's hash code % cache size. The cache is only updated,
+     * if the current record at this index has the given key. If the key is different, no update is
+     * performed.
+     *
+     * @param key Virtual leaf record key
+     */
+    @SuppressWarnings("unchecked")
+    private void invalidateReadCache(final K key) {
+        if (leafRecordCache == null) {
+            return;
+        }
+        final int cacheIndex = Math.abs(key.hashCode() % leafRecordCacheSize);
+        final VirtualLeafRecord<K, V> cached = leafRecordCache[cacheIndex];
+        if ((cached != null) && key.equals(cached.getKey())) {
+            leafRecordCache[cacheIndex] = null;
+        }
+    }
+
     /** Write all the given leaf records to pathToHashKeyValue */
     private void writeLeavesToPathToHashKeyValue(
             final long firstLeafPath,
@@ -1317,6 +1386,8 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                                     e);
                             throw new UncheckedIOException(e);
                         }
+
+                        invalidateReadCache(leafRecord.getKey());
                     });
 
             // iterate over leaf records to delete
@@ -1336,6 +1407,8 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                         // next merge based on range of valid leaf paths. If a leaf at path X is
                         // deleted then a new leaf is
                         // inserted at path X then the record is just updated to new leaf's data.
+
+                        invalidateReadCache(leafRecord.getKey());
                     });
 
             // end writing
@@ -1399,7 +1472,6 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                 LOG.info(JASPER_DB.getMarker(), "[{}] Starting Small Merge", label);
             }
 
-            DataFileCommon.waitIfMergingPaused(mergingPaused);
             // we need to merge disk files for internal hashes if they exist and pathToHashKeyValue
             // store
             if (hasDiskStoreForInternalHashes) {
@@ -1417,7 +1489,6 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
             } else {
                 afterInternalHashStoreDiskMerge = now; // zero elapsed time
             }
-            DataFileCommon.waitIfMergingPaused(mergingPaused);
             // merge objectKeyToPath files
             if (isLongKeyMode) {
                 // third "now" is replaced by copying second "now"
@@ -1433,7 +1504,6 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                 // set third "now"
                 afterObjectKeyToPathMerge = Instant.now(clock);
             }
-            DataFileCommon.waitIfMergingPaused(mergingPaused);
             // now do main merge of pathToHashKeyValue store
             // horrible hack to get around generics because file filters work on any type of
             // DataFileReader

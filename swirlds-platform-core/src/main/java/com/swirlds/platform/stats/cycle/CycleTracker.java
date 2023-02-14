@@ -15,27 +15,23 @@
  */
 package com.swirlds.platform.stats.cycle;
 
-import com.swirlds.common.Clock;
+import com.swirlds.common.time.Time;
 import java.util.Arrays;
 
 /** Tracks the time points of a thread cycle and passes on the information to the metrics */
 public class CycleTracker {
     private final CycleMetrics metrics;
     /** provides the current time in nanoseconds */
-    private final Clock clock;
+    private final Time time;
     /** duration of each interval, in nanoseconds */
     private final long[] duration;
 
     private long lastTime;
     private int intervalStarted;
 
-    public CycleTracker(final CycleMetrics metrics) {
-        this(metrics, Clock.DEFAULT);
-    }
-
-    public CycleTracker(final CycleMetrics metrics, final Clock clock) {
+    public CycleTracker(final Time time, final CycleMetrics metrics) {
         this.metrics = metrics;
-        this.clock = clock;
+        this.time = time;
         this.duration = new long[metrics.getNumIntervals()];
         this.lastTime = now();
     }
@@ -90,6 +86,6 @@ public class CycleTracker {
      * @return current time in ns
      */
     private long now() {
-        return clock.now();
+        return time.nanoTime();
     }
 }

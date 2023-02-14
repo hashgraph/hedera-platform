@@ -43,7 +43,7 @@ public class HashTests {
 
     @BeforeAll
     public static void setUp() throws ConstructableRegistryException {
-        ConstructableRegistry.registerConstructables("com.swirlds.common.crypto");
+        ConstructableRegistry.getInstance().registerConstructables("com.swirlds.common.crypto");
     }
 
     @Test

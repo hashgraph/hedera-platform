@@ -24,7 +24,7 @@ import java.util.Set;
 /**
  * This interface is used to define sources of configuration properties. Implementations of the
  * interface can be added to the configuration setup by calling * {@link
- * com.swirlds.config.api.ConfigurationProvider#addSource(ConfigSource)}
+ * com.swirlds.config.api.ConfigurationBuilder#withSource(ConfigSource)}
  */
 public interface ConfigSource {
 

@@ -25,9 +25,10 @@ import com.swirlds.common.crypto.SerializableHashable;
 import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.crypto.VerificationStatus;
-import com.swirlds.common.crypto.internal.CryptographySettings;
+import com.swirlds.common.crypto.config.CryptoConfig;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.threading.futures.StandardFuture;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.logging.LogMarker;
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
@@ -41,17 +42,12 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class CryptoEngine implements Cryptography {
 
     /** The constant value used as the component name for all threads created by this module. */
     public static final String THREAD_COMPONENT_NAME = "adv crypto";
-
-    /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(CryptoEngine.class);
 
     static {
         // Register the BouncyCastle Provider instance with the JVM
@@ -112,23 +108,26 @@ public class CryptoEngine implements Cryptography {
     private volatile BlockingQueue<List<Message>> digestQueue;
 
     /** the current configuration settings */
-    private volatile CryptographySettings settings;
+    private volatile CryptoConfig config;
 
     /** a pre-computed {@link Map} of each algorithm's {@code null} hash value. */
     private Map<DigestType, Hash> nullHashes;
 
-    /** Constructs a new {@link CryptoEngine} using default settings. */
-    public CryptoEngine() {
-        this(CryptographySettings.getDefaultSettings());
-    }
+    /**
+     * Responsible for creating and managing all threads and threading resources used by this
+     * utility.
+     */
+    private final ThreadManager threadManager;
 
     /**
      * Constructs a new {@link CryptoEngine} using the provided settings.
      *
-     * @param settings the initial settings to be used
+     * @param threadManager responsible for managing thread lifecycles
+     * @param config the initial config to be used
      */
-    public CryptoEngine(final CryptographySettings settings) {
-        this.settings = settings;
+    public CryptoEngine(final ThreadManager threadManager, final CryptoConfig config) {
+        this.threadManager = threadManager;
+        this.config = config;
         this.availableCpuCount = Runtime.getRuntime().availableProcessors();
         this.digestProvider = new DigestProvider();
 
@@ -146,8 +145,7 @@ public class CryptoEngine implements Cryptography {
     }
 
     /**
-     * Supplier implementation for {@link AsyncVerificationHandler} used by the {@link
-     * #CryptoEngine()} constructor.
+     * Supplier implementation for {@link AsyncVerificationHandler}.
      *
      * @param provider the required {@link OperationProvider} to be used while performing the
      *     cryptographic transformations
@@ -282,17 +280,17 @@ public class CryptoEngine implements Cryptography {
      *
      * @return the current configuration settings
      */
-    public synchronized CryptographySettings getSettings() {
-        return settings;
+    public synchronized CryptoConfig getSettings() {
+        return config;
     }
 
     /**
      * Setter to allow the configuration settings to be updated at runtime.
      *
-     * @param settings the configuration settings
+     * @param config the configuration settings
      */
-    public synchronized void setSettings(final CryptographySettings settings) {
-        this.settings = settings;
+    public synchronized void setSettings(final CryptoConfig config) {
+        this.config = config;
         applySettings();
     }
 
@@ -546,10 +544,10 @@ public class CryptoEngine implements Cryptography {
 
         // Resize the dispatcher queues
         final Queue<List<TransactionSignature>> oldVerifierQueue = this.verificationQueue;
-        this.verificationQueue = new LinkedBlockingQueue<>(settings.getCpuVerifierQueueSize());
+        this.verificationQueue = new LinkedBlockingQueue<>(config.cpuVerifierQueueSize());
 
         final Queue<List<Message>> oldDigestQueue = this.digestQueue;
-        this.digestQueue = new LinkedBlockingQueue<>(settings.getCpuDigestQueueSize());
+        this.digestQueue = new LinkedBlockingQueue<>(config.cpuDigestQueueSize());
 
         if (oldVerifierQueue != null && oldVerifierQueue.size() > 0) {
             this.verificationQueue.addAll(oldVerifierQueue);
@@ -562,24 +560,26 @@ public class CryptoEngine implements Cryptography {
         // Launch new background threads with the new settings
         this.verificationDispatcher =
                 new IntakeDispatcher<>(
+                        threadManager,
                         TransactionSignature.class,
                         this.verificationQueue,
                         this.delegatingVerificationProvider,
-                        settings.computeCpuVerifierThreadCount(),
+                        config.computeCpuVerifierThreadCount(),
                         CryptoEngine::verificationHandler);
 
         this.digestDispatcher =
                 new IntakeDispatcher<>(
+                        threadManager,
                         Message.class,
                         this.digestQueue,
                         this.digestProvider,
-                        settings.computeCpuDigestThreadCount(),
+                        config.computeCpuDigestThreadCount(),
                         this::digestHandler);
     }
 
     /**
      * Supplier implementation for {@link AsyncDigestHandler} used by the {@link
-     * #CryptoEngine(CryptographySettings)} constructor.
+     * #CryptoEngine(ThreadManager, CryptoConfig)} constructor.
      *
      * @param provider the required {@link OperationProvider} to be used while performing the
      *     cryptographic transformations

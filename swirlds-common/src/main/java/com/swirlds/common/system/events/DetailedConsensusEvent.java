@@ -16,6 +16,8 @@
 package com.swirlds.common.system.events;
 
 import com.swirlds.common.crypto.AbstractSerializableHashable;
+import com.swirlds.common.crypto.RunningHash;
+import com.swirlds.common.crypto.RunningHashable;
 import com.swirlds.common.io.OptionalSelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
@@ -30,7 +32,7 @@ import org.apache.commons.lang3.builder.ToStringStyle;
  * detailed consensus information.
  */
 public class DetailedConsensusEvent extends AbstractSerializableHashable
-        implements OptionalSelfSerializable<EventSerializationOptions> {
+        implements OptionalSelfSerializable<EventSerializationOptions>, RunningHashable {
 
     public static final long CLASS_ID = 0xe250a9fbdcc4b1baL;
     public static final int CLASS_VERSION = 1;
@@ -41,6 +43,8 @@ public class DetailedConsensusEvent extends AbstractSerializableHashable
     private BaseEventUnhashedData baseEventUnhashedData;
     /** Consensus data calculated for an event */
     private ConsensusData consensusData;
+    /** the running hash of this event */
+    private final RunningHash runningHash = new RunningHash();
 
     /** Creates an empty instance */
     public DetailedConsensusEvent() {}
@@ -99,6 +103,11 @@ public class DetailedConsensusEvent extends AbstractSerializableHashable
         baseEventHashedData = in.readSerializable(false, BaseEventHashedData::new);
         baseEventUnhashedData = in.readSerializable(false, BaseEventUnhashedData::new);
         consensusData = in.readSerializable(false, ConsensusData::new);
+    }
+
+    @Override
+    public RunningHash getRunningHash() {
+        return runningHash;
     }
 
     /** Returns the event data that is part of this event's hash. */

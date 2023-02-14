@@ -24,11 +24,11 @@ import static com.swirlds.common.metrics.Metrics.INTERNAL_CATEGORY;
 import static com.swirlds.common.metrics.Metrics.PLATFORM_CATEGORY;
 import static com.swirlds.common.utility.Units.NANOSECONDS_TO_SECONDS;
 
-import com.swirlds.common.Clock;
 import com.swirlds.common.metrics.Counter;
 import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.metrics.RunningAverageMetric;
 import com.swirlds.common.metrics.SpeedometerMetric;
+import com.swirlds.common.time.Time;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.observers.StaleEventObserver;
@@ -79,17 +79,18 @@ public class EventIntakeMetrics implements StaleEventObserver {
                     .withFormat(FORMAT_16_2);
     private final SpeedometerMetric staleEventsPerSecond;
 
-    private final Clock clock;
+    private final Time time;
 
     /**
      * Constructor of {@code EventIntakeMetrics}
      *
      * @param metrics a reference to the metrics-system
+     * @param time provides wall clock time
      * @throws IllegalArgumentException if {@code metrics} is {@code null}
      */
-    public EventIntakeMetrics(final Metrics metrics) {
+    public EventIntakeMetrics(final Metrics metrics, final Time time) {
         CommonUtils.throwArgNull(metrics, "metrics");
-        this.clock = Clock.DEFAULT;
+        this.time = time;
 
         rescuedEventsPerSecond = metrics.getOrCreate(RESCUED_EVENTS_PER_SECOND_CONFIG);
         duplicateEventsPerSecond = metrics.getOrCreate(DUPLICATE_EVENTS_PER_SECOND_CONFIG);
@@ -128,7 +129,7 @@ public class EventIntakeMetrics implements StaleEventObserver {
      */
     public void processedEventTask(final long startTime) {
         // nanoseconds spent adding to hashgraph
-        timeFracAdd.update(((double) clock.now() - startTime) * NANOSECONDS_TO_SECONDS);
+        timeFracAdd.update(((double) time.nanoTime() - startTime) * NANOSECONDS_TO_SECONDS);
     }
 
     /**

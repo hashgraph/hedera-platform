@@ -21,6 +21,7 @@ import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.threading.pool.StandardWorkGroup;
 import java.io.IOException;
 
@@ -37,9 +38,11 @@ public interface LearnerTreeView<T>
     /**
      * Start any required background threads. Threads should be created on the provided work group.
      *
+     * @param threadManager responsible for creating new threads
      * @param workGroup a work group responsible for managing threads
      */
-    default void startThreads(final StandardWorkGroup workGroup) {}
+    default void startThreads(
+            final ThreadManager threadManager, final StandardWorkGroup workGroup) {}
 
     /**
      * Check if this view represents the root of the state.

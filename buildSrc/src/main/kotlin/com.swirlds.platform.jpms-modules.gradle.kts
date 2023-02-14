@@ -35,6 +35,9 @@ extraJavaModuleInfo {
     automaticModule("commons-io:commons-io", "org.apache.commons.io")
     automaticModule("com.offbynull.portmapper:portmapper", "portmapper")
     automaticModule("org.openjfx:javafx-base", "javafx.base")
+    automaticModule("io.prometheus:simpleclient", "io.prometheus.simpleclient")
+    automaticModule("io.prometheus:simpleclient_common", "io.prometheus.simpleclient_common")
+    automaticModule("io.prometheus:simpleclient_httpserver", "io.prometheus.simpleclient.httpserver")
 
     automaticModule("hamcrest-core-1.3.jar", "hamcrest.core")
     automaticModule("j2objc-annotations-1.3.jar", "j2objc.annotations")

@@ -34,7 +34,7 @@ import org.apache.logging.log4j.Logger;
 
 /** A set of static methods to aid with reconnect */
 public final class ReconnectUtils {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ReconnectUtils.class);
 
     private ReconnectUtils() {}
 

@@ -22,8 +22,12 @@ plugins {
 dependencies {
     // Individual Dependencies
     api(libs.bundles.logging.api)
+    api(project(":swirlds-config-api"))
+    api(project(":swirlds-common"))
     implementation(libs.bundles.logging.impl)
+    implementation(libs.classgraph)
 
     // Test Dependencies
     testImplementation(testLibs.bundles.junit)
+    testImplementation(project(":swirlds-config-impl"))
 }

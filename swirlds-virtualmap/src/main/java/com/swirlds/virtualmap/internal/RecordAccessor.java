@@ -54,7 +54,16 @@ public interface RecordAccessor<K extends VirtualKey<? super K>, V extends Virtu
      * @throws UncheckedIOException If we fail to access the data store, then a catastrophic error
      *     occurred and an UncheckedIOException is thrown.
      */
-    VirtualInternalRecord findInternalRecord(long path);
+    VirtualInternalRecord findInternalRecord(final long path);
+
+    /**
+     * Reads the internal record at {@code path} into OS file cache (warms it), but don't
+     * deserialize it into Java heap. This gives us a free cache at the OS level without storing
+     * anything into Java heap.
+     *
+     * @param path
+     */
+    void warmInternalRecord(final long path);
 
     /**
      * Locates and returns a leaf node based on the given key. If the leaf node already exists in

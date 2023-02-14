@@ -17,7 +17,6 @@ package com.swirlds.platform.event.creation;
 
 import static com.swirlds.logging.LogMarker.CREATE_EVENT;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.stream.Signer;
 import com.swirlds.common.system.EventCreationRuleResponse;
@@ -25,13 +24,12 @@ import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.events.BaseEvent;
 import com.swirlds.common.system.events.BaseEventHashedData;
 import com.swirlds.common.system.events.BaseEventUnhashedData;
+import com.swirlds.common.time.Time;
 import com.swirlds.platform.components.EventCreationRules;
 import com.swirlds.platform.components.EventMapper;
-import com.swirlds.platform.components.SwirldMainManager;
 import com.swirlds.platform.components.TransactionSupplier;
 import com.swirlds.platform.event.EventUtils;
 import com.swirlds.platform.event.GossipEvent;
-import java.time.Instant;
 import java.util.function.Consumer;
 import java.util.function.LongFunction;
 import org.apache.logging.log4j.LogManager;
@@ -39,12 +37,10 @@ import org.apache.logging.log4j.Logger;
 
 /** This class encapsulates the workflow required to create new events. */
 public class ChatterEventCreator {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ChatterEventCreator.class);
 
     /** This node's address book ID */
     private final NodeId selfId;
-    /** An implementor of {@link SwirldMainManager} */
-    private final SwirldMainManager swirldMainManager;
     /** An implementor of {@link Signer} */
     private final Signer signer;
     /** An implementor of {@link TransactionSupplier} */
@@ -58,22 +54,25 @@ public class ChatterEventCreator {
     /** Used for hashing the event when created */
     private final Cryptography hasher;
 
+    private final Time time;
+
     public ChatterEventCreator(
-            final SwirldMainManager swirldMainManager,
             final NodeId selfId,
             final Signer signer,
             final TransactionSupplier transactionSupplier,
             final Consumer<GossipEvent> newEventHandler,
             final LongFunction<GossipEvent> mostRecentEventById,
-            final EventCreationRules eventCreationRules) {
-        this.swirldMainManager = swirldMainManager;
+            final EventCreationRules eventCreationRules,
+            final Cryptography hasher,
+            final Time time) {
         this.selfId = selfId;
         this.signer = signer;
         this.transactionSupplier = transactionSupplier;
         this.newEventHandler = newEventHandler;
         this.mostRecentEventById = mostRecentEventById;
         this.eventCreationRules = eventCreationRules;
-        this.hasher = CryptoFactory.getInstance();
+        this.hasher = hasher;
+        this.time = time;
     }
 
     /** Create a genesis event with no parents */
@@ -103,10 +102,6 @@ public class ChatterEventCreator {
             return false;
         }
 
-        // Give the app one last chance to create a non-system transaction and give the platform
-        // one last chance to create a system transaction.
-        swirldMainManager.preEvent();
-
         handleNewEvent(buildEvent(selfParent, otherParent));
         return true;
     }
@@ -126,7 +121,7 @@ public class ChatterEventCreator {
                         EventUtils.getEventGeneration(otherParent),
                         EventUtils.getEventHash(selfParent),
                         EventUtils.getEventHash(otherParent),
-                        EventUtils.getChildTimeCreated(Instant.now(), selfParent),
+                        EventUtils.getChildTimeCreated(time.now(), selfParent),
                         transactionSupplier.getTransactions());
         hasher.digestSync(hashedData);
 

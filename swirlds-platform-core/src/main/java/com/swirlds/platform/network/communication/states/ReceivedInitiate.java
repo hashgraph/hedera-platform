@@ -24,7 +24,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 /** Responds to a protocol initiation by the peer */
-public class ReceivedInitiate implements NegotiationState {
+public class ReceivedInitiate extends NegotiationStateWithDescription {
     private final NegotiationProtocols protocols;
     private final OutputStream byteOutput;
 
@@ -72,11 +72,13 @@ public class ReceivedInitiate implements NegotiationState {
             byteOutput.flush();
             stateNegotiated.runProtocol(protocol);
             protocolInitiated = NegotiatorBytes.UNINITIALIZED;
+            setDescription("accepted protocol initiated by peer - " + protocol.getProtocolName());
             return stateNegotiated;
         } else {
             byteOutput.write(NegotiatorBytes.REJECT);
             byteOutput.flush();
             protocolInitiated = NegotiatorBytes.UNINITIALIZED;
+            setDescription("rejected protocol initiated by peer - " + protocol.getProtocolName());
             return sleep;
         }
     }

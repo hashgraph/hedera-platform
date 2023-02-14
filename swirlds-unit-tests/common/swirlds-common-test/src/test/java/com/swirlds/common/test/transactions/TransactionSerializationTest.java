@@ -59,8 +59,9 @@ class TransactionSerializationTest {
         SettingsCommon.maxTransactionCountPerEvent = MAX_TRANSACTIONS;
         SettingsCommon.transactionMaxBytes = MAX_TRANSACTION_BYTES;
         SettingsCommon.maxAddressSizeAllowed = MAX_ADDRESSBOOK_SIZE;
-        ConstructableRegistry.registerConstructables("com.swirlds.common.system.transaction");
-        ConstructableRegistry.registerConstructables("com.swirlds.common");
+        final ConstructableRegistry registry = ConstructableRegistry.getInstance();
+        registry.registerConstructables("com.swirlds.common.system.transaction");
+        registry.registerConstructables("com.swirlds.common");
     }
 
     @ParameterizedTest

@@ -4,6 +4,7 @@ open module com.swirlds.merkle {
     exports com.swirlds.merkle.tree;
     exports com.swirlds.merkle.tree.internal to
             com.swirlds.merkle.test;
+    exports com.swirlds.merkle.map.internal;
 
     requires com.swirlds.common;
     requires com.swirlds.logging;

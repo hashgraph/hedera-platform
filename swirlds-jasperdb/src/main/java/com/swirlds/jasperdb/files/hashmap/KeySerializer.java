@@ -33,8 +33,8 @@ import java.nio.ByteBuffer;
 public interface KeySerializer<K> extends BaseSerializer<K>, SelfSerializable {
 
     /**
-     * Get the current data item serialization version. Key serializers can only use the lower 32
-     * bits of the version long as the upper 32 are used by the BucketSerializer.
+     * Get the current key serialization version. Key serializers can only use the lower 32 bits of
+     * the version long as the upper 32 are used by the BucketSerializer.
      */
     long getCurrentDataVersion();
 

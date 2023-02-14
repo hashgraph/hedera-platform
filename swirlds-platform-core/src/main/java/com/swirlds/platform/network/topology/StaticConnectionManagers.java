@@ -31,7 +31,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Pre-builds connection managers for the supplied topology, does not allow changes at runtime */
 public class StaticConnectionManagers {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(StaticConnectionManagers.class);
     private final NetworkTopology topology;
     private final Map<ConnectionMapping, ConnectionManager> connectionManagers;
 

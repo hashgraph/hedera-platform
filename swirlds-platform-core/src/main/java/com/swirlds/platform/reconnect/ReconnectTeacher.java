@@ -21,6 +21,7 @@ import static com.swirlds.logging.LogMarker.RECONNECT;
 import com.swirlds.common.io.streams.MerkleDataInputStream;
 import com.swirlds.common.io.streams.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.TeachingSynchronizer;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.logging.payloads.ReconnectFinishPayload;
 import com.swirlds.logging.payloads.ReconnectStartPayload;
 import com.swirlds.platform.Connection;
@@ -56,7 +57,20 @@ public class ReconnectTeacher {
 
     private boolean stateIsReleased;
 
+    private final ThreadManager threadManager;
+
+    /**
+     * @param threadManager responsible for managing thread lifecycles
+     * @param connection the connection to be used for the reconnect
+     * @param signedState the signed state to send to the learner
+     * @param reconnectSocketTimeout the socket timeout to use during the reconnect
+     * @param selfId this node's ID
+     * @param otherId the learner's ID
+     * @param lastRoundReceived the round of the state
+     * @param statistics reconnect metrics
+     */
     public ReconnectTeacher(
+            final ThreadManager threadManager,
             final Connection connection,
             final SignedState signedState,
             final int reconnectSocketTimeout,
@@ -65,6 +79,7 @@ public class ReconnectTeacher {
             final long lastRoundReceived,
             final ReconnectMetrics statistics) {
 
+        this.threadManager = threadManager;
         this.connection = connection;
         this.signedState = signedState;
         this.reconnectSocketTimeout = reconnectSocketTimeout;
@@ -144,8 +159,8 @@ public class ReconnectTeacher {
         increaseSocketTimeout();
 
         try {
-            reconnect();
             sendSignatures();
+            reconnect();
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ReconnectException(e);
@@ -193,7 +208,7 @@ public class ReconnectTeacher {
      *
      * @throws InterruptedException thrown if the current thread is interrupted
      */
-    private void reconnect() throws InterruptedException {
+    private void reconnect() throws InterruptedException, IOException {
         LOG.info(RECONNECT.getMarker(), "Starting synchronization in the role of the sender.");
         statistics.incrementSenderStartTimes();
 
@@ -202,6 +217,7 @@ public class ReconnectTeacher {
 
         final TeachingSynchronizer synchronizer =
                 new TeachingSynchronizer(
+                        threadManager,
                         new MerkleDataInputStream(connection.getDis()),
                         new MerkleDataOutputStream(connection.getDos()),
                         signedState.getState(),
@@ -216,6 +232,7 @@ public class ReconnectTeacher {
         signedState.weakReleaseState();
 
         synchronizer.synchronize();
+        connection.getDos().flush();
 
         statistics.incrementSenderEndTimes();
         LOG.info(RECONNECT.getMarker(), "Finished synchronization in the role of the sender.");

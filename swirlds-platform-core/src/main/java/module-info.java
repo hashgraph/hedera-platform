@@ -12,10 +12,14 @@ module com.swirlds.platform {
     exports com.swirlds.platform.chatter.protocol.output;
     exports com.swirlds.platform.chatter.protocol.peer;
     exports com.swirlds.platform.chatter.protocol.heartbeat;
+    exports com.swirlds.platform.event.report;
+    exports com.swirlds.platform.gui.hashgraph;
+    exports com.swirlds.platform.gui.hashgraph.internal;
     exports com.swirlds.platform.network.connection;
     exports com.swirlds.platform.network.connectivity;
     exports com.swirlds.platform.event.validation;
     exports com.swirlds.platform.eventhandling;
+    exports com.swirlds.platform.gui;
     exports com.swirlds.platform.intake;
     exports com.swirlds.platform.metrics;
     exports com.swirlds.platform.network;
@@ -23,6 +27,8 @@ module com.swirlds.platform {
     exports com.swirlds.platform.network.protocol;
     exports com.swirlds.platform.network.topology;
     exports com.swirlds.platform.network.unidirectional;
+    exports com.swirlds.platform.recovery;
+    exports com.swirlds.platform.recovery.legacy;
     exports com.swirlds.platform.state;
     exports com.swirlds.platform.stats;
     exports com.swirlds.platform.stats.atomic;
@@ -33,6 +39,7 @@ module com.swirlds.platform {
     exports com.swirlds.platform.sync;
     exports com.swirlds.platform.system;
     exports com.swirlds.platform.threading;
+    exports com.swirlds.platform.util;
 
     /* Targeted Exports to External Libraries */
     exports com.swirlds.platform.event to
@@ -71,12 +78,10 @@ module com.swirlds.platform {
     exports com.swirlds.platform.state.iss.internal to
             com.swirlds.platform.test;
     exports com.swirlds.platform.chatter.protocol.processing;
-    exports com.swirlds.platform.recovery to
-            com.swirlds.platform.test;
-    exports com.swirlds.platform.util.router to
-            com.swirlds.platform.test;
     exports com.swirlds.platform.dispatch to
-            com.swirlds.platform.test;
+            com.swirlds.platform.test,
+            com.swirlds.config.impl,
+            com.swirlds.common;
     exports com.swirlds.platform.dispatch.types to
             com.swirlds.platform.test;
     exports com.swirlds.platform.dispatch.triggers.control to
@@ -89,12 +94,22 @@ module com.swirlds.platform {
             com.swirlds.platform.test;
     exports com.swirlds.platform.reconnect.emergency to
             com.swirlds.platform.test;
+    exports com.swirlds.platform.recovery.internal to
+            com.swirlds.platform.test;
+
+    opens com.swirlds.platform.cli to
+            info.picocli;
+
+    exports com.swirlds.platform.chatter.config;
+    exports com.swirlds.platform.config;
+    exports com.swirlds.platform.config.legacy;
 
     /* Swirlds Libraries */
     requires transitive com.swirlds.common;
     requires com.swirlds.common.test;
     requires com.swirlds.test.framework;
     requires com.swirlds.logging;
+    requires com.swirlds.cli;
 
     /* JDK Libraries */
     requires java.desktop;
@@ -126,4 +141,10 @@ module com.swirlds.platform {
     requires com.swirlds.jasperdb;
     requires com.swirlds.virtualmap;
     requires com.swirlds.fcqueue;
+    requires com.swirlds.config;
+
+    /* Command Line Utilities */
+    requires info.picocli;
+    requires com.fasterxml.jackson.databind;
+    requires com.fasterxml.jackson.dataformat.yaml;
 }

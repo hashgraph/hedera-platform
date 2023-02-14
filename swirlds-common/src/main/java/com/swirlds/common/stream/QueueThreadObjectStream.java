@@ -34,7 +34,7 @@ import org.apache.logging.log4j.Logger;
 public class QueueThreadObjectStream<T extends RunningHashable> implements LinkedObjectStream<T> {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(QueueThreadObjectStream.class);
 
     /** the next stream in the flow */
     private final LinkedObjectStream<T> nextStream;

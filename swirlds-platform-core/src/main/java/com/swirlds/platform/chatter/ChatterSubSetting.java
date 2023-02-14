@@ -18,15 +18,20 @@ package com.swirlds.platform.chatter;
 import com.swirlds.platform.internal.SubSetting;
 import java.time.Duration;
 
+/**
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
+@Deprecated(forRemoval = true)
 public class ChatterSubSetting extends SubSetting implements ChatterSettings {
     /**
      * @see #isChatterUsed()
      */
-    public boolean useChatter = false;
+    public boolean useChatter = true;
     /**
      * @see #getAttemptedChatterEventPerSecond()
      */
-    public int attemptedChatterEventPerSecond = 50;
+    public int attemptedChatterEventPerSecond = 40;
     /**
      * @see #getChatteringCreationThreshold()
      */
@@ -38,7 +43,7 @@ public class ChatterSubSetting extends SubSetting implements ChatterSettings {
     /**
      * @see #getOtherEventDelay()
      */
-    public Duration otherEventDelay = Duration.ofMillis(500);
+    public Duration otherEventDelay = Duration.ofSeconds(2);
     /**
      * @see #getSelfEventQueueCapacity()
      */
@@ -63,6 +68,10 @@ public class ChatterSubSetting extends SubSetting implements ChatterSettings {
      * @see #getFutureGenerationLimit()
      */
     public int futureGenerationLimit = 100_000;
+    /**
+     * @see #getCriticalQuorumSoftening()
+     */
+    public int criticalQuorumSoftening = 50;
 
     @Override
     public boolean isChatterUsed() {
@@ -117,5 +126,10 @@ public class ChatterSubSetting extends SubSetting implements ChatterSettings {
     @Override
     public int getFutureGenerationLimit() {
         return futureGenerationLimit;
+    }
+
+    @Override
+    public int getCriticalQuorumSoftening() {
+        return criticalQuorumSoftening;
     }
 }

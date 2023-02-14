@@ -18,8 +18,8 @@ package com.swirlds.common.test.threading;
 import static com.swirlds.test.framework.TestQualifierTags.TIME_CONSUMING;
 
 import com.swirlds.common.threading.BlockingResourceProvider;
-import com.swirlds.common.threading.ThrowingRunnable;
 import com.swirlds.common.threading.locks.locked.LockedResource;
+import com.swirlds.common.threading.utility.ThrowingRunnable;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;

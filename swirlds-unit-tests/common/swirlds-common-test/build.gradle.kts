@@ -33,4 +33,10 @@ dependencies {
     testImplementation(testLibs.bundles.junit)
     testImplementation(testLibs.bundles.mocking)
     testImplementation(testLibs.bundles.utils)
+    testImplementation(project(":swirlds-config-impl"))
+
+    testImplementation(libs.prometheus.httpserver) {
+        exclude("io.prometheus", "simpleclient_tracer_otel")
+        exclude("io.prometheus", "simpleclient_tracer_otel_agent")
+    }
 }

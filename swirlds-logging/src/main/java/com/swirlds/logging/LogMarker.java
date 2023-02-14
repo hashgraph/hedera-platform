@@ -100,6 +100,9 @@ public enum LogMarker {
     /** log each event as it's added to the hashgraph */
     ADD_EVENT(LogMarkerType.INFO),
 
+    /** Marker for config */
+    CONFIG(LogMarkerType.INFO),
+
     /** log each event as it's added to the intake queue */
     INTAKE_EVENT(LogMarkerType.INFO),
 
@@ -200,8 +203,13 @@ public enum LogMarker {
     /** Detail information about JasperDb. */
     JASPER_DB(LogMarkerType.INFO),
 
+    /** Detail information about MerkleDb. */
+    MERKLE_DB(LogMarkerType.INFO),
+
     /** Logs stats related to Virtual Merkle (nodes, map, etc). */
-    VIRTUAL_MERKLE_STATS(LogMarkerType.INFO);
+    VIRTUAL_MERKLE_STATS(LogMarkerType.INFO),
+    /** logs related to network protocol negotiation */
+    PROTOCOL_NEGOTIATION(LogMarkerType.INFO);
 
     private final LogMarkerType type;
     private final Marker marker;

@@ -44,7 +44,7 @@ import org.apache.logging.log4j.Logger;
  * com.swirlds.platform.eventhandling.PreConsensusEventHandler}.
  */
 public class EventIntake {
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(EventIntake.class);
     /** The ID of this node */
     private final NodeId selfId;
 
@@ -116,7 +116,7 @@ public class EventIntake {
         if (consensus().isExpired(event)) {
             return;
         }
-        stats.startIntake();
+        stats.startIntakeAddEvent();
         if (!StaticValidators.isValidTimeCreated(event)) {
             event.clear();
             return;
@@ -165,6 +165,7 @@ public class EventIntake {
             handleStale(minGenNonAncientBeforeAdding);
             stats.dispatchedStale();
         }
+        stats.doneIntakeAddEvent();
     }
 
     /** Notify observer of stale events, of all event in the consensus stale event queue. */

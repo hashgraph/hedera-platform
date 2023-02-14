@@ -36,10 +36,9 @@ class ShortConverterTest {
         final String rawValue = "2";
 
         // when
-        final Short value = converter.convert(rawValue);
+        final short value = converter.convert(rawValue);
 
         // then
-        Assertions.assertNotNull(value);
         Assertions.assertEquals((short) 2, value);
     }
 }

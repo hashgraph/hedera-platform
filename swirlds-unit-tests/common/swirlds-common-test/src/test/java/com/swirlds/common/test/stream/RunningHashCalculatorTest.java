@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
@@ -29,7 +29,7 @@ import com.swirlds.common.stream.RunningHashCalculatorForStream;
 import org.junit.jupiter.api.Test;
 
 class RunningHashCalculatorTest {
-    private static Cryptography cryptography = CryptoFactory.getInstance();
+    private static Cryptography cryptography = CryptographyHolder.get();
 
     @Test
     void runningHashTest() throws InterruptedException {

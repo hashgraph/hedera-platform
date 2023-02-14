@@ -18,8 +18,8 @@ package com.swirlds.virtualmap.internal.hash;
 import static com.swirlds.virtualmap.internal.Path.INVALID_PATH;
 import static com.swirlds.virtualmap.internal.Path.ROOT_PATH;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.HashBuilder;
 import com.swirlds.common.crypto.Hashable;
@@ -45,7 +45,7 @@ import java.util.Objects;
  */
 final class HashJob<K extends VirtualKey<? super K>, V extends VirtualValue> implements Hashable {
     /** A singleton reference to the Cryptography libraries. Used for hashing. */
-    private static final Cryptography CRYPTO = CryptoFactory.getInstance();
+    private static final Cryptography CRYPTO = CryptographyHolder.get();
 
     private static final Hash NULL_HASH = CRYPTO.getNullHash();
 

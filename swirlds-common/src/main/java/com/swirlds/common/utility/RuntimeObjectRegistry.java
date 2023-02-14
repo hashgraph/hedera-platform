@@ -48,11 +48,25 @@ public final class RuntimeObjectRegistry {
      *     when the object is released.
      */
     public static <T> RuntimeObjectRecord createRecord(final Class<T> cls) {
+        return createRecord(cls, null);
+    }
+
+    /**
+     * Create a new record for a runtime object with the specified class and add it to the records
+     * list. When the record is released, it gets deleted from this registry.
+     *
+     * @param cls the object class
+     * @param metadata optional metadata associated with the object
+     * @return a new {@link RuntimeObjectRecord}. Should be saved by the runtime object and released
+     *     when the object is released.
+     */
+    public static <T> RuntimeObjectRecord createRecord(final Class<T> cls, final Object metadata) {
         final Instant now = Instant.now();
         final List<RuntimeObjectRecord> classRecords =
                 RECORDS.computeIfAbsent(
                         cls, clsid -> Collections.synchronizedList(new ArrayList<>()));
-        final RuntimeObjectRecord objectRecord = new RuntimeObjectRecord(now, classRecords::remove);
+        final RuntimeObjectRecord objectRecord =
+                new RuntimeObjectRecord(now, classRecords::remove, metadata);
         classRecords.add(objectRecord);
 
         return objectRecord;
@@ -84,9 +98,31 @@ public final class RuntimeObjectRegistry {
             // moment, as
             // the method isn't synchronized. Instead, just catch IOOBE
             final RuntimeObjectRecord oldestRecord = classRecords.get(0);
-            return Duration.between(oldestRecord.getCreationTime(), now);
+            return oldestRecord.getAge(now);
         } catch (final IndexOutOfBoundsException e) {
             return Duration.ZERO;
+        }
+    }
+
+    /**
+     * Get the record associated with the oldest runtime object of the specified class tracked in
+     * this registry.
+     *
+     * @param cls the object class
+     * @return the oldest record, or null if there are no records available for this class
+     */
+    public static <T> RuntimeObjectRecord getOldestActiveObjectRecord(final Class<T> cls) {
+        final List<RuntimeObjectRecord> classRecords = RECORDS.get(cls);
+        if (classRecords == null) {
+            return null;
+        }
+        try {
+            // It doesn't make sense to check if the list is empty, as it may become empty at any
+            // moment, as
+            // the method isn't synchronized. Instead, just catch IOOBE
+            return classRecords.get(0);
+        } catch (final IndexOutOfBoundsException e) {
+            return null;
         }
     }
 

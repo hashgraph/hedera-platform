@@ -28,9 +28,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** Implements the {@link CriticalQuorum} algorithm. */
 public class CriticalQuorumImpl implements CriticalQuorum {
+    private static final boolean DEFAULT_BOTH_PARENTS = true;
+    private static final int DEFAULT_THRESHOLD_SOFTENING = 0;
 
     /** The current address book for this node. */
     private final AddressBook addressBook;
+    /** Should both parents be checked for critical quorum or just the self parent */
+    private final boolean considerBothParents;
+    /**
+     * 'soften' the threshold by this many events, the higher the number, the less strict the quorum
+     * is
+     */
+    private final int thresholdSoftening;
 
     /** The number of events observed from each node in the current round. */
     private final Map<Long, Integer> eventCounts;
@@ -54,12 +63,21 @@ public class CriticalQuorumImpl implements CriticalQuorum {
     private long round;
 
     /**
-     * Construct a critical quorum from an address book
+     * Construct a critical quorum
      *
      * @param addressBook the source address book
+     * @param considerBothParents true if both parents should be checked for critical quorum and
+     *     false for just the self parent
+     * @param thresholdSoftening 'soften' the threshold by this many events, the higher the number,
+     *     the less strict the quorum is
      */
-    public CriticalQuorumImpl(final AddressBook addressBook) {
+    public CriticalQuorumImpl(
+            final AddressBook addressBook,
+            final boolean considerBothParents,
+            final int thresholdSoftening) {
         this.addressBook = addressBook;
+        this.considerBothParents = considerBothParents;
+        this.thresholdSoftening = thresholdSoftening;
 
         eventCounts = new ConcurrentHashMap<>();
         stakeNotExceedingThreshold = new HashMap<>();
@@ -67,10 +85,19 @@ public class CriticalQuorumImpl implements CriticalQuorum {
         threshold = new AtomicInteger(0);
     }
 
+    /**
+     * Construct a critical quorum from an address book
+     *
+     * @param addressBook the source address book
+     */
+    public CriticalQuorumImpl(final AddressBook addressBook) {
+        this(addressBook, DEFAULT_BOTH_PARENTS, DEFAULT_THRESHOLD_SOFTENING);
+    }
+
     /** {@inheritDoc} */
     @Override
     public boolean isInCriticalQuorum(final long nodeId) {
-        return eventCounts.getOrDefault(nodeId, 0) <= threshold.get();
+        return eventCounts.getOrDefault(nodeId, 0) <= threshold.get() + thresholdSoftening;
     }
 
     /** When the round increases we need to reset all of our counts. */
@@ -118,10 +145,16 @@ public class CriticalQuorumImpl implements CriticalQuorum {
     public EventCreationRuleResponse shouldCreateEvent(
             final BaseEvent selfParent, final BaseEvent otherParent) {
         // if neither node is part of the superMinority in the latest round, don't create an event
-        if (!isInCriticalQuorum(EventUtils.getCreatorId(selfParent))
-                && !isInCriticalQuorum(EventUtils.getCreatorId(otherParent))) {
-            return EventCreationRuleResponse.DONT_CREATE;
+        final boolean isSelfMinority = isInCriticalQuorum(EventUtils.getCreatorId(selfParent));
+        if (!considerBothParents) {
+            return isSelfMinority
+                    ? EventCreationRuleResponse.PASS
+                    : EventCreationRuleResponse.DONT_CREATE;
         }
-        return EventCreationRuleResponse.PASS;
+        final boolean isOtherMinority = isInCriticalQuorum(EventUtils.getCreatorId(otherParent));
+        if (isSelfMinority || isOtherMinority) {
+            return EventCreationRuleResponse.PASS;
+        }
+        return EventCreationRuleResponse.DONT_CREATE;
     }
 }

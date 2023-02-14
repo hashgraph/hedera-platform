@@ -22,6 +22,7 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.Stoppable;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.threading.pool.StandardWorkGroup;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
@@ -102,6 +103,7 @@ public class ReconnectNodeRemover<K extends VirtualKey<? super K>, V extends Vir
     /**
      * Create an object responsible for removing virtual map nodes during a reconnect.
      *
+     * @param threadManager responsible for creating new threads
      * @param oldRecords a record accessor for the original map from before the reconnect
      * @param encounteredKeys records the keys that have been encountered so far during the
      *     reconnect
@@ -109,6 +111,7 @@ public class ReconnectNodeRemover<K extends VirtualKey<? super K>, V extends Vir
      * @param oldLastLeafPath the original last leaf path from before the reconnect
      */
     public ReconnectNodeRemover(
+            final ThreadManager threadManager,
             final StandardWorkGroup workGroup,
             final RecordAccessor<K, ?> oldRecords,
             final VirtualKeySet<K> encounteredKeys,
@@ -123,9 +126,10 @@ public class ReconnectNodeRemover<K extends VirtualKey<? super K>, V extends Vir
 
         this.encounteredKeys = Objects.requireNonNull(encounteredKeys);
 
+        final QueueThreadConfiguration<ReceivedNode<K>> config =
+                new QueueThreadConfiguration<>(threadManager);
         this.workQueue =
-                new QueueThreadConfiguration<ReceivedNode<K>>()
-                        .setCapacity(QUEUE_CAPACITY)
+                config.setCapacity(QUEUE_CAPACITY)
                         .setComponent("reconnect")
                         .setThreadName("vm-node-remover")
                         .setHandler(this::handler)

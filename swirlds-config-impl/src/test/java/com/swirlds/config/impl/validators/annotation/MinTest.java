@@ -15,52 +15,50 @@
  */
 package com.swirlds.config.impl.validators.annotation;
 
-import com.swirlds.config.api.ConfigurationProvider;
+import com.swirlds.common.config.sources.SimpleConfigSource;
+import com.swirlds.config.api.ConfigurationBuilder;
 import com.swirlds.config.api.validation.ConfigViolationException;
-import com.swirlds.config.impl.DummyConfigSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class MinTest {
 
-    private final DummyConfigSource dummyConfigSource = new DummyConfigSource();
-
     @Test
     public void testNoViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("min.intValue", "3");
-        dummyConfigSource.setProperty("min.longValue", "3");
-        dummyConfigSource.setProperty("min.doubleValue", "3");
-        dummyConfigSource.setProperty("min.floatValue", "3");
-        dummyConfigSource.setProperty("min.shortValue", "3");
-        dummyConfigSource.setProperty("min.byteValue", "3");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(MinTestConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("min.intValue", 3))
+                        .withSources(new SimpleConfigSource("min.longValue", 3L))
+                        .withSources(new SimpleConfigSource("min.doubleValue", 3D))
+                        .withSources(new SimpleConfigSource("min.floatValue", 3F))
+                        .withSources(new SimpleConfigSource("min.shortValue", 3))
+                        .withSources(new SimpleConfigSource("min.byteValue", 3))
+                        .withConfigDataTypes(MinTestConfigData.class);
 
         // then
         Assertions.assertDoesNotThrow(
-                () -> ConfigurationProvider.init(), "No violation should happen");
+                () -> configurationBuilder.build(), "No violation should happen");
     }
 
     @Test
     public void testIntViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("min.intValue", "1");
-        dummyConfigSource.setProperty("min.longValue", "3");
-        dummyConfigSource.setProperty("min.doubleValue", "3");
-        dummyConfigSource.setProperty("min.floatValue", "3");
-        dummyConfigSource.setProperty("min.shortValue", "3");
-        dummyConfigSource.setProperty("min.byteValue", "3");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(MinTestConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("min.intValue", 1))
+                        .withSources(new SimpleConfigSource("min.longValue", 3L))
+                        .withSources(new SimpleConfigSource("min.doubleValue", 3D))
+                        .withSources(new SimpleConfigSource("min.floatValue", 3F))
+                        .withSources(new SimpleConfigSource("min.shortValue", 3))
+                        .withSources(new SimpleConfigSource("min.byteValue", 3))
+                        .withConfigDataTypes(MinTestConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Min should happen");
 
         // then
@@ -75,21 +73,21 @@ public class MinTest {
     @Test
     public void testViolations() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("min.intValue", "1");
-        dummyConfigSource.setProperty("min.longValue", "1");
-        dummyConfigSource.setProperty("min.doubleValue", "1");
-        dummyConfigSource.setProperty("min.floatValue", "1");
-        dummyConfigSource.setProperty("min.shortValue", "1");
-        dummyConfigSource.setProperty("min.byteValue", "1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(MinTestConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("min.intValue", 1))
+                        .withSources(new SimpleConfigSource("min.longValue", 1L))
+                        .withSources(new SimpleConfigSource("min.doubleValue", 1D))
+                        .withSources(new SimpleConfigSource("min.floatValue", 1F))
+                        .withSources(new SimpleConfigSource("min.shortValue", 1))
+                        .withSources(new SimpleConfigSource("min.byteValue", 1))
+                        .withConfigDataTypes(MinTestConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Min should happen");
 
         // then
@@ -99,18 +97,18 @@ public class MinTest {
     @Test
     public void testEdgeCaseViolations() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("min.intValue", "2");
-        dummyConfigSource.setProperty("min.longValue", "2");
-        dummyConfigSource.setProperty("min.doubleValue", "2");
-        dummyConfigSource.setProperty("min.floatValue", "2");
-        dummyConfigSource.setProperty("min.shortValue", "2");
-        dummyConfigSource.setProperty("min.byteValue", "2");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(MinTestConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("min.intValue", 2))
+                        .withSources(new SimpleConfigSource("min.longValue", 2L))
+                        .withSources(new SimpleConfigSource("min.doubleValue", 2D))
+                        .withSources(new SimpleConfigSource("min.floatValue", 2F))
+                        .withSources(new SimpleConfigSource("min.shortValue", 2))
+                        .withSources(new SimpleConfigSource("min.byteValue", 2))
+                        .withConfigDataTypes(MinTestConfigData.class);
 
         // then
         Assertions.assertDoesNotThrow(
-                () -> ConfigurationProvider.init(), "No violation should happen");
+                () -> configurationBuilder.build(), "No violation should happen");
     }
 }

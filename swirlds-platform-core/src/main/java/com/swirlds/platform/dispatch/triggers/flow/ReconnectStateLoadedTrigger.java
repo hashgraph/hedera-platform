@@ -18,7 +18,8 @@ package com.swirlds.platform.dispatch.triggers.flow;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.dispatch.types.TriggerTwo;
 
-/** Dispatches when a state has been loaded from disk. */
+/** Dispatches when a state has been loaded via reconnect. */
+@FunctionalInterface
 public interface ReconnectStateLoadedTrigger extends TriggerTwo<Long, Hash> {
 
     /**

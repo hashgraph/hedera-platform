@@ -49,7 +49,7 @@ class BloomFilterTests {
 
     @BeforeAll
     static void beforeAll() throws ConstructableRegistryException {
-        ConstructableRegistry.registerConstructables("com.swirlds");
+        ConstructableRegistry.getInstance().registerConstructables("com.swirlds");
     }
 
     /**

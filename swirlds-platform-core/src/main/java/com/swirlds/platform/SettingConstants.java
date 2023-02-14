@@ -15,6 +15,11 @@
  */
 package com.swirlds.platform;
 
+/**
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
+@Deprecated(forRemoval = true)
 public final class SettingConstants {
 
     /** name of the settings used file */
@@ -23,12 +28,13 @@ public final class SettingConstants {
     static final String CONFIG_TXT = "config.txt";
     static final String SETTINGS_TXT = "settings.txt";
     static final String DATA_STRING = "data";
+    static final String SAVED_STRING = "saved";
     static final String KEYS_STRING = "keys";
     static final String APPS_STRING = "apps";
     static final String LOG4J2_CONFIG_FILE = "log4j2.xml";
     static final int NUM_CRYPTO_THREADS_DEFAULT_VALUE = 32;
     static final int SIGNED_STATE_FREQ_DEFAULT_VALUE = 1;
-    static final int MAX_EVENT_QUEUE_FOR_CONS_DEFAULT_VALUE = 500;
+    static final int MAX_EVENT_QUEUE_FOR_CONS_DEFAULT_VALUE = 10_000;
     static final int THROTTLE_TRANSACTION_QUEUE_SIZE_DEFAULT_VALUE = 100_000;
     static final double THROTTLE_7_THRESHOLD_DEFAULT_VALUE = 1.5;
     static final int NUM_CONNECTIONS_DEFAULT_VALUE = 40;
@@ -37,7 +43,6 @@ public final class SettingConstants {
     static final int BUFFER_SIZE_DEFAULT_VALUE = 8 * 1024;
     static final int SOCKET_IP_TOS_DEFAULT_VALUE = -1;
     static final int HALF_LIFE_DEFAULT_VALUE = 10;
-    static final int COIN_FREQ_DEFAULT_VALUE = 12;
     static final boolean LOG_STACK_DEFAULT_VALUE = true;
     static final boolean USE_TLS_DEFAULT_VALUE = true;
     static final boolean DO_UPNP_DEFAULT_VALUE = true;
@@ -72,10 +77,14 @@ public final class SettingConstants {
     static final int MAX_TRANSACTION_COUNT_PER_EVENT_DEFAULT_VALUE = 245760;
     static final boolean TRANS_THROTTLE_DEFAULT_VALUE = true;
     static final String CSV_OUTPUT_FOLDER_DEFAULT_VALUE = "";
+    static final boolean DISABLE_METRICS_OUTPUT_DEFAULT_VALUE = false;
     static final String CSV_FILE_NAME_DEFAULT_VALUE = "";
-    static final String EMERGENCY_STATE_FILE_NAME_DEFAULT_VALUE = "emergencyRecovery.csv";
+    static final String EMERGENCY_STATE_FILE_NAME_DEFAULT_VALUE = "emergencyRecovery.yaml";
     static final int CSV_WRITE_FREQUENCY_DEFAULT_VALUE = 3000;
     static final boolean CSV_APPEND_DEFAULT_VALUE = false;
+    static final boolean PROMETHEUS_ENDPOINT_ENABLED_DEFAULT_VALUE = false;
+    static final int PROMETHEUS_ENDPOINT_PORT_NUMBER_DEFAULT_VALUE = 9999;
+    static final int PROMETHEUS_ENDPOINT_MAX_BACKLOG_ALLOWED_DEFAULT_VALUE = 1;
     static final int EVENT_INTAKE_QUEUE_THROTTLE_SIZE_DEFAULT_VALUE = 1000;
     static final int EVENT_INTAKE_QUEUE_SIZE_DEFAULT_VALUE = 10_000;
     static final boolean CHECK_SIGNED_STATE_FROM_DISK_DEFAULT_VALUE = false;

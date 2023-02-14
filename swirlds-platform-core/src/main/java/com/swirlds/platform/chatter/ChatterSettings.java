@@ -17,6 +17,11 @@ package com.swirlds.platform.chatter;
 
 import java.time.Duration;
 
+/**
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
+@Deprecated(forRemoval = true)
 public interface ChatterSettings {
     /**
      * Whether to use chatter for event gossiping and creation
@@ -84,4 +89,9 @@ public interface ChatterSettings {
      * @return the number of non-ancient generations we are willing to accept from a peer
      */
     int getFutureGenerationLimit();
+
+    /**
+     * @return the number of events by which to 'soften' the critical quorum threshold
+     */
+    int getCriticalQuorumSoftening();
 }

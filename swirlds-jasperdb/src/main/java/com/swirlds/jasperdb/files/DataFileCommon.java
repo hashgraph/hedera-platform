@@ -40,7 +40,6 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Semaphore;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -385,7 +384,7 @@ public final class DataFileCommon {
         log.info(
                 JASPER_DB.getMarker(),
                 """
-						[{}] Merged {} files into {} files in {} seconds. Read at {} Mb/sec Written at {}
+						[{}] Merged {} files into {} files in {} seconds. Read at {} Written at {}
 						        filesToMerge = {} allMergeableFiles = {}
 						        allFilesAfter = {}""",
                 storeName,
@@ -406,18 +405,6 @@ public final class DataFileCommon {
                         fileCollection.getAllFullyWrittenFiles().stream()
                                 .map(reader -> reader.getMetadata().getIndex())
                                 .toArray()));
-    }
-
-    /**
-     * Blocks until mergingLock is released.
-     *
-     * @param mergingPaused semaphore to check if merging should be paused.
-     * @throws InterruptedException when the thread is interrupted while waiting here.
-     */
-    public static void waitIfMergingPaused(final Semaphore mergingPaused)
-            throws InterruptedException {
-        mergingPaused.acquire();
-        mergingPaused.release();
     }
 
     /**

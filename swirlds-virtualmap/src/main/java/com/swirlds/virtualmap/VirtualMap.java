@@ -26,14 +26,15 @@ import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
 import com.swirlds.common.metrics.Metrics;
+import com.swirlds.common.utility.Labeled;
 import com.swirlds.common.utility.RuntimeObjectRecord;
 import com.swirlds.common.utility.RuntimeObjectRegistry;
 import com.swirlds.common.utility.ValueReference;
 import com.swirlds.virtualmap.datasource.VirtualDataSource;
 import com.swirlds.virtualmap.datasource.VirtualDataSourceBuilder;
-import com.swirlds.virtualmap.internal.merkle.StateAccessorImpl;
 import com.swirlds.virtualmap.internal.merkle.VirtualMapState;
 import com.swirlds.virtualmap.internal.merkle.VirtualRootNode;
+import com.swirlds.virtualmap.internal.merkle.VirtualStateAccessorImpl;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.FileInputStream;
@@ -114,7 +115,8 @@ import java.util.Objects;
  * @param <V> The value. Must be a {@link VirtualValue}.
  */
 public final class VirtualMap<K extends VirtualKey<? super K>, V extends VirtualValue>
-        extends PartialBinaryMerkleInternal implements ExternalSelfSerializable, MerkleInternal {
+        extends PartialBinaryMerkleInternal
+        implements ExternalSelfSerializable, Labeled, MerkleInternal {
 
     /** Used for serialization. */
     public static final long CLASS_ID = 0xb881f3704885e853L;
@@ -238,14 +240,22 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
      * Implementation of MerkleInternal and associated APIs
      **/
 
+    /** {@inheritDoc} */
     @Override
     public long getClassId() {
         return CLASS_ID;
     }
 
+    /** {@inheritDoc} */
     @Override
     public int getVersion() {
         return ClassVersion.MERKLE_SERIALIZATION_CLEANUP;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String getLabel() {
+        return state.getLabel();
     }
 
     /** {@inheritDoc} */
@@ -273,7 +283,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
         // VirtualRootNode instance
         // and need to supply the virtual root node with a StateAccessor that can interface with the
         // new VirtualMapState
-        // instance. This would be trivial except for the reconnect and restart (serialization) use
+        // instance. This would be trivial except for reconnect and restart (serialization) use
         // cases because
         // the serialization engine will create an incomplete VirtualMap structure and then add the
         // children to it
@@ -285,7 +295,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
             state = child.cast();
         } else if (index == ChildIndices.VIRTUAL_ROOT_CHILD_INDEX) {
             root = child.cast();
-            root.postInit(new StateAccessorImpl(state));
+            root.postInit(new VirtualStateAccessorImpl(state));
         }
 
         super.setChild(index, child);
@@ -353,8 +363,7 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
                             .getValue()
                             .deserialize(stream, inputFile.getParent(), stream.readInt());
                     return null;
-                },
-                null);
+                });
 
         state = virtualMapState.getValue();
         root = virtualRootNode.getValue();
@@ -470,5 +479,25 @@ public final class VirtualMap<K extends VirtualKey<? super K>, V extends Virtual
      */
     public V remove(final K key) {
         return root.remove(key);
+    }
+
+    /**
+     * To speed up transaction processing for a given round, we can use OS page cache's help Just by
+     * loading leaf record and internal records from disk
+     *
+     * <ol>
+     *   <li>It will be read from disk
+     *   <li>The OS will cache it in its page cache
+     * </ol>
+     *
+     * The idea is that during SwirldState.handleTransactionRound(..) or during preHandle(..) we
+     * know what leaf records and internal records are going to be accessed and hence
+     * preloading/warming them in os cache before transaction processing should significantly speed
+     * up transaction processing.
+     *
+     * @param key key of the leaf to warm
+     */
+    public void warm(final K key) {
+        root.warm(key);
     }
 }

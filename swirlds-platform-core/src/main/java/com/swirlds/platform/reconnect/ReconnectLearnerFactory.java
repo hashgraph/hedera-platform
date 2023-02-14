@@ -17,6 +17,7 @@ package com.swirlds.platform.reconnect;
 
 import com.swirlds.common.merkle.synchronization.settings.ReconnectSettings;
 import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.metrics.ReconnectMetrics;
 import com.swirlds.platform.state.State;
@@ -26,11 +27,20 @@ public class ReconnectLearnerFactory {
     private final AddressBook addressBook;
     private final ReconnectSettings settings;
     private final ReconnectMetrics statistics;
+    private final ThreadManager threadManager;
 
+    /**
+     * @param threadManager responsible for managing thread lifecycles
+     * @param addressBook the current address book
+     * @param settings reconnect settings
+     * @param statistics reconnect metrics
+     */
     public ReconnectLearnerFactory(
+            final ThreadManager threadManager,
             final AddressBook addressBook,
             final ReconnectSettings settings,
             final ReconnectMetrics statistics) {
+        this.threadManager = threadManager;
         this.addressBook = addressBook;
         this.settings = settings;
         this.statistics = statistics;
@@ -45,6 +55,7 @@ public class ReconnectLearnerFactory {
      */
     public ReconnectLearner create(final Connection conn, final State workingState) {
         return new ReconnectLearner(
+                threadManager,
                 conn,
                 addressBook,
                 workingState,

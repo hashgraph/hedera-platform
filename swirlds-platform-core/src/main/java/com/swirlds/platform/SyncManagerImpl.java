@@ -227,7 +227,7 @@ public class SyncManagerImpl implements SyncManager, FallenBehindManager {
      *
      * @param reason the reason why gossip is being stopped
      */
-    @Observer(dispatchType = HaltRequestedTrigger.class)
+    @Observer(HaltRequestedTrigger.class)
     public void haltRequestedObserver(final String reason) {
         gossipHalted.set(true);
         LOG.info(FREEZE.getMarker(), "Gossip frozen, reason: {}", reason);
@@ -426,6 +426,11 @@ public class SyncManagerImpl implements SyncManager, FallenBehindManager {
     @Override
     public List<Long> getNeighborsForReconnect() {
         return fallenBehindManager.getNeighborsForReconnect();
+    }
+
+    @Override
+    public boolean shouldReconnectFrom(final Long peerId) {
+        return fallenBehindManager.shouldReconnectFrom(peerId);
     }
 
     @Override

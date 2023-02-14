@@ -17,8 +17,8 @@ package com.swirlds.platform.event.validation;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.platform.event.GossipEvent;
 import java.util.function.Consumer;
 import org.apache.logging.log4j.LogManager;
@@ -27,7 +27,7 @@ import org.apache.logging.log4j.Logger;
 /** Validates events received from peers */
 public class EventValidator {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(EventValidator.class);
 
     private final GossipEventValidator gossipEventValidator;
     /** A consumer of valid events */
@@ -40,7 +40,7 @@ public class EventValidator {
             final Consumer<GossipEvent> eventIntake) {
         this.gossipEventValidator = gossipEventValidator;
         this.eventIntake = eventIntake;
-        this.cryptography = CryptoFactory.getInstance();
+        this.cryptography = CryptographyHolder.get();
     }
 
     /**

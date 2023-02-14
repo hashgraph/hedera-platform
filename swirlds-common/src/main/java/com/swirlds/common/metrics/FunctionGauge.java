@@ -25,8 +25,8 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 /**
  * A {@code FunctionGauge} maintains a single value.
  *
- * <p>Unlike the other gauges, the value of a {@code FunctionGauge} is not explicitly set. Instead a
- * {@link java.util.function.Supplier} has to be specified, which reads the current value of this
+ * <p>Unlike the other gauges, the value of a {@code FunctionGauge} is not explicitly set. Instead,
+ * a {@link java.util.function.Supplier} has to be specified, which reads the current value of this
  * gauge.
  *
  * <p>Only the current value is stored, no history or distribution is kept.
@@ -44,6 +44,7 @@ public interface FunctionGauge<T> extends Metric {
     /** {@inheritDoc} */
     @Override
     default T get(final ValueType valueType) {
+        throwArgNull(valueType, "valueType");
         if (valueType == VALUE) {
             return get();
         }
@@ -166,7 +167,7 @@ public interface FunctionGauge<T> extends Metric {
         /** {@inheritDoc} */
         @SuppressWarnings("unchecked")
         @Override
-        Class<FunctionGauge<T>> getResultClass() {
+        public Class<FunctionGauge<T>> getResultClass() {
             return (Class<FunctionGauge<T>>) (Class<?>) FunctionGauge.class;
         }
 

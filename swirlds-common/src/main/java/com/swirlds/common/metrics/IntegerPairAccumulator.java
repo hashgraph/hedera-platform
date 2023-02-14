@@ -54,6 +54,7 @@ public interface IntegerPairAccumulator<T> extends Metric {
     /** {@inheritDoc} */
     @Override
     default T get(final ValueType valueType) {
+        throwArgNull(valueType, "valueType");
         if (valueType == VALUE) {
             return get();
         }
@@ -278,7 +279,7 @@ public interface IntegerPairAccumulator<T> extends Metric {
         /** {@inheritDoc} */
         @SuppressWarnings("unchecked")
         @Override
-        Class<IntegerPairAccumulator<T>> getResultClass() {
+        public Class<IntegerPairAccumulator<T>> getResultClass() {
             return (Class<IntegerPairAccumulator<T>>) (Class<?>) IntegerPairAccumulator.class;
         }
 

@@ -31,7 +31,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class SwirldStateSingleTransactionPool extends EventTransactionPool {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(SwirldStateSingleTransactionPool.class);
 
     /** list of transactions by self waiting to be handled by doCurr */
     private volatile LinkedList<ConsensusTransaction> transCurr = new LinkedList<>();

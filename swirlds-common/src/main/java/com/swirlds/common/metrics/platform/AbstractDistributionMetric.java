@@ -16,13 +16,13 @@
 package com.swirlds.common.metrics.platform;
 
 import com.swirlds.common.metrics.MetricConfig;
-import com.swirlds.common.metrics.platform.Snapshot.SnapshotValue;
+import com.swirlds.common.metrics.platform.Snapshot.SnapshotEntry;
 import com.swirlds.common.statistics.StatsBuffered;
 import com.swirlds.common.utility.CommonUtils;
 import java.util.List;
 
 /** Represents a metric computed over a distribution function */
-public abstract class AbstractDistributionMetric extends PlatformMetric {
+public abstract class AbstractDistributionMetric extends DefaultMetric {
 
     protected final double halfLife;
 
@@ -62,13 +62,13 @@ public abstract class AbstractDistributionMetric extends PlatformMetric {
 
     /** {@inheritDoc} */
     @Override
-    public List<SnapshotValue> takeSnapshot() {
+    public List<SnapshotEntry> takeSnapshot() {
         final StatsBuffered statsBuffered = getStatsBuffered();
         return List.of(
-                new SnapshotValue(ValueType.VALUE, get()),
-                new SnapshotValue(ValueType.MAX, statsBuffered.getMax()),
-                new SnapshotValue(ValueType.MIN, statsBuffered.getMin()),
-                new SnapshotValue(ValueType.STD_DEV, statsBuffered.getStdDev()));
+                new SnapshotEntry(ValueType.VALUE, get()),
+                new SnapshotEntry(ValueType.MAX, statsBuffered.getMax()),
+                new SnapshotEntry(ValueType.MIN, statsBuffered.getMin()),
+                new SnapshotEntry(ValueType.STD_DEV, statsBuffered.getStdDev()));
     }
 
     /** {@inheritDoc} */

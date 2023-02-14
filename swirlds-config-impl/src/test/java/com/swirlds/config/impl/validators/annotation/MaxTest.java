@@ -15,70 +15,68 @@
  */
 package com.swirlds.config.impl.validators.annotation;
 
-import com.swirlds.config.api.ConfigurationProvider;
+import com.swirlds.common.config.sources.SimpleConfigSource;
+import com.swirlds.config.api.ConfigurationBuilder;
 import com.swirlds.config.api.validation.ConfigViolationException;
-import com.swirlds.config.impl.DummyConfigSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class MaxTest {
 
-    private final DummyConfigSource dummyConfigSource = new DummyConfigSource();
-
     @Test
     public void testNoViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("max.intValue", "1");
-        dummyConfigSource.setProperty("max.longValue", "1");
-        dummyConfigSource.setProperty("max.doubleValue", "1");
-        dummyConfigSource.setProperty("max.floatValue", "1");
-        dummyConfigSource.setProperty("max.shortValue", "1");
-        dummyConfigSource.setProperty("max.byteValue", "1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(MaxTestConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("max.intValue", 1))
+                        .withSources(new SimpleConfigSource("max.longValue", 1))
+                        .withSources(new SimpleConfigSource("max.doubleValue", 1))
+                        .withSources(new SimpleConfigSource("max.floatValue", 1))
+                        .withSources(new SimpleConfigSource("max.shortValue", 1))
+                        .withSources(new SimpleConfigSource("max.byteValue", 1))
+                        .withConfigDataTypes(MaxTestConfigData.class);
 
         // then
         Assertions.assertDoesNotThrow(
-                () -> ConfigurationProvider.init(), "No violation should happen");
+                () -> configurationBuilder.build(), "No violation should happen");
     }
 
     @Test
     public void testEdgeCase() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("max.intValue", "2");
-        dummyConfigSource.setProperty("max.longValue", "2");
-        dummyConfigSource.setProperty("max.doubleValue", "2");
-        dummyConfigSource.setProperty("max.floatValue", "2");
-        dummyConfigSource.setProperty("max.shortValue", "2");
-        dummyConfigSource.setProperty("max.byteValue", "2");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(MaxTestConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("max.intValue", 2))
+                        .withSources(new SimpleConfigSource("max.longValue", 2))
+                        .withSources(new SimpleConfigSource("max.doubleValue", 2))
+                        .withSources(new SimpleConfigSource("max.floatValue", 2))
+                        .withSources(new SimpleConfigSource("max.shortValue", 2))
+                        .withSources(new SimpleConfigSource("max.byteValue", 2))
+                        .withConfigDataTypes(MaxTestConfigData.class);
 
         // then
         Assertions.assertDoesNotThrow(
-                () -> ConfigurationProvider.init(), "No violation should happen");
+                () -> configurationBuilder.build(), "No violation should happen");
     }
 
     @Test
     public void testIntViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("max.intValue", "3");
-        dummyConfigSource.setProperty("max.longValue", "1");
-        dummyConfigSource.setProperty("max.doubleValue", "1");
-        dummyConfigSource.setProperty("max.floatValue", "1");
-        dummyConfigSource.setProperty("max.shortValue", "1");
-        dummyConfigSource.setProperty("max.byteValue", "1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(MaxTestConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("max.intValue", 3))
+                        .withSources(new SimpleConfigSource("max.longValue", 1))
+                        .withSources(new SimpleConfigSource("max.doubleValue", 1))
+                        .withSources(new SimpleConfigSource("max.floatValue", 1))
+                        .withSources(new SimpleConfigSource("max.shortValue", 1))
+                        .withSources(new SimpleConfigSource("max.byteValue", 1))
+                        .withConfigDataTypes(MaxTestConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Min should happen");
 
         // then
@@ -93,21 +91,21 @@ public class MaxTest {
     @Test
     public void testLongViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("max.intValue", "1");
-        dummyConfigSource.setProperty("max.longValue", "3");
-        dummyConfigSource.setProperty("max.doubleValue", "1");
-        dummyConfigSource.setProperty("max.floatValue", "1");
-        dummyConfigSource.setProperty("max.shortValue", "1");
-        dummyConfigSource.setProperty("max.byteValue", "1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(MaxTestConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("max.intValue", 1))
+                        .withSources(new SimpleConfigSource("max.longValue", 3))
+                        .withSources(new SimpleConfigSource("max.doubleValue", 1))
+                        .withSources(new SimpleConfigSource("max.floatValue", 1))
+                        .withSources(new SimpleConfigSource("max.shortValue", 1))
+                        .withSources(new SimpleConfigSource("max.byteValue", 1))
+                        .withConfigDataTypes(MaxTestConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Min should happen");
 
         // then
@@ -123,21 +121,21 @@ public class MaxTest {
     @Test
     public void testShortViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("max.intValue", "1");
-        dummyConfigSource.setProperty("max.longValue", "1");
-        dummyConfigSource.setProperty("max.doubleValue", "1");
-        dummyConfigSource.setProperty("max.floatValue", "1");
-        dummyConfigSource.setProperty("max.shortValue", "3");
-        dummyConfigSource.setProperty("max.byteValue", "1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(MaxTestConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("max.intValue", 1))
+                        .withSources(new SimpleConfigSource("max.longValue", 1))
+                        .withSources(new SimpleConfigSource("max.doubleValue", 1))
+                        .withSources(new SimpleConfigSource("max.floatValue", 1))
+                        .withSources(new SimpleConfigSource("max.shortValue", 3))
+                        .withSources(new SimpleConfigSource("max.byteValue", 1))
+                        .withConfigDataTypes(MaxTestConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Min should happen");
 
         // then
@@ -153,21 +151,21 @@ public class MaxTest {
     @Test
     public void testByteViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("max.intValue", "1");
-        dummyConfigSource.setProperty("max.longValue", "1");
-        dummyConfigSource.setProperty("max.doubleValue", "1");
-        dummyConfigSource.setProperty("max.floatValue", "1");
-        dummyConfigSource.setProperty("max.shortValue", "1");
-        dummyConfigSource.setProperty("max.byteValue", "3");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(MaxTestConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("max.intValue", 1))
+                        .withSources(new SimpleConfigSource("max.longValue", 1))
+                        .withSources(new SimpleConfigSource("max.doubleValue", 1))
+                        .withSources(new SimpleConfigSource("max.floatValue", 1))
+                        .withSources(new SimpleConfigSource("max.shortValue", 1))
+                        .withSources(new SimpleConfigSource("max.byteValue", 3))
+                        .withConfigDataTypes(MaxTestConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Min should happen");
 
         // then

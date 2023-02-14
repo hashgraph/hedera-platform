@@ -15,6 +15,10 @@
  */
 package com.swirlds.common.metrics;
 
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
+
+import java.util.EnumSet;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
 /**
@@ -23,7 +27,36 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
  * <p>Only the current value is stored, no history or distribution is kept. Special values ({@link
  * Double#NaN}, {@link Double#POSITIVE_INFINITY}, {@link Double#NEGATIVE_INFINITY}) are supported.
  */
-public interface DoubleGauge extends BaseDoubleMetric {
+public interface DoubleGauge extends Metric {
+
+    /** {@inheritDoc} */
+    @Override
+    default DataType getDataType() {
+        return DataType.FLOAT;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    default EnumSet<ValueType> getValueTypes() {
+        return EnumSet.of(VALUE);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    default Double get(final ValueType valueType) {
+        throwArgNull(valueType, "valueType");
+        if (valueType == VALUE) {
+            return get();
+        }
+        throw new IllegalArgumentException("Unsupported ValueType: " + valueType);
+    }
+
+    /**
+     * Get the current value
+     *
+     * @return the current value
+     */
+    double get();
 
     /**
      * Set the current value
@@ -138,7 +171,7 @@ public interface DoubleGauge extends BaseDoubleMetric {
 
         /** {@inheritDoc} */
         @Override
-        Class<DoubleGauge> getResultClass() {
+        public Class<DoubleGauge> getResultClass() {
             return DoubleGauge.class;
         }
 

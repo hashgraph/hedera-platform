@@ -17,6 +17,7 @@ package com.swirlds.platform.state.signed;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
+import static com.swirlds.logging.LogMarker.SIGNED_STATE;
 
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.utility.AutoCloseableWrapper;
@@ -28,14 +29,14 @@ import org.apache.logging.log4j.Logger;
 
 /** Utilities for evaluating signed states */
 public final class SignedStateUtilities {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(SignedStateUtilities.class);
 
     private SignedStateUtilities() {}
 
     /**
-     * Calculates the amount of valid stake that signed a state.
+     * Calculates the amount of stake among valid signatures on the signed state.
      *
-     * @param signedState the signed state to verify
+     * @param signedState the signed state to calculate stake on
      * @param crypto the object capable of determining the validity of member signatures
      * @param addressBook the address book used for the signed state
      * @return the signature summary of the signed state
@@ -132,5 +133,23 @@ public final class SignedStateUtilities {
                         }
                     }
                 });
+    }
+
+    /**
+     * Logs information about the signed state validity.
+     *
+     * @param log the logger to use
+     * @param validStake the amount of stake from valid signatures
+     * @param hasEnoughStake true if the state has enough valid stake
+     * @param addressBook the address book used to validate the signed state
+     */
+    public static void logStakeInfo(
+            final Logger log,
+            final long validStake,
+            final boolean hasEnoughStake,
+            final AddressBook addressBook) {
+        log.info(SIGNED_STATE.getMarker(), "Signed State valid Stake: {} ", validStake);
+        log.info(SIGNED_STATE.getMarker(), "AddressBook Stake: {} ", addressBook.getTotalStake());
+        log.info(SIGNED_STATE.getMarker(), "Sufficient signatures status: {}", hasEnoughStake);
     }
 }

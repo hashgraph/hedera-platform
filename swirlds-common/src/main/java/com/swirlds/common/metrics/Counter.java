@@ -15,10 +15,9 @@
  */
 package com.swirlds.common.metrics;
 
-import static com.swirlds.common.metrics.Metric.ValueType.COUNTER;
 import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
-import com.swirlds.common.utility.CommonUtils;
 import java.util.EnumSet;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
@@ -38,16 +37,14 @@ public interface Counter extends Metric {
     /** {@inheritDoc} */
     @Override
     default EnumSet<ValueType> getValueTypes() {
-        return EnumSet.of(COUNTER);
+        return EnumSet.of(VALUE);
     }
 
     /** {@inheritDoc} */
     @Override
     default Long get(final ValueType valueType) {
-        CommonUtils.throwArgNull(valueType, "valueType");
-        // Metric.get(ValueType.VALUE) should always work and return the main value of a Metric.
-        // Therefore, we allow it here, too.
-        if ((valueType == COUNTER) || (valueType == VALUE)) {
+        throwArgNull(valueType, "valueType");
+        if (valueType == VALUE) {
             return get();
         }
         throw new IllegalArgumentException("Unsupported ValueType: " + valueType);
@@ -111,7 +108,7 @@ public interface Counter extends Metric {
 
         /** {@inheritDoc} */
         @Override
-        Class<Counter> getResultClass() {
+        public Class<Counter> getResultClass() {
             return Counter.class;
         }
 

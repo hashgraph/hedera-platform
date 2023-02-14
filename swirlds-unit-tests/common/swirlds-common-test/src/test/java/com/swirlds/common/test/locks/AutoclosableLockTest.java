@@ -17,6 +17,7 @@ package com.swirlds.common.test.locks;
 
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyFalse;
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyTrue;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -141,7 +142,7 @@ class AutoclosableLockTest {
         final AtomicBoolean threadGotLock1 = new AtomicBoolean(false);
 
         final Thread thread0 =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setThreadName("thread0")
                         .setInterruptableRunnable(
                                 () -> {
@@ -162,7 +163,7 @@ class AutoclosableLockTest {
                 "thread should have acquired lock by now");
 
         final Thread thread1 =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setThreadName("thread1")
                         .setInterruptableRunnable(
                                 () -> {
@@ -219,7 +220,7 @@ class AutoclosableLockTest {
         final AtomicBoolean threadGotLock1 = new AtomicBoolean(false);
 
         final Thread thread0 =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setInterruptableRunnable(
                                 () -> {
                                     try (final Locked locked0 = lock.lock()) {
@@ -232,7 +233,7 @@ class AutoclosableLockTest {
                         .build(true);
 
         final Thread thread1 =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setInterruptableRunnable(
                                 () -> {
                                     while (true) {

@@ -15,41 +15,45 @@
  */
 package com.swirlds.common.metrics.platform;
 
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
+
 import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.utility.CommonUtils;
 import java.util.List;
-import org.apache.commons.lang3.builder.ToStringBuilder;
 
 /** An instance of {@code Snapshot} contains the data of a single snapshot of a {@link Metric}. */
-public final class Snapshot {
+public record Snapshot(Metric metric, List<SnapshotEntry> entries) {
 
-    public static Snapshot of(final PlatformMetric metric) {
-        return new Snapshot(metric);
+    /**
+     * Create a {@code Snapshot} of a {@link DefaultMetric}
+     *
+     * @param metric The source metric
+     * @return the {@code Snapshot}
+     */
+    public static Snapshot of(final DefaultMetric metric) {
+        CommonUtils.throwArgNull(metric, "metric");
+        return new Snapshot(metric, metric.takeSnapshot());
     }
 
-    private final Metric metric;
-    private final List<SnapshotValue> snapshots;
-
-    private Snapshot(final PlatformMetric metric) {
-        this.metric = CommonUtils.throwArgNull(metric, "metric");
-        this.snapshots = metric.takeSnapshot();
+    /**
+     * Get the main value of this {@code Snapshot}
+     *
+     * @return the main value
+     */
+    public Object getValue() {
+        for (final SnapshotEntry entry : entries) {
+            if (entry.valueType == VALUE) {
+                return entry.value;
+            }
+        }
+        throw new IllegalStateException("Snapshot does not contain a value: " + this);
     }
 
-    Metric getMetric() {
-        return metric;
-    }
-
-    List<SnapshotValue> getEntries() {
-        return snapshots;
-    }
-
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this)
-                .append("metric", metric)
-                .append("snapshots", snapshots)
-                .toString();
-    }
-
-    public record SnapshotValue(Metric.ValueType valueType, Object value) {}
+    /**
+     * As single entry within a {@code Snapshot}
+     *
+     * @param valueType the {@link com.swirlds.common.metrics.Metric.ValueType} of this entry
+     * @param value the actual value
+     */
+    public record SnapshotEntry(Metric.ValueType valueType, Object value) {}
 }

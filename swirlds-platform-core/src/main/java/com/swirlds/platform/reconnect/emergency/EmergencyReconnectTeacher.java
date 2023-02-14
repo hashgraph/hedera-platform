@@ -18,6 +18,7 @@ package com.swirlds.platform.reconnect.emergency;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.utility.AutoCloseableWrapper;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.metrics.ReconnectMetrics;
@@ -30,20 +31,24 @@ import org.apache.logging.log4j.Logger;
 
 /** Executes emergency reconnect in the role of the teacher */
 public class EmergencyReconnectTeacher {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(EmergencyReconnectTeacher.class);
     private final EmergencyStateFinder stateFinder;
     private final int reconnectSocketTimeout;
     private final ReconnectMetrics reconnectMetrics;
+    private final ThreadManager threadManager;
 
     /**
+     * @param threadManager responsible for managing thread lifecycles
      * @param stateFinder finds an acceptable state for emergency reconnect
      * @param reconnectSocketTimeout the socket timeout to use when executing a reconnect
      * @param reconnectMetrics tracks reconnect metrics
      */
     public EmergencyReconnectTeacher(
+            final ThreadManager threadManager,
             final EmergencyStateFinder stateFinder,
             final int reconnectSocketTimeout,
             final ReconnectMetrics reconnectMetrics) {
+        this.threadManager = threadManager;
         this.stateFinder = stateFinder;
         this.reconnectSocketTimeout = reconnectSocketTimeout;
         this.reconnectMetrics = reconnectMetrics;
@@ -73,6 +78,7 @@ public class EmergencyReconnectTeacher {
                     state.weakReserveState();
 
                     new ReconnectTeacher(
+                                    threadManager,
                                     connection,
                                     state,
                                     reconnectSocketTimeout,

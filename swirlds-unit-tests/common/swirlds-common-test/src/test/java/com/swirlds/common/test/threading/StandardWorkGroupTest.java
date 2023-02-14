@@ -16,6 +16,7 @@
 package com.swirlds.common.test.threading;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import com.swirlds.common.threading.pool.StandardWorkGroup;
@@ -34,7 +35,9 @@ class StandardWorkGroupTest {
     @BeforeEach
     void setUp() {
         abortCount = new AtomicInteger();
-        subject = new StandardWorkGroup("groupName", abortCount::incrementAndGet);
+        subject =
+                new StandardWorkGroup(
+                        getStaticThreadManager(), "groupName", abortCount::incrementAndGet);
     }
 
     @AfterEach

@@ -56,6 +56,14 @@ public interface FallenBehindManager {
     List<Long> getNeighborsForReconnect();
 
     /**
+     * Should I attempt a reconnect with this neighbor?
+     *
+     * @param peerId the ID of the neighbor
+     * @return true if I should attempt a reconnect
+     */
+    boolean shouldReconnectFrom(Long peerId);
+
+    /**
      * @return the number of nodes that have told us we have fallen behind
      */
     int numReportedFallenBehind();

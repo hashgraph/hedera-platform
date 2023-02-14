@@ -25,6 +25,7 @@ import com.swirlds.common.crypto.RunningHashable;
 import com.swirlds.common.crypto.SerializableHashable;
 import com.swirlds.common.stream.internal.TimestampStreamFileWriter;
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -41,7 +42,7 @@ import org.apache.logging.log4j.Logger;
 public class EventStreamManager<
         T extends StreamAligned & Timestamped & RunningHashable & SerializableHashable> {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOGGER = LogManager.getLogger();
+    private static final Logger LOGGER = LogManager.getLogger(EventStreamManager.class);
 
     /**
      * receives consensus events from ConsensusRoundHandler.addEvent(), then passes to
@@ -84,10 +85,12 @@ public class EventStreamManager<
      *     write to EventStream files
      * @param isLastEventInFreezeCheck a predicate which checks whether this event is the last event
      *     before restart
+     * @param threadManager responsible for managing thread lifecycles
      * @throws NoSuchAlgorithmException is thrown when fails to get required MessageDigest instance
      * @throws IOException is thrown when fails to create directory for event streaming
      */
     public EventStreamManager(
+            final ThreadManager threadManager,
             final NodeId selfId,
             final Signer signer,
             final String nodeName,
@@ -97,6 +100,7 @@ public class EventStreamManager<
             final int eventStreamQueueCapacity,
             final Predicate<T> isLastEventInFreezeCheck)
             throws NoSuchAlgorithmException, IOException {
+
         if (enableEventStreaming) {
             // the directory to which event stream files are written
             final String eventStreamDir = eventsLogDir + "/events_" + nodeName;
@@ -117,7 +121,7 @@ public class EventStreamManager<
                             EventStreamType.getInstance());
 
             writeQueueThread =
-                    new QueueThreadObjectStreamConfiguration<T>()
+                    new QueueThreadObjectStreamConfiguration<T>(threadManager)
                             .setNodeId(selfId.getId())
                             .setComponent("event-stream")
                             .setThreadName("write-queue")
@@ -132,7 +136,7 @@ public class EventStreamManager<
                 new RunningHashCalculatorForStream<>();
         hashCalculator = new HashCalculatorForStream<>(runningHashCalculator);
         hashQueueThread =
-                new QueueThreadObjectStreamConfiguration<T>()
+                new QueueThreadObjectStreamConfiguration<T>(threadManager)
                         .setNodeId(selfId.getId())
                         .setComponent("event-stream")
                         .setThreadName("hash-queue")
@@ -169,6 +173,9 @@ public class EventStreamManager<
      * <p>IMPORTANT: For unit test purposes only.
      */
     public void stop() {
+        writeQueueThread.stop();
+        hashQueueThread.stop();
+
         streamFileWriter.close();
         multiStream.close();
     }

@@ -124,7 +124,7 @@ public class IssMetrics {
      * @param nodeHash the hash computed by the node
      * @param consensusHash the consensus hash computed by the network
      */
-    @Observer(dispatchType = StateHashValidityTrigger.class)
+    @Observer(StateHashValidityTrigger.class)
     public void stateHashValidityObserver(
             final Long round, final Long nodeId, final Hash nodeHash, final Hash consensusHash) {
 
@@ -164,7 +164,7 @@ public class IssMetrics {
      * @param round the round of the ISS
      * @param selfStateHash the hash computed by this node
      */
-    @Observer(dispatchType = CatastrophicIssTrigger.class)
+    @Observer(CatastrophicIssTrigger.class)
     public void catastrophicIssObserver(final Long round, final Hash selfStateHash) {
 
         if (round <= highestRound) {

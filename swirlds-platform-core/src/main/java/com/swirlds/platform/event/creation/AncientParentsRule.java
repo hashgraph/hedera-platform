@@ -30,7 +30,7 @@ import org.apache.logging.log4j.Logger;
  * themselves
  */
 public class AncientParentsRule implements ParentBasedCreationRule {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(AncientParentsRule.class);
     /** Supplies the key generation number from the hashgraph */
     private final Supplier<GraphGenerations> graphGenerationsSupplier;
 

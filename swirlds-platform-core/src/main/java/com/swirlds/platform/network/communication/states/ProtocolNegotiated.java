@@ -22,7 +22,7 @@ import com.swirlds.platform.network.protocol.Protocol;
 import java.io.IOException;
 
 /** Runs a protocol previously negotiated */
-public class ProtocolNegotiated implements NegotiationState {
+public class ProtocolNegotiated extends NegotiationStateWithDescription {
     private final Connection connection;
     private Protocol protocol;
 
@@ -55,6 +55,7 @@ public class ProtocolNegotiated implements NegotiationState {
         try {
             protocol.runProtocol(connection);
         } finally {
+            setDescription("ran protocol " + protocol.getProtocolName());
             protocol = null;
         }
         return null; // back to initial state

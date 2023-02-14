@@ -17,7 +17,8 @@ package com.swirlds.common.statistics.internal;
 
 import static com.swirlds.common.utility.Units.NANOSECONDS_TO_SECONDS;
 
-import com.swirlds.common.Clock;
+import com.swirlds.common.time.OSTime;
+import com.swirlds.common.time.Time;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntBinaryOperator;
 import java.util.function.IntUnaryOperator;
@@ -45,7 +46,7 @@ public class StatsBuffer {
     /** return half of an int value */
     private static final IntUnaryOperator DIVIDE_NUM_BY_TWO = value -> value / 2;
 
-    private final Clock clock;
+    private final Time time;
 
     /** the time record() was first called, in seconds */
     private double start = -1;
@@ -120,15 +121,15 @@ public class StatsBuffer {
      *     from the first time it's called
      */
     public StatsBuffer(final int maxBins, final double recentSeconds, final double startDelay) {
-        this(maxBins, recentSeconds, startDelay, Clock.DEFAULT);
+        this(maxBins, recentSeconds, startDelay, OSTime.getInstance());
     }
 
     public StatsBuffer(
             final int maxBins,
             final double recentSeconds,
             final double startDelay,
-            final Clock clock) {
-        this.clock = clock;
+            final Time time) {
+        this.time = time;
         this.maxBins = maxBins + (maxBins % 2); // add 1 if necessary to make it even
         this.binSeconds = recentSeconds / maxBins;
         this.startDelay = startDelay;
@@ -337,7 +338,7 @@ public class StatsBuffer {
      * @return the time in seconds right now
      */
     public double xNow() {
-        return clock.now() * NANOSECONDS_TO_SECONDS;
+        return time.nanoTime() * NANOSECONDS_TO_SECONDS;
     }
 
     /**

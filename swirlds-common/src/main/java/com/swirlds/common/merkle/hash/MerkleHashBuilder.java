@@ -27,6 +27,7 @@ import com.swirlds.common.merkle.crypto.MerkleCryptography;
 import com.swirlds.common.merkle.iterators.MerkleIterator;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.threading.futures.StandardFuture;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.util.Iterator;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -51,10 +52,12 @@ public class MerkleHashBuilder {
     /**
      * Construct an object which calculates the hash of a merkle tree.
      *
+     * @param threadManager responsible for managing thread lifecycles
      * @param cryptography the {@link Cryptography} implementation to use
      * @param cpuThreadCount the number of threads to be used for computing hash
      */
     public MerkleHashBuilder(
+            final ThreadManager threadManager,
             final MerkleCryptography merkleCryptography,
             final Cryptography cryptography,
             final int cpuThreadCount) {
@@ -63,7 +66,7 @@ public class MerkleHashBuilder {
         this.cpuThreadCount = cpuThreadCount;
 
         final ThreadFactory threadFactory =
-                new ThreadConfiguration()
+                new ThreadConfiguration(threadManager)
                         .setDaemon(true)
                         .setComponent(THREAD_COMPONENT_NAME)
                         .setThreadName("merkle hash")

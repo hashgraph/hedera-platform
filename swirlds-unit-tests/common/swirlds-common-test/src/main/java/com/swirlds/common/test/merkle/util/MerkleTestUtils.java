@@ -16,6 +16,7 @@
 package com.swirlds.common.test.merkle.util;
 
 import static com.swirlds.common.merkle.copy.MerkleInitialize.initializeTreeAfterCopy;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -950,6 +951,7 @@ public final class MerkleTestUtils {
             if (latencyMilliseconds == 0) {
                 learner =
                         new LearningSynchronizer(
+                                getStaticThreadManager(),
                                 streams.getLearnerInput(),
                                 streams.getLearnerOutput(),
                                 startingTree,
@@ -963,6 +965,7 @@ public final class MerkleTestUtils {
                                 });
                 teacher =
                         new TeachingSynchronizer(
+                                getStaticThreadManager(),
                                 streams.getTeacherInput(),
                                 streams.getTeacherOutput(),
                                 desiredTree,
@@ -1005,7 +1008,8 @@ public final class MerkleTestUtils {
                                 });
             }
 
-            final StandardWorkGroup workGroup = new StandardWorkGroup("synchronization-test", null);
+            final StandardWorkGroup workGroup =
+                    new StandardWorkGroup(getStaticThreadManager(), "synchronization-test", null);
             workGroup.execute(
                     "teaching-synchronizer-main", () -> teachingSynchronizerThread(teacher));
             workGroup.execute(

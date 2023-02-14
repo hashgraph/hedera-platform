@@ -15,9 +15,9 @@
  */
 package com.swirlds.platform.chatter.protocol.heartbeat;
 
-import com.swirlds.common.Clock;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.time.Time;
 import com.swirlds.platform.chatter.protocol.MessageHandler;
 import com.swirlds.platform.chatter.protocol.MessageProvider;
 import java.time.Duration;
@@ -32,7 +32,7 @@ public class HeartbeatSender implements MessageProvider, MessageHandler<Heartbea
     private final NodeId peerId;
     private final BiConsumer<NodeId, Long> pingConsumer;
     private final Duration heartbeatInterval;
-    private final Clock clock;
+    private final Time time;
     private final AtomicReference<HeartbeatSent> outbound = new AtomicReference<>();
     private final AtomicLong lastHeartbeatNanos = new AtomicLong();
     private final AtomicBoolean firstResponseReceived = new AtomicBoolean();
@@ -42,24 +42,24 @@ public class HeartbeatSender implements MessageProvider, MessageHandler<Heartbea
      * @param pingConsumer consumes the ping time the heartbeat measures. accepts the ID of the peer
      *     and the number of nanoseconds it took for the peer to respond
      * @param heartbeatInterval the interval at which to send heartbeats
-     * @param clock provides a point in time in nanoseconds, should only be used to measure relative
+     * @param time provides a point in time in nanoseconds, should only be used to measure relative
      *     time (from one point to another), not absolute time (wall clock time)
      */
     public HeartbeatSender(
             final long peerId,
             final BiConsumer<NodeId, Long> pingConsumer,
             final Duration heartbeatInterval,
-            final Clock clock) {
+            final Time time) {
         this.peerId = NodeId.createMain(peerId);
         this.pingConsumer = pingConsumer;
         this.heartbeatInterval = heartbeatInterval;
-        this.clock = clock;
+        this.time = time;
         clear();
     }
 
     @Override
     public SelfSerializable getMessage() {
-        final long now = clock.now();
+        final long now = time.nanoTime();
         final HeartbeatSent lastHeartBeatSent = outbound.get();
         if (!lastHeartBeatSent.responded()) {
             // we are still waiting for a response
@@ -91,7 +91,7 @@ public class HeartbeatSender implements MessageProvider, MessageHandler<Heartbea
             return;
         }
         // they are responding to our ping, so we capture the time difference
-        final long roundTripNanos = clock.now() - lastSent.time();
+        final long roundTripNanos = time.nanoTime() - lastSent.time();
         lastHeartbeatNanos.set(roundTripNanos);
         firstResponseReceived.set(true);
         pingConsumer.accept(peerId, roundTripNanos);
@@ -102,7 +102,7 @@ public class HeartbeatSender implements MessageProvider, MessageHandler<Heartbea
 
     @Override
     public void clear() {
-        outbound.set(new HeartbeatSent(0, clock.now(), true));
+        outbound.set(new HeartbeatSent(0, time.nanoTime(), true));
         firstResponseReceived.set(false);
         lastHeartbeatNanos.set(0);
     }
@@ -127,7 +127,7 @@ public class HeartbeatSender implements MessageProvider, MessageHandler<Heartbea
             return 0;
         } else {
             // we are still waiting for a response
-            return clock.now() - lastHeartBeatSent.time();
+            return time.nanoTime() - lastHeartBeatSent.time();
         }
     }
 }

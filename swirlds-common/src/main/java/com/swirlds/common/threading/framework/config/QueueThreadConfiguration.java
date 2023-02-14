@@ -18,6 +18,7 @@ package com.swirlds.common.threading.framework.config;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.internal.AbstractQueueThreadConfiguration;
 import com.swirlds.common.threading.interrupt.InterruptableConsumer;
+import com.swirlds.common.threading.manager.ThreadManager;
 
 /**
  * An object used to configure and build {@link QueueThread}s.
@@ -27,9 +28,14 @@ import com.swirlds.common.threading.interrupt.InterruptableConsumer;
 public class QueueThreadConfiguration<T>
         extends AbstractQueueThreadConfiguration<QueueThreadConfiguration<T>, T> {
 
-    /** Build a new queue thread configuration with default values. */
-    public QueueThreadConfiguration() {
-        super();
+    /**
+     * Build a new queue thread configuration with default values.
+     *
+     * @param threadManager responsible for the creation and management of the thread used by this
+     *     object
+     */
+    public QueueThreadConfiguration(final ThreadManager threadManager) {
+        super(threadManager);
     }
 
     /**
@@ -37,7 +43,7 @@ public class QueueThreadConfiguration<T>
      *
      * @param that the configuration to copy.
      */
-    private QueueThreadConfiguration(final QueueThreadConfiguration<T> that) {
+    public QueueThreadConfiguration(final QueueThreadConfiguration<T> that) {
         super(that);
     }
 

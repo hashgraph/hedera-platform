@@ -114,7 +114,7 @@ public class ConsensusRound implements Round {
 
     /** {@inheritDoc} */
     @Override
-    public Iterator<ConsensusEvent> eventIterator() {
+    public Iterator<ConsensusEvent> iterator() {
         return new TypedIterator<>(consensusEvents.iterator());
     }
 
@@ -122,6 +122,18 @@ public class ConsensusRound implements Round {
     @Override
     public long getRoundNum() {
         return roundNum;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean isEmpty() {
+        return consensusEvents.isEmpty();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int getEventCount() {
+        return consensusEvents.size();
     }
 
     /**

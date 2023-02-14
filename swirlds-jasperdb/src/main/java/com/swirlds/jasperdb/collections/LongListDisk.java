@@ -16,7 +16,6 @@
 package com.swirlds.jasperdb.collections;
 
 import com.swirlds.jasperdb.utilities.JasperDBFileUtils;
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
@@ -26,7 +25,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 /** A direct on disk implementation of LongList */
-public class LongListDisk extends LongList implements Closeable {
+public class LongListDisk extends LongList {
     /** A temp byte buffer for reading and writing longs */
     private static final ThreadLocal<ByteBuffer> TEMP_LONG_BUFFER_THREAD_LOCAL =
             ThreadLocal.withInitial(

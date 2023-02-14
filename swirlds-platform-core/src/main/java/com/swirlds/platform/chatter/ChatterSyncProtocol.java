@@ -15,6 +15,7 @@
  */
 package com.swirlds.platform.chatter;
 
+import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.pool.ParallelExecutionException;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.Utilities;
@@ -22,41 +23,69 @@ import com.swirlds.platform.chatter.protocol.MessageProvider;
 import com.swirlds.platform.chatter.protocol.peer.CommunicationState;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.protocol.Protocol;
+import com.swirlds.platform.sync.FallenBehindManager;
 import com.swirlds.platform.sync.ShadowGraphSynchronizer;
 import com.swirlds.platform.sync.SyncException;
 import java.io.IOException;
+import java.util.List;
 
 /**
  * Exchanges non-expired events with the peer and ensures all future events will be sent through
  * {@link com.swirlds.platform.chatter.communication.ChatterProtocol}
  */
 public class ChatterSyncProtocol implements Protocol {
+    private final NodeId peerId;
     private final CommunicationState state;
     private final MessageProvider messageProvider;
     private final ShadowGraphSynchronizer synchronizer;
+    private final FallenBehindManager fallenBehindManager;
 
     /**
      * @param state the state that tracks the peer
      * @param messageProvider keeps messages that need to be sent to the chatter peer
      * @param synchronizer does a sync and enables chatter
+     * @param fallenBehindManager maintains this node's behind status and the peers that have
+     *     informed this node that it is behind
      */
     public ChatterSyncProtocol(
+            final NodeId peerId,
             final CommunicationState state,
             final MessageProvider messageProvider,
-            final ShadowGraphSynchronizer synchronizer) {
+            final ShadowGraphSynchronizer synchronizer,
+            final FallenBehindManager fallenBehindManager) {
+        this.peerId = peerId;
         this.state = state;
         this.messageProvider = messageProvider;
         this.synchronizer = synchronizer;
+        this.fallenBehindManager = fallenBehindManager;
     }
 
     @Override
     public boolean shouldInitiate() {
-        return state.shouldPerformChatterSync();
+        // if we are out of sync, we should initiate
+        return state.isOutOfSync() && fallenBehindSync();
     }
 
     @Override
     public boolean shouldAccept() {
-        return state.shouldPerformChatterSync();
+        // we should accept even if we are in sync, so long as chattering is not suspended
+        return !state.isSuspended() && fallenBehindSync();
+    }
+
+    /**
+     * Checks our fallen behind status and decides if we should sync with this neighbor. If someone
+     * told us we have fallen behind, we should not sync with them again until we have:
+     *
+     * <ul>
+     *   <li>decided that we have fallen behind and then reconnect
+     *   <li>someone else tells us we have not fallen behind
+     * </ul>
+     *
+     * @return true if we should sync with this neighbor
+     */
+    private boolean fallenBehindSync() {
+        final List<Long> notReportedFallenBehind = fallenBehindManager.getNeededForFallenBehind();
+        return notReportedFallenBehind == null || notReportedFallenBehind.contains(peerId.getId());
     }
 
     @Override
@@ -69,7 +98,11 @@ public class ChatterSyncProtocol implements Protocol {
             throws NetworkProtocolException, IOException, InterruptedException {
         state.chatterSyncStarted();
         try {
-            synchronizer.synchronize(connection);
+            if (synchronizer.synchronize(connection)) {
+                state.chatterSyncSucceeded();
+            } else {
+                state.chatterSyncFailed();
+            }
         } catch (final ParallelExecutionException | SyncException e) {
             state.chatterSyncFailed();
             messageProvider.clear();
@@ -82,6 +115,5 @@ public class ChatterSyncProtocol implements Protocol {
             messageProvider.clear();
             throw e;
         }
-        state.chatterSyncSucceeded();
     }
 }

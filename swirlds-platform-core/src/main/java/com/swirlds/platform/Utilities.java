@@ -21,15 +21,11 @@ import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.platform.internal.Deserializer;
 import com.swirlds.platform.internal.Serializer;
-import com.swirlds.platform.state.signed.SignedState;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadInfo;
-import java.lang.management.ThreadMXBean;
 import java.net.SocketException;
 import java.util.Arrays;
 import java.util.List;
@@ -45,7 +41,7 @@ public final class Utilities {
     private Utilities() {}
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(Utilities.class);
 
     /**
      * Convert a string to a boolean.
@@ -57,7 +53,7 @@ public final class Utilities {
      * @param par the string to convert (or null)
      * @return the boolean value
      */
-    static boolean parseBoolean(String par) {
+    public static boolean parseBoolean(String par) {
         if (par == null) {
             return false;
         }
@@ -337,88 +333,6 @@ public final class Utilities {
     }
 
     /**
-     * Return a string with info about all threads currently deadlocked. Each thread has a name of
-     * XYZ where X is the thread ID of the thread that created this thread, Y is a 2-letter code for
-     * its purpose, and Z is the Platform ID (0 for Alice, 1 for Bob, etc). See newThreadFromPool
-     * for the list of 2-letter codes.
-     *
-     * <p>If there are no deadlocked threads, then this method does nothing, and returns in slightly
-     * less than one millisecond, on average.
-     *
-     * @return a string describing all deadlocked threads, or null if there are none
-     */
-    static String deadlocks() {
-        ThreadMXBean threadMB = ManagementFactory.getThreadMXBean();
-        long[] threadIds = threadMB.findDeadlockedThreads();
-        if (threadIds == null) { // if it's null, then there are no deadlocked threads
-            return null;
-        }
-        String err = "\nDEADLOCKED THREADS:\n";
-        for (long tid : threadIds) {
-            ThreadInfo t = threadMB.getThreadInfo(tid);
-            err +=
-                    "    thread "
-                            + t.getThreadName()
-                            + " blocked waiting on "
-                            + threadMB.getThreadInfo(t.getLockOwnerId()).getThreadName()
-                            + " to get the lock on "
-                            + t.getLockInfo().getClassName()
-                            + " "
-                            + t.getLockInfo().getIdentityHashCode()
-                            + "\n";
-            for (StackTraceElement s : t.getStackTrace()) {
-                err += "        " + s + "\n";
-            }
-        }
-        return err;
-    }
-
-    /**
-     * Insert line breaks into the given string so that each line is at most len characters long
-     * (not including trailing whitespace and the line break iteslf). Line breaks are only inserted
-     * after a whitespace character and before a non-whitespace character, resulting in some lines
-     * possibly being shorter. If a line has no whitespace, then it will insert between two
-     * non-whitespace characters to make it exactly len characters long.
-     *
-     * @param len the desired length
-     * @param str the input string, where a newline is always just \n (never \n\r or \r or \r\n)
-     */
-    static String wrap(int len, String str) {
-        StringBuilder ans = new StringBuilder();
-        String[] lines = str.split("\n"); // break into lines
-        for (String line : lines) { // we'll add \n to end of every line, then strip off the last
-            if (line.length() == 0) {
-                ans.append('\n');
-            }
-            char[] c = line.toCharArray();
-            int i = 0;
-            while (i < c.length) { // repeatedly add a string starting at i, followed by a \n
-                int j = i + len;
-                if (j >= c.length) { // grab the rest of the characters
-                    j = c.length;
-                } else if (Character.isWhitespace(c[j])) { // grab more than len characters
-                    while (j < c.length && Character.isWhitespace(c[j])) {
-                        j++;
-                    }
-                } else { // grab len or fewer characters
-                    while (j >= i && !Character.isWhitespace(c[j])) {
-                        j--;
-                    }
-                    if (j < i) { // there is no whitespace before len
-                        j = i + len;
-                    } else { // the last whitespace before len is at j
-                        j++;
-                    }
-                }
-                ans.append(c, i, j - i); // append c[i...j-1]
-                ans.append('\n');
-                i = j; // continue, starting at j
-            }
-        }
-        return ans.substring(0, ans.length() - 1); // remove the last '\n' that was added
-    }
-
-    /**
      * Is the part more than 2/3 of the whole?
      *
      * @param part a long value, the fraction of the whole being compared
@@ -514,18 +428,5 @@ public final class Utilities {
             cause = cause.getCause();
         }
         return type.isInstance(cause);
-    }
-
-    /**
-     * Returns the minimum generation below which all events are ancient for the round of the signed
-     * state
-     *
-     * @param signedState the signed state that holds the minumum generation information
-     * @return minimum non-ancient generation
-     */
-    public static long getMinGenNonAncient(final SignedState signedState) {
-        return Settings.getInstance()
-                .getState()
-                .getMinGenNonAncient(signedState.getRound(), signedState::getMinGen);
     }
 }

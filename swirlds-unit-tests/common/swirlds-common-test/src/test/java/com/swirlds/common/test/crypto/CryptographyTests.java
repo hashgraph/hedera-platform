@@ -24,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.Message;
@@ -33,9 +33,11 @@ import com.swirlds.common.crypto.SerializableHashable;
 import com.swirlds.common.crypto.SignatureType;
 import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.crypto.VerificationStatus;
-import com.swirlds.common.crypto.internal.CryptographySettings;
+import com.swirlds.common.crypto.config.CryptoConfig;
 import com.swirlds.common.threading.futures.FuturePool;
+import com.swirlds.config.api.Configuration;
 import com.swirlds.test.framework.TestQualifierTags;
+import com.swirlds.test.framework.config.TestConfigBuilder;
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -56,8 +58,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class CryptographyTests {
-    private static final CryptographySettings engineSettings =
-            CryptographySettings.getDefaultSettings();
+    private static CryptoConfig cryptoConfig;
     private static final int PARALLELISM = 16;
     private static final Hash KNOWN_DUMMY_SERIALIZABLE_HASH =
             new Hash(
@@ -67,19 +68,21 @@ class CryptographyTests {
     private static SignaturePool ed25519SignaturePool;
     private static ExecutorService executorService;
     private static EcdsaSignedTxnPool ecdsaSignaturePool;
-    private static Cryptography cryptoProvider;
+    private static Cryptography cryptography;
 
     @BeforeAll
     public static void startup() throws NoSuchAlgorithmException {
-        assertNotNull(engineSettings);
-        assertTrue(engineSettings.computeCpuDigestThreadCount() >= 1);
+        final Configuration configuration = new TestConfigBuilder().getOrCreateConfig();
+        cryptoConfig = configuration.getConfigData(CryptoConfig.class);
+
+        assertTrue(cryptoConfig.computeCpuDigestThreadCount() >= 1);
 
         executorService = Executors.newFixedThreadPool(PARALLELISM);
-        cryptoProvider = CryptoFactory.getInstance();
+        cryptography = CryptographyHolder.get();
 
         digestPool =
                 new MessageDigestPool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 100);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 100);
     }
 
     @AfterAll
@@ -97,7 +100,7 @@ class CryptographyTests {
         for (int i = 0; i < messages.length; i++) {
             messages[i] = digestPool.next();
             final Future<Hash> future =
-                    cryptoProvider.digestAsync(messages[i].getPayloadDirect(), DigestType.SHA_384);
+                    cryptography.digestAsync(messages[i].getPayloadDirect(), DigestType.SHA_384);
             assertNotNull(future);
             assertTrue(digestPool.isValid(messages[i], future.get().getValue()));
         }
@@ -111,7 +114,7 @@ class CryptographyTests {
         for (int i = 0; i < messages.length; i++) {
             messages[i] = digestPool.next();
             final Hash hash =
-                    cryptoProvider.digestSync(messages[i].getPayloadDirect(), DigestType.SHA_384);
+                    cryptography.digestSync(messages[i].getPayloadDirect(), DigestType.SHA_384);
             assertTrue(digestPool.isValid(messages[i], hash.getValue()));
         }
     }
@@ -120,7 +123,7 @@ class CryptographyTests {
     void hashableSerializableTest() {
         final SerializableHashable hashable = new SerializableHashableDummy(123, "some string");
         assertNull(hashable.getHash());
-        cryptoProvider.digestSync(hashable);
+        cryptography.digestSync(hashable);
         assertNotNull(hashable.getHash());
 
         final Hash hash = hashable.getHash();
@@ -134,14 +137,14 @@ class CryptographyTests {
     void verifyAsyncEd25519Only(final int count) throws ExecutionException, InterruptedException {
         ed25519SignaturePool =
                 new SignaturePool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 100, true);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 100, true);
         final TransactionSignature[] signatures = new TransactionSignature[count];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = ed25519SignaturePool.next();
             final Triple<byte[], byte[], byte[]> components = extractComponents(signatures[i]);
             final Future<Boolean> future =
-                    cryptoProvider.verifyAsync(
+                    cryptography.verifyAsync(
                             components.getLeft(),
                             components.getMiddle(),
                             components.getRight(),
@@ -159,14 +162,14 @@ class CryptographyTests {
         /* Note that here the "transactionSize" is limited to the largest support digest type, which is 64 bytes */
         ecdsaSignaturePool =
                 new EcdsaSignedTxnPool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 64);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 64);
         final TransactionSignature[] signatures = new TransactionSignature[count];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = ecdsaSignaturePool.next();
             final Triple<byte[], byte[], byte[]> components = extractComponents(signatures[i]);
             final Future<Boolean> future =
-                    cryptoProvider.verifyAsync(
+                    cryptography.verifyAsync(
                             components.getLeft(),
                             components.getMiddle(),
                             components.getRight(),
@@ -182,14 +185,14 @@ class CryptographyTests {
     void verifySyncEd25519Only(final int count) {
         ed25519SignaturePool =
                 new SignaturePool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 100, true);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 100, true);
         final TransactionSignature[] signatures = new TransactionSignature[count];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = ed25519SignaturePool.next();
             final Triple<byte[], byte[], byte[]> components = extractComponents(signatures[i]);
             assertTrue(
-                    cryptoProvider.verifySync(
+                    cryptography.verifySync(
                             components.getLeft(),
                             components.getMiddle(),
                             components.getRight(),
@@ -203,14 +206,14 @@ class CryptographyTests {
     void verifySyncEcdsaSecp256k1Only(final int count) {
         ecdsaSignaturePool =
                 new EcdsaSignedTxnPool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 64);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 64);
         final TransactionSignature[] signatures = new TransactionSignature[count];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = ecdsaSignaturePool.next();
             final Triple<byte[], byte[], byte[]> components = extractComponents(signatures[i]);
             assertTrue(
-                    cryptoProvider.verifySync(
+                    cryptography.verifySync(
                             components.getLeft(),
                             components.getMiddle(),
                             components.getRight(),
@@ -224,12 +227,12 @@ class CryptographyTests {
     void verifySyncInvalidEcdsaSecp256k1() {
         ecdsaSignaturePool =
                 new EcdsaSignedTxnPool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 64);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 64);
         final TransactionSignature signature = ecdsaSignaturePool.next();
         final Triple<byte[], byte[], byte[]> components = extractComponents(signature);
         Configurator.setAllLevels("", Level.ALL);
         assertFalse(
-                cryptoProvider.verifySync(
+                cryptography.verifySync(
                         components.getLeft(),
                         Arrays.copyOfRange(
                                 components.getMiddle(), 0, components.getMiddle().length - 1),
@@ -243,12 +246,12 @@ class CryptographyTests {
     void verifySyncInvalidEd25519() {
         ed25519SignaturePool =
                 new SignaturePool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 100, true);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 100, true);
         final TransactionSignature signature = ed25519SignaturePool.next();
         final Triple<byte[], byte[], byte[]> components = extractComponents(signature);
         Configurator.setAllLevels("", Level.ALL);
         assertFalse(
-                cryptoProvider.verifySync(
+                cryptography.verifySync(
                         components.getLeft(),
                         Arrays.copyOfRange(
                                 components.getMiddle(), 0, components.getMiddle().length - 1),
@@ -263,10 +266,10 @@ class CryptographyTests {
     void verifyAsyncMix(final int count) throws ExecutionException, InterruptedException {
         ecdsaSignaturePool =
                 new EcdsaSignedTxnPool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 64);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 64);
         ed25519SignaturePool =
                 new SignaturePool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 100, true);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 100, true);
         final TransactionSignature[] signatures = new TransactionSignature[count];
 
         boolean useEcdsa = true;
@@ -276,7 +279,7 @@ class CryptographyTests {
                     useEcdsa ? SignatureType.ECDSA_SECP256K1 : SignatureType.ED25519;
             final Triple<byte[], byte[], byte[]> components = extractComponents(signatures[i]);
             final Future<Boolean> future =
-                    cryptoProvider.verifyAsync(
+                    cryptography.verifyAsync(
                             components.getLeft(),
                             components.getMiddle(),
                             components.getRight(),
@@ -292,18 +295,18 @@ class CryptographyTests {
     void verifySyncEd25519Signature() {
         ed25519SignaturePool =
                 new SignaturePool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 100, true);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 100, true);
         final TransactionSignature signature = ed25519SignaturePool.next();
-        assertTrue(cryptoProvider.verifySync(signature), "Should be a valid signature");
+        assertTrue(cryptography.verifySync(signature), "Should be a valid signature");
     }
 
     @Test
     void verifySyncEcdsaSignature() {
         ecdsaSignaturePool =
                 new EcdsaSignedTxnPool(
-                        engineSettings.computeCpuDigestThreadCount() * PARALLELISM, 64);
+                        cryptoConfig.computeCpuDigestThreadCount() * PARALLELISM, 64);
         final TransactionSignature signature = ecdsaSignaturePool.next();
-        assertTrue(cryptoProvider.verifySync(signature), "Should be a valid signature");
+        assertTrue(cryptography.verifySync(signature), "Should be a valid signature");
     }
 
     private Triple<byte[], byte[], byte[]> extractComponents(final TransactionSignature signature) {
@@ -364,7 +367,7 @@ class CryptographyTests {
                             for (int i = offset; i < count; i++) {
                                 final TransactionSignature signature = sItems[i];
 
-                                final boolean isValid = cryptoProvider.verifySync(signature);
+                                final boolean isValid = cryptography.verifySync(signature);
                                 signature.setSignatureStatus(
                                         ((isValid)
                                                 ? VerificationStatus.VALID

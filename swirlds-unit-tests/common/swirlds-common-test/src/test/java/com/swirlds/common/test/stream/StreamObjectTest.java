@@ -73,7 +73,7 @@ class StreamObjectTest {
 
     @BeforeAll
     static void setUp() throws ConstructableRegistryException, IOException {
-        ConstructableRegistry.registerConstructables("com.swirlds.common");
+        ConstructableRegistry.getInstance().registerConstructables("com.swirlds.common");
     }
 
     static void clearDir() throws IOException {

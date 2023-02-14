@@ -21,7 +21,7 @@ import java.util.Iterator;
 import java.util.Map;
 
 /**
- * This iterator walks over a {@link com.swirlds.merkle.map.MerkleMapEntrySet}
+ * This iterator walks over a {@link MerkleMapEntrySet}
  *
  * <p>This iterator leverages the functionality of the FCHashMapEntrySetIterator
  *

@@ -19,7 +19,7 @@ import static com.swirlds.common.stream.internal.StreamValidationResult.PARSE_ST
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.OBJECT_STREAM;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.Signature;
@@ -40,7 +40,8 @@ import org.apache.logging.log4j.Logger;
 /** Utilities methods for validating stream files and stream signature files */
 public final class LinkedObjectStreamValidateUtils {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOGGER = LogManager.getLogger();
+    private static final Logger LOGGER =
+            LogManager.getLogger(LinkedObjectStreamValidateUtils.class);
 
     private LinkedObjectStreamValidateUtils() {}
 
@@ -205,9 +206,9 @@ public final class LinkedObjectStreamValidateUtils {
                 break;
             }
             objectsCount++;
-            Hash objectHash = CryptoFactory.getInstance().digestSync(selfSerializable);
+            Hash objectHash = CryptographyHolder.get().digestSync(selfSerializable);
             runningHash =
-                    CryptoFactory.getInstance()
+                    CryptographyHolder.get()
                             .calcRunningHash(runningHash, objectHash, DigestType.SHA_384);
             LOGGER.info(
                     OBJECT_STREAM.getMarker(),

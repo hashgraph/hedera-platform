@@ -15,29 +15,45 @@
  */
 package com.swirlds.common.threading.pool;
 
-import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 
 /** An implementation that uses a CachedThreadPool to execute parallel tasks */
 public class CachedPoolParallelExecutor implements ParallelExecutor {
     private static final Runnable NOOP = () -> {};
+
     /** The thread pool used by this class. */
-    private final ExecutorService threadPool;
+    private ExecutorService threadPool;
+
+    private boolean immutable = false;
+
+    private final ThreadFactory factory;
 
     /**
+     * @param threadManager responsible for managing thread lifecycles
      * @param name the name given to the threads in the pool
      */
-    public CachedPoolParallelExecutor(final String name) {
-        threadPool =
-                Executors.newCachedThreadPool(
-                        new ThreadConfiguration()
-                                .setThreadName(name)
-                                .setComponent(name)
-                                .buildFactory());
+    public CachedPoolParallelExecutor(final ThreadManager threadManager, final String name) {
+        factory = threadManager.createThreadFactory("parallel-executor", name);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean isImmutable() {
+        return immutable;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void start() {
+        throwIfImmutable("should only be started once");
+        immutable = true;
+        threadPool = Executors.newCachedThreadPool(factory);
     }
 
     /**
@@ -61,6 +77,8 @@ public class CachedPoolParallelExecutor implements ParallelExecutor {
             final Callable<Void> backgroundTask,
             final Runnable onThrow)
             throws ParallelExecutionException {
+        throwIfMutable("must be started first");
+
         final Future<Void> future = threadPool.submit(backgroundTask);
 
         // exception to throw, if any of the tasks throw

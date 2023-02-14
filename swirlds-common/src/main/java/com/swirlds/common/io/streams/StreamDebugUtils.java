@@ -62,14 +62,11 @@ public final class StreamDebugUtils {
      *
      * @param inputStreamBuilder builds the input stream. The stream is closed when finished.
      * @param deserializer the method that performs the deserialization
-     * @param failureCallback a method that is invoked if serialization fails, ignored if null
      * @param <T> the type of object being deserialized
      * @return the deserialized objects (if no errors are encountered)
      */
     public static <T> T deserializeAndDebugOnFailure(
-            final InputStreamBuilder inputStreamBuilder,
-            final Deserializer<T> deserializer,
-            final Runnable failureCallback)
+            final InputStreamBuilder inputStreamBuilder, final Deserializer<T> deserializer)
             throws IOException {
 
         try (final InputStream baseStream = inputStreamBuilder.buildStream()) {
@@ -98,9 +95,6 @@ public final class StreamDebugUtils {
                             EXCEPTION.getMarker(),
                             "Deserialization stack trace:\n{}",
                             in.getFormattedStackTrace());
-                }
-                if (failureCallback != null) {
-                    failureCallback.run();
                 }
             }
 

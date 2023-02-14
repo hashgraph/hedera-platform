@@ -16,11 +16,14 @@
 package com.swirlds.platform.reconnect;
 
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.metrics.ReconnectMetrics;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.protocol.Protocol;
 import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateValidator;
+import com.swirlds.platform.sync.FallenBehindManager;
 import java.io.IOException;
 import java.util.function.Supplier;
 
@@ -34,8 +37,11 @@ public class ReconnectProtocol implements Protocol {
     private final ReconnectController reconnectController;
     private final SignedStateValidator validator;
     private InitiatedBy initiatedBy = InitiatedBy.NO_ONE;
+    private final ThreadManager threadManager;
+    private final FallenBehindManager fallenBehindManager;
 
     /**
+     * @param threadManager responsible for creating and managing threads
      * @param peerId the ID of the peer we are communicating with
      * @param teacherThrottle restricts reconnects as a teacher
      * @param lastCompleteSignedState provides the latest completely signed state
@@ -44,13 +50,16 @@ public class ReconnectProtocol implements Protocol {
      * @param reconnectController controls reconnecting as a learner
      */
     public ReconnectProtocol(
+            final ThreadManager threadManager,
             final NodeId peerId,
             final ReconnectThrottle teacherThrottle,
             final Supplier<SignedState> lastCompleteSignedState,
             final int reconnectSocketTimeout,
             final ReconnectMetrics reconnectMetrics,
             final ReconnectController reconnectController,
-            final SignedStateValidator validator) {
+            final SignedStateValidator validator,
+            final FallenBehindManager fallenBehindManager) {
+        this.threadManager = threadManager;
         this.peerId = peerId;
         this.teacherThrottle = teacherThrottle;
         this.lastCompleteSignedState = lastCompleteSignedState;
@@ -58,15 +67,22 @@ public class ReconnectProtocol implements Protocol {
         this.reconnectMetrics = reconnectMetrics;
         this.reconnectController = reconnectController;
         this.validator = validator;
+        this.fallenBehindManager = fallenBehindManager;
     }
 
     @Override
     public boolean shouldInitiate() {
-        final boolean shouldInitiate = reconnectController.acquireLearnerPermit();
-        if (shouldInitiate) {
+        // if this neighbor has not told me I have fallen behind, I will not reconnect with him
+        if (!fallenBehindManager.shouldReconnectFrom(peerId.getId())) {
+            return false;
+        }
+
+        // if a permit is acquired, it will be released by either initiateFailed or runProtocol
+        final boolean acquiredPermit = reconnectController.acquireLearnerPermit();
+        if (acquiredPermit) {
             initiatedBy = InitiatedBy.SELF;
         }
-        return shouldInitiate;
+        return acquiredPermit;
     }
 
     @Override
@@ -77,11 +93,16 @@ public class ReconnectProtocol implements Protocol {
 
     @Override
     public boolean shouldAccept() {
-        final boolean shouldAccept = teacherThrottle.initiateReconnect(peerId.getId());
-        if (shouldAccept) {
+        // we should not be the teacher if we have fallen behind
+        if (fallenBehindManager.hasFallenBehind()) {
+            return false;
+        }
+        // if the throttle is initiated, we should call markReconnectFinished in teacher()
+        final boolean throttleInitiated = teacherThrottle.initiateReconnect(peerId.getId());
+        if (throttleInitiated) {
             initiatedBy = InitiatedBy.PEER;
         }
-        return shouldAccept;
+        return throttleInitiated;
     }
 
     @Override
@@ -118,6 +139,7 @@ public class ReconnectProtocol implements Protocol {
             // ReconnectTeacher
             final SignedState state = lastCompleteSignedState.get();
             new ReconnectTeacher(
+                            threadManager,
                             connection,
                             state,
                             reconnectSocketTimeout,

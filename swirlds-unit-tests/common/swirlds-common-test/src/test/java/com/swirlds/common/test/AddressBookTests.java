@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.swirlds.common.constructable.ConstructableRegistry;
 import com.swirlds.common.constructable.ConstructableRegistryException;
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.exceptions.MutabilityException;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
@@ -141,8 +141,8 @@ class AddressBookTests {
         assertTrue(original.isMutable(), "original should be mutable");
         assertTrue(copy.isMutable(), "copy should be mutable");
 
-        CryptoFactory.getInstance().digestSync(original);
-        CryptoFactory.getInstance().digestSync(copy);
+        CryptographyHolder.get().digestSync(original);
+        CryptographyHolder.get().digestSync(copy);
         final Hash originalHash = original.getHash();
         final Hash copyHash = copy.getHash();
 
@@ -158,8 +158,8 @@ class AddressBookTests {
         original.invalidateHash();
         copy.invalidateHash();
 
-        CryptoFactory.getInstance().digestSync(original);
-        CryptoFactory.getInstance().digestSync(copy);
+        CryptographyHolder.get().digestSync(original);
+        CryptographyHolder.get().digestSync(copy);
 
         assertEquals(originalHash, original.getHash(), "original should be unchanged");
         assertNotEquals(copyHash, copy.getHash(), "copy should be changed");
@@ -317,7 +317,7 @@ class AddressBookTests {
     @DisplayName("Serialization Test")
     @Tag(TIME_CONSUMING)
     void serializationTest() throws IOException, ConstructableRegistryException {
-        ConstructableRegistry.registerConstructables("com.swirlds");
+        ConstructableRegistry.getInstance().registerConstructables("com.swirlds");
 
         final AddressBook original =
                 new RandomAddressBookGenerator(getRandomPrintSeed()).setSize(100).build();

@@ -20,9 +20,7 @@
  * com.swirlds.config.api.validation.ConfigValidator} and {@link
  * com.swirlds.config.api.validation.ConfigPropertyConstraint} interfaces. The instances can be
  * added by using {@link
- * com.swirlds.config.api.ConfigurationProvider#addValidator(com.swirlds.config.api.validation.ConfigValidator)}
- * and {@link com.swirlds.config.api.ConfigurationProvider#addConstraint(java.lang.String,
- * java.lang.Class, com.swirlds.config.api.validation.ConfigPropertyConstraint)}. By default no
- * validator or constraint is added.
+ * com.swirlds.config.api.ConfigurationBuilder#withValidator(com.swirlds.config.api.validation.ConfigValidator)}
+ * By default no validator is added.
  */
 package com.swirlds.config.impl.validators;

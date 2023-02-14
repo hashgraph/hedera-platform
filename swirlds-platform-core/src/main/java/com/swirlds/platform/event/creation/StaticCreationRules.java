@@ -24,7 +24,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Event creation rules that are static and do not need to be instantiated */
 public final class StaticCreationRules {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(StaticCreationRules.class);
 
     private StaticCreationRules() {}
 

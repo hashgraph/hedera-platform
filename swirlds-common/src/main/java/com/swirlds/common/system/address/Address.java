@@ -96,6 +96,37 @@ public class Address implements SelfSerializable {
                 null);
     }
 
+    public Address(
+            final long id,
+            final String nickname,
+            final String selfName,
+            final long stake,
+            final boolean ownHost,
+            final byte[] addressInternalIpv4,
+            final int portInternalIpv4,
+            final byte[] addressExternalIpv4,
+            final int portExternalIpv4,
+            final String memo) {
+        this(
+                id,
+                nickname,
+                selfName,
+                stake, // stake
+                ownHost, // ownHost
+                addressInternalIpv4,
+                portInternalIpv4,
+                addressExternalIpv4,
+                portExternalIpv4,
+                null,
+                -1,
+                null,
+                -1,
+                null,
+                null,
+                (SerializablePublicKey) null,
+                memo);
+    }
+
     private byte[] clone(byte[] x) {
         return x == null ? x : x.clone();
     }
@@ -178,7 +209,7 @@ public class Address implements SelfSerializable {
      * @param portInternalIpv4 port for the internal IPv4 address
      * @param addressExternalIpv4 IPv4 address on the outside of the NATing router (same as internal
      *     if there is no NAT)
-     * @param portExternalIpv4 port port for the external IPv4 address
+     * @param portExternalIpv4 port for the external IPv4 address
      * @param addressInternalIpv6 IPv6 address on the inside of the NATing router
      * @param portInternalIpv6 port for the internal IPv6 address
      * @param addressExternalIpv6 address on the outside of the NATing router
@@ -189,23 +220,23 @@ public class Address implements SelfSerializable {
      * @param memo additional information about the node, can be null
      */
     public Address(
-            long id,
-            String nickname,
-            String selfName,
-            long stake,
-            boolean ownHost,
-            byte[] addressInternalIpv4,
-            int portInternalIpv4,
-            byte[] addressExternalIpv4,
-            int portExternalIpv4,
-            byte[] addressInternalIpv6,
-            int portInternalIpv6,
-            byte[] addressExternalIpv6,
-            int portExternalIpv6,
-            SerializablePublicKey sigPublicKey,
-            SerializablePublicKey encPublicKey,
-            SerializablePublicKey agreePublicKey,
-            String memo) {
+            final long id,
+            final String nickname,
+            final String selfName,
+            final long stake,
+            final boolean ownHost,
+            final byte[] addressInternalIpv4,
+            final int portInternalIpv4,
+            final byte[] addressExternalIpv4,
+            final int portExternalIpv4,
+            final byte[] addressInternalIpv6,
+            final int portInternalIpv6,
+            final byte[] addressExternalIpv6,
+            final int portExternalIpv6,
+            final SerializablePublicKey sigPublicKey,
+            final SerializablePublicKey encPublicKey,
+            final SerializablePublicKey agreePublicKey,
+            final String memo) {
         this.id = id;
         this.nickname = nickname;
         this.selfName = selfName;
@@ -640,15 +671,15 @@ public class Address implements SelfSerializable {
                 nickname,
                 selfName,
                 stake,
-                ownHost, //
+                ownHost,
                 addressInternalIpv4,
-                portInternalIpv4, //
+                portInternalIpv4,
                 addressExternalIpv4,
-                portExternalIpv4, //
+                portExternalIpv4,
                 addressInternalIpv6,
-                portInternalIpv6, //
+                portInternalIpv6,
                 addressExternalIpv6,
-                portExternalIpv6, //
+                portExternalIpv6,
                 sigPublicKey,
                 encPublicKey,
                 agreePublicKey,

@@ -15,8 +15,10 @@
  */
 package com.swirlds.common.metrics;
 
+import static com.swirlds.common.metrics.Metric.ValueType.VALUE;
 import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 
+import java.util.EnumSet;
 import java.util.function.LongBinaryOperator;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
@@ -28,7 +30,36 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
  * <p>A {@code LongAccumulator} is reset to the {@link #getInitialValue() initialValue}. If no
  * {@code initialValue} was specified, the {@code LongAccumulator} is reset to {@code 0L}.
  */
-public interface LongAccumulator extends BaseLongMetric {
+public interface LongAccumulator extends Metric {
+
+    /** {@inheritDoc} */
+    @Override
+    default DataType getDataType() {
+        return DataType.INT;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    default EnumSet<ValueType> getValueTypes() {
+        return EnumSet.of(VALUE);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    default Long get(final ValueType valueType) {
+        throwArgNull(valueType, "valueType");
+        if (valueType == VALUE) {
+            return get();
+        }
+        throw new IllegalArgumentException("Unsupported ValueType: " + valueType);
+    }
+
+    /**
+     * Get the current value
+     *
+     * @return the current value
+     */
+    long get();
 
     /**
      * Returns the {@code initialValue} of the {@code LongAccumulator}
@@ -188,7 +219,7 @@ public interface LongAccumulator extends BaseLongMetric {
 
         /** {@inheritDoc} */
         @Override
-        Class<LongAccumulator> getResultClass() {
+        public Class<LongAccumulator> getResultClass() {
             return LongAccumulator.class;
         }
 

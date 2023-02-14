@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test.merkle;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static com.swirlds.test.framework.TestQualifierTags.TIME_CONSUMING;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -104,7 +105,8 @@ class AsyncStreamTest {
     @DisplayName("Basic Operation")
     void basicOperation() throws IOException, InterruptedException {
         try (final PairedStreams streams = new PairedStreams()) {
-            final StandardWorkGroup workGroup = new StandardWorkGroup("test", null);
+            final StandardWorkGroup workGroup =
+                    new StandardWorkGroup(getStaticThreadManager(), "test", null);
 
             final AsyncInputStream<SerializableLong> in =
                     new AsyncInputStream<>(
@@ -141,7 +143,8 @@ class AsyncStreamTest {
     @DisplayName("Pre-Anticipation")
     void preAnticipation() throws IOException, InterruptedException {
         try (final PairedStreams streams = new PairedStreams()) {
-            final StandardWorkGroup workGroup = new StandardWorkGroup("test", null);
+            final StandardWorkGroup workGroup =
+                    new StandardWorkGroup(getStaticThreadManager(), "test", null);
 
             final AsyncInputStream<SerializableLong> in =
                     new AsyncInputStream<>(
@@ -186,7 +189,8 @@ class AsyncStreamTest {
 
         final int count = 1_000;
 
-        final StandardWorkGroup workGroup = new StandardWorkGroup("test", null);
+        final StandardWorkGroup workGroup =
+                new StandardWorkGroup(getStaticThreadManager(), "test", null);
 
         final ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
         final BlockingOutputStream blockingOut = new BlockingOutputStream(byteOut);
@@ -201,7 +205,7 @@ class AsyncStreamTest {
 
         final AtomicInteger messagesSent = new AtomicInteger(0);
         final Thread outputThread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setRunnable(
                                 () -> {
                                     for (int i = 0; i < count; i++) {
@@ -256,7 +260,8 @@ class AsyncStreamTest {
         configureAsyncStreamSettings(bufferSize, 10_000);
 
         final int count = 1_000;
-        final StandardWorkGroup workGroup = new StandardWorkGroup("test", null);
+        final StandardWorkGroup workGroup =
+                new StandardWorkGroup(getStaticThreadManager(), "test", null);
 
         // Write a bunch of stuff into the stream
         final ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
@@ -292,7 +297,7 @@ class AsyncStreamTest {
 
         final AtomicInteger messagesReceived = new AtomicInteger(0);
         final Thread inputThread =
-                new ThreadConfiguration()
+                new ThreadConfiguration(getStaticThreadManager())
                         .setRunnable(
                                 () -> {
                                     for (int i = 0; i < count; i++) {
@@ -343,7 +348,8 @@ class AsyncStreamTest {
         try (final PairedStreams pairedStreams = new PairedStreams()) {
 
             final StandardWorkGroup workGroup =
-                    new StandardWorkGroup("input-stream-abort-deadlock", null);
+                    new StandardWorkGroup(
+                            getStaticThreadManager(), "input-stream-abort-deadlock", null);
 
             final AsyncOutputStream<ExplodingSelfSerializable> teacherOut =
                     new AsyncOutputStream<>(pairedStreams.getTeacherOutput(), workGroup);

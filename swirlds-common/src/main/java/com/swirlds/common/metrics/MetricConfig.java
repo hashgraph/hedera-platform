@@ -172,7 +172,7 @@ public abstract sealed class MetricConfig<T extends Metric, C extends MetricConf
      *
      * @return the {@code Class}
      */
-    abstract Class<T> getResultClass();
+    public abstract Class<T> getResultClass();
 
     /**
      * Create a {@code Metric} using the given {@link MetricsFactory}

@@ -24,14 +24,13 @@ import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
 import com.swirlds.virtualmap.datasource.VirtualInternalRecord;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
-import com.swirlds.virtualmap.datasource.VirtualRecord;
 import java.io.IOException;
 import java.util.Objects;
 
 /** Implementation of a VirtualLeaf */
 @ConstructableIgnored
 public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends VirtualValue>
-        extends PartialMerkleLeaf implements MerkleLeaf, VirtualNode {
+        extends PartialMerkleLeaf implements MerkleLeaf, VirtualNode<VirtualLeafRecord<K, V>> {
 
     public static final long CLASS_ID = 0x499677a326fb04caL;
 
@@ -41,11 +40,11 @@ public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends Vi
     }
 
     /**
-     * The {@link VirtualRecord} is the backing data for this node. There are different types of
-     * records, {@link VirtualInternalRecord} for internal nodes and {@link
-     * com.swirlds.virtualmap.datasource.VirtualLeafRecord} for leaf nodes.
+     * The {@link VirtualLeafRecord} is the backing data for this node. There are different types of
+     * records, {@link VirtualInternalRecord} for internal nodes and {@link VirtualLeafRecord} for
+     * leaf nodes.
      */
-    private final VirtualRecord virtualRecord;
+    private final VirtualLeafRecord<K, V> virtualRecord;
 
     public VirtualLeafNode(final VirtualLeafRecord<K, V> virtualRecord) {
         this.virtualRecord = Objects.requireNonNull(virtualRecord);
@@ -54,7 +53,7 @@ public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends Vi
 
     /** {@inheritDoc} */
     @Override
-    public VirtualRecord getVirtualRecord() {
+    public VirtualLeafRecord<K, V> getVirtualRecord() {
         return virtualRecord;
     }
 
@@ -63,9 +62,8 @@ public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends Vi
      *
      * @return the key
      */
-    @SuppressWarnings("unchecked")
     public K getKey() {
-        return ((VirtualLeafRecord<K, V>) virtualRecord).getKey();
+        return virtualRecord.getKey();
     }
 
     /**
@@ -73,9 +71,8 @@ public final class VirtualLeafNode<K extends VirtualKey<? super K>, V extends Vi
      *
      * @return the value
      */
-    @SuppressWarnings("unchecked")
     public V getValue() {
-        return ((VirtualLeafRecord<K, V>) virtualRecord).getValue();
+        return virtualRecord.getValue();
     }
 
     /** {@inheritDoc} */

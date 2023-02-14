@@ -16,6 +16,10 @@
 package com.swirlds.platform.state.iss;
 
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.notification.NotificationEngine;
+import com.swirlds.common.system.state.notifications.IssListener;
+import com.swirlds.common.system.state.notifications.IssNotification;
+import com.swirlds.common.time.Time;
 import com.swirlds.common.utility.throttle.RateLimiter;
 import com.swirlds.platform.dispatch.DispatchBuilder;
 import com.swirlds.platform.dispatch.Observer;
@@ -34,6 +38,8 @@ public class IssHandler {
 
     private static final String ISS_DUMP_CATEGORY = "iss";
 
+    private final NotificationEngine notificationEngine;
+
     private final RateLimiter issDumpRateLimiter;
     private final StateSettings stateSettings;
 
@@ -49,24 +55,29 @@ public class IssHandler {
      * Create an object responsible for handling ISS events.
      *
      * @param dispatchBuilder builds dispatchers
+     * @param notificationEngine sends notifications to the app
      * @param stateSettings settings for the state
      * @param selfId the self ID of this node
      */
     public IssHandler(
+            final Time time,
             final DispatchBuilder dispatchBuilder,
+            final NotificationEngine notificationEngine,
             final StateSettings stateSettings,
             final long selfId) {
 
+        this.notificationEngine = notificationEngine;
+
         this.stateDumpRequestedDispatcher =
-                dispatchBuilder.getDispatcher(StateDumpRequestedTrigger.class)::dispatch;
+                dispatchBuilder.getDispatcher(this, StateDumpRequestedTrigger.class)::dispatch;
         this.shutdownRequestedDispatcher =
-                dispatchBuilder.getDispatcher(ShutdownRequestedTrigger.class)::dispatch;
+                dispatchBuilder.getDispatcher(this, ShutdownRequestedTrigger.class)::dispatch;
         this.haltRequestedDispatcher =
-                dispatchBuilder.getDispatcher(HaltRequestedTrigger.class)::dispatch;
+                dispatchBuilder.getDispatcher(this, HaltRequestedTrigger.class)::dispatch;
 
         this.stateSettings = stateSettings;
         this.issDumpRateLimiter =
-                new RateLimiter(Duration.ofSeconds(stateSettings.secondsBetweenISSDumps));
+                new RateLimiter(time, Duration.ofSeconds(stateSettings.secondsBetweenISSDumps));
 
         this.selfId = selfId;
     }
@@ -79,7 +90,7 @@ public class IssHandler {
      * @param nodeHash the incorrect hash computed by the node
      * @param consensusHash the correct hash computed by the network
      */
-    @Observer(dispatchType = StateHashValidityTrigger.class)
+    @Observer(StateHashValidityTrigger.class)
     public void stateHashValidityObserver(
             final Long round, final Long nodeId, final Hash nodeHash, final Hash consensusHash) {
 
@@ -98,6 +109,10 @@ public class IssHandler {
             return;
         }
 
+        notificationEngine.dispatch(
+                IssListener.class,
+                new IssNotification(round, IssNotification.IssType.OTHER_ISS, nodeId));
+
         if (stateSettings.haltOnAnyIss) {
             // If we are halting then we always should dump.
             stateDumpRequestedDispatcher.dispatch(ISS_DUMP_CATEGORY, false);
@@ -115,7 +130,7 @@ public class IssHandler {
      * @param selfStateHash the incorrect hash computed by this node
      * @param consensusHash the correct hash computed by the network
      */
-    @Observer(dispatchType = SelfIssTrigger.class)
+    @Observer(SelfIssTrigger.class)
     public void selfIssObserver(
             final Long round, final Hash selfStateHash, final Hash consensusHash) {
 
@@ -123,6 +138,10 @@ public class IssHandler {
             // don't take any action once halted
             return;
         }
+
+        notificationEngine.dispatch(
+                IssListener.class,
+                new IssNotification(round, IssNotification.IssType.SELF_ISS, selfId));
 
         if (stateSettings.haltOnAnyIss) {
             // If configured to halt then always do a dump.
@@ -198,13 +217,17 @@ public class IssHandler {
      * @param round the round of the ISS
      * @param selfStateHash the hash computed by this node
      */
-    @Observer(dispatchType = CatastrophicIssTrigger.class)
+    @Observer(CatastrophicIssTrigger.class)
     public void catastrophicIssObserver(final Long round, final Hash selfStateHash) {
 
         if (halted) {
             // don't take any action once halted
             return;
         }
+
+        notificationEngine.dispatch(
+                IssListener.class,
+                new IssNotification(round, IssNotification.IssType.CATASTROPHIC_ISS, null));
 
         if (stateSettings.haltOnAnyIss || stateSettings.haltOnCatastrophicIss) {
             // If configured to halt then always do a dump.

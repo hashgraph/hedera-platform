@@ -42,8 +42,8 @@ public class SignedStateMetrics {
                     .withFormat(FORMAT_10_2);
     private final RunningAverageMetric staleStates;
 
-    private static final RunningAverageMetric.Config AVERAGE_SIGNING_TIME_CONFIG =
-            new RunningAverageMetric.Config(CATEGORY, "averageStateSigningTime")
+    private static final RunningAverageMetric.Config AVERAGE_TIME_TO_SIGN_STATE =
+            new RunningAverageMetric.Config(CATEGORY, "averageTimeToSignState")
                     .withDescription("The average time required to sign a state in milliseconds")
                     .withFormat(FORMAT_10_2);
     private final RunningAverageMetric averageSigningTime;
@@ -75,6 +75,16 @@ public class SignedStateMetrics {
                     .withFormat(FORMAT_16_2);
     private final SpeedometerMetric stateSignaturesGatheredPerSecond;
 
+    private static final RunningAverageMetric.Config STATE_SIGNATURE_AGE_CONFIG =
+            new RunningAverageMetric.Config(CATEGORY, "stateSignatureAge")
+                    .withDescription(
+                            "the average difference in round number between state signatures and"
+                                + " the most recent immutable state. Negative numbers meanthe are"
+                                + " being received early, large positive numbers mean signatures"
+                                + " are being received late.")
+                    .withFormat(FORMAT_10_3);
+    private final RunningAverageMetric stateSignatureAge;
+
     private static final RunningAverageMetric.Config STATE_ARCHIVAL_TIME_AVG_CONFIG =
             new RunningAverageMetric.Config(CATEGORY, "stateArchivalTimeAvg")
                     .withDescription("avg time to archive a signed state (in milliseconds)")
@@ -99,6 +109,23 @@ public class SignedStateMetrics {
                             "average time it takes to hash a SignedState (in milliseconds)")
                     .withFormat(FORMAT_10_3);
     private final RunningAverageMetric stateHashingTime;
+
+    private static final RunningAverageMetric.Config WRITE_STATE_TO_DISK_TIME_CONFIG =
+            new RunningAverageMetric.Config(CATEGORY, "writeStateToDisk")
+                    .withDescription(
+                            "average time it takes to write a SignedState to disk (in"
+                                    + " milliseconds)")
+                    .withFormat(FORMAT_10_3);
+
+    private final RunningAverageMetric writeStateToDiskTime;
+
+    private static final RunningAverageMetric.Config STATE_TO_DISK_TIME_CONFIG =
+            new RunningAverageMetric.Config(CATEGORY, "stateToDisk")
+                    .withDescription(
+                            "average time it takes to do perform all actions when writing a"
+                                    + " SignedState to disk (in milliseconds)")
+                    .withFormat(FORMAT_10_3);
+    private final RunningAverageMetric stateToDiskTime;
 
     /** Get a metric tracking fresh unsigned states. */
     public RunningAverageMetric getFreshStatesMetric() {
@@ -160,6 +187,27 @@ public class SignedStateMetrics {
         return stateHashingTime;
     }
 
+    /** Get a metric tracking the average time required to write a state to disk. */
+    public RunningAverageMetric getWriteStateToDiskTimeMetric() {
+        return writeStateToDiskTime;
+    }
+
+    /**
+     * Get a metric tracking the average time required to perform all actions when saving a state to
+     * disk, i.e. notifying listeners and cleaning up old states on disk.
+     */
+    public RunningAverageMetric getStateToDiskTimeMetric() {
+        return stateToDiskTime;
+    }
+
+    /**
+     * Get a metric tracking the average difference in round number between signature transactions
+     * and the most recent immutable state.
+     */
+    public RunningAverageMetric getStateSignatureAge() {
+        return stateSignatureAge;
+    }
+
     /**
      * Register all metrics with a registry.
      *
@@ -168,7 +216,7 @@ public class SignedStateMetrics {
     public SignedStateMetrics(final Metrics metrics) {
         freshStates = metrics.getOrCreate(FRESH_STATES_CONFIG);
         staleStates = metrics.getOrCreate(STALE_STATES_CONFIG);
-        averageSigningTime = metrics.getOrCreate(AVERAGE_SIGNING_TIME_CONFIG);
+        averageSigningTime = metrics.getOrCreate(AVERAGE_TIME_TO_SIGN_STATE);
         totalNeverSignedStates = metrics.getOrCreate(TOTAL_NEVER_SIGNED_STATES_CONFIG);
         totalNeverSignedDiskStates = metrics.getOrCreate(TOTAL_NEVER_SIGNED_DISK_STATES_CONFIG);
         statesSignedPerSecond = metrics.getOrCreate(STATES_SIGNED_PER_SECOND_CONFIG);
@@ -178,5 +226,8 @@ public class SignedStateMetrics {
         stateDeletionQueueAvg = metrics.getOrCreate(STATE_DELETION_QUEUE_AVG_CONFIG);
         stateDeletionTimeAvg = metrics.getOrCreate(STATE_DELETION_TIME_AVG_CONFIG);
         stateHashingTime = metrics.getOrCreate(STATE_HASHING_TIME_CONFIG);
+        stateToDiskTime = metrics.getOrCreate(STATE_TO_DISK_TIME_CONFIG);
+        writeStateToDiskTime = metrics.getOrCreate(WRITE_STATE_TO_DISK_TIME_CONFIG);
+        stateSignatureAge = metrics.getOrCreate(STATE_SIGNATURE_AGE_CONFIG);
     }
 }

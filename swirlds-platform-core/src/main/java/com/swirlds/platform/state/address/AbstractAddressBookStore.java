@@ -21,6 +21,8 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STARTUP;
 
 import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.utility.CommonUtils;
+import com.swirlds.platform.config.AddressBookConfig;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -32,7 +34,11 @@ public abstract class AbstractAddressBookStore implements AddressBookStore {
 
     private static final Logger LOG = LogManager.getLogger(AbstractAddressBookStore.class);
 
-    protected AbstractAddressBookStore() {}
+    private final AddressBookConfig addressBookConfig;
+
+    protected AbstractAddressBookStore(final AddressBookConfig addressBookConfig) {
+        this.addressBookConfig = CommonUtils.throwArgNull(addressBookConfig, "addressBookConfig");
+    }
 
     /**
      * Get a map of rounds to address books.
@@ -178,7 +184,7 @@ public abstract class AbstractAddressBookStore implements AddressBookStore {
         }
 
         final AddressBook addressBook =
-                AddressBookSettingsFactory.get().isUpdateAddressBookOnlyAtUpgrade()
+                addressBookConfig.updateAddressBookOnlyAtUpgrade()
                         ? getOverridingAddressBook()
                         : getAddressBookMap().get(round);
 
@@ -202,5 +208,9 @@ public abstract class AbstractAddressBookStore implements AddressBookStore {
     @Override
     public void updateOverridingAddressBook() {
         setOverridingAddressBook(getAddressBookMap().get(getLatestRound()));
+    }
+
+    protected AddressBookConfig getAddressBookConfig() {
+        return addressBookConfig;
     }
 }

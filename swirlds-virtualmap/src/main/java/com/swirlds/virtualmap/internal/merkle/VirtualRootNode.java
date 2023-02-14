@@ -15,6 +15,7 @@
  */
 package com.swirlds.virtualmap.internal.merkle;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 import static com.swirlds.logging.LogMarker.TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT;
@@ -64,7 +65,7 @@ import com.swirlds.virtualmap.datasource.VirtualInternalRecord;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
 import com.swirlds.virtualmap.datasource.VirtualRecord;
 import com.swirlds.virtualmap.internal.RecordAccessor;
-import com.swirlds.virtualmap.internal.StateAccessor;
+import com.swirlds.virtualmap.internal.VirtualStateAccessor;
 import com.swirlds.virtualmap.internal.cache.VirtualNodeCache;
 import com.swirlds.virtualmap.internal.hash.VirtualHashListener;
 import com.swirlds.virtualmap.internal.hash.VirtualHasher;
@@ -75,11 +76,9 @@ import com.swirlds.virtualmap.internal.reconnect.ReconnectHashListener;
 import com.swirlds.virtualmap.internal.reconnect.ReconnectState;
 import com.swirlds.virtualmap.internal.reconnect.VirtualLearnerTreeView;
 import com.swirlds.virtualmap.internal.reconnect.VirtualTeacherTreeView;
-import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.channels.ClosedByInterruptException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -213,7 +212,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
      * over time, so we use this interface instead and allow the {@link VirtualMap} to provide
      * indirection onto the current state data.
      */
-    private StateAccessor state;
+    private VirtualStateAccessor state;
 
     /**
      * An interface through which the {@link VirtualRootNode} can access record data from the cache
@@ -279,7 +278,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
     /** The {@link RecordAccessor} for the state, cache, and data source needed during reconnect. */
     private RecordAccessor<K, V> reconnectRecords;
 
-    private StateAccessor fullyReconnectedState;
+    private VirtualStateAccessor fullyReconnectedState;
 
     private VirtualLearnerTreeView<K, V> learnerTreeView;
 
@@ -357,12 +356,12 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
     }
 
     /**
-     * Sets the {@link StateAccessor}. This is called during copy, and also during reconnect.
+     * Sets the {@link VirtualStateAccessor}. This is called during copy, and also during reconnect.
      *
      * @param state The accessor. Cannot be null.
      */
     @SuppressWarnings("ClassEscapesDefinedScope")
-    public void postInit(final StateAccessor state) {
+    public void postInit(final VirtualStateAccessor state) {
         // We're reconnecting, state doesn't match cache or dataSource, gotta bail.
         if (learnerTreeView != null) {
             fullyReconnectedState = state;
@@ -373,9 +372,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
         this.shouldBeFlushed =
                 fastCopyVersion != 0 && fastCopyVersion % settings.getFlushInterval() == 0;
         if (this.dataSourceBuilder != null && this.dataSource == null) {
-            this.dataSource =
-                    this.dataSourceBuilder.build(
-                            createUniqueDataSourceName(state.getLabel()), state.getLabel(), true);
+            this.dataSource = this.dataSourceBuilder.build(state.getLabel(), true);
         }
         this.records = new RecordAccessorImpl<>(this.state, this.cache, this.dataSource);
 
@@ -395,13 +392,14 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
     }
 
     /**
-     * Gets the {@link StateAccessor} containing state for this copy of {@link VirtualRootNode}.
+     * Gets the {@link VirtualStateAccessor} containing state for this copy of {@link
+     * VirtualRootNode}.
      *
-     * @return The {@link StateAccessor}. Will not be null unless called during serialization before
-     *     serialization completes.
+     * @return The {@link VirtualStateAccessor}. Will not be null unless called during serialization
+     *     before serialization completes.
      */
     @SuppressWarnings("ClassEscapesDefinedScope")
-    public StateAccessor getState() {
+    public VirtualStateAccessor getState() {
         return state;
     }
 
@@ -879,14 +877,14 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
         flushed.set(true);
         flushLatch.countDown();
         if (statistics != null) {
-            statistics.recordFlushLatency(end - (double) start);
+            statistics.recordFlush(end - (double) start);
         }
         LOG.debug(VIRTUAL_MERKLE_STATS.getMarker(), "Flushed in {} ms", end - start);
     }
 
     private void flush(
             VirtualNodeCache<K, V> cacheToFlush,
-            StateAccessor stateToUse,
+            VirtualStateAccessor stateToUse,
             VirtualDataSource<K, V> ds) {
         try {
             // Get the leaves that were changed and sort them by path so that lower paths come first
@@ -929,8 +927,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
     public void serialize(final SerializableDataOutputStream out, final Path outputDirectory)
             throws IOException {
 
-        final RecordAccessor<K, V> detachedRecords =
-                pipeline.detachCopy(this, state.getLabel(), outputDirectory, false, false);
+        final RecordAccessor<K, V> detachedRecords = pipeline.detachCopy(this, outputDirectory);
         assert detachedRecords.getDataSource() == null : "No data source should be created.";
 
         out.writeNormalisedString(state.getLabel());
@@ -943,19 +940,9 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
     public void deserialize(
             final SerializableDataInputStream in, final Path inputDirectory, final int version)
             throws IOException {
-
-        final String name = in.readNormalisedString(MAX_LABEL_LENGTH);
+        final String label = in.readNormalisedString(MAX_LABEL_LENGTH);
         dataSourceBuilder = in.readSerializable();
-
-        final File source = inputDirectory.resolve(name).toFile();
-        if (!source.exists() || !source.isDirectory()) {
-            throw new IOException("No virtual map data found at " + source);
-        }
-
-        dataSource =
-                dataSourceBuilder.build(
-                        createUniqueDataSourceName(name), name, source.toPath(), true);
-
+        dataSource = dataSourceBuilder.restore(label, inputDirectory);
         cache = in.readSerializable();
     }
 
@@ -1048,11 +1035,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 
     /** {@inheritDoc} */
     @Override
-    public <T> T detach(
-            final String label,
-            final Path destination,
-            boolean reopen,
-            boolean withDbCompactionEnabled) {
+    public <T> T detach(final Path destination) {
         if (isDestroyed()) {
             throw new IllegalStateException("detach is illegal on already destroyed copies");
         }
@@ -1067,48 +1050,17 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
         // source, and also snapshot the cache. I will create a new "RecordAccessor" for the
         // detached
         // record state.
-        final String snapshotName =
-                label == null ? (createUniqueDataSourceName(state.getLabel())) : label;
-
         final T snapshot;
-
         if (destination == null) {
-            assert reopen : "We do not support reopen=false for this path yet";
-
             //noinspection unchecked
             snapshot =
                     (T)
                             new RecordAccessorImpl<>(
-                                    state,
-                                    cache.snapshot(),
-                                    dataSourceBuilder.build(
-                                            snapshotName,
-                                            state.getLabel(),
-                                            dataSource,
-                                            withDbCompactionEnabled));
+                                    state, cache.snapshot(), dataSourceBuilder.copy(dataSource));
         } else {
-            if (reopen) {
-                final VirtualDataSource<K, V> ds =
-                        dataSourceBuilder.build(
-                                snapshotName,
-                                destination.resolve(snapshotName),
-                                dataSource,
-                                withDbCompactionEnabled);
-                //noinspection unchecked
-                snapshot = (T) new RecordAccessorImpl<>(state, cache.snapshot(), ds);
-            } else {
-                try {
-                    final Path snapshotDir = destination.resolve(snapshotName);
-                    Files.createDirectories(snapshotDir);
-                    dataSource.snapshot(snapshotDir);
-                    //noinspection unchecked
-                    snapshot = (T) new RecordAccessorImpl<>(state, cache.snapshot(), null);
-                } catch (IOException e) {
-                    LOG.error(
-                            EXCEPTION.getMarker(), "Failed to take a snapshot of the database", e);
-                    throw new UncheckedIOException(e);
-                }
-            }
+            dataSourceBuilder.snapshot(destination, dataSource);
+            //noinspection unchecked
+            snapshot = (T) new RecordAccessorImpl<>(state, cache.snapshot(), null);
         }
 
         detached.set(true);
@@ -1128,7 +1080,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
     /** {@inheritDoc} */
     @Override
     public TeacherTreeView<Long> buildTeacherView() {
-        return new VirtualTeacherTreeView<>(this, state, pipeline);
+        return new VirtualTeacherTreeView<>(getStaticThreadManager(), this, state, pipeline);
     }
 
     /** {@inheritDoc} */
@@ -1154,10 +1106,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
         originalMap.dataSource.stopBackgroundCompaction();
 
         // Take a snapshot, and use the snapshot database as my data source
-        final String snapshotName = createUniqueDataSourceName(originalMap.state.getLabel());
-        this.dataSource =
-                dataSourceBuilder.build(
-                        snapshotName, originalMap.state.getLabel(), originalMap.dataSource, false);
+        this.dataSource = dataSourceBuilder.copy(originalMap.dataSource);
 
         // The old map's cache is going to become immutable, but that's OK, because the old map
         // will NEVER be updated again.
@@ -1175,7 +1124,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
         reconnectHashingFuture = new CompletableFuture<>();
         reconnectHashingStarted = new AtomicBoolean(false);
 
-        final StateAccessor reconnectState = new ReconnectState(-1, -1);
+        final VirtualStateAccessor reconnectState = new ReconnectState(-1, -1);
         reconnectRecords = new RecordAccessorImpl<>(reconnectState, snapshotCache, dataSource);
 
         // During reconnect we want to look up state from the original records
@@ -1257,7 +1206,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
 
         // This background thread will be responsible for hashing the tree and sending the
         // data to the hash listener to flush.
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setComponent("virtualmap")
                 .setThreadName("hasher")
                 .setRunnable(
@@ -1310,6 +1259,49 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
             final var message =
                     "VirtualMap@" + getRoute() + " interrupted while ending learner reconnect";
             throw new MerkleSynchronizationException(message, e);
+        }
+    }
+
+    /**
+     * Loads the leaf, sibling and sibling of parents on the path to root into OS and not in java
+     * heap The OS cache helps in fast retrieval of values without costing us java heap
+     *
+     * @param key key to the leaf node
+     */
+    public void warm(final K key) {
+
+        // Warm the leaf node
+        final VirtualLeafRecord<K, V> leafRecord = records.findLeafRecord(key, false);
+
+        if (leafRecord != null) {
+            final long leafPath = leafRecord.getPath();
+            // Warm the sibling of the leaf
+            records.findLeafRecord(getSiblingPath(leafPath), false);
+            // Warm internal nodes (sibling on path to parent)
+            warmInternalNodesForLeaf(leafPath);
+        }
+    }
+
+    /**
+     * @param leafPath path to the leaf record When the value in a leaf node is changed all the
+     *     parent nodes up to the root need to be rehashed. When navigating from leaf->root, for
+     *     every parent the sibling needs to be read from disk Hence we know all internal nodes that
+     *     need to be read from disk to calculate the rootHash
+     *     <p>We can read those internal nodes from disk and the OS page cache will cache them for
+     *     us We do not need to do anything with the read data we can drop it
+     */
+    public void warmInternalNodesForLeaf(final long leafPath) {
+
+        long siblingPath;
+        long path = leafPath;
+
+        while (path > 0) {
+            path = getParentPath(path);
+            siblingPath = getSiblingPath(path);
+
+            if (siblingPath != INVALID_PATH) {
+                records.warmInternalRecord(siblingPath);
+            }
         }
     }
 
@@ -1435,9 +1427,5 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
         // will change, the contract of the API is that the caller expects to change it, which
         // is good enough for us).
         cache.putLeaf(leaf);
-    }
-
-    private String createUniqueDataSourceName(String label) {
-        return label + "-" + System.currentTimeMillis();
     }
 }

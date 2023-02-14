@@ -18,8 +18,8 @@ package com.swirlds.common.merkle.hash;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LoggingUtils.plural;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.SerializableHashable;
 import com.swirlds.common.merkle.MerkleInternal;
@@ -40,7 +40,7 @@ import org.apache.logging.log4j.Logger;
 
 public final class MerkleHashChecker {
 
-    private static final Logger LOGGER = LogManager.getLogger();
+    private static final Logger LOGGER = LogManager.getLogger(MerkleHashChecker.class);
 
     private MerkleHashChecker() {}
 
@@ -80,7 +80,7 @@ public final class MerkleHashChecker {
         final Hash recalculated;
         if (node.isLeaf()) {
             recalculated =
-                    CryptoFactory.getInstance()
+                    CryptographyHolder.get()
                             .digestSync(
                                     (SerializableHashable) node,
                                     Cryptography.DEFAULT_DIGEST_TYPE,

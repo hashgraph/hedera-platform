@@ -23,6 +23,7 @@ import com.swirlds.platform.dispatch.types.TriggerTwo;
  *
  * <p>Sends dispatches for catastrophic ISS events.
  */
+@FunctionalInterface
 public interface CatastrophicIssTrigger extends TriggerTwo<Long, Hash> {
 
     /**

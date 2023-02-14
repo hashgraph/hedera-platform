@@ -26,13 +26,14 @@ import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
 import com.swirlds.common.merkle.synchronization.views.TeacherTreeView;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
 import com.swirlds.virtualmap.datasource.VirtualRecord;
 import com.swirlds.virtualmap.internal.ConcurrentNodeStatusTracker;
 import com.swirlds.virtualmap.internal.RecordAccessor;
-import com.swirlds.virtualmap.internal.StateAccessor;
+import com.swirlds.virtualmap.internal.VirtualStateAccessor;
 import com.swirlds.virtualmap.internal.merkle.VirtualRootNode;
 import com.swirlds.virtualmap.internal.pipeline.VirtualPipeline;
 import java.io.IOException;
@@ -76,23 +77,25 @@ public final class VirtualTeacherTreeView<K extends VirtualKey<? super K>, V ext
     /**
      * Create a new {@link VirtualTeacherTreeView}.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param root The root node on the teacher side of the saved state that we are going to
      *     reconnect.
      * @param state The state of the virtual tree that we are synchronizing.
      * @param pipeline The pipeline managing the virtual map.
      */
     public VirtualTeacherTreeView(
+            final ThreadManager threadManager,
             final VirtualRootNode<K, V> root,
-            final StateAccessor state,
+            final VirtualStateAccessor state,
             final VirtualPipeline pipeline) {
 
         // There is no distinction between originalState and reconnectState in this implementation
         super(root, state, state);
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(threadManager)
                 .setRunnable(
                         () -> {
-                            records = pipeline.detachCopy(root, false);
+                            records = pipeline.detachCopy(root);
                             ready.countDown();
                         })
                 .setComponent("virtualmap")

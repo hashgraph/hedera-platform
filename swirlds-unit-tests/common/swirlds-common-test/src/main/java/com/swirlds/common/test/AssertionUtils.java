@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -194,7 +195,7 @@ public final class AssertionUtils {
         final CountDownLatch latch = new CountDownLatch(1);
         final AtomicBoolean error = new AtomicBoolean();
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setComponent("assertion-utils")
                 .setThreadName("assert-prompt-completion")
                 .setInterruptableRunnable(
@@ -232,7 +233,7 @@ public final class AssertionUtils {
         final AtomicBoolean error = new AtomicBoolean();
         final AtomicReference<T> value = new AtomicReference<>();
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setComponent("assertion-utils")
                 .setThreadName("assert-prompt-completion")
                 .setInterruptableRunnable(
@@ -274,7 +275,7 @@ public final class AssertionUtils {
         final CountDownLatch latch = new CountDownLatch(1);
         final AtomicBoolean error = new AtomicBoolean();
 
-        new ThreadConfiguration()
+        new ThreadConfiguration(getStaticThreadManager())
                 .setComponent("assertion-utils")
                 .setThreadName("assert-prompt-throw")
                 .setRunnable(

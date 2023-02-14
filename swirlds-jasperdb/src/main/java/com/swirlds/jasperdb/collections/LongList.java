@@ -19,6 +19,7 @@ import static com.swirlds.common.utility.Units.MEBIBYTES_TO_BYTES;
 
 import com.swirlds.jasperdb.files.DataFileCommon;
 import com.swirlds.jasperdb.utilities.JasperDBFileUtils;
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -41,7 +42,7 @@ import java.util.stream.StreamSupport;
  * instead trigger an automatic expansion of the list's capacity. Thus a {@link LongList} behaves
  * more like a long-to-long map than a traditional list.
  */
-public abstract class LongList implements CASable {
+public abstract class LongList implements CASable, Closeable {
     /** A suitable default for the maximum number of longs that may be stored (32GB of longs). */
     protected static final long DEFAULT_MAX_LONGS_TO_STORE = 4_000_000_000L;
     /** The maximum number of longs to store per chunk. */

@@ -21,12 +21,13 @@ import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.CryptographyException;
 import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.crypto.internal.CryptographySettings;
+import com.swirlds.common.crypto.config.CryptoConfig;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.crypto.MerkleCryptography;
 import com.swirlds.common.merkle.hash.MerkleHashBuilder;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.logging.LogMarker;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -43,12 +44,22 @@ public class MerkleCryptoEngine implements MerkleCryptography {
 
     private final Cryptography basicCryptoEngine;
 
+    /**
+     * Create a new merkle crypto engine.
+     *
+     * @param threadManager responsible for thread lifecycle management
+     * @param cryptography provides cryptographic primitives
+     * @param settings provides settings for cryptography
+     */
     public MerkleCryptoEngine(
-            final Cryptography cryptography, final CryptographySettings settings) {
+            final ThreadManager threadManager,
+            final Cryptography cryptography,
+            final CryptoConfig settings) {
         basicCryptoEngine = cryptography;
         this.merkleInternalDigestProvider = new MerkleInternalDigestProvider();
         this.merkleHashBuilder =
-                new MerkleHashBuilder(this, cryptography, settings.computeCpuDigestThreadCount());
+                new MerkleHashBuilder(
+                        threadManager, this, cryptography, settings.computeCpuDigestThreadCount());
     }
 
     /** {@inheritDoc} */

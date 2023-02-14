@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test.threading;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.swirlds.common.threading.pool.ParallelExecutionException;
@@ -72,7 +73,8 @@ class SyncPhaseParallelExecutorTest {
                 };
 
         // set the ref to a new executor
-        phaseExecutorRef.set(new SyncPhaseParallelExecutor(afterPhase1, afterPhase2));
+        phaseExecutorRef.set(
+                new SyncPhaseParallelExecutor(getStaticThreadManager(), afterPhase1, afterPhase2));
 
         // setup the background thread
         final Thread thread = new Thread(threadTask1.getThreadRun());
@@ -127,7 +129,9 @@ class SyncPhaseParallelExecutorTest {
                 };
 
         // set the ref to a new executor
-        phaseExecutorRef.set(new SyncPhaseParallelExecutor(afterPhase1, afterPhase2, false));
+        phaseExecutorRef.set(
+                new SyncPhaseParallelExecutor(
+                        getStaticThreadManager(), afterPhase1, afterPhase2, false));
 
         // run the task in the foreground
         threadTask.getThreadRun().run();

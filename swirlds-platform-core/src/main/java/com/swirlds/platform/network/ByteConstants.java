@@ -39,6 +39,8 @@ public final class ByteConstants {
     public static final byte COMM_CONNECT = 0x47 /* 71 */;
     /** sent before sending each event */
     public static final byte COMM_EVENT_NEXT = 0x48 /* 72 */;
+    /** sent when event sending is aborted */
+    public static final byte COMM_EVENT_ABORT = 0x49 /* 73 */;
     /** sent after all events have been sent for this sync */
     public static final byte COMM_EVENT_DONE = 0x4a /* 74 */;
     /** sent if a node wants to get the latest signed state */

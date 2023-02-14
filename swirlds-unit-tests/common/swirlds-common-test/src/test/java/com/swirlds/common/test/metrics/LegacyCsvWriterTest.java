@@ -33,9 +33,10 @@ import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.metrics.RunningAverageMetric;
 import com.swirlds.common.metrics.SpeedometerMetric;
 import com.swirlds.common.metrics.StatEntry;
+import com.swirlds.common.metrics.platform.DefaultMetric;
+import com.swirlds.common.metrics.platform.DefaultMetrics;
+import com.swirlds.common.metrics.platform.DefaultMetricsFactory;
 import com.swirlds.common.metrics.platform.LegacyCsvWriter;
-import com.swirlds.common.metrics.platform.PlatformMetric;
-import com.swirlds.common.metrics.platform.PlatformMetricsFactory;
 import com.swirlds.common.metrics.platform.Snapshot;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -55,7 +56,9 @@ class LegacyCsvWriterTest {
         SettingsCommon.csvAppend = false;
         SettingsCommon.showInternalStats = false;
         SettingsCommon.verboseStatistics = false;
-        metrics = new Metrics(mock(ScheduledExecutorService.class), new PlatformMetricsFactory());
+        metrics =
+                new DefaultMetrics(
+                        mock(ScheduledExecutorService.class), new DefaultMetricsFactory());
     }
 
     @Test
@@ -77,7 +80,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createCompleteList();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -111,7 +114,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createShortList();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -148,7 +151,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createShortList();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -179,7 +182,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createShortList();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -203,7 +206,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createListWithInternals();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -228,7 +231,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createListWithInternals();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -254,7 +257,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createListWithSecondaryValues();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -281,7 +284,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createListWithSecondaryValues();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -312,7 +315,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createShortList();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // then
         assertThat(grandParentPath).exists();
@@ -327,11 +330,11 @@ class LegacyCsvWriterTest {
         final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
         final List<Metric> metrics = createCompleteList();
         final List<Snapshot> snapshots1 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
 
         // when
-        writer.prepareFile(metrics);
-        writer.writeMetrics(snapshots1);
+        writer.init(metrics);
+        writer.handleSnapshots(snapshots1);
 
         // update metrics
         ((Counter) metrics.get(0)).increment();
@@ -344,10 +347,10 @@ class LegacyCsvWriterTest {
         ((RunningAverageMetric) metrics.get(8)).update(1000.0);
         ((SpeedometerMetric) metrics.get(9)).update(10);
         final List<Snapshot> snapshots2 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
 
         // when
-        writer.writeMetrics(snapshots2);
+        writer.handleSnapshots(snapshots2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -367,21 +370,21 @@ class LegacyCsvWriterTest {
         final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
         final List<Metric> metrics = createShortList();
         final DoubleGauge gauge = (DoubleGauge) metrics.get(1);
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // when
         gauge.set(Double.NaN);
         final List<Snapshot> snapshots1 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
-        writer.writeMetrics(snapshots1);
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        writer.handleSnapshots(snapshots1);
         gauge.set(Double.POSITIVE_INFINITY);
         final List<Snapshot> snapshots2 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
-        writer.writeMetrics(snapshots2);
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        writer.handleSnapshots(snapshots2);
         gauge.set(Double.NEGATIVE_INFINITY);
         final List<Snapshot> snapshots3 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
-        writer.writeMetrics(snapshots3);
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        writer.handleSnapshots(snapshots3);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -401,11 +404,11 @@ class LegacyCsvWriterTest {
         final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
         final List<Metric> metrics = createListWithInternals();
         final List<Snapshot> snapshots1 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
 
         // when
-        writer.prepareFile(metrics);
-        writer.writeMetrics(snapshots1);
+        writer.init(metrics);
+        writer.handleSnapshots(snapshots1);
 
         // update metrics
         ((Counter) metrics.get(0)).add(2);
@@ -413,10 +416,10 @@ class LegacyCsvWriterTest {
         ((DoubleGauge) metrics.get(2)).set(Math.PI);
         ((DoubleGauge) metrics.get(3)).set(Math.E);
         final List<Snapshot> snapshots2 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
 
         // when
-        writer.writeMetrics(snapshots2);
+        writer.handleSnapshots(snapshots2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -435,11 +438,11 @@ class LegacyCsvWriterTest {
         final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
         final List<Metric> metrics = createListWithInternals();
         final List<Snapshot> snapshots1 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
 
         // when
-        writer.prepareFile(metrics);
-        writer.writeMetrics(snapshots1);
+        writer.init(metrics);
+        writer.handleSnapshots(snapshots1);
 
         // update metrics
         ((Counter) metrics.get(0)).add(2);
@@ -447,10 +450,10 @@ class LegacyCsvWriterTest {
         ((DoubleGauge) metrics.get(2)).set(Math.PI);
         ((DoubleGauge) metrics.get(3)).set(Math.E);
         final List<Snapshot> snapshots2 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
 
         // when
-        writer.writeMetrics(snapshots2);
+        writer.handleSnapshots(snapshots2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -469,11 +472,11 @@ class LegacyCsvWriterTest {
         final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
         final List<Metric> metrics = createListWithSecondaryValues();
         final List<Snapshot> snapshots1 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
 
         // when
-        writer.prepareFile(metrics);
-        writer.writeMetrics(snapshots1);
+        writer.init(metrics);
+        writer.handleSnapshots(snapshots1);
 
         // update metrics
         ((RunningAverageMetric) metrics.get(0)).update(1000.0);
@@ -481,10 +484,10 @@ class LegacyCsvWriterTest {
         ((RunningAverageMetric) metrics.get(2)).update(3000.0);
         ((SpeedometerMetric) metrics.get(3)).update(4000.0);
         final List<Snapshot> snapshots2 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
 
         // when
-        writer.writeMetrics(snapshots2);
+        writer.handleSnapshots(snapshots2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -505,11 +508,11 @@ class LegacyCsvWriterTest {
         final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
         final List<Metric> metrics = createListWithSecondaryValues();
         final List<Snapshot> snapshots1 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
 
         // when
-        writer.prepareFile(metrics);
-        writer.writeMetrics(snapshots1);
+        writer.init(metrics);
+        writer.handleSnapshots(snapshots1);
 
         // update metrics
         ((RunningAverageMetric) metrics.get(0)).update(1000.0);
@@ -517,10 +520,10 @@ class LegacyCsvWriterTest {
         ((RunningAverageMetric) metrics.get(2)).update(3000.0);
         ((SpeedometerMetric) metrics.get(3)).update(4000.0);
         final List<Snapshot> snapshots2 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
 
         // when
-        writer.writeMetrics(snapshots2);
+        writer.handleSnapshots(snapshots2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -543,11 +546,11 @@ class LegacyCsvWriterTest {
                         new DoubleGauge.Config(Metrics.PLATFORM_CATEGORY, "DoubleGauge")
                                 .withFormat("%d")
                                 .withInitialValue(Math.PI));
-        final Snapshot snapshot = Snapshot.of((PlatformMetric) gauge);
+        final Snapshot snapshot = Snapshot.of((DefaultMetric) gauge);
 
         // when
-        writer.prepareFile(List.of(gauge));
-        writer.writeMetrics(List.of(snapshot));
+        writer.init(List.of(gauge));
+        writer.handleSnapshots(List.of(snapshot));
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -566,7 +569,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createSimpleList();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // first row
         ((Counter) metrics.get(1)).add(1L);
@@ -574,17 +577,17 @@ class LegacyCsvWriterTest {
         ((Counter) metrics.get(3)).add(3L);
         ((Counter) metrics.get(4)).add(4L);
         final List<Snapshot> snapshots1 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
-        writer.writeMetrics(snapshots1);
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        writer.handleSnapshots(snapshots1);
 
         // second row
         ((Counter) metrics.get(1)).add(10L);
         ((Counter) metrics.get(3)).add(30L);
         final List<Snapshot> snapshots2 =
                 List.of(
-                        Snapshot.of((PlatformMetric) metrics.get(3)),
-                        Snapshot.of((PlatformMetric) metrics.get(1)));
-        writer.writeMetrics(snapshots2);
+                        Snapshot.of((DefaultMetric) metrics.get(3)),
+                        Snapshot.of((DefaultMetric) metrics.get(1)));
+        writer.handleSnapshots(snapshots2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -615,7 +618,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createComplexList();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // first row
         ((RunningAverageMetric) metrics.get(1)).update(1000.0);
@@ -623,17 +626,17 @@ class LegacyCsvWriterTest {
         ((RunningAverageMetric) metrics.get(3)).update(3000.0);
         ((RunningAverageMetric) metrics.get(4)).update(4000.0);
         final List<Snapshot> snapshots1 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
-        writer.writeMetrics(snapshots1);
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        writer.handleSnapshots(snapshots1);
 
         // second row
         ((RunningAverageMetric) metrics.get(1)).update(10000.0);
         ((RunningAverageMetric) metrics.get(3)).update(30000.0);
         final List<Snapshot> snapshots2 =
                 List.of(
-                        Snapshot.of((PlatformMetric) metrics.get(3)),
-                        Snapshot.of((PlatformMetric) metrics.get(1)));
-        writer.writeMetrics(snapshots2);
+                        Snapshot.of((DefaultMetric) metrics.get(3)),
+                        Snapshot.of((DefaultMetric) metrics.get(1)));
+        writer.handleSnapshots(snapshots2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -665,7 +668,7 @@ class LegacyCsvWriterTest {
         final List<Metric> metrics = createComplexList();
 
         // when
-        writer.prepareFile(metrics);
+        writer.init(metrics);
 
         // first row
         ((RunningAverageMetric) metrics.get(1)).update(1000.0);
@@ -673,17 +676,17 @@ class LegacyCsvWriterTest {
         ((RunningAverageMetric) metrics.get(3)).update(3000.0);
         ((RunningAverageMetric) metrics.get(4)).update(4000.0);
         final List<Snapshot> snapshots1 =
-                metrics.stream().map(PlatformMetric.class::cast).map(Snapshot::of).toList();
-        writer.writeMetrics(snapshots1);
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        writer.handleSnapshots(snapshots1);
 
         // second row
         ((RunningAverageMetric) metrics.get(1)).update(10000.0);
         ((RunningAverageMetric) metrics.get(3)).update(30000.0);
         final List<Snapshot> snapshots2 =
                 List.of(
-                        Snapshot.of((PlatformMetric) metrics.get(3)),
-                        Snapshot.of((PlatformMetric) metrics.get(1)));
-        writer.writeMetrics(snapshots2);
+                        Snapshot.of((DefaultMetric) metrics.get(3)),
+                        Snapshot.of((DefaultMetric) metrics.get(1)));
+        writer.handleSnapshots(snapshots2);
 
         // then
         final String content = Files.readString(csvFilePath);

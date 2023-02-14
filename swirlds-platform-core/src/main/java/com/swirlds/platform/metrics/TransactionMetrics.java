@@ -21,7 +21,7 @@ import static com.swirlds.common.metrics.Metrics.INTERNAL_CATEGORY;
 import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.system.PlatformStatNames;
 import com.swirlds.common.system.transaction.internal.SwirldTransaction;
-import com.swirlds.platform.TransactionSubmitter;
+import com.swirlds.platform.SwirldTransactionSubmitter;
 import com.swirlds.platform.stats.AverageStat;
 
 /** Provides access to statistics relevant to transactions. */
@@ -47,7 +47,7 @@ public class TransactionMetrics {
     }
 
     /**
-     * Called by {@link TransactionSubmitter#submitTransaction(SwirldTransaction)} when a
+     * Called by {@link SwirldTransactionSubmitter#submitTransaction(SwirldTransaction)} when a
      * transaction passes initial checks and is offered to the transaction pool.
      */
     public void updateTransSubmitMicros(final long microseconds) {

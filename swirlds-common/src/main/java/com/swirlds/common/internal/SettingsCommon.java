@@ -28,19 +28,19 @@ public class SettingsCommon {
      * if a single transaction exceeds this limit then the event will contain the single transaction
      * only
      */
-    public static int maxTransactionBytesPerEvent;
+    public static int maxTransactionBytesPerEvent = Integer.MAX_VALUE;
 
     /** the maximum number of transactions that a single event may contain */
-    public static int maxTransactionCountPerEvent;
+    public static int maxTransactionCountPerEvent = Integer.MAX_VALUE;
 
     // used by Transaction, Platform
     /** maximum number of bytes allowed in a transaction */
-    public static int transactionMaxBytes;
+    public static int transactionMaxBytes = Integer.MAX_VALUE;
     /**
      * the maximum number of address allowed in a address book, the same as the maximum allowed
      * network size
      */
-    public static int maxAddressSizeAllowed;
+    public static int maxAddressSizeAllowed = Integer.MAX_VALUE;
 
     // used by CommonUtils
     public static boolean logStack;
@@ -67,9 +67,20 @@ public class SettingsCommon {
     public static int metricsUpdatePeriodMillis = 1000;
 
     // used by MetricsWriterService
+    public static boolean disableMetricsOutput = false;
     public static int threadPriorityNonSync = Thread.NORM_PRIORITY;
     public static String csvFileName = "";
     public static String csvOutputFolder = "";
     public static boolean csvAppend = false;
     public static long csvWriteFrequency = 3000L;
+
+    /** Indicates if a prometheus endpoint should be offered * */
+    public static boolean prometheusEndpointEnabled = false;
+    /** Port of the Prometheus endpoint * */
+    public static int prometheusEndpointPortNumber = 9999;
+    /**
+     * Backlog of the Prometheus endpoint (= number of incoming TCP connections the system will
+     * queue) *
+     */
+    public static int prometheusEndpointMaxBacklogAllowed = 1;
 }

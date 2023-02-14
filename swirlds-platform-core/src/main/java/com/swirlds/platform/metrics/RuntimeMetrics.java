@@ -32,6 +32,7 @@ import com.swirlds.common.metrics.RunningAverageMetric;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.common.utility.RuntimeObjectRegistry;
 import com.swirlds.common.utility.Units;
+import com.swirlds.platform.state.signed.SignedState;
 import java.io.File;
 import java.lang.management.BufferPoolMXBean;
 import java.lang.management.ManagementFactory;
@@ -180,6 +181,12 @@ public final class RuntimeMetrics {
         metrics.getOrCreate(DISKSPACE_FREE_CONFIG);
         metrics.getOrCreate(DISKSPACE_WHOLE_CONFIG);
         metrics.getOrCreate(DISKSPACE_USED_CONFIG);
+
+        // Ensure that the runtime object registry is tracking signed states when we create metrics.
+        // When this code was added, the first SignedState is created AFTER this point in time.
+        // In the future when state loading happens outside the platform constructor, this will
+        // no longer be necessary.
+        RuntimeObjectRegistry.createRecord(SignedState.class).release();
 
         for (final Class<?> cls : RuntimeObjectRegistry.getTrackedClasses()) {
             final String className = cls.getSimpleName();

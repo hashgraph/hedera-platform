@@ -23,7 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.stream.HashCalculatorForStream;
@@ -62,7 +62,7 @@ class HashCalculatorTest {
                 new HashCalculatorForStream<>();
         assertNull(object.getHash(), "the object's Hash should be null after initialization");
         // calculate expected Hash
-        Hash expected = CryptoFactory.getInstance().digestSync((SelfSerializable) object);
+        Hash expected = CryptographyHolder.get().digestSync((SelfSerializable) object);
         assertNotNull(expected, "the object's expected Hash should not be null");
         assertNull(
                 object.getHash(),

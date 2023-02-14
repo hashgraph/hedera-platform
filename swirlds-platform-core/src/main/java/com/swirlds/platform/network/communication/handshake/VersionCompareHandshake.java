@@ -31,7 +31,7 @@ import org.apache.logging.log4j.Logger;
  * error if the versions do not match
  */
 public class VersionCompareHandshake implements ProtocolRunnable {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(VersionCompareHandshake.class);
     private final SoftwareVersion version;
     private final boolean throwOnMismatch;
 

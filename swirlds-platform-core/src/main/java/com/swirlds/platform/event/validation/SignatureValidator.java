@@ -32,7 +32,7 @@ import org.apache.logging.log4j.Logger;
 
 /** A {@link GossipEventValidator} which validates the event's signature */
 public class SignatureValidator implements GossipEventValidator {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(SignatureValidator.class);
     private final AddressBook addressBook;
 
     public SignatureValidator(final AddressBook addressBook) {

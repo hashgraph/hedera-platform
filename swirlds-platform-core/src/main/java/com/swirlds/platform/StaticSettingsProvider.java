@@ -15,8 +15,6 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.platform.state.StateSettings;
-
 /** A temporary class to bridge circumvent the fact that the Settings class is package private */
 public final class StaticSettingsProvider implements SettingsProvider {
 
@@ -117,21 +115,6 @@ public final class StaticSettingsProvider implements SettingsProvider {
         return settings.isTcpNoDelay();
     }
 
-    @Override
-    public String getKeystorePassword() {
-        return settings.getCrypto().getKeystorePassword();
-    }
-
-    @Override
-    public boolean isEnableStateRecovery() {
-        return settings.isEnableStateRecovery();
-    }
-
-    @Override
-    public StateSettings getStateSettings() {
-        return settings.getState();
-    }
-
     /**
      * @see Settings#getThrottleTransactionQueueSize()
      */
@@ -161,12 +144,12 @@ public final class StaticSettingsProvider implements SettingsProvider {
     }
 
     @Override
-    public String getPlaybackStreamFileDirectory() {
-        return settings.getPlaybackStreamFileDirectory();
+    public boolean isRequireStateLoad() {
+        return settings.isRequireStateLoad();
     }
 
     @Override
-    public String getPlaybackEndTimeStamp() {
-        return settings.getPlaybackEndTimeStamp();
+    public boolean isCheckSignedStateFromDisk() {
+        return settings.isCheckSignedStateFromDisk();
     }
 }

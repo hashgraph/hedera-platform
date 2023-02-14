@@ -18,6 +18,7 @@ package com.swirlds.common.threading.framework.config;
 import com.swirlds.common.threading.framework.QueueThreadPool;
 import com.swirlds.common.threading.framework.internal.AbstractQueueThreadPoolConfiguration;
 import com.swirlds.common.threading.interrupt.InterruptableConsumer;
+import com.swirlds.common.threading.manager.ThreadManager;
 
 /**
  * Implements a thread pool that continuously takes elements from a queue and handles them.
@@ -27,8 +28,13 @@ import com.swirlds.common.threading.interrupt.InterruptableConsumer;
 public class QueueThreadPoolConfiguration<T>
         extends AbstractQueueThreadPoolConfiguration<QueueThreadPoolConfiguration<T>, T> {
 
-    public QueueThreadPoolConfiguration() {
-        super();
+    /**
+     * Create a new QueueThreadPool configuration.
+     *
+     * @param threadManager responsible for creating and managing threads
+     */
+    public QueueThreadPoolConfiguration(final ThreadManager threadManager) {
+        super(threadManager);
     }
 
     /**

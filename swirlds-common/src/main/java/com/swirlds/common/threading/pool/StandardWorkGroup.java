@@ -19,6 +19,7 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.threading.futures.ConcurrentFuturePool;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -54,20 +55,22 @@ public class StandardWorkGroup {
     /**
      * Create a new work group.
      *
+     * @param threadManager responsible for managing thread lifecycle
      * @param groupName the name of the group
      * @param abortAction if a non-<code>InterruptedException</code> exception is encountered,
      *     execute this method. All threads in the work group are interrupted, but if there is
      *     additional cleanup required then this method can be used to perform that cleanup. Method
      *     is called at most one time. If argument is null then no additional action is taken.
      */
-    public StandardWorkGroup(final String groupName, final Runnable abortAction) {
+    public StandardWorkGroup(
+            final ThreadManager threadManager, final String groupName, final Runnable abortAction) {
         this.groupName = groupName;
         this.futures = new ConcurrentFuturePool<>(this::handleError);
 
         this.onException = abortAction;
 
         final ThreadConfiguration configuration =
-                new ThreadConfiguration()
+                new ThreadConfiguration(threadManager)
                         .setComponent("work group " + groupName)
                         .setExceptionHandler(
                                 (t, ex) ->

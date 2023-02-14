@@ -23,6 +23,7 @@ import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_KEY_
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_KEY_SET_BLOOM_FILTER_SIZE_IN_BYTES;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_BUFFER;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_SIZE;
+import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_LEAF_RECORD_CACHE_SIZE;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_FILE_SIZE_BYTES;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_GB_RAM_FOR_MERGING;
 import static com.swirlds.jasperdb.settings.DefaultJasperDbSettings.DEFAULT_MAX_NUMBER_OF_FILES_IN_MERGE;
@@ -40,6 +41,11 @@ import com.swirlds.jasperdb.settings.JasperDbSettings;
 import com.swirlds.platform.internal.SubSetting;
 import java.time.temporal.ChronoUnit;
 
+/**
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
+@Deprecated(forRemoval = true)
 @SuppressWarnings("unused")
 public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings {
     public static final int MAX_NUMBER_OF_SAVES_BEFORE_MERGE = 100;
@@ -66,6 +72,7 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
     public long keySetHalfDiskHashMapSize = DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_SIZE;
     public int keySetHalfDiskHashMapBuffer = DEFAULT_KEY_SET_HALF_DISK_HASH_MAP_BUFFER;
     public boolean indexRebuildingEnforced = DEFAULT_INDEX_REBUILDING_ENFORCED;
+    public int leafRecordCacheSize = DEFAULT_LEAF_RECORD_CACHE_SIZE;
 
     /** {@inheritDoc} */
     @Override
@@ -314,5 +321,19 @@ public class JasperDbSettingsImpl extends SubSetting implements JasperDbSettings
     @Override
     public boolean isIndexRebuildingEnforced() {
         return indexRebuildingEnforced;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int getLeafRecordCacheSize() {
+        return leafRecordCacheSize;
+    }
+
+    public void setLeafRecordCacheSize(final int leafRecordCacheSize) {
+        if (leafRecordCacheSize < 0) {
+            throw new IllegalArgumentException(
+                    "Cannot configure leafRecordCacheSize=" + leafRecordCacheSize);
+        }
+        this.leafRecordCacheSize = leafRecordCacheSize;
     }
 }

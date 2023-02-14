@@ -15,10 +15,10 @@
  */
 package com.swirlds.config.benchmark;
 
+import com.swirlds.common.config.sources.PropertyFileConfigSource;
 import com.swirlds.config.api.ConfigData;
 import com.swirlds.config.api.Configuration;
-import com.swirlds.config.api.ConfigurationProvider;
-import com.swirlds.config.impl.sources.PropertyFileConfigSource;
+import com.swirlds.config.api.ConfigurationBuilder;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -64,15 +64,14 @@ public class ConfigBenchmark {
         final URI configUri = ConfigBenchmark.class.getResource("app.properties").toURI();
         fileSystem = FileSystems.newFileSystem(configUri, Collections.emptyMap());
         final Path configFile = Paths.get(configUri);
-        PropertyFileConfigSource configSource = new PropertyFileConfigSource(configFile);
-        ConfigurationProvider.addSource(configSource);
-        ConfigurationProvider.init();
-        configuration = ConfigurationProvider.getConfig();
+        configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new PropertyFileConfigSource(configFile))
+                        .build();
     }
 
     @TearDown(Level.Iteration)
     public void reset() {
-        ConfigurationProvider.dispose();
         try {
             fileSystem.close();
         } catch (IOException ignored) {

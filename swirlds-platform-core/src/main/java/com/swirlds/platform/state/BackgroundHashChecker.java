@@ -20,6 +20,7 @@ import static com.swirlds.platform.SwirldsPlatform.PLATFORM_THREAD_POOL_NAME;
 
 import com.swirlds.common.threading.framework.StoppableThread;
 import com.swirlds.common.threading.framework.config.StoppableThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.utility.AutoCloseableWrapper;
 import com.swirlds.platform.state.signed.SignedState;
 import java.util.function.Consumer;
@@ -41,15 +42,19 @@ public class BackgroundHashChecker {
     /**
      * Create a new background hash checker. This constructor starts a background thread.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param stateSupplier a method that is used to get signed states
      */
-    public BackgroundHashChecker(final Supplier<AutoCloseableWrapper<SignedState>> stateSupplier) {
-        this(stateSupplier, null, null);
+    public BackgroundHashChecker(
+            final ThreadManager threadManager,
+            final Supplier<AutoCloseableWrapper<SignedState>> stateSupplier) {
+        this(threadManager, stateSupplier, null, null);
     }
 
     /**
      * Create a new background hash checker. This constructor starts a background thread.
      *
+     * @param threadManager responsible for creating threads
      * @param stateSupplier a method that is used to get signed states
      * @param passedValidationCallback this method his called with each signed state that passes
      *     validation. State passed to this callback should not be used once the callback returns. A
@@ -59,6 +64,7 @@ public class BackgroundHashChecker {
      *     null callback is permitted.
      */
     public BackgroundHashChecker(
+            final ThreadManager threadManager,
             final Supplier<AutoCloseableWrapper<SignedState>> stateSupplier,
             final Consumer<SignedState> passedValidationCallback,
             final Consumer<SignedState> failedValidationCallback) {
@@ -68,7 +74,7 @@ public class BackgroundHashChecker {
         this.failedValidationCallback = failedValidationCallback;
 
         this.thread =
-                new StoppableThreadConfiguration<>()
+                new StoppableThreadConfiguration<>(threadManager)
                         .setComponent(PLATFORM_THREAD_POOL_NAME)
                         .setThreadName("background-hash-checker")
                         .setPriority(Thread.MIN_PRIORITY)

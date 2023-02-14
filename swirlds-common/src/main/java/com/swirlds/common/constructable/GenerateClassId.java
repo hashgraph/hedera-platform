@@ -18,24 +18,42 @@ package com.swirlds.common.constructable;
 import java.util.Random;
 
 /** Generates random long to use as a class ID for RuntimeConstructable. */
-public class GenerateClassId {
-    public static void main(String[] args) {
+public final class GenerateClassId {
+
+    private GenerateClassId() {}
+
+    /** {@inheritDoc} */
+    public static void main(final String[] args) {
+        generateAndPrintClassId();
+    }
+
+    /** Generate a class ID and print it to standard out. */
+    public static void generateAndPrintClassId() {
         System.out.printf(
-                "Simple program to generate a random long to use as a class ID for"
-                        + " RuntimeConstructable.\n\n"
-                        + "\tprivate static final long CLASS_ID = 0x%sL;\n\n"
-                        + "\tprivate static final class ClassVersion {\n"
-                        + "\t\tpublic static final int ORIGINAL = 1;\n"
-                        + "\t}\n\n"
-                        + "\t@Override\n"
-                        + "\tpublic long getClassId() {\n"
-                        + "\t\treturn CLASS_ID;\n"
-                        + "\t}\n"
-                        + "\n"
-                        + "\t@Override\n"
-                        + "\tpublic int getVersion() {\n"
-                        + "\t\treturn ClassVersion.ORIGINAL;\n"
-                        + "\t}",
+                """
+
+						\tprivate static final long CLASS_ID = 0x%sL;
+
+						\tprivate static final class ClassVersion {
+						\t\tpublic static final int ORIGINAL = 1;
+						\t}
+
+						\t/**
+						\t * {@inheritDoc}
+						\t */
+						\t@Override
+						\tpublic long getClassId() {
+						\t\treturn CLASS_ID;
+						\t}
+
+						\t/**
+						\t * {@inheritDoc}
+						\t */
+						\t@Override
+						\tpublic int getVersion() {
+						\t\treturn ClassVersion.ORIGINAL;
+						\t}
+							""",
                 Long.toHexString(new Random().nextLong()));
     }
 }

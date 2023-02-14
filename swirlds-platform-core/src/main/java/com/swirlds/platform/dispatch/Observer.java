@@ -25,6 +25,9 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 public @interface Observer {
 
-    /** The type of the dispatcher. */
-    Class<? extends Trigger<?>> dispatchType();
+    /** The type of the dispatcher(s). Minimum one trigger must be supplied. */
+    Class<? extends Trigger<?>>[] value();
+
+    /** An optional comment describing what the observer is doing. */
+    String comment() default "";
 }

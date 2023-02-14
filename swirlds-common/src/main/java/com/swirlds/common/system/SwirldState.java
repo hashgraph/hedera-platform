@@ -77,10 +77,10 @@ public sealed interface SwirldState extends Archivable, MerkleNode
 
     /**
      * Given a round of consensus ordered events, update the state to reflect their effect. Events
-     * are iterated in consensus order by the {@link Round#eventIterator()}. Transactions in each
-     * event are iterated in consensus order by the {@link
-     * ConsensusEvent#consensusTransactionIterator()}. Transactions in a single event occur after
-     * all the transactions in the previous event and before all the transactions in the next event.
+     * are iterated in consensus order by the {@link Round#iterator()}. Transactions in each event
+     * are iterated in consensus order by the {@link ConsensusEvent#consensusTransactionIterator()}.
+     * Transactions in a single event occur after all the transactions in the previous event and
+     * before all the transactions in the next event.
      *
      * <p>It is good if this method changes some class variables and then return. It is also OK if
      * it spawns a number of threads that change those variables, then wait until all those threads

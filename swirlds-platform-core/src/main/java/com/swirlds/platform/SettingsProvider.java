@@ -15,12 +15,13 @@
  */
 package com.swirlds.platform;
 
-import com.swirlds.platform.internal.CryptoSettings;
-import com.swirlds.platform.state.StateSettings;
-
 /**
  * A temporary interface to bridge circumvent the fact that the Settings class is package private
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
  */
+@Deprecated(forRemoval = true)
 public interface SettingsProvider {
     /** Returns true if beta mirror node support including zero stake support is enabled */
     boolean isEnableBetaMirror();
@@ -100,21 +101,6 @@ public interface SettingsProvider {
     boolean isTcpNoDelay();
 
     /**
-     * @see CryptoSettings#getKeystorePassword()
-     */
-    String getKeystorePassword();
-
-    /**
-     * @see Settings#enableStateRecovery
-     */
-    boolean isEnableStateRecovery();
-
-    /**
-     * @see Settings#state
-     */
-    StateSettings getStateSettings();
-
-    /**
      * @see Settings#throttleTransactionQueueSize
      */
     int getThrottleTransactionQueueSize();
@@ -139,7 +125,7 @@ public interface SettingsProvider {
      */
     int sleepHeartbeatMillis();
 
-    String getPlaybackStreamFileDirectory();
+    boolean isRequireStateLoad();
 
-    String getPlaybackEndTimeStamp();
+    boolean isCheckSignedStateFromDisk();
 }

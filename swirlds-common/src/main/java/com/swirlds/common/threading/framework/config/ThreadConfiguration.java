@@ -17,14 +17,19 @@ package com.swirlds.common.threading.framework.config;
 
 import com.swirlds.common.threading.framework.ThreadSeed;
 import com.swirlds.common.threading.framework.internal.AbstractThreadConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.util.concurrent.ThreadFactory;
 
 /** This object is used to configure and build {@link Thread} instances. */
 public class ThreadConfiguration extends AbstractThreadConfiguration<ThreadConfiguration> {
 
-    /** Build a new thread configuration with default values. */
-    public ThreadConfiguration() {
-        super();
+    /**
+     * Build a new thread configuration with default values.
+     *
+     * @param threadManager capable of building raw thread objects
+     */
+    public ThreadConfiguration(final ThreadManager threadManager) {
+        super(threadManager);
     }
 
     /**
@@ -50,20 +55,24 @@ public class ThreadConfiguration extends AbstractThreadConfiguration<ThreadConfi
     /**
      * Extracts the thread configuration from the caller's thread.
      *
+     * @param threadManager capable of building raw thread objects
      * @return a thread configuration with properties matching the caller's thread
      */
-    public static ThreadConfiguration captureThreadConfiguration() {
-        return captureThreadConfiguration(Thread.currentThread());
+    public static ThreadConfiguration captureThreadConfiguration(
+            final ThreadManager threadManager) {
+        return captureThreadConfiguration(threadManager, Thread.currentThread());
     }
 
     /**
      * Extracts the thread configuration from a given thread.
      *
+     * @param threadManager capable of building raw thread objects
      * @param thread the thread to copy configuration from
      * @return a thread configuration that matches the provided thread
      */
-    public static ThreadConfiguration captureThreadConfiguration(final Thread thread) {
-        final ThreadConfiguration configuration = new ThreadConfiguration();
+    public static ThreadConfiguration captureThreadConfiguration(
+            final ThreadManager threadManager, final Thread thread) {
+        final ThreadConfiguration configuration = new ThreadConfiguration(threadManager);
         configuration.copyThreadConfiguration(thread);
         return configuration;
     }
@@ -103,9 +112,9 @@ public class ThreadConfiguration extends AbstractThreadConfiguration<ThreadConfi
     public ThreadFactory buildFactory() {
         enableThreadNumbering();
 
-        final ThreadFactory factory =
+        final java.util.concurrent.ThreadFactory factory =
                 (final Runnable r) -> {
-                    final Thread thread = new Thread(getThreadGroup(), r);
+                    final Thread thread = getThreadManager().createThread(getThreadGroup(), r);
                     configureThread(thread);
                     return thread;
                 };

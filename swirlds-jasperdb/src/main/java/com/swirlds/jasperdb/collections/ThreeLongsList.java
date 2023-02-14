@@ -138,7 +138,7 @@ public class ThreeLongsList {
      *
      * @param handler callback to receieve each triple.
      */
-    public void forEach(final ThreeLongFunction handler) {
+    public <T extends Throwable> void forEach(final ThreeLongFunction<T> handler) throws T {
         int index = 0;
         for (final long[] chunk : data) {
             for (int j = 0, k = 0; j < triplesPerChunk; j++, k += LONGS_PER_TRIPLE) {
@@ -172,10 +172,15 @@ public class ThreeLongsList {
         return maxTriples;
     }
 
-    /** Simple interface for a three longs function. */
+    /**
+     * Simple functional interface to process three longs. A Throwable of the given type may be
+     * thrown.
+     *
+     * @param <T> Type of Throwable that may be thrown
+     */
     @FunctionalInterface
-    public interface ThreeLongFunction {
-        void process(long l1, long l2, long l3);
+    public interface ThreeLongFunction<T extends Throwable> {
+        void process(long l1, long l2, long l3) throws T;
     }
 
     int getTriplesPerChunk() {

@@ -49,5 +49,5 @@ public @interface ConfigData {
      *
      * @return the prefix for the property names
      */
-    String value();
+    String value() default "";
 }

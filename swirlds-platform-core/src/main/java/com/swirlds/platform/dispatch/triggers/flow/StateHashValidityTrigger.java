@@ -23,6 +23,7 @@ import com.swirlds.platform.dispatch.types.TriggerFour;
  * for rounds that have a catastrophic ISS (these rounds don't have a consensus hash, so there is no
  * such thing as a valid hash for that round).
  */
+@FunctionalInterface
 public interface StateHashValidityTrigger extends TriggerFour<Long, Long, Hash, Hash> {
 
     /**

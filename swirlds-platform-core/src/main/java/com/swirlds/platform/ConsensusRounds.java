@@ -15,9 +15,11 @@
  */
 package com.swirlds.platform;
 
+import com.swirlds.common.config.ConsensusConfig;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.consensus.GraphGenerations;
+import com.swirlds.platform.consensus.RoundCalculationUtils;
 import com.swirlds.platform.consensus.RoundNumberProvider;
 import com.swirlds.platform.state.MinGenInfo;
 import java.util.List;
@@ -37,7 +39,8 @@ import org.apache.logging.log4j.Logger;
  * <p>This is a first version, the plan is to put all round storing logic into this class.
  */
 class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ConsensusRounds.class);
+    private final ConsensusConfig config;
 
     /** the address book of the network */
     private final AddressBook addressBook;
@@ -85,7 +88,8 @@ class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
      *
      * @param addressBook the address book of the network
      */
-    ConsensusRounds(final AddressBook addressBook) {
+    ConsensusRounds(final ConsensusConfig config, final AddressBook addressBook) {
+        this.config = config;
         this.addressBook = addressBook;
         rounds = new ConcurrentHashMap<>();
     }
@@ -220,7 +224,8 @@ class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
      */
     private void updateMinGenNonAncient() {
         final long nonAncientRound =
-                Settings.getInstance().getState().getOldestNonAncientRound(fameDecidedBelow.get());
+                RoundCalculationUtils.getOldestNonAncientRound(
+                        config.roundsNonAncient(), fameDecidedBelow.get());
         final RoundInfo ri = rounds.get(nonAncientRound);
         if (ri == null) {
             // should never happen

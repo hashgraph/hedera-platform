@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 Hedera Hashgraph, LLC
+ * Copyright (C) 2016-2022 Hedera Hashgraph, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,70 +15,34 @@
  */
 package com.swirlds.config.impl;
 
+import com.swirlds.common.config.sources.LegacyFileConfigSource;
+import com.swirlds.common.config.sources.PropertyFileConfigSource;
+import com.swirlds.common.config.sources.SimpleConfigSource;
+import com.swirlds.common.config.sources.SystemPropertiesConfigSource;
 import com.swirlds.config.api.Configuration;
-import com.swirlds.config.api.ConfigurationProvider;
-import com.swirlds.config.api.converter.ConfigConverter;
-import com.swirlds.config.api.source.ConfigSource;
-import com.swirlds.config.api.validation.ConfigPropertyConstraint;
+import com.swirlds.config.api.ConfigurationBuilder;
 import com.swirlds.config.api.validation.ConfigValidator;
-import com.swirlds.config.api.validation.ConfigViolation;
 import com.swirlds.config.api.validation.ConfigViolationException;
-import com.swirlds.config.api.validation.PropertyMetadata;
 import com.swirlds.config.impl.converters.DurationConverter;
-import com.swirlds.config.impl.converters.IntegerConverter;
-import com.swirlds.config.impl.sources.DefaultValueConfigSource;
-import com.swirlds.config.impl.sources.LegacyFileConfigSource;
-import com.swirlds.config.impl.sources.PropertyFileConfigSource;
-import com.swirlds.config.impl.sources.SystemPropertiesConfigSource;
 import com.swirlds.config.impl.validators.DefaultConfigViolation;
-import com.swirlds.config.impl.validators.MinConstraint;
-import com.swirlds.config.impl.validators.PropertyExistsConstraint;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 public class ConfigApiTests {
 
-    private final DummyConfigSource dummyConfigSource = new DummyConfigSource();
-
-    @BeforeEach
-    public void initConfig() {
-        if (ConfigurationProvider.isInitialized()) {
-            ConfigurationProvider.dispose();
-        }
-        dummyConfigSource.clear();
-        ConfigurationProvider.init();
-    }
-
-    private void addPropertyToConfig(final String key, final String value) {
-        if (ConfigurationProvider.isInitialized()) {
-            ConfigurationProvider.dispose();
-        }
-        dummyConfigSource.setProperty(key, value);
-        ConfigurationProvider.addSource(dummyConfigSource);
-        ConfigurationProvider.init();
-    }
-
     @Test
     public void checkNotExistingProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // then
         Assertions.assertFalse(
@@ -88,10 +52,10 @@ public class ConfigApiTests {
     @Test
     public void checkExistingProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
-
-        // when
-        addPropertyToConfig("someName", "123");
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("someName", "123"))
+                        .build();
 
         // then
         Assertions.assertTrue(
@@ -101,7 +65,7 @@ public class ConfigApiTests {
     @Test
     public void getAllPropertyNamesEmpty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // when
         final List<String> names = configuration.getPropertyNames().collect(Collectors.toList());
@@ -115,10 +79,12 @@ public class ConfigApiTests {
     @Test
     public void getAllPropertyNames() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
-        addPropertyToConfig("someName", "123");
-        addPropertyToConfig("someOtherName", "test");
-        addPropertyToConfig("company.url", "dummy");
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("someName", "123"))
+                        .withSource(new SimpleConfigSource("someOtherName", "test"))
+                        .withSource(new SimpleConfigSource("company.url", "dummy"))
+                        .build();
 
         // when
         final List<String> names = configuration.getPropertyNames().collect(Collectors.toList());
@@ -137,7 +103,7 @@ public class ConfigApiTests {
     @Test
     public void readNotExistingStringProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // then
         Assertions.assertThrows(
@@ -150,7 +116,7 @@ public class ConfigApiTests {
     @Test
     public void readDefaultStringProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // when
         final String value = configuration.getValue("someName", "default");
@@ -165,8 +131,10 @@ public class ConfigApiTests {
     @Test
     public void readStringProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
-        addPropertyToConfig("someName", "123");
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("someName", "123"))
+                        .build();
 
         // when
         final String value = configuration.getValue("someName");
@@ -179,8 +147,10 @@ public class ConfigApiTests {
     @Test
     public void readStringPropertyWithDefaultProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
-        addPropertyToConfig("someName", "123");
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("someName", "123"))
+                        .build();
 
         // when
         final String value = configuration.getValue("someName", "default");
@@ -193,7 +163,7 @@ public class ConfigApiTests {
     @Test
     public void readMissingStringPropertyWithNullProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // when
         final String value = configuration.getValue("someName", String.class, null);
@@ -205,8 +175,10 @@ public class ConfigApiTests {
     @Test
     public void readIntProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
-        addPropertyToConfig("timeout", "12");
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("timeout", 12))
+                        .build();
 
         // when
         final int value = configuration.getValue("timeout", Integer.class);
@@ -218,7 +190,7 @@ public class ConfigApiTests {
     @Test
     public void readNotExistingIntProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // then
         Assertions.assertThrows(
@@ -231,8 +203,10 @@ public class ConfigApiTests {
     @Test
     public void readBadIntProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
-        addPropertyToConfig("timeout", "NO-INT");
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("timeout", "NO-INT"))
+                        .build();
 
         // then
         Assertions.assertThrows(
@@ -245,8 +219,10 @@ public class ConfigApiTests {
     @Test
     public void readIntPropertyWithDefaultValue() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
-        addPropertyToConfig("timeout", "12");
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("timeout", 12))
+                        .build();
 
         // when
         final int value = configuration.getValue("timeout", Integer.class, 1_000);
@@ -259,7 +235,7 @@ public class ConfigApiTests {
     @Test
     public void readMissingIntPropertyWithDefaultValue() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // when
         final int value = configuration.getValue("timeout", Integer.class, 1_000);
@@ -274,7 +250,7 @@ public class ConfigApiTests {
     @Test
     public void readMissingIntPropertyWithNullDefaultValue() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // when
         Integer value = configuration.getValue("timeout", Integer.class, null);
@@ -286,7 +262,7 @@ public class ConfigApiTests {
     @Test
     public void readMissingIntPropertyWithNullDefaultValueAutoboxing() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // then
         Assertions.assertThrows(
@@ -300,8 +276,12 @@ public class ConfigApiTests {
     @Test
     public void readListProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
-        addPropertyToConfig("testNumbers", "1,2,3");
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(
+                                new SimpleConfigSource()
+                                        .withIntegerValues("testNumbers", List.of(1, 2, 3)))
+                        .build();
 
         // when
         final List<Integer> values = configuration.getValues("testNumbers", Integer.class);
@@ -326,8 +306,10 @@ public class ConfigApiTests {
     @Test
     public void readListPropertyWithOneEntry() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
-        addPropertyToConfig("testNumbers", "123");
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("testNumbers", 123))
+                        .build();
 
         // when
         final List<Integer> values = configuration.getValues("testNumbers", Integer.class);
@@ -344,8 +326,10 @@ public class ConfigApiTests {
     @Test
     public void readBadListProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
-        addPropertyToConfig("testNumbers", "1,2,   3,4");
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("testNumbers", "1,2,   3,4"))
+                        .build();
 
         // then
         Assertions.assertThrows(
@@ -357,7 +341,7 @@ public class ConfigApiTests {
     @Test
     public void readDefaultListProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // when
         final List<Integer> values =
@@ -379,7 +363,7 @@ public class ConfigApiTests {
     @Test
     public void readNullDefaultListProperty() {
         // given
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // when
         final List<Integer> values = configuration.getValues("testNumbers", Integer.class, null);
@@ -391,8 +375,10 @@ public class ConfigApiTests {
     @Test
     public void checkListPropertyImmutable() {
         // given
-        addPropertyToConfig("testNumbers", "1,2,3");
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("testNumbers", "1,2,3"))
+                        .build();
 
         // when
         final List<Integer> values = configuration.getValues("testNumbers", Integer.class);
@@ -407,12 +393,11 @@ public class ConfigApiTests {
     @Test
     public void getConfigProxy() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("network.port", "8080");
-        ConfigurationProvider.addSource(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NetworkConfig.class);
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("network.port", 8080))
+                        .withConfigDataType(NetworkConfig.class)
+                        .build();
 
         // when
         final NetworkConfig networkConfig = configuration.getConfigData(NetworkConfig.class);
@@ -425,22 +410,20 @@ public class ConfigApiTests {
     @Test
     public void getNotRegisteredDataObject() {
         // given
-        ConfigurationProvider.dispose();
-        ConfigurationProvider.addConfigDataType(NetworkConfig.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create().withConfigDataType(NetworkConfig.class);
 
         // then
         Assertions.assertThrows(
                 IllegalStateException.class,
-                () -> ConfigurationProvider.init(),
+                () -> configurationBuilder.build(),
                 "It should not be possible to create a config data object with undefined values");
     }
 
     @Test
     public void getConfigProxyUndefinedValue() {
         // given
-        ConfigurationProvider.dispose();
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration = ConfigurationBuilder.create().build();
 
         // then
         Assertions.assertThrows(
@@ -453,12 +436,11 @@ public class ConfigApiTests {
     @Test
     public void getConfigProxyDefaultValue() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("network.port", "8080");
-        ConfigurationProvider.addSource(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NetworkConfig.class);
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("network.port", "8080"))
+                        .withConfigDataType(NetworkConfig.class)
+                        .build();
 
         // when
         final NetworkConfig networkConfig = configuration.getConfigData(NetworkConfig.class);
@@ -473,13 +455,11 @@ public class ConfigApiTests {
     @Test
     public void getConfigProxyDefaultValuesList() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.clear();
-        dummyConfigSource.setProperty("network.port", "8080");
-        ConfigurationProvider.addSource(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NetworkConfig.class);
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("network.port", "8080"))
+                        .withConfigDataType(NetworkConfig.class)
+                        .build();
 
         // when
         final NetworkConfig networkConfig = configuration.getConfigData(NetworkConfig.class);
@@ -503,13 +483,12 @@ public class ConfigApiTests {
     @Test
     public void getConfigProxyValuesList() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("network.port", "8080");
-        dummyConfigSource.setProperty("network.errorCodes", "1,2,3");
-        ConfigurationProvider.addSource(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NetworkConfig.class);
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("network.port", "8080"))
+                        .withSource(new SimpleConfigSource("network.errorCodes", "1,2,3"))
+                        .withConfigDataType(NetworkConfig.class)
+                        .build();
 
         // when
         final NetworkConfig networkConfig = configuration.getConfigData(NetworkConfig.class);
@@ -531,13 +510,13 @@ public class ConfigApiTests {
     @Test
     public void invalidDataRecordWillFailInit() {
         // given
-        ConfigurationProvider.dispose();
-        ConfigurationProvider.addConfigDataType(NetworkConfig.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create().withConfigDataType(NetworkConfig.class);
 
         // then
         Assertions.assertThrows(
                 IllegalStateException.class,
-                ConfigurationProvider::init,
+                () -> configurationBuilder.build(),
                 "values must be defined for all properties that are defined by registered config"
                         + " data types");
     }
@@ -545,14 +524,12 @@ public class ConfigApiTests {
     @Test
     public void getConfigProxyOverwrittenDefaultValue() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.clear();
-        dummyConfigSource.setProperty("network.port", "8080");
-        dummyConfigSource.setProperty("network.server", "example.net");
-        ConfigurationProvider.addSource(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NetworkConfig.class);
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("network.port", "8080"))
+                        .withSource(new SimpleConfigSource("network.server", "example.net"))
+                        .withConfigDataType(NetworkConfig.class)
+                        .build();
 
         // when
         final NetworkConfig networkConfig = configuration.getConfigData(NetworkConfig.class);
@@ -567,11 +544,11 @@ public class ConfigApiTests {
     @Test
     public void getSystemProperty() {
         // given
-        ConfigurationProvider.dispose();
         System.setProperty("test.config.sample", "qwerty");
-        ConfigurationProvider.addSource(SystemPropertiesConfigSource.getInstance());
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(SystemPropertiesConfigSource.getInstance())
+                        .build();
 
         // when
         String value = configuration.getValue("test.config.sample");
@@ -584,12 +561,12 @@ public class ConfigApiTests {
     @Test
     public void getPropertyFromFile() throws IOException, URISyntaxException {
         // given
-        ConfigurationProvider.dispose();
         final Path configFile =
                 Paths.get(ConfigApiTests.class.getResource("test.properties").toURI());
-        ConfigurationProvider.addSource(new PropertyFileConfigSource(configFile));
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new PropertyFileConfigSource(configFile))
+                        .build();
 
         // when
         String value = configuration.getValue("app.name");
@@ -604,14 +581,14 @@ public class ConfigApiTests {
     @Test
     public void getPropertyFromFileOverwritesDefault() throws IOException, URISyntaxException {
         // given
-        ConfigurationProvider.dispose();
         final Path configFile =
                 Paths.get(ConfigApiTests.class.getResource("test.properties").toURI());
-        ConfigurationProvider.addSource(new PropertyFileConfigSource(configFile));
-        DefaultValueConfigSource.setDefaultValue("app.name", "unknown");
-        ConfigurationProvider.addSource(DefaultValueConfigSource.getInstance());
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new PropertyFileConfigSource(configFile))
+                        .withSources(new SimpleConfigSource("app.name", "unknown"))
+                        .build();
 
         // when
         String value = configuration.getValue("app.name");
@@ -626,7 +603,6 @@ public class ConfigApiTests {
     @Test
     public void checkValidationForNotExistingProperty() {
         // given
-        ConfigurationProvider.dispose();
         final ConfigValidator validator =
                 configuration -> {
                     if (!configuration.exists("app.name")) {
@@ -639,13 +615,14 @@ public class ConfigApiTests {
                     }
                     return Stream.empty();
                 };
-        ConfigurationProvider.addValidator(validator);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create().withValidator(validator);
 
         // when
         final IllegalStateException exception =
                 Assertions.assertThrows(
                         IllegalStateException.class,
-                        ConfigurationProvider::init,
+                        () -> configurationBuilder.build(),
                         "Config must not be initialzed if a validation fails");
 
         // then
@@ -672,15 +649,12 @@ public class ConfigApiTests {
     @Test
     public void loadLegacySettings() throws IOException, URISyntaxException {
         // given
-        ConfigurationProvider.dispose();
         final Path configFile =
                 Paths.get(ConfigApiTests.class.getResource("legacy-settings.txt").toURI());
-        @SuppressWarnings("removal")
-        final ConfigSource configSource = new LegacyFileConfigSource(configFile);
-        ConfigurationProvider.addSource(configSource);
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
-
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new LegacyFileConfigSource(configFile))
+                        .build();
         // then
         Assertions.assertEquals(
                 8,
@@ -744,224 +718,25 @@ public class ConfigApiTests {
     }
 
     @Test
-    public void checkNotInitialized() {
-        // given
-        ConfigurationProvider.dispose();
-        final Configuration configuration = ConfigurationProvider.getConfig();
-
-        // then
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                configuration::getPropertyNames,
-                "It must not be possible to access functionallity of a disposes configuration");
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> configuration.exists("app.name"),
-                "It must not be possible to access functionallity of a disposes configuration");
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> configuration.getValue("app.name"),
-                "It must not be possible to access functionallity of a disposes configuration");
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> configuration.getValue("app.name", String.class),
-                "It must not be possible to access functionallity of a disposes configuration");
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> configuration.getValue("app.name", String.class, "default"),
-                "It must not be possible to access functionallity of a disposes configuration");
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> configuration.getValues("app.services", String.class),
-                "It must not be possible to access functionallity of a disposes configuration");
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () ->
-                        configuration.getValues(
-                                "app.services", String.class, Collections.emptyList()),
-                "It must not be possible to access functionallity of a disposes configuration");
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> configuration.getConfigData(NetworkConfig.class),
-                "It must not be possible to access functionallity of a disposes configuration");
-    }
-
-    @Test
-    public void checkConstraintForNotExistingProperty() {
-        // given
-        ConfigurationProvider.dispose();
-        ConfigurationProvider.addConstraint(
-                "app.name", String.class, new PropertyExistsConstraint<>());
-
-        // when
-        final IllegalStateException exception =
-                Assertions.assertThrows(
-                        IllegalStateException.class,
-                        ConfigurationProvider::init,
-                        "It must not be possible to init the config with a failed contraint");
-
-        // then
-        Assertions.assertEquals(ConfigViolationException.class, exception.getClass());
-        final ConfigViolationException configViolationException =
-                (ConfigViolationException) exception;
-        Assertions.assertEquals(
-                1,
-                configViolationException.getViolations().size(),
-                "Based o the contraint we should only have 1 violation");
-        Assertions.assertEquals(
-                "app.name",
-                configViolationException.getViolations().get(0).getPropertyName(),
-                "The violation should define the corret property");
-    }
-
-    @Test
-    public void checkConstraintForMinIntegerProperty() {
-        // given
-        ConfigurationProvider.dispose();
-        ConfigurationProvider.addConstraint("app.version", Integer.class, new MinConstraint<>(10));
-        DefaultValueConfigSource.setDefaultValue("app.version", "9");
-        ConfigurationProvider.addSource(DefaultValueConfigSource.getInstance());
-
-        // when
-        final IllegalStateException exception =
-                Assertions.assertThrows(
-                        IllegalStateException.class,
-                        ConfigurationProvider::init,
-                        "Configuration initialization must fail based on the registered "
-                                + "contraint");
-
-        // then
-        Assertions.assertEquals(
-                ConfigViolationException.class,
-                exception.getClass(),
-                "Configuration initialization must fail with a ConfigViolationException");
-        final ConfigViolationException configViolationException =
-                (ConfigViolationException) exception;
-        Assertions.assertEquals(
-                1,
-                configViolationException.getViolations().size(),
-                "The given contraint must end in exactly 1 violation");
-        Assertions.assertEquals(
-                "app.version",
-                configViolationException.getViolations().get(0).getPropertyName(),
-                "The violation must contain the correct property");
-    }
-
-    @Test
-    public void testInitalizedConfigCanNotBeConfigured() {
-        // given
-        final ConfigSource source = new DummyConfigSource();
-        final ConfigConverter<Integer> converter = new IntegerConverter();
-        final ConfigValidator validator = c -> Stream.empty();
-        final ConfigPropertyConstraint<String> constraint =
-                metadata -> DefaultConfigViolation.of(metadata, "");
-
-        // when
-        ConfigurationProvider.dispose();
-        ConfigurationProvider.init();
-
-        // then
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> ConfigurationProvider.addSource(source),
-                "add config sources after config has been initialized must not be possible");
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> ConfigurationProvider.addConverter(converter),
-                "add converter after config has been initialized must not be possible");
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> ConfigurationProvider.addValidator(validator),
-                "add validator after config has been initialized must not be possible");
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> ConfigurationProvider.addConstraint("property", String.class, constraint),
-                "add constraint after config has been initialized must not be possible");
-    }
-
-    @Test
-    public void testInitIsThreadSafe() {
-        // given
-        ConfigurationProvider.dispose();
-        final AtomicInteger initCount = new AtomicInteger(0);
-        final AtomicInteger failCount = new AtomicInteger(0);
-        final Runnable task =
-                () -> {
-                    try {
-                        ConfigurationProvider.init();
-                        initCount.incrementAndGet();
-                    } catch (final Exception e) {
-                        failCount.incrementAndGet();
-                    }
-                };
-        final ExecutorService executorService = Executors.newFixedThreadPool(10);
-
-        // when
-        IntStream.range(0, 100)
-                .mapToObj(i -> executorService.submit(task))
-                .forEach(
-                        f -> {
-                            try {
-                                f.get();
-                            } catch (Exception e) {
-                            }
-                        });
-
-        // then
-        Assertions.assertEquals(1, initCount.get());
-        Assertions.assertEquals(99, failCount.get());
-    }
-
-    @Test
-    public void testCreationIsThreadSafe() {
-        // given
-        ConfigurationProvider.dispose();
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
-
-        final Callable<Configuration> task = () -> ConfigurationProvider.getConfig();
-        final ExecutorService executorService = Executors.newFixedThreadPool(10);
-
-        // then
-        IntStream.range(0, 100)
-                .mapToObj(i -> executorService.submit(task))
-                .map(
-                        f -> {
-                            try {
-                                return f.get();
-                            } catch (Exception e) {
-                                throw new RuntimeException("Error", e);
-                            }
-                        })
-                .filter(c -> c != configuration)
-                .findAny()
-                .ifPresent(c -> Assertions.fail("We should only have 1 config instance"));
-    }
-
-    @Test
     public void registerConverterForTypeMultipleTimes() {
         // given
-        ConfigurationProvider.dispose();
-
-        // when
-        ConfigurationProvider.addConverter(new DurationConverter());
-
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create().withConverter(new DurationConverter());
         // then
         Assertions.assertThrows(
                 IllegalStateException.class,
-                () -> ConfigurationProvider.init(),
+                () -> configurationBuilder.build(),
                 "One 1 converter for a specific type / class can be registered");
     }
 
     @Test
     public void registerCustomConverter() {
         // given
-        ConfigurationProvider.dispose();
-        ConfigurationProvider.addConverter(new TestDateConverter());
-        DefaultValueConfigSource.setDefaultValue("app.start", "1662367513551");
-        ConfigurationProvider.addSource(DefaultValueConfigSource.getInstance());
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withConverter(new TestDateConverter())
+                        .withSource(new SimpleConfigSource("app.start", "1662367513551"))
+                        .build();
 
         // when
         final Date date = configuration.getValue("app.start", Date.class);
@@ -976,16 +751,16 @@ public class ConfigApiTests {
     @Test
     public void testMinConstrainAnnotation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("network.port", "-1");
-        ConfigurationProvider.addSource(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NetworkConfig.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("network.port", "-1"))
+                        .withConfigDataType(NetworkConfig.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Check for @Min annotation in NetworkConfig should end in violation");
 
         // then
@@ -1000,17 +775,17 @@ public class ConfigApiTests {
     @Test
     public void testConstrainAnnotation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("network.port", "8080");
-        dummyConfigSource.setProperty("network.server", "invalid");
-        ConfigurationProvider.addSource(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NetworkConfig.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("network.port", "8080"))
+                        .withSources(new SimpleConfigSource("network.server", "invalid"))
+                        .withConfigDataType(NetworkConfig.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Check for @Constraint annotation in NetworkConfig should end in"
                                 + " violation");
 
@@ -1027,17 +802,17 @@ public class ConfigApiTests {
     @Test
     public void testMultipleConstrainAnnotationsFail() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("network.port", "-1");
-        dummyConfigSource.setProperty("network.server", "invalid");
-        ConfigurationProvider.addSource(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NetworkConfig.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("network.port", "-1"))
+                        .withSources(new SimpleConfigSource("network.server", "invalid"))
+                        .withConfigDataType(NetworkConfig.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Check for @Constraint annotation in NetworkConfig should end in"
                                 + " violation");
 
@@ -1046,35 +821,109 @@ public class ConfigApiTests {
     }
 
     @Test
-    public void testConfigPropertyConstraintMetadata() {
+    public void testNullList() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("test", "-1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        final AtomicBoolean check = new AtomicBoolean(false);
-        ConfigurationProvider.addConstraint(
-                "test",
-                Integer.TYPE,
-                new ConfigPropertyConstraint<Integer>() {
-                    @Override
-                    public ConfigViolation check(final PropertyMetadata<Integer> metadata) {
-                        Assertions.assertNotNull(metadata);
-                        Assertions.assertEquals("test", metadata.getName());
-                        Assertions.assertEquals("-1", metadata.getRawValue());
-                        Assertions.assertNotNull(metadata.getConverter());
-                        Assertions.assertEquals(
-                                -1, metadata.getConverter().convert(metadata.getRawValue()));
-                        Assertions.assertEquals(Integer.TYPE, metadata.getValueType());
-                        Assertions.assertTrue(metadata.exists());
-                        check.set(true);
-                        return null;
-                    }
-                });
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("sample.list", (String) null))
+                        .build();
 
         // when
-        ConfigurationProvider.init();
+        List<String> list1 = configuration.getValues("sample.list");
+        List<String> list2 = configuration.getValues("sample.list", List.of());
+        List<String> list3 = configuration.getValues("sample.list", String.class);
+        List<String> list4 = configuration.getValues("sample.list", String.class, List.of());
+        List<Integer> list5 = configuration.getValues("sample.list", Integer.class);
+        List<Integer> list6 = configuration.getValues("sample.list", Integer.class, List.of());
 
         // then
-        Assertions.assertTrue(check.get());
+        Assertions.assertNull(list1, "The list must be null");
+        Assertions.assertNull(
+                list2,
+                "The list must be null since a default is only used if a property is not defined");
+        Assertions.assertNull(list3, "The list must be null");
+        Assertions.assertNull(
+                list4,
+                "The list must be null since a default is only used if a property is not defined");
+        Assertions.assertNull(list5, "The list must be null");
+        Assertions.assertNull(
+                list6,
+                "The list must be null since a default is only used if a property is not defined");
+    }
+
+    @Test
+    public void testNullProperties() {
+        // given
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("sample", (String) null))
+                        .build();
+
+        // when
+        String value1 = configuration.getValue("sample");
+        String value2 = configuration.getValue("sample", "default");
+        String value3 = configuration.getValue("sample", String.class);
+        String value4 = configuration.getValue("sample", String.class, "default");
+
+        Integer value5 = configuration.getValue("sample", Integer.class);
+        Integer value6 = configuration.getValue("sample", Integer.class, 123);
+
+        // then
+        Assertions.assertNull(value1, "The value must be null");
+        Assertions.assertNull(
+                value2,
+                "The value must be null since a default is only used if a property is not defined");
+        Assertions.assertNull(value3, "The value must be null");
+        Assertions.assertNull(
+                value4,
+                "The value must be null since a default is only used if a property is not defined");
+        Assertions.assertNull(value5, "The value must be null");
+        Assertions.assertNull(
+                value6,
+                "The value must be null since a default is only used if a property is not defined");
+    }
+
+    @Test
+    public void testNotDefinedEmptyList() {
+        // given
+        final Configuration configuration = ConfigurationBuilder.create().build();
+
+        // then
+        Assertions.assertThrows(
+                NoSuchElementException.class, () -> configuration.getValues("sample.list"));
+        Assertions.assertThrows(
+                NoSuchElementException.class,
+                () -> configuration.getValues("sample.list", String.class));
+        Assertions.assertThrows(
+                NoSuchElementException.class,
+                () -> configuration.getValues("sample.list", Integer.class));
+    }
+
+    @Test
+    public void testEmptyListInConfigDataRecord() {
+        // given
+        final Configuration configuration =
+                ConfigurationBuilder.create().withConfigDataType(EmptyListConfig.class).build();
+
+        // when
+        List<Integer> list = configuration.getConfigData(EmptyListConfig.class).list();
+
+        // then
+        Assertions.assertIterableEquals(List.of(), list);
+    }
+
+    @Test
+    public void testNullDefaultsInConfigDataRecord() {
+        // given
+        final Configuration configuration =
+                ConfigurationBuilder.create().withConfigDataType(NullConfig.class).build();
+
+        // when
+        List<Integer> list = configuration.getConfigData(NullConfig.class).list();
+        String value = configuration.getConfigData(NullConfig.class).value();
+
+        // then
+        Assertions.assertNull(list);
+        Assertions.assertNull(value);
     }
 }

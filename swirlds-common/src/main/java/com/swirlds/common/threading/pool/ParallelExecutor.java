@@ -15,16 +15,20 @@
  */
 package com.swirlds.common.threading.pool;
 
-import com.swirlds.common.threading.ThrowingRunnable;
+import com.swirlds.common.Mutable;
+import com.swirlds.common.threading.utility.ThrowingRunnable;
+import com.swirlds.common.utility.Startable;
 import java.util.concurrent.Callable;
 
 /** Used for executing tasks in parallel */
-public interface ParallelExecutor {
+public interface ParallelExecutor extends Mutable, Startable {
     /**
      * Run two tasks in parallel
      *
      * @param task1 a task to execute in parallel
      * @param task2 a task to execute in parallel
+     * @throws com.swirlds.common.exceptions.MutabilityException if executed prior to object being
+     *     started
      * @throws ParallelExecutionException if anything goes wrong
      */
     <T> T doParallel(Callable<T> task1, Callable<Void> task2) throws ParallelExecutionException;
@@ -42,6 +46,8 @@ public interface ParallelExecutor {
      * @param task1 a task to execute in parallel
      * @param task2 a task to execute in parallel
      * @param onThrow a task to run if an exception gets thrown
+     * @throws com.swirlds.common.exceptions.MutabilityException if executed prior to object being
+     *     started
      * @throws ParallelExecutionException if anything goes wrong
      */
     default <T> T doParallel(

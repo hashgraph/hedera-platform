@@ -19,10 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Message;
-import com.swirlds.common.crypto.internal.CryptographySettings;
+import com.swirlds.common.crypto.config.CryptoConfig;
+import com.swirlds.config.api.Configuration;
+import com.swirlds.test.framework.config.TestConfigBuilder;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.util.Arrays;
@@ -33,18 +35,19 @@ import org.junit.jupiter.api.Test;
 
 public class MessageDigestTests {
 
-    private static final CryptographySettings engineSettings =
-            CryptographySettings.getDefaultSettings();
+    private static CryptoConfig cryptoConfig;
     private static MessageDigestPool digestPool;
     private static Cryptography cryptoProvider;
 
     @BeforeAll
     public static void startup() throws NoSuchAlgorithmException {
-        assertNotNull(engineSettings);
-        assertTrue(engineSettings.computeCpuDigestThreadCount() >= 1);
+        final Configuration configuration = new TestConfigBuilder().getOrCreateConfig();
+        cryptoConfig = configuration.getConfigData(CryptoConfig.class);
 
-        cryptoProvider = CryptoFactory.getInstance();
-        digestPool = new MessageDigestPool(engineSettings.computeCpuDigestThreadCount() * 16, 100);
+        assertTrue(cryptoConfig.computeCpuDigestThreadCount() >= 1);
+
+        cryptoProvider = CryptographyHolder.get();
+        digestPool = new MessageDigestPool(cryptoConfig.computeCpuDigestThreadCount() * 16, 100);
     }
 
     @AfterAll
@@ -70,7 +73,7 @@ public class MessageDigestTests {
     /** Checks correctness of MessageDigest batch sizes less than the thread count */
     @Test
     public void digestSizeUnderThreads() throws ExecutionException, InterruptedException {
-        final Message[] messages = new Message[engineSettings.computeCpuDigestThreadCount() - 1];
+        final Message[] messages = new Message[cryptoConfig.computeCpuDigestThreadCount() - 1];
 
         for (int i = 0; i < messages.length; i++) {
             messages[i] = digestPool.next();
@@ -87,7 +90,7 @@ public class MessageDigestTests {
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
         final Message[] messages =
-                new Message[(engineSettings.computeCpuDigestThreadCount() * 2) - 1];
+                new Message[(cryptoConfig.computeCpuDigestThreadCount() * 2) - 1];
 
         for (int i = 0; i < messages.length; i++) {
             messages[i] = digestPool.next();
@@ -103,7 +106,7 @@ public class MessageDigestTests {
     public void digestHalfQueueSize()
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
-        final Message[] messages = new Message[engineSettings.getCpuDigestQueueSize() / 2];
+        final Message[] messages = new Message[cryptoConfig.cpuDigestQueueSize() / 2];
 
         for (int i = 0; i < messages.length; i++) {
             messages[i] = digestPool.next();
@@ -119,7 +122,7 @@ public class MessageDigestTests {
     public void digestExactQueueSize()
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
-        final Message[] messages = new Message[engineSettings.getCpuDigestQueueSize()];
+        final Message[] messages = new Message[cryptoConfig.cpuDigestQueueSize()];
 
         for (int i = 0; i < messages.length; i++) {
             messages[i] = digestPool.next();
@@ -135,7 +138,7 @@ public class MessageDigestTests {
     public void digestDoubleQueueSize()
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
-        final Message[] messages = new Message[engineSettings.getCpuDigestQueueSize() * 2];
+        final Message[] messages = new Message[cryptoConfig.cpuDigestQueueSize() * 2];
 
         for (int i = 0; i < messages.length; i++) {
             messages[i] = digestPool.next();

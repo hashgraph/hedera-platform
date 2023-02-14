@@ -21,7 +21,7 @@ import org.apache.logging.log4j.Marker;
 
 /** Used for debugging state transitions */
 public class LoggingCommunicationState extends CommunicationState {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(LoggingCommunicationState.class);
     private final long peerId;
     private final Marker marker;
 

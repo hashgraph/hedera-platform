@@ -17,13 +17,17 @@ package com.swirlds.common.constructable;
 
 import java.util.function.Supplier;
 
+/**
+ * @deprecated see {@link ConstructableRegistry#registerConstructable(ClassConstructorPair)}
+ */
+@Deprecated(forRemoval = true)
 public class ClassConstructorPair {
-    private Class<? extends RuntimeConstructable> aClass;
-    private Supplier<RuntimeConstructable> constructor;
+    private final Class<? extends RuntimeConstructable> aClass;
+    private final Supplier<RuntimeConstructable> constructor;
 
     public ClassConstructorPair(
-            Class<? extends RuntimeConstructable> aClass,
-            Supplier<RuntimeConstructable> constructor) {
+            final Class<? extends RuntimeConstructable> aClass,
+            final Supplier<RuntimeConstructable> constructor) {
         this.aClass = aClass;
         this.constructor = constructor;
     }

@@ -17,6 +17,7 @@ package com.swirlds.platform.event.linking;
 
 import static com.swirlds.logging.LogMarker.INVALID_EVENT_ERROR;
 
+import com.swirlds.common.config.ConsensusConfig;
 import com.swirlds.logging.LogMarker;
 import com.swirlds.platform.EventStrings;
 import com.swirlds.platform.event.GossipEvent;
@@ -30,7 +31,7 @@ import org.apache.logging.log4j.Logger;
  * out-of-order event is provided, it is logged and discarded.
  */
 public class InOrderLinker extends AbstractEventLinker {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(InOrderLinker.class);
     private final ParentFinder parentFinder;
     /** Provides the most recent event by the supplied creator ID */
     private final Function<Long, EventImpl> mostRecentEvent;
@@ -38,7 +39,10 @@ public class InOrderLinker extends AbstractEventLinker {
     private EventImpl linkedEvent = null;
 
     public InOrderLinker(
-            final ParentFinder parentFinder, final Function<Long, EventImpl> mostRecentEvent) {
+            final ConsensusConfig config,
+            final ParentFinder parentFinder,
+            final Function<Long, EventImpl> mostRecentEvent) {
+        super(config);
         this.parentFinder = parentFinder;
         this.mostRecentEvent = mostRecentEvent;
     }

@@ -37,15 +37,28 @@ include(":swirlds-virtualmap")
 
 include(":swirlds-platform-core")
 
+include(":swirlds-cli")
+
+include(":platform-apps")
+project(":platform-apps").name = "swirlds-platform-apps"
+
+include(":swirlds-platform-apps:demos:CryptocurrencyDemo")
+include(":swirlds-platform-apps:demos:HashgraphDemo")
+include(":swirlds-platform-apps:demos:HelloSwirldDemo")
+include(":swirlds-platform-apps:demos:StatsDemo")
+
+include(":swirlds-platform-apps:tests:GameTest")
+include(":swirlds-platform-apps:tests:ISSTestingTool")
+include(":swirlds-platform-apps:tests:MigrationTestingTool")
+include(":swirlds-platform-apps:tests:PlatformTestingTool")
+include(":swirlds-platform-apps:tests:StatsSigningTestingTool")
+
 include(":swirlds-benchmarks")
 include(":swirlds-unit-tests")
 include(":swirlds-unit-tests:common:swirlds-test-framework")
 include(":swirlds-unit-tests:common:swirlds-common-test")
-include(":swirlds-unit-tests:common:swirlds-logging-test")
 include(":swirlds-unit-tests:core:swirlds-platform-test")
-include(":swirlds-unit-tests:structures:swirlds-fcqueue-test")
 include(":swirlds-unit-tests:structures:swirlds-merkle-test")
-include(":swirlds-unit-tests:structures:swirlds-virtual-merkle-test")
 
 dependencyResolutionManagement {
     @Suppress("UnstableApiUsage")
@@ -93,15 +106,22 @@ dependencyResolutionManagement {
             // Protobuf
             version("protobuf-version", "3.21.5")
 
+            // Prometheus Java client
+            version("prometheus-client", "0.16.0")
+
+            // PicoCLI
+            version("picocli-version", "4.6.3")
+
             // List of bundles provided for us. When applicable, favor using these over individual libraries.
             bundle("eclipse", listOf("eclipse-collections"))
             bundle("cryptography-core", listOf("lazysodium", "bc-provider", "bc-pkix"))
             bundle("cryptography-runtime", listOf("jna", "resource-loader"))
             bundle("logging-api", listOf("log4j-api", "slf4j-api"))
             bundle("logging-impl", listOf("log4j-core", "slf4j-nop"))
-            bundle("jackson", listOf("jackson-databind", "jackson-datatype-jsr310"))
+            bundle("jackson", listOf("jackson-databind", "jackson-datatype-jsr310", "jackson-dataformat-yaml"))
             bundle("networking", listOf("portmapper"))
             bundle("javafx", listOf("javafx-base"))
+            bundle("picocli", listOf("picocli"))
 
             // Define the individual libraries
             // Commons Bundle
@@ -109,9 +129,17 @@ dependencyResolutionManagement {
             library("commons-io", "commons-io", "commons-io").versionRef("commons-io-version")
             library("commons-codec", "commons-codec", "commons-codec").versionRef("commons-codec-version")
             library("commons-math3", "org.apache.commons", "commons-math3").versionRef("commons-math3-version")
-            library("commons-collections4", "org.apache.commons", "commons-collections4").versionRef("commons-collections4-version")
+            library(
+                "commons-collections4",
+                "org.apache.commons",
+                "commons-collections4"
+            ).versionRef("commons-collections4-version")
             // Eclipse Bundle
-            library("eclipse-collections", "org.eclipse.collections", "eclipse-collections").versionRef("eclipse-collections-version")
+            library(
+                "eclipse-collections",
+                "org.eclipse.collections",
+                "eclipse-collections"
+            ).versionRef("eclipse-collections-version")
             // Cryptography Bundle
             library("bc-provider", "org.bouncycastle", "bcprov-jdk15on").versionRef("bouncycastle-version")
             library("bc-pkix", "org.bouncycastle", "bcpkix-jdk15on").versionRef("bouncycastle-version")
@@ -124,10 +152,31 @@ dependencyResolutionManagement {
             library("slf4j-nop", "org.slf4j", "slf4j-nop").versionRef("slf4j-version")
             // Jackson Bundle
             library("jackson-databind", "com.fasterxml.jackson.core", "jackson-databind").versionRef("jackson-version")
-            library("jackson-datatype-joda", "com.fasterxml.jackson.datatype", "jackson-datatype-joda").versionRef("jackson-version")
-            library("jackson-datatype-guava", "com.fasterxml.jackson.datatype", "jackson-datatype-guava").versionRef("jackson-version")
-            library("jackson-datatype-jdk8", "com.fasterxml.jackson.datatype", "jackson-datatype-jdk8").versionRef("jackson-version")
-            library("jackson-datatype-jsr310", "com.fasterxml.jackson.datatype", "jackson-datatype-jsr310").versionRef("jackson-version")
+            library(
+                "jackson-datatype-joda",
+                "com.fasterxml.jackson.datatype",
+                "jackson-datatype-joda"
+            ).versionRef("jackson-version")
+            library(
+                "jackson-datatype-guava",
+                "com.fasterxml.jackson.datatype",
+                "jackson-datatype-guava"
+            ).versionRef("jackson-version")
+            library(
+                "jackson-datatype-jdk8",
+                "com.fasterxml.jackson.datatype",
+                "jackson-datatype-jdk8"
+            ).versionRef("jackson-version")
+            library(
+                "jackson-datatype-jsr310",
+                "com.fasterxml.jackson.datatype",
+                "jackson-datatype-jsr310"
+            ).versionRef("jackson-version")
+            library(
+                "jackson-dataformat-yaml",
+                "com.fasterxml.jackson.dataformat",
+                "jackson-dataformat-yaml"
+            ).versionRef("jackson-version")
             // Networking Bundle
             library("portmapper", "com.offbynull.portmapper", "portmapper").versionRef("portmapper-version")
             // JavaFX Bundle
@@ -137,6 +186,9 @@ dependencyResolutionManagement {
             library("jna", "net.java.dev.jna", "jna").versionRef("jna-version")
             library("resource-loader", "com.goterl", "resource-loader").versionRef("resource-loader-version")
             library("protobuf", "com.google.protobuf", "protobuf-java").versionRef("protobuf-version")
+            library("prometheus-httpserver", "io.prometheus", "simpleclient_httpserver").versionRef("prometheus-client")
+            // PicoCLI Bundle
+            library("picocli", "info.picocli", "picocli").versionRef("picocli-version")
         }
 
         create("testLibs") {

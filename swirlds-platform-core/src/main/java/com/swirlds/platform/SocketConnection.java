@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class SocketConnection implements Connection {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(SocketConnection.class);
 
     private final NodeId selfId;
     private final NodeId otherId;

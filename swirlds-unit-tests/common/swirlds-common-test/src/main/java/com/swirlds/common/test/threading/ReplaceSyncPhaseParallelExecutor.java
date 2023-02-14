@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test.threading;
 
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.threading.pool.CachedPoolParallelExecutor;
 import com.swirlds.common.threading.pool.ParallelExecutionException;
 import com.swirlds.common.threading.pool.ParallelExecutor;
@@ -36,6 +37,7 @@ public class ReplaceSyncPhaseParallelExecutor implements ParallelExecutor {
     private Callable<Void> replacementTask;
 
     public ReplaceSyncPhaseParallelExecutor(
+            final ThreadManager threadManager,
             final int phaseToReplace,
             final int taskNumToReplace,
             final Callable<Void> replacementTask) {
@@ -43,7 +45,7 @@ public class ReplaceSyncPhaseParallelExecutor implements ParallelExecutor {
         this.taskNumToReplace = taskNumToReplace;
         this.replacementTask = replacementTask;
 
-        executor = new CachedPoolParallelExecutor("sync-phase-thread");
+        executor = new CachedPoolParallelExecutor(threadManager, "sync-phase-thread");
         phase = 1;
     }
 
@@ -61,7 +63,6 @@ public class ReplaceSyncPhaseParallelExecutor implements ParallelExecutor {
      *
      * @param task1 a task to execute in parallel
      * @param task2 a task to execute in parallel
-     * @throws ParallelExecutionException
      */
     @Override
     public <T> T doParallel(final Callable<T> task1, final Callable<Void> task2)
@@ -80,5 +81,17 @@ public class ReplaceSyncPhaseParallelExecutor implements ParallelExecutor {
         } finally {
             incPhase();
         }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean isImmutable() {
+        return executor.isImmutable();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void start() {
+        executor.start();
     }
 }

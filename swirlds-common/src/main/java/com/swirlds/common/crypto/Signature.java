@@ -36,7 +36,7 @@ import org.apache.logging.log4j.Logger;
 /** Encapsulates a cryptographic signature along with its SignatureType. */
 public class Signature implements SelfSerializable {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(Signature.class);
 
     /** a unique class type identifier */
     private static final long CLASS_ID = 0x13dc4b399b245c69L;

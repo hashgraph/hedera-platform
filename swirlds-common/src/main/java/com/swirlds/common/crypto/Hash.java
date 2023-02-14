@@ -29,7 +29,7 @@ import java.util.Arrays;
 /** A cryptographic hash of some data. */
 public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
     private static final int SHORT_STRING_BYTES = 4;
-    private static final long CLASS_ID = 0xf422da83a251741eL;
+    public static final long CLASS_ID = 0xf422da83a251741eL;
     private static final int CLASS_VERSION = 1;
 
     private byte[] value;
@@ -231,8 +231,18 @@ public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
         return (value == null) ? null : hex(value);
     }
 
+    /** Create a short string representation of this hash. */
     public String toShortString() {
-        return (value == null) ? null : hex(value, SHORT_STRING_BYTES);
+        return toShortString(SHORT_STRING_BYTES);
+    }
+
+    /**
+     * Create a short string representation of this hash.
+     *
+     * @param length the number of characters to include in the short string
+     */
+    public String toShortString(final int length) {
+        return (value == null) ? null : hex(value, length);
     }
 
     /**

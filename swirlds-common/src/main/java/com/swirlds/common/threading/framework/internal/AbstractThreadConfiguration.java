@@ -24,6 +24,7 @@ import com.swirlds.common.Mutable;
 import com.swirlds.common.threading.framework.ThreadSeed;
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.threading.interrupt.InterruptableRunnable;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
@@ -39,7 +40,10 @@ import org.apache.logging.log4j.Logger;
 public abstract class AbstractThreadConfiguration<C extends AbstractThreadConfiguration<C>>
         implements Copyable, Mutable {
 
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(AbstractThreadConfiguration.class);
+
+    /** Responsible for creating and managing threads used by this object. */
+    private final ThreadManager threadManager;
 
     /** The ID of the node that is running the thread. */
     private Long nodeId;
@@ -90,7 +94,8 @@ public abstract class AbstractThreadConfiguration<C extends AbstractThreadConfig
     private boolean immutable;
 
     /** Build a new thread configuration with default values. */
-    protected AbstractThreadConfiguration() {
+    protected AbstractThreadConfiguration(final ThreadManager threadManager) {
+        this.threadManager = threadManager;
         nextThreadNumber = new AtomicInteger();
     }
 
@@ -101,6 +106,7 @@ public abstract class AbstractThreadConfiguration<C extends AbstractThreadConfig
      */
     @SuppressWarnings("CopyConstructorMissesField")
     protected AbstractThreadConfiguration(final AbstractThreadConfiguration<C> that) {
+        this.threadManager = that.threadManager;
         this.nodeId = that.nodeId;
         this.component = that.component;
         this.threadName = that.threadName;
@@ -114,6 +120,15 @@ public abstract class AbstractThreadConfiguration<C extends AbstractThreadConfig
         this.runnable = that.runnable;
         this.nextThreadNumber = that.nextThreadNumber;
         this.useThreadNumbers = that.useThreadNumbers;
+    }
+
+    /**
+     * Get the thread manager responsible for creating threads.
+     *
+     * @return a thread factory
+     */
+    protected ThreadManager getThreadManager() {
+        return threadManager;
     }
 
     /**
@@ -157,10 +172,8 @@ public abstract class AbstractThreadConfiguration<C extends AbstractThreadConfig
      * @return a stoppable thread built using this configuration
      */
     protected Thread buildThread(final boolean start) {
-        final Thread thread =
-                new Thread(
-                        getThreadGroup(),
-                        requireNonNull(getRunnable(), "runnable must not be null"));
+        final Runnable runnable = requireNonNull(getRunnable(), "runnable must not be null");
+        final Thread thread = threadManager.createThread(getThreadGroup(), runnable);
         configureThread(thread);
 
         if (start) {
@@ -188,7 +201,8 @@ public abstract class AbstractThreadConfiguration<C extends AbstractThreadConfig
         requireNonNull(getRunnable(), "runnable must not be null");
 
         return () -> {
-            final ThreadConfiguration originalConfiguration = captureThreadConfiguration();
+            final ThreadConfiguration originalConfiguration =
+                    captureThreadConfiguration(threadManager);
 
             try {
                 configureThread(Thread.currentThread());

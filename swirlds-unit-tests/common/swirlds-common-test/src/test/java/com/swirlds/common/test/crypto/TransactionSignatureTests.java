@@ -19,12 +19,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.TransactionSignature;
 import com.swirlds.common.crypto.VerificationStatus;
-import com.swirlds.common.crypto.internal.CryptographySettings;
+import com.swirlds.common.crypto.config.CryptoConfig;
 import com.swirlds.common.threading.futures.FuturePool;
+import com.swirlds.config.api.Configuration;
+import com.swirlds.test.framework.config.TestConfigBuilder;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.util.Arrays;
@@ -41,8 +43,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 public class TransactionSignatureTests {
 
-    private static final CryptographySettings engineSettings =
-            CryptographySettings.getDefaultSettings();
+    private static CryptoConfig cryptoConfig;
     private static final int PARALLELISM = 16;
     private static ExecutorService executorService;
     private static SignaturePool signaturePool;
@@ -50,14 +51,16 @@ public class TransactionSignatureTests {
 
     @BeforeAll
     public static void startup() throws NoSuchAlgorithmException, NoSuchProviderException {
-        assertNotNull(engineSettings);
-        assertTrue(engineSettings.computeCpuDigestThreadCount() >= 1);
+        final Configuration configuration = new TestConfigBuilder().getOrCreateConfig();
+        cryptoConfig = configuration.getConfigData(CryptoConfig.class);
 
-        cryptoProvider = CryptoFactory.getInstance();
+        assertTrue(cryptoConfig.computeCpuDigestThreadCount() >= 1);
+
+        cryptoProvider = CryptographyHolder.get();
         executorService = Executors.newFixedThreadPool(PARALLELISM);
         signaturePool =
                 new SignaturePool(
-                        engineSettings.computeCpuVerifierThreadCount() * PARALLELISM, 4096, true);
+                        cryptoConfig.computeCpuVerifierThreadCount() * PARALLELISM, 4096, true);
     }
 
     @AfterAll
@@ -91,7 +94,7 @@ public class TransactionSignatureTests {
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
         final TransactionSignature[] signatures =
-                new TransactionSignature[engineSettings.computeCpuVerifierThreadCount() - 1];
+                new TransactionSignature[cryptoConfig.computeCpuVerifierThreadCount() - 1];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = signaturePool.next();
@@ -108,7 +111,7 @@ public class TransactionSignatureTests {
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
         final TransactionSignature[] signatures =
-                new TransactionSignature[(engineSettings.computeCpuVerifierThreadCount() * 2) - 1];
+                new TransactionSignature[(cryptoConfig.computeCpuVerifierThreadCount() * 2) - 1];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = signaturePool.next();
@@ -125,7 +128,7 @@ public class TransactionSignatureTests {
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
         final TransactionSignature[] signatures =
-                new TransactionSignature[engineSettings.getCpuVerifierQueueSize() / 2];
+                new TransactionSignature[cryptoConfig.cpuVerifierQueueSize() / 2];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = signaturePool.next();
@@ -143,7 +146,7 @@ public class TransactionSignatureTests {
                     NoSuchAlgorithmException {
 
         final TransactionSignature[] signatures =
-                new TransactionSignature[engineSettings.getCpuVerifierQueueSize()];
+                new TransactionSignature[cryptoConfig.cpuVerifierQueueSize()];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = signaturePool.next();
@@ -160,7 +163,7 @@ public class TransactionSignatureTests {
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
         final TransactionSignature[] signatures =
-                new TransactionSignature[(engineSettings.getCpuVerifierQueueSize() * 2)];
+                new TransactionSignature[(cryptoConfig.cpuVerifierQueueSize() * 2)];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = signaturePool.next();
@@ -174,7 +177,7 @@ public class TransactionSignatureTests {
     /** */
     @Test
     public void signatureThreadedHalfQueueSize() throws ExecutionException, InterruptedException {
-        final int totalSignatures = engineSettings.getCpuVerifierQueueSize() / 2;
+        final int totalSignatures = cryptoConfig.cpuVerifierQueueSize() / 2;
         final TransactionSignature[] signatures = new TransactionSignature[totalSignatures];
 
         for (int i = 0; i < signatures.length; i++) {
@@ -189,7 +192,7 @@ public class TransactionSignatureTests {
     @Test
     public void signatureThreadedFourTimesQueueSize()
             throws ExecutionException, InterruptedException {
-        final int totalSignatures = engineSettings.getCpuVerifierQueueSize() * 4;
+        final int totalSignatures = cryptoConfig.cpuVerifierQueueSize() * 4;
         final TransactionSignature[] signatures = new TransactionSignature[totalSignatures];
 
         for (int i = 0; i < signatures.length; i++) {
@@ -205,7 +208,7 @@ public class TransactionSignatureTests {
     @ValueSource(ints = {0, 1})
     public void signatureThreadedEightTimesQueueSize()
             throws ExecutionException, InterruptedException {
-        final int totalSignatures = engineSettings.getCpuVerifierQueueSize() * 8;
+        final int totalSignatures = cryptoConfig.cpuVerifierQueueSize() * 8;
         final TransactionSignature[] signatures = new TransactionSignature[totalSignatures];
 
         for (int i = 0; i < signatures.length; i++) {
@@ -222,7 +225,7 @@ public class TransactionSignatureTests {
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
         final TransactionSignature[] signatures =
-                new TransactionSignature[engineSettings.computeCpuVerifierThreadCount() - 1];
+                new TransactionSignature[cryptoConfig.computeCpuVerifierThreadCount() - 1];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = signaturePool.next();
@@ -241,7 +244,7 @@ public class TransactionSignatureTests {
                     NoSuchAlgorithmException {
 
         final TransactionSignature[] signatures =
-                new TransactionSignature[(engineSettings.computeCpuVerifierThreadCount() * 2) - 1];
+                new TransactionSignature[(cryptoConfig.computeCpuVerifierThreadCount() * 2) - 1];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = signaturePool.next();
@@ -259,7 +262,7 @@ public class TransactionSignatureTests {
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
         final TransactionSignature[] signatures =
-                new TransactionSignature[engineSettings.getCpuVerifierQueueSize() / 2];
+                new TransactionSignature[cryptoConfig.cpuVerifierQueueSize() / 2];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = signaturePool.next();
@@ -277,7 +280,7 @@ public class TransactionSignatureTests {
             throws ExecutionException, InterruptedException, NoSuchProviderException,
                     NoSuchAlgorithmException {
         final TransactionSignature[] signatures =
-                new TransactionSignature[engineSettings.getCpuVerifierQueueSize()];
+                new TransactionSignature[cryptoConfig.cpuVerifierQueueSize()];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = signaturePool.next();
@@ -296,7 +299,7 @@ public class TransactionSignatureTests {
                     NoSuchAlgorithmException {
 
         final TransactionSignature[] signatures =
-                new TransactionSignature[(engineSettings.getCpuVerifierQueueSize() * 2)];
+                new TransactionSignature[(cryptoConfig.cpuVerifierQueueSize() * 2)];
 
         for (int i = 0; i < signatures.length; i++) {
             signatures[i] = signaturePool.next();

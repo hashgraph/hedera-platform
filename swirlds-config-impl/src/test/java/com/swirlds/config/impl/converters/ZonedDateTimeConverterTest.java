@@ -15,9 +15,9 @@
  */
 package com.swirlds.config.impl.converters;
 
+import com.swirlds.common.config.sources.SimpleConfigSource;
 import com.swirlds.config.api.Configuration;
-import com.swirlds.config.api.ConfigurationProvider;
-import com.swirlds.config.impl.sources.DefaultValueConfigSource;
+import com.swirlds.config.api.ConfigurationBuilder;
 import java.time.Month;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -39,11 +39,11 @@ class ZonedDateTimeConverterTest {
     @Test
     public void test1() {
         // given
-        ConfigurationProvider.dispose();
-        DefaultValueConfigSource.setDefaultValue("app.start", "1994-11-05T08:15:30-05:00");
-        ConfigurationProvider.addSource(DefaultValueConfigSource.getInstance());
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(
+                                new SimpleConfigSource("app.start", "1994-11-05T08:15:30-05:00"))
+                        .build();
 
         // when
         final ZonedDateTime zonedDateTime =
@@ -74,11 +74,10 @@ class ZonedDateTimeConverterTest {
     @Test
     public void test2() {
         // given
-        ConfigurationProvider.dispose();
-        DefaultValueConfigSource.setDefaultValue("app.start", "1994-11-05T08:15:30Z");
-        ConfigurationProvider.addSource(DefaultValueConfigSource.getInstance());
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(new SimpleConfigSource("app.start", "1994-11-05T08:15:30Z"))
+                        .build();
 
         // when
         final ZonedDateTime zonedDateTime =
@@ -109,12 +108,12 @@ class ZonedDateTimeConverterTest {
     @Test
     public void test3() {
         // given
-        ConfigurationProvider.dispose();
-        DefaultValueConfigSource.setDefaultValue(
-                "app.start", "1994-11-05T08:15:30-05:00[US/Eastern]");
-        ConfigurationProvider.addSource(DefaultValueConfigSource.getInstance());
-        ConfigurationProvider.init();
-        final Configuration configuration = ConfigurationProvider.getConfig();
+        final Configuration configuration =
+                ConfigurationBuilder.create()
+                        .withSource(
+                                new SimpleConfigSource(
+                                        "app.start", "1994-11-05T08:15:30-05:00[US/Eastern]"))
+                        .build();
 
         // when
         final ZonedDateTime zonedDateTime =

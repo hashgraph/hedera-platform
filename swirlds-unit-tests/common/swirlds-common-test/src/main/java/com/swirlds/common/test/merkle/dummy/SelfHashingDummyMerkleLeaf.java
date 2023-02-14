@@ -15,7 +15,7 @@
  */
 package com.swirlds.common.test.merkle.dummy;
 
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
@@ -111,7 +111,7 @@ public class SelfHashingDummyMerkleLeaf extends PartialMerkleLeaf
             // this one.
             return null;
         }
-        return CryptoFactory.getInstance().getNullHash();
+        return CryptographyHolder.get().getNullHash();
     }
 
     public void setReturnNullForHash(final boolean returnNullForHash) {

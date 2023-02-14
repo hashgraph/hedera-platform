@@ -18,6 +18,7 @@ package com.swirlds.common.utility.throttle;
 import static com.swirlds.common.utility.CompareTo.isGreaterThanOrEqualTo;
 import static com.swirlds.common.utility.Units.SECONDS_TO_NANOSECONDS;
 
+import com.swirlds.common.time.Time;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -39,22 +40,28 @@ public class RateLimiter {
     /** The number of requests that have been denied since the last successful operation. */
     private long deniedRequests;
 
+    /** Provides a view of the current time. */
+    private final Time time;
+
     /**
      * Create a new rate limiter.
      *
+     * @param time provides the current time
      * @param minimumPeriod the minimum time that must pass between operations
      */
-    public RateLimiter(final Duration minimumPeriod) {
+    public RateLimiter(final Time time, final Duration minimumPeriod) {
+        this.time = time;
         this.minimumPeriod = minimumPeriod;
     }
 
     /**
      * Create a new rate limiter.
      *
+     * @param time provides the current time
      * @param maxFrequency the maximum frequency of the operation, in hz
      */
-    public RateLimiter(final double maxFrequency) {
-        this(Duration.ofNanos((long) (1.0 / maxFrequency * SECONDS_TO_NANOSECONDS)));
+    public RateLimiter(final Time time, final double maxFrequency) {
+        this(time, Duration.ofNanos((long) (1.0 / maxFrequency * SECONDS_TO_NANOSECONDS)));
     }
 
     /**
@@ -64,7 +71,7 @@ public class RateLimiter {
      * @return true if the operation can be performed without violating rate limits, otherwise false
      */
     public boolean request() {
-        final Instant now = Instant.now();
+        final Instant now = time.now();
         final Duration elapsed = Duration.between(lastOperation, now);
         if (isGreaterThanOrEqualTo(elapsed, minimumPeriod)) {
             lastOperation = now;

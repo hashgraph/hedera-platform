@@ -32,7 +32,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class ReconnectThrottle {
 
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(ReconnectThrottle.class);
 
     /** Reconnect settings for this node. */
     private final ReconnectSettings settings;

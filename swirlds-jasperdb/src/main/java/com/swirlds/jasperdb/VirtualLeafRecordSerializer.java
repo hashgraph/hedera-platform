@@ -112,7 +112,10 @@ public class VirtualLeafRecordSerializer<K extends VirtualKey<? super K>, V exte
                 hasVariableDataSize
                         ? VARIABLE_DATA_SIZE
                         : (Long.BYTES + hashDigest.digestLength() + keySizeBytes + valueSizeBytes);
-        this.headerSize = Long.BYTES + (byteMaxSize ? 1 : Integer.BYTES);
+        this.headerSize = Long.BYTES; // key
+        if (hasVariableDataSize) {
+            this.headerSize += (byteMaxSize ? 1 : Integer.BYTES); // size
+        }
     }
 
     /** {@inheritDoc} */

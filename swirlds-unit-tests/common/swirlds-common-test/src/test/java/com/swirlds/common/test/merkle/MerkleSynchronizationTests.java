@@ -60,7 +60,7 @@ public class MerkleSynchronizationTests {
     @BeforeAll
     public static void startup() throws ConstructableRegistryException, FileNotFoundException {
         loadLog4jContext();
-        ConstructableRegistry.registerConstructables("com.swirlds.common");
+        ConstructableRegistry.getInstance().registerConstructables("com.swirlds.common");
 
         ReconnectSettingsFactory.configure(
                 new ReconnectSettings() {

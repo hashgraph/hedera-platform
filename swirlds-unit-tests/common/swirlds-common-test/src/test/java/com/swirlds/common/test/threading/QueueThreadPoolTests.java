@@ -18,6 +18,7 @@ package com.swirlds.common.test.threading;
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyEquals;
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyFalse;
 import static com.swirlds.common.test.AssertionUtils.assertEventuallyTrue;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static com.swirlds.test.framework.TestQualifierTags.TIME_CONSUMING;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -59,7 +60,7 @@ class QueueThreadPoolTests {
         final AtomicInteger sleepCount = new AtomicInteger();
 
         final QueueThreadPool<Integer> pool =
-                new QueueThreadPoolConfiguration<Integer>()
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
                         .setComponent("test")
                         .setThreadName("worker")
                         .setThreadCount(10)
@@ -104,7 +105,7 @@ class QueueThreadPoolTests {
         final AtomicBoolean doSleep = new AtomicBoolean(true);
 
         final QueueThreadPool<Integer> pool =
-                new QueueThreadPoolConfiguration<Integer>()
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
                         .setComponent("test")
                         .setThreadName("worker")
                         .setThreadCount(10)
@@ -179,7 +180,7 @@ class QueueThreadPoolTests {
         final Set<String> threadsNames = Collections.synchronizedSet(new HashSet<>());
 
         final QueueThreadPool<Integer> pool =
-                new QueueThreadPoolConfiguration<Integer>()
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
                         .setComponent("test")
                         .setThreadName("worker")
                         .setThreadCount(10)
@@ -258,7 +259,7 @@ class QueueThreadPoolTests {
     void configurationMutabilityTest() {
         // Build should make the configuration immutable
         final QueueThreadPoolConfiguration<Integer> configuration =
-                new QueueThreadPoolConfiguration<Integer>()
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
                         .setHandler((final Integer element) -> {});
 
         assertTrue(configuration.isMutable(), "configuration should be mutable");
@@ -279,7 +280,7 @@ class QueueThreadPoolTests {
         // build() should cause future calls to build() to fail, and start() should cause
         // buildSeed() to fail.
         final QueueThreadPoolConfiguration<?> configuration0 =
-                new QueueThreadPoolConfiguration<Integer>()
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
                         .setHandler(
                                 (final Integer i) -> {
                                     MILLISECONDS.sleep(1);
@@ -303,7 +304,7 @@ class QueueThreadPoolTests {
 
         // buildSeed() should cause future calls to buildSeed() and start() to fail.
         final QueueThreadPoolConfiguration<?> configuration1 =
-                new QueueThreadPoolConfiguration<Integer>()
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
                         .setHandler(
                                 (final Integer i) -> {
                                     MILLISECONDS.sleep(1);
@@ -326,7 +327,8 @@ class QueueThreadPoolTests {
     @DisplayName("Copy Test")
     void copyTest() {
         final QueueThreadPoolConfiguration<?> configuration =
-                new QueueThreadPoolConfiguration<Integer>().setThreadCount(1234);
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
+                        .setThreadCount(1234);
 
         final QueueThreadPoolConfiguration<?> copy1 = configuration.copy();
 
@@ -354,7 +356,7 @@ class QueueThreadPoolTests {
         final Set<Thread> threads = Collections.synchronizedSet(new HashSet<>());
 
         final QueueThreadPool<Integer> pool =
-                new QueueThreadPoolConfiguration<Integer>()
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
                         .setComponent("test")
                         .setThreadName("worker")
                         .setThreadCount(10)
@@ -393,7 +395,7 @@ class QueueThreadPoolTests {
         final Set<Thread> threads = Collections.synchronizedSet(new HashSet<>());
 
         final QueueThreadPool<Integer> pool =
-                new QueueThreadPoolConfiguration<Integer>()
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
                         .setComponent("test")
                         .setThreadName("worker")
                         .setThreadCount(10)
@@ -440,7 +442,7 @@ class QueueThreadPoolTests {
         final Set<Thread> threads = Collections.synchronizedSet(new HashSet<>());
 
         final QueueThreadPool<Integer> pool =
-                new QueueThreadPoolConfiguration<Integer>()
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
                         .setComponent("test")
                         .setThreadName("worker")
                         .setThreadCount(10)
@@ -491,7 +493,7 @@ class QueueThreadPoolTests {
         final Set<Thread> threads = new HashSet<>();
 
         final QueueThreadPool<Integer> pool =
-                new QueueThreadPoolConfiguration<Integer>()
+                new QueueThreadPoolConfiguration<Integer>(getStaticThreadManager())
                         .setComponent("test")
                         .setThreadName("worker")
                         .setThreadCount(10)

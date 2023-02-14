@@ -31,7 +31,7 @@ import org.apache.logging.log4j.Logger;
 /** Handles all system transactions */
 public class SystemTransactionHandlerImpl implements SystemTransactionHandler {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(SystemTransactionHandlerImpl.class);
 
     private final PreConsensusStateSignatureTrigger preConsensusStateSignatureDispatcher;
     private final PostConsensusStateSignatureTrigger postConsensusStateSignatureDispatcher;
@@ -43,9 +43,11 @@ public class SystemTransactionHandlerImpl implements SystemTransactionHandler {
      */
     public SystemTransactionHandlerImpl(final DispatchBuilder dispatchBuilder) {
         preConsensusStateSignatureDispatcher =
-                dispatchBuilder.getDispatcher(PreConsensusStateSignatureTrigger.class)::dispatch;
+                dispatchBuilder.getDispatcher(this, PreConsensusStateSignatureTrigger.class)
+                        ::dispatch;
         postConsensusStateSignatureDispatcher =
-                dispatchBuilder.getDispatcher(PostConsensusStateSignatureTrigger.class)::dispatch;
+                dispatchBuilder.getDispatcher(this, PostConsensusStateSignatureTrigger.class)
+                        ::dispatch;
     }
 
     /** {@inheritDoc} */

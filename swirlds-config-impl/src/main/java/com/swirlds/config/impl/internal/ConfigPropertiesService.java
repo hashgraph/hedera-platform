@@ -17,14 +17,15 @@ package com.swirlds.config.impl.internal;
 
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.config.api.source.ConfigSource;
-import java.util.Properties;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.stream.Stream;
 
 /** Service that provides all loaded config properties */
 class ConfigPropertiesService implements ConfigLifecycle {
 
     /** stores all config properties */
-    private final Properties internalProperties;
+    private final Map<String, String> internalProperties;
 
     /** The services that is used to load all properties in the correct order */
     private final ConfigSourceService configSourceService;
@@ -35,7 +36,7 @@ class ConfigPropertiesService implements ConfigLifecycle {
     ConfigPropertiesService(final ConfigSourceService configSourceService) {
         this.configSourceService =
                 CommonUtils.throwArgNull(configSourceService, "configSourceService");
-        internalProperties = new Properties();
+        internalProperties = new HashMap<>();
     }
 
     @Override
@@ -62,7 +63,7 @@ class ConfigPropertiesService implements ConfigLifecycle {
 
     Stream<String> getPropertyNames() {
         throwIfNotInitialized();
-        return internalProperties.stringPropertyNames().stream();
+        return internalProperties.keySet().stream();
     }
 
     boolean containsKey(final String propertyName) {
@@ -74,11 +75,11 @@ class ConfigPropertiesService implements ConfigLifecycle {
     String getProperty(final String propertyName) {
         throwIfNotInitialized();
         CommonUtils.throwArgBlank(propertyName, "propertyName");
-        return internalProperties.getProperty(propertyName);
+        return internalProperties.get(propertyName);
     }
 
     private void addProperty(final String propertyName, final String propertyValue) {
         CommonUtils.throwArgBlank(propertyName, "propertyName");
-        internalProperties.setProperty(propertyName, propertyValue);
+        internalProperties.put(propertyName, propertyValue);
     }
 }

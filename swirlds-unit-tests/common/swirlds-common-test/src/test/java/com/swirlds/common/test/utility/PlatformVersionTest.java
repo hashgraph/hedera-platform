@@ -219,9 +219,11 @@ public class PlatformVersionTest {
             final String build,
             final String commitId)
             throws ConstructableRegistryException, IOException {
-        ConstructableRegistry.registerConstructable(
+        final ConstructableRegistry registry = ConstructableRegistry.getInstance();
+
+        registry.registerConstructable(
                 new ClassConstructorPair(SemanticVersion.class, SemanticVersion::new));
-        ConstructableRegistry.registerConstructable(
+        registry.registerConstructable(
                 new ClassConstructorPair(PlatformVersion.class, PlatformVersion::new));
         final PlatformVersion original =
                 new PlatformVersion(

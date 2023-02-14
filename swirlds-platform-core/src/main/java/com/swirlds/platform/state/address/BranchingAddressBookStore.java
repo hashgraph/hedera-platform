@@ -16,12 +16,14 @@
 package com.swirlds.platform.state.address;
 
 import com.swirlds.common.Releasable;
+import com.swirlds.common.config.singleton.ConfigurationHolder;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.impl.ComposedMerkleLeaf;
 import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
 import com.swirlds.common.merkle.impl.destroyable.DestroyableMerkleLeaf;
 import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.platform.config.AddressBookConfig;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -51,7 +53,9 @@ public class BranchingAddressBookStore extends AbstractAddressBookStore
     private long latestRound;
 
     /** Zero arg constructor required by constructable registry. */
-    public BranchingAddressBookStore() {}
+    public BranchingAddressBookStore() {
+        super(ConfigurationHolder.getConfigData(AddressBookConfig.class));
+    }
 
     /**
      * Copy constructor.
@@ -59,6 +63,7 @@ public class BranchingAddressBookStore extends AbstractAddressBookStore
      * @param that the object to copy
      */
     private BranchingAddressBookStore(final BranchingAddressBookStore that) {
+        super(that.getAddressBookConfig());
         that.addressBookMap.forEach(
                 (final Long round, final AddressBook addressBook) -> {
                     this.addressBookMap.put(round, addressBook);

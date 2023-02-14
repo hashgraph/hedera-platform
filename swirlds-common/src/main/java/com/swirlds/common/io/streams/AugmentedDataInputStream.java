@@ -21,6 +21,7 @@ import static com.swirlds.common.io.streams.SerializableStreamConstants.NULL_LIS
 
 import com.swirlds.common.io.exceptions.BadIOException;
 import com.swirlds.common.utility.CommonUtils;
+import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,7 +33,7 @@ import java.util.List;
  * This data input stream provides additional functionality for deserializing various basic data
  * structures.
  */
-public class AugmentedDataInputStream extends InputStream {
+public class AugmentedDataInputStream extends InputStream implements DataInput {
 
     private final DataInputStream baseStream;
 
@@ -99,74 +100,80 @@ public class AugmentedDataInputStream extends InputStream {
         baseStream.skipNBytes(n);
     }
 
-    /** Corresponds to {@link DataInputStream#readFully(byte[])}. */
+    @Override
     public void readFully(final byte[] b) throws IOException {
         baseStream.readFully(b);
     }
 
-    /** Corresponds to {@link DataInputStream#readFully(byte[], int, int)}. */
+    @Override
     public void readFully(final byte[] b, final int off, final int len) throws IOException {
         baseStream.readFully(b, off, len);
     }
 
-    /** Corresponds to {@link DataInputStream#skipBytes(int)}. */
+    @Override
     public int skipBytes(final int n) throws IOException {
         return baseStream.skipBytes(n);
     }
 
-    /** Corresponds to {@link DataInputStream#readBoolean()}. */
+    @Override
     public boolean readBoolean() throws IOException {
         return baseStream.readBoolean();
     }
 
-    /** Corresponds to {@link DataInputStream#readByte()}. */
+    @Override
     public byte readByte() throws IOException {
         return baseStream.readByte();
     }
 
-    /** Corresponds to {@link DataInputStream#readUnsignedByte()}. */
+    @Override
     public int readUnsignedByte() throws IOException {
         return baseStream.readUnsignedByte();
     }
 
-    /** Corresponds to {@link DataInputStream#readShort()}. */
+    @Override
     public short readShort() throws IOException {
         return baseStream.readShort();
     }
 
-    /** Corresponds to {@link DataInputStream#readUnsignedShort()}. */
+    @Override
     public int readUnsignedShort() throws IOException {
         return baseStream.readUnsignedShort();
     }
 
-    /** Corresponds to {@link DataInputStream#readChar()}. */
+    @Override
     public char readChar() throws IOException {
         return baseStream.readChar();
     }
 
-    /** Corresponds to {@link DataInputStream#readInt()}. */
+    @Override
     public int readInt() throws IOException {
         return baseStream.readInt();
     }
 
-    /** Corresponds to {@link DataInputStream#readLong()}. */
+    @Override
     public long readLong() throws IOException {
         return baseStream.readLong();
     }
 
-    /** Corresponds to {@link DataInputStream#readFloat()}. */
+    @Override
     public float readFloat() throws IOException {
         return baseStream.readFloat();
     }
 
-    /** Corresponds to {@link DataInputStream#readDouble()}. */
+    @Override
     public double readDouble() throws IOException {
         return baseStream.readDouble();
     }
 
-    /** Corresponds to {@link DataInputStream#readUTF()}. */
+    @Override
     public String readUTF() throws IOException {
         return baseStream.readUTF();
+    }
+
+    @Override
+    @Deprecated
+    public String readLine() throws IOException {
+        return baseStream.readLine();
     }
 
     /**

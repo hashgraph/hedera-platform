@@ -15,52 +15,50 @@
  */
 package com.swirlds.config.impl.validators.annotation;
 
-import com.swirlds.config.api.ConfigurationProvider;
+import com.swirlds.common.config.sources.SimpleConfigSource;
+import com.swirlds.config.api.ConfigurationBuilder;
 import com.swirlds.config.api.validation.ConfigViolationException;
-import com.swirlds.config.impl.DummyConfigSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class NegativeTest {
 
-    private final DummyConfigSource dummyConfigSource = new DummyConfigSource();
-
     @Test
     public void testNoViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("negative.intValue", "-1");
-        dummyConfigSource.setProperty("negative.longValue", "-1");
-        dummyConfigSource.setProperty("negative.doubleValue", "-1");
-        dummyConfigSource.setProperty("negative.floatValue", "-1");
-        dummyConfigSource.setProperty("negative.shortValue", "-1");
-        dummyConfigSource.setProperty("negative.byteValue", "-1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NegativeConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("negative.intValue", -1))
+                        .withSources(new SimpleConfigSource("negative.longValue", -1L))
+                        .withSources(new SimpleConfigSource("negative.doubleValue", -1D))
+                        .withSources(new SimpleConfigSource("negative.floatValue", -1F))
+                        .withSources(new SimpleConfigSource("negative.shortValue", -1))
+                        .withSources(new SimpleConfigSource("negative.byteValue", -1))
+                        .withConfigDataTypes(NegativeConfigData.class);
 
         // then
         Assertions.assertDoesNotThrow(
-                () -> ConfigurationProvider.init(), "No violation should happen");
+                () -> configurationBuilder.build(), "No violation should happen");
     }
 
     @Test
     public void testIntViolation() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("negative.intValue", "1");
-        dummyConfigSource.setProperty("negative.longValue", "-1");
-        dummyConfigSource.setProperty("negative.doubleValue", "-1");
-        dummyConfigSource.setProperty("negative.floatValue", "-1");
-        dummyConfigSource.setProperty("negative.shortValue", "-1");
-        dummyConfigSource.setProperty("negative.byteValue", "-1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NegativeConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("negative.intValue", 1))
+                        .withSources(new SimpleConfigSource("negative.longValue", -1L))
+                        .withSources(new SimpleConfigSource("negative.doubleValue", -1D))
+                        .withSources(new SimpleConfigSource("negative.floatValue", -1F))
+                        .withSources(new SimpleConfigSource("negative.shortValue", -1))
+                        .withSources(new SimpleConfigSource("negative.byteValue", -1))
+                        .withConfigDataTypes(NegativeConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Min should happen");
 
         // then
@@ -75,21 +73,21 @@ public class NegativeTest {
     @Test
     public void testViolations() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("negative.intValue", "1");
-        dummyConfigSource.setProperty("negative.longValue", "1");
-        dummyConfigSource.setProperty("negative.doubleValue", "1");
-        dummyConfigSource.setProperty("negative.floatValue", "1");
-        dummyConfigSource.setProperty("negative.shortValue", "1");
-        dummyConfigSource.setProperty("negative.byteValue", "1");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NegativeConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("negative.intValue", 1))
+                        .withSources(new SimpleConfigSource("negative.longValue", 1L))
+                        .withSources(new SimpleConfigSource("negative.doubleValue", 1D))
+                        .withSources(new SimpleConfigSource("negative.floatValue", 1F))
+                        .withSources(new SimpleConfigSource("negative.shortValue", 1))
+                        .withSources(new SimpleConfigSource("negative.byteValue", 1))
+                        .withConfigDataTypes(NegativeConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Negative should happen");
 
         // then
@@ -99,21 +97,21 @@ public class NegativeTest {
     @Test
     public void testEdgeCaseViolations() {
         // given
-        ConfigurationProvider.dispose();
-        dummyConfigSource.setProperty("negative.intValue", "0");
-        dummyConfigSource.setProperty("negative.longValue", "0");
-        dummyConfigSource.setProperty("negative.doubleValue", "0");
-        dummyConfigSource.setProperty("negative.floatValue", "0");
-        dummyConfigSource.setProperty("negative.shortValue", "0");
-        dummyConfigSource.setProperty("negative.byteValue", "0");
-        ConfigurationProvider.addSources(dummyConfigSource);
-        ConfigurationProvider.addConfigDataType(NegativeConfigData.class);
+        final ConfigurationBuilder configurationBuilder =
+                ConfigurationBuilder.create()
+                        .withSources(new SimpleConfigSource("negative.intValue", 0))
+                        .withSources(new SimpleConfigSource("negative.longValue", 0L))
+                        .withSources(new SimpleConfigSource("negative.doubleValue", 0D))
+                        .withSources(new SimpleConfigSource("negative.floatValue", 0F))
+                        .withSources(new SimpleConfigSource("negative.shortValue", 0))
+                        .withSources(new SimpleConfigSource("negative.byteValue", 0))
+                        .withConfigDataTypes(NegativeConfigData.class);
 
         // when
         final ConfigViolationException exception =
                 Assertions.assertThrows(
                         ConfigViolationException.class,
-                        () -> ConfigurationProvider.init(),
+                        () -> configurationBuilder.build(),
                         "Violation for @Negative should happen");
 
         // then

@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.swirlds.common.constructable.ConstructableIgnored;
-import com.swirlds.common.crypto.CryptoFactory;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.exceptions.MutabilityException;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
@@ -44,6 +44,7 @@ import com.swirlds.common.merkle.route.MerkleRoute;
 import com.swirlds.common.merkle.route.MerkleRouteFactory;
 import com.swirlds.common.test.merkle.dummy.DummyMerkleLeaf;
 import java.io.IOException;
+import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
@@ -367,12 +368,12 @@ class PartialNodeTests {
         final MerkleNode node = nodeImpl.constructor.get();
 
         assertNull(node.getHash(), "node should start with null hash");
-        final Hash hash1 = CryptoFactory.getInstance().getNullHash();
+        final Hash hash1 = CryptographyHolder.get().getNullHash();
         node.setHash(hash1);
         assertSame(hash1, node.getHash(), "unexpected hash");
 
         final byte[] bytes = new byte[100];
-        final Hash hash2 = CryptoFactory.getInstance().digestSync(bytes);
+        final Hash hash2 = CryptographyHolder.get().digestSync(bytes);
         node.setHash(hash2);
         assertSame(hash2, node.getHash(), "unexpected hash");
 
@@ -495,5 +496,22 @@ class PartialNodeTests {
 
         node.setChild(0, null);
         assertTrue(B.isDestroyed(), "should have been destroyed after replacement");
+    }
+
+    @ParameterizedTest
+    @MethodSource("merkleInternals")
+    @DisplayName("addDeserializedChildren() Releases Old Children Test")
+    void addDeserializedChildrenReleasesOldChildrenTest(final NodeImpl<MerkleInternal> nodeImpl) {
+        final MerkleInternal node = nodeImpl.constructor.get();
+
+        final DummyMerkleLeaf originalChild = new DummyMerkleLeaf();
+        node.setChild(0, originalChild);
+
+        final DummyMerkleLeaf newChild = new DummyMerkleLeaf();
+
+        node.addDeserializedChildren(List.of(newChild), node.getVersion());
+
+        assertEquals(1, newChild.getReservationCount());
+        assertTrue(originalChild.isDestroyed());
     }
 }

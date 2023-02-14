@@ -24,11 +24,15 @@ dependencies {
     api(project(":swirlds-fchashmap"))
     api(project(":swirlds-fcqueue"))
     api(project(":swirlds-jasperdb"))
+    api(project(":swirlds-cli"))
+    runtimeOnly(project(":swirlds-config-impl"))
 
     // Bundle Dependencies
     implementation(libs.bundles.logging.impl)
     implementation(libs.bundles.javafx)
     implementation(libs.bundles.networking)
+    implementation(libs.bundles.picocli)
+    implementation(libs.bundles.jackson)
 
     // Test Dependencies
 
@@ -39,4 +43,5 @@ dependencies {
     testImplementation(testLibs.bundles.junit)
     testImplementation(testLibs.bundles.mocking)
     testImplementation(testLibs.bundles.utils)
+    testImplementation(project(":swirlds-config-impl"))
 }

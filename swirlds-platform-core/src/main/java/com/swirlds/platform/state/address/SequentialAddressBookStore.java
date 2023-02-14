@@ -15,6 +15,7 @@
  */
 package com.swirlds.platform.state.address;
 
+import com.swirlds.common.config.singleton.ConfigurationHolder;
 import com.swirlds.common.merkle.impl.ComposedMerkleInternal;
 import com.swirlds.common.merkle.impl.PartialBinaryMerkleInternal;
 import com.swirlds.common.merkle.impl.PartialMerkleInternal;
@@ -22,6 +23,7 @@ import com.swirlds.common.merkle.impl.destroyable.DestroyableBinaryMerkleInterna
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.fchashmap.FCHashMap;
 import com.swirlds.fcqueue.FCQueue;
+import com.swirlds.platform.config.AddressBookConfig;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
@@ -53,6 +55,7 @@ public class SequentialAddressBookStore extends AbstractAddressBookStore
             new DestroyableBinaryMerkleInternal(this::destroyNode);
 
     public SequentialAddressBookStore() {
+        super(ConfigurationHolder.getConfigData(AddressBookConfig.class));
         map = new FCHashMap<>();
         setAddressBooks(new FCQueue<>());
         setStoreInfo(new SequentialAddressBookStoreInfo());
@@ -64,6 +67,7 @@ public class SequentialAddressBookStore extends AbstractAddressBookStore
      * @param that the store to copy
      */
     private SequentialAddressBookStore(final SequentialAddressBookStore that) {
+        super(that.getAddressBookConfig());
         this.setChild(ChildIndices.ADDRESS_BOOKS, that.getAddressBooks().copy());
         this.setChild(ChildIndices.STORE_INFO, that.getStoreInfo().copy());
 

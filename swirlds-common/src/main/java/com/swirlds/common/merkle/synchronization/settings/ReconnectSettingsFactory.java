@@ -17,7 +17,13 @@ package com.swirlds.common.merkle.synchronization.settings;
 
 import java.time.Duration;
 
-/** Utility class for fetching reconnect settings. */
+/**
+ * Utility class for fetching reconnect settings.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
+@Deprecated(forRemoval = true)
 public final class ReconnectSettingsFactory {
 
     private static ReconnectSettings reconnectSettings;

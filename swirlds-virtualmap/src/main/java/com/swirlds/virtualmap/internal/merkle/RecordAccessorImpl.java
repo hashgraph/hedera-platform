@@ -25,7 +25,7 @@ import com.swirlds.virtualmap.datasource.VirtualInternalRecord;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
 import com.swirlds.virtualmap.datasource.VirtualRecord;
 import com.swirlds.virtualmap.internal.RecordAccessor;
-import com.swirlds.virtualmap.internal.StateAccessor;
+import com.swirlds.virtualmap.internal.VirtualStateAccessor;
 import com.swirlds.virtualmap.internal.cache.VirtualNodeCache;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -40,7 +40,7 @@ import java.util.Objects;
  */
 public class RecordAccessorImpl<K extends VirtualKey<? super K>, V extends VirtualValue>
         implements RecordAccessor<K, V> {
-    private final StateAccessor state;
+    private final VirtualStateAccessor state;
     private final VirtualNodeCache<K, V> cache;
     private final VirtualDataSource<K, V> dataSource;
 
@@ -52,7 +52,9 @@ public class RecordAccessorImpl<K extends VirtualKey<? super K>, V extends Virtu
      * @param dataSource The data source. Can be null.
      */
     public RecordAccessorImpl(
-            StateAccessor state, VirtualNodeCache<K, V> cache, VirtualDataSource<K, V> dataSource) {
+            VirtualStateAccessor state,
+            VirtualNodeCache<K, V> cache,
+            VirtualDataSource<K, V> dataSource) {
         this.state = Objects.requireNonNull(state);
         this.cache = Objects.requireNonNull(cache);
         this.dataSource = dataSource;
@@ -63,7 +65,7 @@ public class RecordAccessorImpl<K extends VirtualKey<? super K>, V extends Virtu
      *
      * @return The state. This will never be null.
      */
-    public StateAccessor getState() {
+    public VirtualStateAccessor getState() {
         return state;
     }
 
@@ -107,6 +109,22 @@ public class RecordAccessorImpl<K extends VirtualKey<? super K>, V extends Virtu
         }
 
         return node == VirtualNodeCache.DELETED_INTERNAL_RECORD ? null : node;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void warmInternalRecord(long path) {
+        assert path >= 0;
+
+        VirtualInternalRecord node = cache.lookupInternalByPath(path, false);
+        if (node == null) {
+            try {
+                dataSource.warmInternalRecord(path);
+            } catch (final IOException e) {
+                throw new UncheckedIOException(
+                        "Failed to read an internal node record from the data source", e);
+            }
+        }
     }
 
     /** {@inheritDoc} */

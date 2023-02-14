@@ -27,36 +27,25 @@ import java.nio.file.Path;
  * deleting it when it is no longer needed. </b>
  */
 public interface Snapshotable {
-    /**
-     * Start snapshot, this is called while saving is blocked. It is expected to complete as fast as
-     * possible and only do the minimum needed to capture/write state that could be changed by
-     * saving.
-     *
-     * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
-     *     exist.
-     * @throws IOException If there was a problem snapshotting
-     */
-    void startSnapshot(Path snapshotDirectory) throws IOException;
 
     /**
-     * Do the bulk of snapshot work, as much as possible. Saving is not blocked while this method is
-     * running, and it is expected that saving can happen concurrently without problems. This will
-     * block till the snapshot is completely created.
+     * Perform a snapshot, saving data contained in this object to the specified directory.
+     *
+     * <p>Snapshots are done in the transaction handler thread, so they have to be synchronized with
+     * flushes (running in virtual pipeline thread) and compactions (running in dedicated background
+     * threads). To sync up with flushes, this method is run either from VirtualRootNode.detach(),
+     * which is called while pipeline is paused, or on learner reconnect, while no data is stored to
+     * the virtual map. Synchronization with compaction processes is slightly more complicated.
+     * Before virtual map snapshot is started, it takes a lock (semaphore), which is monitored by
+     * compaction threads. As soon as the semaphore is locked, compaction is immediately stopped. If
+     * compaction thread is in the middle of index update, it updates a single index entry and then
+     * stops until the snapshot is done. Compaction thread may also be in the middle of deleting
+     * compacted files. In this case, files are deleted first, and snapshot will not take them into
+     * consideration.
      *
      * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
      *     exist.
      * @throws IOException If there was a problem snapshotting
      */
-    void middleSnapshot(Path snapshotDirectory) throws IOException;
-
-    /**
-     * End snapshot, this is called while saving is blocked. It is expected to complete as fast as
-     * possible and only do the minimum needed to finish any work and return state after
-     * snapshotting.
-     *
-     * @param snapshotDirectory Directory to put snapshot into, it will be created if it doesn't
-     *     exist.
-     * @throws IOException If there was a problem snapshotting
-     */
-    void endSnapshot(Path snapshotDirectory) throws IOException;
+    void snapshot(Path snapshotDirectory) throws IOException;
 }

@@ -1,1 +1,2 @@
-module com.swirlds.common.test.fixtures {}
+module com.swirlds.common.test.fixtures {
+}

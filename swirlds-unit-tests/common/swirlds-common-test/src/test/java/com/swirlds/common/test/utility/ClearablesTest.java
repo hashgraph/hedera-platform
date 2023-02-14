@@ -17,9 +17,12 @@ package com.swirlds.common.test.utility;
 
 import com.swirlds.common.utility.Clearable;
 import com.swirlds.common.utility.Clearables;
+import com.swirlds.common.utility.LoggingClearables;
+import com.swirlds.logging.LogMarker;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -33,6 +36,22 @@ class ClearablesTest {
                         list.stream()
                                 .map(ab -> (Clearable) () -> ab.set(true))
                                 .toArray(Clearable[]::new));
+        clearables.clear();
+        list.forEach(
+                ab -> Assertions.assertTrue(ab.get(), "all booleans should have been set to true"));
+    }
+
+    /** Tests whether all clearables have been cleared with a single method call */
+    @Test
+    void loggingClearablesTest() {
+        final List<AtomicBoolean> list = Stream.generate(AtomicBoolean::new).limit(10).toList();
+        final Clearable clearables =
+                new LoggingClearables(
+                        LogMarker.STARTUP.getMarker(),
+                        list.stream()
+                                .map(ab -> (Clearable) () -> ab.set(true))
+                                .map(c -> Pair.of(c, "name"))
+                                .toList());
         clearables.clear();
         list.forEach(
                 ab -> Assertions.assertTrue(ab.get(), "all booleans should have been set to true"));

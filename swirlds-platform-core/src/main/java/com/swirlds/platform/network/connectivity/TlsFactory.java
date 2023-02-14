@@ -15,6 +15,7 @@
  */
 package com.swirlds.platform.network.connectivity;
 
+import com.swirlds.common.crypto.config.CryptoConfig;
 import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.crypto.CryptoConstants;
 import com.swirlds.platform.crypto.CryptoStatic;
@@ -51,11 +52,14 @@ public class TlsFactory implements SocketFactory {
      * appropriate KeyManagerFactory, TrustManagerFactory, SSLContext, SSLServerSocketFactory, and
      * SSLSocketFactory, so that it can later create the TLS sockets.
      */
-    public TlsFactory(final KeysAndCerts keysAndCerts, final SettingsProvider settings)
+    public TlsFactory(
+            final KeysAndCerts keysAndCerts,
+            final SettingsProvider settings,
+            final CryptoConfig cryptoConfig)
             throws NoSuchAlgorithmException, UnrecoverableKeyException, KeyStoreException,
                     KeyManagementException, CertificateException, IOException {
         this.settings = settings;
-        final char[] password = settings.getKeystorePassword().toCharArray();
+        final char[] password = cryptoConfig.keystorePassword().toCharArray();
         /* nondeterministic CSPRNG */
         final SecureRandom nonDetRandom = CryptoStatic.getNonDetRandom();
 

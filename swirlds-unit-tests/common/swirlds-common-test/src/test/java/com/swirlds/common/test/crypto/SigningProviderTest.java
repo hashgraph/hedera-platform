@@ -17,13 +17,14 @@ package com.swirlds.common.test.crypto;
 
 import static com.swirlds.test.framework.TestQualifierTags.TIME_CONSUMING;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.SignatureType;
-import com.swirlds.common.crypto.internal.CryptographySettings;
+import com.swirlds.common.crypto.config.CryptoConfig;
+import com.swirlds.config.api.Configuration;
+import com.swirlds.test.framework.config.TestConfigBuilder;
 import java.security.NoSuchAlgorithmException;
 import java.util.SplittableRandom;
 import org.junit.jupiter.api.BeforeAll;
@@ -32,17 +33,17 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 public class SigningProviderTest {
-    private static final CryptographySettings engineSettings =
-            CryptographySettings.getDefaultSettings();
-    private static Cryptography cryptoProvider;
+    private static CryptoConfig cryptoConfig;
+    private static Cryptography cryptography;
     private static int TEST_TIMES = 100;
 
     @BeforeAll
     public static void startup() throws NoSuchAlgorithmException {
-        assertNotNull(engineSettings, "Check crptyo engine settings");
-        assertTrue(
-                engineSettings.computeCpuDigestThreadCount() > 1, "Check cpu digest thread count");
-        cryptoProvider = CryptoFactory.getInstance();
+        final Configuration configuration = new TestConfigBuilder().getOrCreateConfig();
+        cryptoConfig = configuration.getConfigData(CryptoConfig.class);
+
+        assertTrue(cryptoConfig.computeCpuDigestThreadCount() > 1, "Check cpu digest thread count");
+        cryptography = CryptographyHolder.get();
     }
 
     @ParameterizedTest
@@ -64,7 +65,7 @@ public class SigningProviderTest {
             random.nextBytes(msg);
             final byte[] signature = ecdsaSigningProvider.sign(msg);
             assertTrue(
-                    cryptoProvider.verifySync(
+                    cryptography.verifySync(
                             msg,
                             signature,
                             ecdsaSigningProvider.getPublicKeyBytes(),
@@ -94,7 +95,7 @@ public class SigningProviderTest {
             random.nextBytes(msg);
             final byte[] signature = ed25519SigningProvider.sign(msg);
             assertTrue(
-                    cryptoProvider.verifySync(
+                    cryptography.verifySync(
                             msg,
                             signature,
                             ed25519SigningProvider.getPublicKeyBytes(),

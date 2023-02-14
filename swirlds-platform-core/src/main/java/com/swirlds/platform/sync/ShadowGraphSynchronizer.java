@@ -34,6 +34,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -50,7 +51,7 @@ import org.apache.logging.log4j.Logger;
  * information about an ongoing sync are method local.
  */
 public class ShadowGraphSynchronizer {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ShadowGraphSynchronizer.class);
 
     /** The shadow graph manager to use for this sync */
     private final ShadowGraph shadowGraph;
@@ -225,8 +226,7 @@ public class ShadowGraphSynchronizer {
             sendList = createSendList(knownSet, myGenerations, theirGensTips.getGenerations());
         }
 
-        phase3(conn, timing, sendList);
-        return true;
+        return phase3(conn, timing, sendList);
     }
 
     private Generations getGenerations(final long minRoundGen) {
@@ -306,17 +306,33 @@ public class ShadowGraphSynchronizer {
         return sendList;
     }
 
-    private void phase3(
+    /**
+     * Executes phase 3 of a sync
+     *
+     * @param conn the connection to use
+     * @param timing metrics that track sync timing
+     * @param sendList the events to send
+     * @return true if the phase was successful, false if it was aborted
+     * @throws ParallelExecutionException if anything goes wrong
+     */
+    private boolean phase3(
             final Connection conn, final SyncTiming timing, final List<EventImpl> sendList)
             throws ParallelExecutionException {
         timing.setTimePoint(4);
         // the reading thread uses this to indicate to the writing thread that it is done
         final CountDownLatch eventReadingDone = new CountDownLatch(1);
+        // the writer will set it to true if writing is aborted
+        final AtomicBoolean writeAborted = new AtomicBoolean(false);
         final Integer eventsRead =
                 readWriteParallel(
                         SyncComms.phase3Read(conn, eventHandler, syncMetrics, eventReadingDone),
-                        SyncComms.phase3Write(conn, sendList, eventReadingDone),
+                        SyncComms.phase3Write(conn, sendList, eventReadingDone, writeAborted),
                         conn);
+        if (eventsRead < 0 || writeAborted.get()) {
+            // sync was aborted
+            LOG.info(SYNC_INFO.getMarker(), "{} sync aborted", conn::getDescription);
+            return false;
+        }
         LOG.info(
                 SYNC_INFO.getMarker(),
                 "{} writing events done, wrote {} events",
@@ -334,6 +350,7 @@ public class ShadowGraphSynchronizer {
 
         timing.setTimePoint(5);
         syncMetrics.recordSyncTiming(timing, conn);
+        return true;
     }
 
     /**

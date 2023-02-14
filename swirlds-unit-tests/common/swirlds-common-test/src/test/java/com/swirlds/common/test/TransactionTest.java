@@ -41,9 +41,9 @@ public class TransactionTest {
 
     @BeforeAll
     public static void setup() throws ConstructableRegistryException {
-        ConstructableRegistry.registerConstructables("com.swirlds.common");
-        ConstructableRegistry.registerConstructables(
-                "com.swirlds.common.system.transaction.internal");
+        final ConstructableRegistry registry = ConstructableRegistry.getInstance();
+        registry.registerConstructables("com.swirlds.common");
+        registry.registerConstructables("com.swirlds.common.system.transaction.internal");
         SettingsCommon.maxTransactionCountPerEvent = MAX_TRANSACTIONS;
         SettingsCommon.transactionMaxBytes = MAX_TRANSACTION_BYTES;
         SettingsCommon.maxAddressSizeAllowed = MAX_ADDRESSBOOK_SIZE;

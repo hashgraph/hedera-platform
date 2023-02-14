@@ -139,7 +139,7 @@ public class MerkleDataInputStream extends SerializableDataInputStream {
             return;
         }
 
-        final MerkleNode node = ConstructableRegistry.createObject(classId);
+        final MerkleNode node = ConstructableRegistry.getInstance().createObject(classId);
         if (node == null) {
             throw new ClassNotFoundException(classId);
         }

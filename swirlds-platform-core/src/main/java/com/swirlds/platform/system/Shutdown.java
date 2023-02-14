@@ -17,6 +17,8 @@ package com.swirlds.platform.system;
 
 import static com.swirlds.logging.LogMarker.STARTUP;
 
+import com.swirlds.platform.dispatch.Observer;
+import com.swirlds.platform.dispatch.triggers.control.ShutdownRequestedTrigger;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -25,7 +27,7 @@ public final class Shutdown {
 
     private static final Logger LOG = LogManager.getLogger(Shutdown.class);
 
-    private Shutdown() {}
+    public Shutdown() {}
 
     /**
      * Shut down the JVM.
@@ -33,7 +35,19 @@ public final class Shutdown {
      * @param reason the reason the JVM is being shut down
      * @param exitCode the exit code to return when the JVM has been shut down
      */
-    public static void shutdown(final String reason, final Integer exitCode) {
+    @Observer(ShutdownRequestedTrigger.class)
+    public void shutdown(final String reason, final Integer exitCode) {
+        immediateShutDown(reason, exitCode);
+    }
+
+    /**
+     * Perform an immediate shutdown. Be cautious calling this method directly from code, as it
+     * makes the code difficult to unit test if it can kill the JVM mid-test.
+     *
+     * @param reason the reason the JVM is being shut down
+     * @param exitCode the exit code to return when the JVM has been shut down
+     */
+    public static void immediateShutDown(final String reason, final Integer exitCode) {
         LOG.info(STARTUP.getMarker(), "Node shutting down. Reason: {}", reason);
         System.exit(exitCode);
     }

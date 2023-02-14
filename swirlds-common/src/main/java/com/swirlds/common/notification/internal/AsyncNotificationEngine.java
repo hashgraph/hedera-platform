@@ -22,6 +22,7 @@ import com.swirlds.common.notification.NoListenersAvailableException;
 import com.swirlds.common.notification.Notification;
 import com.swirlds.common.notification.NotificationResult;
 import com.swirlds.common.threading.futures.StandardFuture;
+import com.swirlds.common.threading.manager.ThreadManager;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
@@ -37,8 +38,16 @@ public class AsyncNotificationEngine extends AbstractNotificationEngine {
     private final Map<Class<? extends Listener<?>>, Dispatcher<? extends Listener<?>>>
             listenerRegistry;
 
-    /** Default Constructor. */
-    public AsyncNotificationEngine() {
+    /** Responsible for creating and managing threads used by this object. */
+    private final ThreadManager threadManager;
+
+    /**
+     * Default Constructor.
+     *
+     * @param threadManager responsible for managing thread lifecycles
+     */
+    public AsyncNotificationEngine(final ThreadManager threadManager) {
+        this.threadManager = threadManager;
         this.listenerRegistry = new ConcurrentHashMap<>();
         Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
     }
@@ -151,10 +160,10 @@ public class AsyncNotificationEngine extends AbstractNotificationEngine {
         Dispatcher<L> dispatcher =
                 (Dispatcher<L>)
                         listenerRegistry.putIfAbsent(
-                                listenerClass, new Dispatcher<>(listenerClass));
+                                listenerClass, new Dispatcher<>(threadManager, listenerClass));
 
         if (dispatcher == null) {
-            dispatcher = new Dispatcher<>(listenerClass);
+            dispatcher = new Dispatcher<>(threadManager, listenerClass);
             listenerRegistry.put(listenerClass, dispatcher);
         }
 

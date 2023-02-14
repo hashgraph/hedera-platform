@@ -18,7 +18,11 @@ package com.swirlds.jasperdb.settings;
 /**
  * Static holder of resolved {@code jasperDb.*} settings, via an instance of {@link
  * JasperDbSettings}.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
  */
+@Deprecated(forRemoval = true)
 public final class JasperDbSettingsFactory {
     private static JasperDbSettings jasperDbSettings;
 

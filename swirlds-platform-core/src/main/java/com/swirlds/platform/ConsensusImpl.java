@@ -19,6 +19,7 @@ import static com.swirlds.logging.LogMarker.ADD_EVENT;
 import static com.swirlds.logging.LogMarker.STARTUP;
 import static com.swirlds.platform.internal.EventImpl.MIN_TRANS_TIMESTAMP_INCR_NANOS;
 
+import com.swirlds.common.config.ConsensusConfig;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.event.EventUtils;
@@ -131,6 +132,8 @@ import org.apache.logging.log4j.Logger;
 public class ConsensusImpl implements Consensus {
 
     private static final Logger LOG = LogManager.getLogger(ConsensusImpl.class);
+    /** consensus configuration */
+    private final ConsensusConfig config;
 
     // ------------------------ Variable passed to the constructor ------------------------
     /** the only address book currently, until address book changes are implemented */
@@ -241,39 +244,43 @@ public class ConsensusImpl implements Consensus {
     /**
      * Constructs an empty object (no events) to keep track of elections and calculate consensus.
      *
+     * @param config consensus configuration
      * @param consensusMetrics metrics related to consensus
      * @param minGenConsumer a method that accepts minimum generation info
      * @param addressBook the global address book, which never changes
      */
     public ConsensusImpl(
+            final ConsensusConfig config,
             final ConsensusMetrics consensusMetrics,
             final BiConsumer<Long, Long> minGenConsumer,
             final AddressBook addressBook) {
-
+        this.config = config;
         this.consensusMetrics = consensusMetrics;
         this.minGenConsumer = minGenConsumer;
 
         // until we implement address book changes, we will just use the use this address book
         this.addressBook = addressBook;
 
-        this.rounds = new ConsensusRounds(addressBook);
+        this.rounds = new ConsensusRounds(config, addressBook);
     }
 
     /**
      * Constructs an object to keep track of elections and calculate consensus. It will read from
      * the given state to process all its events, and to read and store its lastRoundReceived.
      *
+     * @param config consensus configuration
      * @param consensusMetrics metrics related to consensus
      * @param minGenConsumer a method that accepts minimum generation info
      * @param addressBook the global address book, which never changes
      * @param signedState a state to read from
      */
     public ConsensusImpl(
+            final ConsensusConfig config,
             final ConsensusMetrics consensusMetrics,
             final BiConsumer<Long, Long> minGenConsumer,
             final AddressBook addressBook,
             final SignedState signedState) {
-        this(consensusMetrics, minGenConsumer, addressBook);
+        this(config, consensusMetrics, minGenConsumer, addressBook);
         // create all the rounds that we have events for
         rounds.createRoundsForSignedStateConstructor(signedState.getMinGenInfo());
 
@@ -319,12 +326,13 @@ public class ConsensusImpl implements Consensus {
      *     and ancestors of those). This must must be non-null and contain exactly 3 lists.
      */
     public ConsensusImpl(
+            final ConsensusConfig config,
             final ConsensusMetrics consensusMetrics,
             final BiConsumer<Long, Long> minGenConsumer,
             final AddressBook addressBook,
             final long round,
             final List<List<Hash>> witnessHashes) {
-
+        this.config = config;
         this.consensusMetrics = consensusMetrics;
         this.minGenConsumer = minGenConsumer;
         // until we implement address book changes, we will just use the use this address book
@@ -341,7 +349,7 @@ public class ConsensusImpl implements Consensus {
         numInitJudgesMissing = witnessHashes.get(0).size();
         hashRoundJudges = new ArrayList<>();
 
-        this.rounds = new ConsensusRounds(addressBook);
+        this.rounds = new ConsensusRounds(config, addressBook);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -553,13 +561,12 @@ public class ConsensusImpl implements Consensus {
                                 || Utilities.isSupermajority(noStake, totalStake);
 
                 election.vote[voterId] = (yesStake >= noStake);
-                if ((election.age % Settings.getInstance().getCoinFreq()) == 0) {
+                if ((election.age % config.coinFreq()) == 0) {
                     // a coin round. Vote randomly unless you strongly see a supermajority. Don't
                     // decide.
                     numCoinRounds++;
                     if (!superMajority) {
-                        if ((election.age % (2 * Settings.getInstance().getCoinFreq()))
-                                == Settings.getInstance().getCoinFreq()) {
+                        if ((election.age % (2 * config.coinFreq())) == config.coinFreq()) {
                             election.vote[voterId] =
                                     true; // every other "coin round" is just coin=true
                         } else {
@@ -1048,8 +1055,7 @@ public class ConsensusImpl implements Consensus {
     /** Delete the oldest rounds with round number which is expired. */
     private void delRounds() {
         // delete rounds before newMinRound
-        final long newMinRound =
-                getFameDecidedBelow() - Settings.getInstance().getState().roundsExpired;
+        final long newMinRound = getFameDecidedBelow() - config.roundsExpired();
         final long curMinRound = rounds.getMinRound();
 
         if (newMinRound > curMinRound) {

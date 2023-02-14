@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.swirlds.common.metrics.DurationGauge;
 import com.swirlds.common.metrics.FloatFormats;
 import com.swirlds.common.metrics.Metric;
-import com.swirlds.common.metrics.platform.PlatformDurationGauge;
+import com.swirlds.common.metrics.platform.DefaultDurationGauge;
 import com.swirlds.common.metrics.platform.Snapshot;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
@@ -31,7 +31,7 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-public class DurationGaugeTest {
+class DurationGaugeTest {
 
     private static final String CATEGORY = "CaTeGoRy";
     private static final String NAME = "NaMe";
@@ -43,8 +43,9 @@ public class DurationGaugeTest {
     @DisplayName("Constructor should store values")
     void testConstructor() {
         DurationGauge gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, SECONDS));
+                new DefaultDurationGauge(
+                        new DurationGauge.Config(CATEGORY, NAME, SECONDS)
+                                .withDescription(DESCRIPTION));
 
         assertEquals(
                 CATEGORY,
@@ -67,8 +68,8 @@ public class DurationGaugeTest {
         assertEquals(EnumSet.of(VALUE), gauge.getValueTypes(), "ValueTypes should be [VALUE]");
 
         gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, ChronoUnit.MILLIS));
+                new DefaultDurationGauge(
+                        new DurationGauge.Config(CATEGORY, NAME, ChronoUnit.MILLIS));
         assertEquals(
                 FloatFormats.FORMAT_DECIMAL_3,
                 gauge.getFormat(),
@@ -79,8 +80,8 @@ public class DurationGaugeTest {
                 "The name was not set correctly in the constructor");
 
         gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, ChronoUnit.MICROS));
+                new DefaultDurationGauge(
+                        new DurationGauge.Config(CATEGORY, NAME, ChronoUnit.MICROS));
         assertEquals(
                 FloatFormats.FORMAT_DECIMAL_0,
                 gauge.getFormat(),
@@ -91,8 +92,8 @@ public class DurationGaugeTest {
                 "The name was not set correctly in the constructor");
 
         gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, ChronoUnit.NANOS));
+                new DefaultDurationGauge(
+                        new DurationGauge.Config(CATEGORY, NAME, ChronoUnit.NANOS));
         assertEquals(
                 FloatFormats.FORMAT_DECIMAL_0,
                 gauge.getFormat(),
@@ -108,19 +109,15 @@ public class DurationGaugeTest {
     void testConstructorWithNullParameter() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new DurationGauge.Config(null, NAME, DESCRIPTION, SECONDS),
+                () -> new DurationGauge.Config(null, NAME, SECONDS),
                 "Calling the constructor without a category should throw an IAE");
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new DurationGauge.Config(CATEGORY, null, DESCRIPTION, SECONDS),
+                () -> new DurationGauge.Config(CATEGORY, null, SECONDS),
                 "Calling the constructor without a name should throw an IAE");
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new DurationGauge.Config(CATEGORY, NAME, null, SECONDS),
-                "Calling the constructor without a description should throw an IAE");
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, null),
+                () -> new DurationGauge.Config(CATEGORY, NAME, null),
                 "Calling the constructor without a time unit should throw an IAE");
     }
 
@@ -128,8 +125,7 @@ public class DurationGaugeTest {
     void testUpdate() {
         // given
         final DurationGauge gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, SECONDS));
+                new DefaultDurationGauge(new DurationGauge.Config(CATEGORY, NAME, SECONDS));
 
         testDurationUpdate(gauge, Duration.ofMillis(1500), SECONDS);
         testDurationUpdate(gauge, Duration.ofMillis(700), SECONDS);
@@ -160,18 +156,17 @@ public class DurationGaugeTest {
     @Test
     void testSnapshot() {
         // given
-        final PlatformDurationGauge gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, SECONDS));
+        final DefaultDurationGauge gauge =
+                new DefaultDurationGauge(new DurationGauge.Config(CATEGORY, NAME, SECONDS));
         testDurationUpdate(gauge, Duration.ofMillis(3500), SECONDS);
 
         // when
-        final List<Snapshot.SnapshotValue> snapshot = gauge.takeSnapshot();
+        final List<Snapshot.SnapshotEntry> snapshot = gauge.takeSnapshot();
 
         // then
         final double expectedValue = assertValue(gauge, Duration.ofMillis(3500), SECONDS);
         assertEquals(
-                List.of(new Snapshot.SnapshotValue(VALUE, expectedValue)),
+                List.of(new Snapshot.SnapshotEntry(VALUE, expectedValue)),
                 snapshot,
                 "Snapshot is not correct");
     }
@@ -180,18 +175,13 @@ public class DurationGaugeTest {
     void testInvalidGets() {
         // given
         final DurationGauge gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, SECONDS));
+                new DefaultDurationGauge(new DurationGauge.Config(CATEGORY, NAME, SECONDS));
 
         // then
         assertThrows(
                 IllegalArgumentException.class,
                 () -> gauge.get(null),
                 "Calling get() with null should throw an IAE");
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> gauge.get(Metric.ValueType.COUNTER),
-                "Calling get() with an unsupported MetricType should throw an IAE");
         assertThrows(
                 IllegalArgumentException.class,
                 () -> gauge.get(Metric.ValueType.MIN),
@@ -209,26 +199,25 @@ public class DurationGaugeTest {
     @Test
     void testUnit() {
         DurationGauge gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, SECONDS));
+                new DefaultDurationGauge(new DurationGauge.Config(CATEGORY, NAME, SECONDS));
         testDurationUpdate(gauge, Duration.ofNanos(100), SECONDS);
         testDurationUpdate(gauge, Duration.ofMinutes(2), SECONDS);
 
         gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, ChronoUnit.MILLIS));
+                new DefaultDurationGauge(
+                        new DurationGauge.Config(CATEGORY, NAME, ChronoUnit.MILLIS));
         testDurationUpdate(gauge, Duration.ofNanos(100), ChronoUnit.MILLIS);
         testDurationUpdate(gauge, Duration.ofMinutes(2), ChronoUnit.MILLIS);
 
         gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, ChronoUnit.MICROS));
+                new DefaultDurationGauge(
+                        new DurationGauge.Config(CATEGORY, NAME, ChronoUnit.MICROS));
         testDurationUpdate(gauge, Duration.ofNanos(100), ChronoUnit.MICROS);
         testDurationUpdate(gauge, Duration.ofMinutes(2), ChronoUnit.MICROS);
 
         gauge =
-                new PlatformDurationGauge(
-                        new DurationGauge.Config(CATEGORY, NAME, DESCRIPTION, ChronoUnit.NANOS));
+                new DefaultDurationGauge(
+                        new DurationGauge.Config(CATEGORY, NAME, ChronoUnit.NANOS));
         testDurationUpdate(gauge, Duration.ofNanos(100), ChronoUnit.NANOS);
         testDurationUpdate(gauge, Duration.ofMinutes(2), ChronoUnit.NANOS);
     }

@@ -54,7 +54,7 @@ class MerkleCopyTests {
 
     @BeforeAll
     public static void setUp() throws ConstructableRegistryException {
-        ConstructableRegistry.registerConstructables("com.swirlds.*");
+        ConstructableRegistry.getInstance().registerConstructables("com.swirlds.*");
     }
 
     /** Run a series of tests on adopting the children of the given parent. */

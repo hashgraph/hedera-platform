@@ -17,7 +17,13 @@ package com.swirlds.fchashmap;
 
 import java.time.Duration;
 
-/** This object is used to configure general FCHashMap settings. */
+/**
+ * This object is used to configure general FCHashMap settings.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
+@Deprecated(forRemoval = true)
 public final class FCHashMapSettingsFactory {
 
     private static FCHashMapSettings settings;

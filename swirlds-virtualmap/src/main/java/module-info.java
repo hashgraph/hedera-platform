@@ -4,6 +4,7 @@ open module com.swirlds.virtualmap {
     exports com.swirlds.virtualmap.datasource;
     // Currently, exported only for tests.
     exports com.swirlds.virtualmap.internal.merkle;
+    exports com.swirlds.virtualmap.config;
 
     requires com.swirlds.common;
     requires com.swirlds.logging;
@@ -11,4 +12,5 @@ open module com.swirlds.virtualmap {
     requires java.sql;
     requires java.management; // Test dependency
     requires org.apache.commons.lang3;
+    requires com.swirlds.config;
 }

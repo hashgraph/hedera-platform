@@ -47,7 +47,10 @@ public @interface ConfigProperty {
 
     /** A constant that is used to check if a default is defined. */
     String UNDEFINED_DEFAULT_VALUE =
-            "com.swirlds.config.value.unconfigureddvalue#1j8!-235u-hBHJ-#nxs-!n2n";
+            "com.swirlds.config.value.unconfiguredValue#1j8!-235u-hBHJ-#nxs-!n2n";
+
+    /** A constant that is used to check if a default is defined as null. */
+    String NULL_DEFAULT_VALUE = "com.swirlds.config.value.nullValue#1j8!-235u-hBHJ-#nxs-!n2n";
 
     /**
      * This value is used to define the name of the property. the prefix of the property name is

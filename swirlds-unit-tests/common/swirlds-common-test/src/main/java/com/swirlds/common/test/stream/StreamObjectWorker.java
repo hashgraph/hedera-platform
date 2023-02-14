@@ -16,9 +16,10 @@
 package com.swirlds.common.test.stream;
 
 import static com.swirlds.common.test.stream.TestStreamType.TEST_STREAM;
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 
-import com.swirlds.common.crypto.CryptoFactory;
 import com.swirlds.common.crypto.Cryptography;
+import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
@@ -70,7 +71,8 @@ public class StreamObjectWorker {
                         dirPath, logPeriodMs, signer, startWriteAtCompleteWindow, TEST_STREAM);
 
         writeQueueThread =
-                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>()
+                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>(
+                                getStaticThreadManager())
                         .setForwardTo(fileWriter)
                         .build();
         writeQueueThread.start();
@@ -89,7 +91,8 @@ public class StreamObjectWorker {
         WriteToStreamConsumer streamWriter = new WriteToStreamConsumer(stream, initialHash);
 
         writeQueueThread =
-                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>()
+                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>(
+                                getStaticThreadManager())
                         .setForwardTo(streamWriter)
                         .build();
         writeQueueThread.start();
@@ -103,7 +106,7 @@ public class StreamObjectWorker {
         this.iterator =
                 new ObjectForTestStreamGenerator(totalNum, intervalMs, firstTimestamp)
                         .getIterator();
-        Cryptography cryptography = CryptoFactory.getInstance();
+        Cryptography cryptography = CryptographyHolder.get();
         // receives objects from hashCalculator, calculates and set runningHash for this object
         RunningHashCalculatorForStream<ObjectForTestStream> runningHashCalculator =
                 new RunningHashCalculatorForStream<>(writeQueueThread, cryptography);
@@ -114,7 +117,8 @@ public class StreamObjectWorker {
                 new HashCalculatorForStream<>(runningHashCalculator, cryptography);
 
         hashQueueThread =
-                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>()
+                new QueueThreadObjectStreamConfiguration<ObjectForTestStream>(
+                                getStaticThreadManager())
                         .setForwardTo(hashCalculator)
                         .build();
         hashQueueThread.setRunningHash(initialHash);

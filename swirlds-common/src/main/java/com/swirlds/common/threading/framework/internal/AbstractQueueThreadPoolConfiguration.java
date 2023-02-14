@@ -17,6 +17,7 @@ package com.swirlds.common.threading.framework.internal;
 
 import com.swirlds.common.threading.framework.QueueThreadPool;
 import com.swirlds.common.threading.framework.config.QueueThreadPoolConfiguration;
+import com.swirlds.common.threading.manager.ThreadManager;
 
 /**
  * Boilerplate getters, setters, and configuration for queue thread pool configuration.
@@ -32,7 +33,9 @@ public abstract class AbstractQueueThreadPoolConfiguration<
 
     private int threadCount = DEFAULT_THREAD_COUNT;
 
-    protected AbstractQueueThreadPoolConfiguration() {}
+    protected AbstractQueueThreadPoolConfiguration(final ThreadManager threadManager) {
+        super(threadManager);
+    }
 
     /**
      * Copy constructor.

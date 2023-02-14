@@ -29,7 +29,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Tracks the state of communication with a chatter peer */
 public class CommunicationState {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(CommunicationState.class);
 
     /** the state of synchronization with the peer */
     protected final AtomicReference<SyncState> syncState;
@@ -42,14 +42,23 @@ public class CommunicationState {
     }
 
     /**
-     * @return true if we should perform a chatter sync with this peer
+     * @return true if we are out of sync with this peer
      */
-    public boolean shouldPerformChatterSync() {
+    public boolean isOutOfSync() {
         return isSyncState(OUT_OF_SYNC);
+    }
+
+    /**
+     * @return true if chatter is suspended
+     */
+    public boolean isSuspended() {
+        return isSyncState(SUSPENDED);
     }
 
     /** notifies the state that chatter sync has started */
     public void chatterSyncStarted() {
+        // if we are in sync as we begin syncing, switch to OUT_OF_SYNC and start again
+        syncState.compareAndSet(IN_SYNC, OUT_OF_SYNC);
         setAndCheck(commState, SYNC_RUNNING, NO_PROTOCOL);
     }
 
@@ -85,7 +94,9 @@ public class CommunicationState {
     /** notifies the state that chatter has ended */
     public void chatterEnded() {
         syncState.compareAndSet(IN_SYNC, OUT_OF_SYNC);
-        setAndCheck(commState, NO_PROTOCOL, CHATTER_RUNNING);
+        // this can be called twice in case there is a socket exception, so we don't call
+        // setAndCheck() for it
+        commState.set(NO_PROTOCOL);
     }
 
     /** notifies the state that peer has ended chatter */
@@ -111,6 +122,7 @@ public class CommunicationState {
     /** Resets the state to its initial value */
     public void reset() {
         syncState.set(OUT_OF_SYNC);
+        commState.set(NO_PROTOCOL);
     }
 
     /**

@@ -29,6 +29,9 @@ import java.time.Duration;
  * <p>This deserializer currently utilizes a regex for parsing, which may have superlinear time
  * complexity for arbitrary input. Until that is addressed, do not use this parser on untrusted
  * strings.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
  */
 @Deprecated(forRemoval = true)
 public class DurationDeserializer extends StdDeserializer<Duration> {

@@ -16,7 +16,8 @@
 package com.swirlds.platform.reconnect;
 
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
-import static com.swirlds.logging.LogMarker.RECONNECT;
+import static com.swirlds.logging.LogMarker.SIGNED_STATE;
+import static com.swirlds.platform.state.signed.SignedStateUtilities.logStakeInfo;
 
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.Crypto;
@@ -24,7 +25,9 @@ import com.swirlds.platform.Utilities;
 import com.swirlds.platform.state.StateSettings;
 import com.swirlds.platform.state.signed.SignatureSummary;
 import com.swirlds.platform.state.signed.SignedState;
+import com.swirlds.platform.state.signed.SignedStateInvalidException;
 import com.swirlds.platform.state.signed.SignedStateUtilities;
+import com.swirlds.platform.state.signed.SignedStateValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,19 +44,12 @@ public class DefaultSignedStateValidator implements SignedStateValidator {
     }
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(DefaultSignedStateValidator.class);
 
-    /**
-     * Determines if a signed state is valid. If the total stake among valid signatures is a
-     * majority, then the signed state is valid. If the state is not valid, an exception is thrown.
-     *
-     * @param signedState the signed state to validate
-     * @param addressBook the address book to use to lookup public keys and stake values
-     * @throws ReconnectException if the state is not valid
-     */
+    /** {@inheritDoc} */
     public void validate(final SignedState signedState, final AddressBook addressBook)
-            throws ReconnectException {
-        LOG.info(RECONNECT.getMarker(), "Validating signatures of the received state");
+            throws SignedStateInvalidException {
+        LOG.info(SIGNED_STATE.getMarker(), "Validating signatures of the received state");
 
         final SignatureSummary sigSummary =
                 SignedStateUtilities.getSigningStake(signedState, crypto, addressBook);
@@ -64,27 +60,27 @@ public class DefaultSignedStateValidator implements SignedStateValidator {
         final boolean hasEnoughStake =
                 Utilities.isMajority(validStake, addressBook.getTotalStake());
 
-        SignedStateValidator.logStakeInfo(LOG, validStake, hasEnoughStake, addressBook);
+        logStakeInfo(LOG, validStake, hasEnoughStake, addressBook);
 
         if (!hasEnoughStake) {
             LOG.error(
-                    RECONNECT.getMarker(),
-                    "Information for failed reconnect state:\n{}\n{}",
+                    SIGNED_STATE.getMarker(),
+                    "Information for failed state:\n{}\n{}",
                     () -> signedState.getState().getPlatformState().getInfoString(),
                     () ->
                             generateHashDebugString(
                                     signedState.getState(), StateSettings.getDebugHashDepth()));
-            throw new ReconnectException(
+            throw new SignedStateInvalidException(
                     String.format(
-                            "Error: Received signed state does not have enough valid signatures!"
-                                + " validCount:%d, addressBook size:%d, validStake:%d, addressBook"
-                                + " total stake:%d",
+                            "Error: signed state does not have enough valid signatures! validCount:"
+                                    + " %d, addressBook size: %d, validStake: %d, addressBook total"
+                                    + " stake: %d",
                             validCount,
                             addressBook.getSize(),
                             validStake,
                             addressBook.getTotalStake()));
         }
 
-        LOG.info(RECONNECT.getMarker(), "State is valid");
+        LOG.info(SIGNED_STATE.getMarker(), "State is valid");
     }
 }

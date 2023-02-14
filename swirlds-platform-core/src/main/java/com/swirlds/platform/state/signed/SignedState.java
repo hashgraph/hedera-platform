@@ -22,7 +22,11 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.system.SoftwareVersion;
 import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.common.time.OSTime;
 import com.swirlds.common.utility.ReferenceCounter;
+import com.swirlds.common.utility.RuntimeObjectRecord;
+import com.swirlds.common.utility.RuntimeObjectRegistry;
+import com.swirlds.platform.Settings;
 import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.MinGenInfo;
 import com.swirlds.platform.state.PlatformData;
@@ -54,7 +58,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class SignedState implements SignedStateInfo {
 
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(SignedState.class);
 
     /** the signatures collected so far (including from self) */
     private SigSet sigSet;
@@ -96,6 +100,12 @@ public class SignedState implements SignedStateInfo {
     /** Signed states are deleted on this background thread. */
     private SignedStateGarbageCollector signedStateGarbageCollector;
 
+    /** Used to track the lifespan of this signed state. */
+    private final RuntimeObjectRecord registryRecord;
+
+    /** Information about how this signed state was used. */
+    private final SignedStateHistory history;
+
     /**
      * Instantiate a signed state, storing the information passed as parameters in it. Also
      * calculate and store its hash, which can then be retrieved with getHash().
@@ -129,8 +139,19 @@ public class SignedState implements SignedStateInfo {
 
         this(state);
 
+        if (history != null) {
+            history.setRound(round);
+        }
+
         final PlatformState platformState = new PlatformState();
         final PlatformData platformData = new PlatformData();
+
+        final Hash epochHash;
+        if (state.getPlatformState() != null) {
+            epochHash = state.getPlatformState().getPlatformData().getEpochHash();
+        } else {
+            epochHash = null;
+        }
 
         state.setPlatformState(platformState);
         platformState.setPlatformData(platformData);
@@ -143,6 +164,7 @@ public class SignedState implements SignedStateInfo {
         platformData.setMinGenInfo(minGenInfo);
         platformData.calculateLastTransactionTimestampFromEvents();
         platformData.setCreationSoftwareVersion(softwareVersion);
+        platformData.setEpochHash(epochHash);
 
         platformState.setAddressBook(addressBook);
 
@@ -157,6 +179,17 @@ public class SignedState implements SignedStateInfo {
         doNotDelete.reserve();
 
         this.state = state;
+
+        if (Settings.getInstance().getState().signedStateSentinelEnabled) {
+            history = new SignedStateHistory(OSTime.getInstance());
+            history.recordAction(
+                    SignedStateHistory.SignedStateAction.CREATION,
+                    getReservations(),
+                    getWeakReservations());
+        } else {
+            history = null;
+        }
+        registryRecord = RuntimeObjectRegistry.createRecord(getClass(), history);
     }
 
     /** Set a garbage collector, used to delete states on a background thread. */
@@ -216,6 +249,12 @@ public class SignedState implements SignedStateInfo {
      * archived, so it is very important to call releaseState() on it when done.
      */
     public void reserveState() {
+        if (history != null) {
+            history.recordAction(
+                    SignedStateHistory.SignedStateAction.STRONG_RESERVATION,
+                    getReservations(),
+                    getWeakReservations());
+        }
         doNotArchiveOrDelete.reserve();
     }
 
@@ -224,16 +263,34 @@ public class SignedState implements SignedStateInfo {
      * archived. It is very important to call weakReleaseState() on it when done.
      */
     public void weakReserveState() {
+        if (history != null) {
+            history.recordAction(
+                    SignedStateHistory.SignedStateAction.WEAK_RESERVATION,
+                    getReservations(),
+                    getWeakReservations());
+        }
         doNotDelete.reserve();
     }
 
     /** Releases a reservation previously obtained in reserveState() */
     public void releaseState() {
+        if (history != null) {
+            history.recordAction(
+                    SignedStateHistory.SignedStateAction.STRONG_RELEASE,
+                    getReservations(),
+                    getWeakReservations());
+        }
         doNotArchiveOrDelete.release();
     }
 
     /** Release an archival reservation. */
     public void weakReleaseState() {
+        if (history != null) {
+            history.recordAction(
+                    SignedStateHistory.SignedStateAction.WEAK_RELEASE,
+                    getReservations(),
+                    getWeakReservations());
+        }
         doNotDelete.release();
     }
 
@@ -284,6 +341,13 @@ public class SignedState implements SignedStateInfo {
                 try {
                     deleted = true;
 
+                    if (history != null) {
+                        history.recordAction(
+                                SignedStateHistory.SignedStateAction.RELEASE_STATE,
+                                getReservations(),
+                                getWeakReservations());
+                    }
+                    registryRecord.release();
                     state.release();
 
                     if (signedStateGarbageCollector != null) {
@@ -301,6 +365,12 @@ public class SignedState implements SignedStateInfo {
             final SwirldState swirldState = state.getSwirldState();
             if (swirldState != null) {
                 try {
+                    if (history != null) {
+                        history.recordAction(
+                                SignedStateHistory.SignedStateAction.ARCHIVE_STATE,
+                                getReservations(),
+                                getWeakReservations());
+                    }
                     swirldState.archive();
 
                     if (signedStateGarbageCollector != null) {

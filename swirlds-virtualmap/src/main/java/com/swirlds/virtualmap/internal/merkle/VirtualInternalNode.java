@@ -30,7 +30,6 @@ import com.swirlds.virtualmap.VirtualMap;
 import com.swirlds.virtualmap.VirtualValue;
 import com.swirlds.virtualmap.datasource.VirtualInternalRecord;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
-import com.swirlds.virtualmap.datasource.VirtualRecord;
 import com.swirlds.virtualmap.internal.Path;
 import java.io.IOException;
 import java.util.List;
@@ -39,7 +38,8 @@ import java.util.Objects;
 /** Represents a virtual internal merkle node. */
 @ConstructableIgnored
 public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extends VirtualValue>
-        extends PartialBinaryMerkleInternal implements MerkleInternal, VirtualNode {
+        extends PartialBinaryMerkleInternal
+        implements MerkleInternal, VirtualNode<VirtualInternalRecord> {
 
     private static final int NUMBER_OF_CHILDREN = 2;
 
@@ -53,11 +53,11 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
     private final VirtualRootNode<K, V> root;
 
     /**
-     * The {@link VirtualRecord} is the backing data for this node. There are different types of
-     * records, {@link VirtualInternalRecord} for internal nodes and {@link
-     * com.swirlds.virtualmap.datasource.VirtualLeafRecord} for leaf nodes.
+     * The {@link VirtualInternalRecord} is the backing data for this node. There are different
+     * types of records, {@link VirtualInternalRecord} for internal nodes and {@link
+     * VirtualLeafRecord} for leaf nodes.
      */
-    private final VirtualRecord virtualRecord;
+    private final VirtualInternalRecord virtualRecord;
 
     public VirtualInternalNode(
             final VirtualRootNode<K, V> root, final VirtualInternalRecord virtualRecord) {
@@ -76,7 +76,7 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
     @SuppressWarnings("unchecked")
     @Override
     public <T extends MerkleNode> T getChild(final int i) {
-        final VirtualNode node;
+        final VirtualNode<?> node;
         if (i == 0) {
             node = getLeft();
         } else if (i == 1) {
@@ -122,18 +122,18 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
     /** Always returns an ephemeral node, or one we already know about. */
     @SuppressWarnings("unchecked")
     @Override
-    public VirtualNode getLeft() {
+    public VirtualNode<?> getLeft() {
         return getChild(getLeftChildPath(virtualRecord.getPath()));
     }
 
     /** Always returns an ephemeral node, or one we already know about. */
     @SuppressWarnings("unchecked")
     @Override
-    public VirtualNode getRight() {
+    public VirtualNode<?> getRight() {
         return getChild(getRightChildPath(virtualRecord.getPath()));
     }
 
-    private VirtualNode getChild(final long childPath) {
+    private VirtualNode<?> getChild(final long childPath) {
         if (childPath < root.getState().getFirstLeafPath()) {
             return getInternalNode(childPath);
         } else {
@@ -239,7 +239,7 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
             return true;
         }
 
-        if (!(o instanceof final VirtualNode that)) {
+        if (!(o instanceof final VirtualNode<?> that)) {
             return false;
         }
 
@@ -254,7 +254,7 @@ public final class VirtualInternalNode<K extends VirtualKey<? super K>, V extend
 
     /** {@inheritDoc} */
     @Override
-    public VirtualRecord getVirtualRecord() {
+    public VirtualInternalRecord getVirtualRecord() {
         return virtualRecord;
     }
 }

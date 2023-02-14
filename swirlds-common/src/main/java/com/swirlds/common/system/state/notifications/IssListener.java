@@ -24,5 +24,5 @@ import com.swirlds.common.notification.Listener;
  * A method that listens for an ISS event. This listener provides no ordering guarantees with
  * respect to other notifications.
  */
-@DispatchModel(mode = DispatchMode.ASYNC, order = DispatchOrder.UNORDERED)
+@DispatchModel(mode = DispatchMode.SYNC, order = DispatchOrder.ORDERED)
 public interface IssListener extends Listener<IssNotification> {}

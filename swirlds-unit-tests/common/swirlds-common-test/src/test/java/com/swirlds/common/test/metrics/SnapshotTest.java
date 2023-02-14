@@ -20,7 +20,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.swirlds.common.metrics.Metric;
-import com.swirlds.common.metrics.platform.PlatformMetric;
+import com.swirlds.common.metrics.platform.DefaultMetric;
 import com.swirlds.common.metrics.platform.Snapshot;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -30,9 +30,9 @@ class SnapshotTest {
     @Test
     void testToString() {
         // given
-        final PlatformMetric metric = mock(PlatformMetric.class);
+        final DefaultMetric metric = mock(DefaultMetric.class);
         when(metric.takeSnapshot())
-                .thenReturn(List.of(new Snapshot.SnapshotValue(Metric.ValueType.VALUE, 42L)));
+                .thenReturn(List.of(new Snapshot.SnapshotEntry(Metric.ValueType.VALUE, 42L)));
         final Snapshot snapshot = Snapshot.of(metric);
 
         // when

@@ -43,7 +43,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class EventTaskCreator {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(EventTaskCreator.class);
 
     /** immutable current version of the address book. (will later store one per round) */
     private final AddressBook addressBook; // if this code is changed to non-final, make it volatile

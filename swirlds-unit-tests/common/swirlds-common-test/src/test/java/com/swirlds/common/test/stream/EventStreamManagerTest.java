@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.test.stream;
 
+import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -63,6 +64,7 @@ class EventStreamManagerTest {
     static void init() throws Exception {
         disableStreamingInstance =
                 new EventStreamManager<>(
+                        getStaticThreadManager(),
                         selfId,
                         mock(Signer.class),
                         nodeName,
@@ -74,6 +76,7 @@ class EventStreamManagerTest {
 
         enableStreamingInstance =
                 new EventStreamManager<>(
+                        getStaticThreadManager(),
                         selfId,
                         mock(Signer.class),
                         nodeName,

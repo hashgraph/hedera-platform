@@ -27,7 +27,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Observes events and consensus in order to update the {@link ShadowGraph} */
 public class ShadowGraphEventObserver implements EventAddedObserver, ConsensusRoundObserver {
-    private static final Logger LOG = LogManager.getLogger();
+    private static final Logger LOG = LogManager.getLogger(ShadowGraphEventObserver.class);
     private final ShadowGraph shadowGraph;
 
     public ShadowGraphEventObserver(final ShadowGraph shadowGraph) {

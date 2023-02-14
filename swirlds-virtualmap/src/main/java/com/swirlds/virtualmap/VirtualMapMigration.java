@@ -17,7 +17,9 @@ package com.swirlds.virtualmap;
 
 import com.swirlds.common.threading.framework.config.ThreadConfiguration;
 import com.swirlds.common.threading.interrupt.InterruptableConsumer;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
+import com.swirlds.virtualmap.internal.Path;
 import com.swirlds.virtualmap.internal.RecordAccessor;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +39,7 @@ public final class VirtualMapMigration {
     /**
      * Extract all key-value pairs from a virtual map and pass it to a handler.
      *
+     * @param threadManager responsible for creating and managing threads
      * @param source a virtual map to read from, will not be modified by this method
      * @param threadCount the number of threads used for reading from the original map
      * @param <K> the type of the key
@@ -44,6 +47,7 @@ public final class VirtualMapMigration {
      */
     public static <K extends VirtualKey<? super K>, V extends VirtualValue>
             void extractVirtualMapData(
+                    final ThreadManager threadManager,
                     final VirtualMap<K, V> source,
                     final InterruptableConsumer<Pair<K, V>> handler,
                     final int threadCount)
@@ -51,6 +55,9 @@ public final class VirtualMapMigration {
 
         final long firstLeafPath = source.getState().getFirstLeafPath();
         final long lastLeafPath = source.getState().getLastLeafPath();
+        if (firstLeafPath == Path.INVALID_PATH || lastLeafPath == Path.INVALID_PATH) {
+            return;
+        }
 
         final RecordAccessor<K, V> recordAccessor = source.getRoot().getRecords();
 
@@ -70,7 +77,7 @@ public final class VirtualMapMigration {
             final int index = threadIndex;
 
             threads.add(
-                    new ThreadConfiguration()
+                    new ThreadConfiguration(threadManager)
                             .setComponent(COMPONENT_NAME)
                             .setThreadName("reader-" + threadCount)
                             .setInterruptableRunnable(

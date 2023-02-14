@@ -19,9 +19,9 @@ import com.swirlds.config.api.ConfigData;
 import com.swirlds.config.api.ConfigProperty;
 import com.swirlds.config.api.Configuration;
 import com.swirlds.config.api.validation.ConfigViolation;
+import com.swirlds.config.api.validation.annotation.ConstraintMethod;
+import com.swirlds.config.api.validation.annotation.Min;
 import com.swirlds.config.impl.validators.DefaultConfigViolation;
-import com.swirlds.config.impl.validators.annotation.ConstraintMethod;
-import com.swirlds.config.impl.validators.annotation.Min;
 import java.util.List;
 import java.util.Objects;
 

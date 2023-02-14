@@ -17,7 +17,13 @@ package com.swirlds.fchashmap;
 
 import java.time.Duration;
 
-/** Settings for {@link com.swirlds.fchashmap.FCHashMap}. */
+/**
+ * Settings for {@link com.swirlds.fchashmap.FCHashMap}.
+ *
+ * @deprecated will be replaced by the {@link com.swirlds.config.api.Configuration} API in near
+ *     future. If you need to use this class please try to do as less static access as possible.
+ */
+@Deprecated(forRemoval = true)
 public interface FCHashMapSettings {
 
     /** Get the maximum expected size of the FCHashMapGarbageCollector's queue. */

@@ -19,6 +19,7 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.platform.dispatch.types.TriggerThree;
 
 /** Sends dispatches for self ISS events. */
+@FunctionalInterface
 public interface SelfIssTrigger extends TriggerThree<Long, Hash, Hash> {
 
     /**

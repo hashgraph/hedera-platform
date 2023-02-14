@@ -26,6 +26,7 @@ import com.swirlds.common.merkle.synchronization.streams.AsyncOutputStream;
 import com.swirlds.common.merkle.synchronization.utility.MerkleSynchronizationException;
 import com.swirlds.common.merkle.synchronization.views.CustomReconnectRoot;
 import com.swirlds.common.merkle.synchronization.views.LearnerTreeView;
+import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.threading.pool.StandardWorkGroup;
 import com.swirlds.common.utility.ThresholdLimitingHandler;
 import java.util.List;
@@ -57,10 +58,14 @@ public class LearnerThread<T> {
     private final ThresholdLimitingHandler<Throwable> exceptionRateLimiter =
             new ThresholdLimitingHandler<>(1);
 
+    /** Responsible for creating and managing threads used by this object. */
+    private final ThreadManager threadManager;
+
     /**
      * Create a new thread for the learner.
      *
      * @param workGroup the work group that will manage the thread
+     * @param threadManager manages the creation of threads
      * @param in the input stream, this object is responsible for closing the stream when finished
      * @param out the output stream, this object is responsible for closing the stream when finished
      * @param rootsToReceive a queue of subtree roots to synchronize
@@ -71,6 +76,7 @@ public class LearnerThread<T> {
      */
     public LearnerThread(
             final StandardWorkGroup workGroup,
+            final ThreadManager threadManager,
             final AsyncInputStream<Lesson<T>> in,
             final AsyncOutputStream<QueryResponse> out,
             final Queue<MerkleNode> rootsToReceive,
@@ -78,6 +84,7 @@ public class LearnerThread<T> {
             final LearnerTreeView<T> view,
             final ReconnectNodeCount nodeCount) {
         this.workGroup = workGroup;
+        this.threadManager = threadManager;
         this.in = in;
         this.out = out;
         this.rootsToReceive = rootsToReceive;
@@ -107,7 +114,7 @@ public class LearnerThread<T> {
         final T originalNode = expectedLesson.getOriginalNode();
 
         final CustomReconnectRoot<?, ?> customRoot =
-                ConstructableRegistry.createObject(lesson.getCustomViewClassId());
+                ConstructableRegistry.getInstance().createObject(lesson.getCustomViewClassId());
         if (customRoot == null) {
             throw new MerkleSynchronizationException(
                     "unable to construct object with class ID "
@@ -229,7 +236,7 @@ public class LearnerThread<T> {
                 out;
                 view) {
 
-            view.startThreads(workGroup);
+            view.startThreads(threadManager, workGroup);
 
             view.expectLessonFor(null, 0, view.getOriginalRoot(), false);
             in.anticipateMessage();
