@@ -31,7 +31,7 @@ import org.apache.logging.log4j.Logger;
 /** Utility methods for dealing with signed states on disk. */
 public final class SignedStateFileUtils {
 
-    private static final Logger LOG = LogManager.getLogger(SignedStateFileUtils.class);
+    private static final Logger logger = LogManager.getLogger(SignedStateFileUtils.class);
 
     /**
      * Fun trivia: the file extension ".swh" stands for "SWirlds Hashgraph", although this is a bit
@@ -181,7 +181,7 @@ public final class SignedStateFileUtils {
         final Path baseDirectory = getSignedStatesBaseDirectory();
         final Path excludedDirectory = getSignedStatesDirectoryForApp(mainClassName);
 
-        LOG.info(
+        logger.info(
                 STATE_TO_DISK.getMarker(),
                 "Cleaning up saved state directory, all files and directories in {} (with the"
                         + " exception of {}) will be deleted.",
@@ -201,7 +201,7 @@ public final class SignedStateFileUtils {
                         }
                     });
         } catch (final IOException e) {
-            LOG.warn(
+            logger.warn(
                     STATE_TO_DISK.getMarker(),
                     "encountered problem while attempting to clean state directory {}",
                     baseDirectory,

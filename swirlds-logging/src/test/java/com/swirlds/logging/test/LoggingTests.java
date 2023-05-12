@@ -158,28 +158,28 @@ public class LoggingTests {
 
         LoggerContext context = (LoggerContext) LogManager.getContext(false);
         context.setConfigLocation(ResourceLoader.loadURL("log4j2-test.xml").toURI());
-        Logger log = LogManager.getLogger();
+        Logger logger = LogManager.getLogger();
 
         // When this test is run in circleci, other tests pollute the log file. Write a message that
         // we can skip to
         final String beginningMessage = "BEGINNING_OF_LOG_SIMULATION_TEST";
-        log.info(EXCEPTION.getMarker(), beginningMessage);
+        logger.info(EXCEPTION.getMarker(), beginningMessage);
 
         // Build the same log using dummy logs.
         DummyLogBuilder logBuilder = new DummyLogBuilder();
 
-        logBuilder.setThread(Thread.currentThread().getName()).setLoggerName(log.getName());
+        logBuilder.setThread(Thread.currentThread().getName()).setLoggerName(logger.getName());
 
-        log.info(EXCEPTION.getMarker(), "info message");
+        logger.info(EXCEPTION.getMarker(), "info message");
         logBuilder.info(EXCEPTION.getMarker(), "info message");
 
-        log.warn(EXCEPTION.getMarker(), "warning message");
+        logger.warn(EXCEPTION.getMarker(), "warning message");
         logBuilder.warn(EXCEPTION.getMarker(), "warning message");
 
-        log.error(EXCEPTION.getMarker(), "error message");
+        logger.error(EXCEPTION.getMarker(), "error message");
         logBuilder.error(EXCEPTION.getMarker(), "error message");
 
-        log.error(
+        logger.error(
                 EXCEPTION.getMarker(),
                 () ->
                         new SynchronizationCompletePayload("this message contains auxiliary data")
@@ -205,7 +205,7 @@ public class LoggingTests {
                         .setRedundantInternalNodes(10)
                         .toString());
 
-        log.error(
+        logger.error(
                 EXCEPTION.getMarker(),
                 "this log contains an exception",
                 new RuntimeException("err1"));
@@ -214,7 +214,7 @@ public class LoggingTests {
                 "this log contains an exception",
                 new RuntimeException("err1"));
 
-        log.error(
+        logger.error(
                 EXCEPTION.getMarker(),
                 () ->
                         new SynchronizationCompletePayload(

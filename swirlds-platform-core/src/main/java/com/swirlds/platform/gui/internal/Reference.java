@@ -42,7 +42,7 @@ public class Reference {
     private static final String digits =
             "0123456789" + "abcdefghijklmnopqrstuvwxyz" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(Reference.class);
+    private static final Logger logger = LogManager.getLogger(Reference.class);
 
     /**
      * Pass to the constructor 16, 32, or 48 bytes (128, 256, or 384 bits), which is the hash of the
@@ -59,11 +59,11 @@ public class Reference {
      */
     public Reference(byte[] data) {
         if (data == null) {
-            log.error(EXCEPTION.getMarker(), "data should not be null");
+            logger.error(EXCEPTION.getMarker(), "data should not be null");
             throw new InvalidParameterException("data should not be null");
         }
         if (data == null || (data.length != 32 && data.length != 16 && data.length != 48)) {
-            log.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "data.length() should be 16 or 32 or 48, not {}",
                     data.length);
@@ -113,7 +113,7 @@ public class Reference {
             int len256Bits = (int) Math.ceil((256 + 8) / log2(digits.length()));
             int len384Bits = (int) Math.ceil((384 + 8) / log2(digits.length()));
             if (lenString != len128Bits && lenString != len256Bits && lenString != len384Bits) {
-                log.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         " is not a proper encoding of 128, 256, or 384 bits "
                                 + "because it has {} digits instead of {}, {}, or {}",

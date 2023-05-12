@@ -44,7 +44,7 @@ public abstract class OperationProvider<
         Element, OptionalData, Result, Alg, AlgType extends Enum<AlgType>> {
 
     /** the logger all implementations should use for reporting issues or diagnostic messages */
-    private static final Logger LOG = LogManager.getLogger(OperationProvider.class);
+    private static final Logger logger = LogManager.getLogger(OperationProvider.class);
 
     /**
      * Provides the implementor with access to the {@link Logger}.
@@ -52,7 +52,7 @@ public abstract class OperationProvider<
      * @return an initialized logger
      */
     protected static Logger log() {
-        return LOG;
+        return logger;
     }
 
     /**

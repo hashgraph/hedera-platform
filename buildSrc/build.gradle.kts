@@ -30,7 +30,7 @@ dependencies {
     implementation("com.gorylenko.gradle-git-properties:gradle-git-properties:2.4.1")
     implementation("gradle.plugin.lazy.zoo.gradle:git-data-plugin:1.2.2")
     implementation("net.swiftzer.semver:semver:1.1.2")
-    implementation("org.owasp:dependency-check-gradle:7.2.1")
+    implementation("org.owasp:dependency-check-gradle:7.4.4")
     implementation("org.gradlex:extra-java-module-info:1.0")
     implementation("me.champeau.jmh:jmh-gradle-plugin:0.6.6")
     implementation("com.google.protobuf:protobuf-gradle-plugin:0.8.19")

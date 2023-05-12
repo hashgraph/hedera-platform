@@ -26,6 +26,7 @@ import com.swirlds.common.utility.CompareTo;
 import com.swirlds.common.utility.RuntimeObjectRecord;
 import com.swirlds.common.utility.RuntimeObjectRegistry;
 import com.swirlds.common.utility.Startable;
+import com.swirlds.common.utility.Stoppable;
 import com.swirlds.common.utility.throttle.RateLimiter;
 import com.swirlds.platform.Settings;
 import java.time.Duration;
@@ -36,9 +37,9 @@ import org.apache.logging.log4j.Logger;
  * This object is responsible for observing the lifespans of signed states, and taking action if a
  * state suspected of a memory leak is observed.
  */
-public class SignedStateSentinel implements Startable {
+public class SignedStateSentinel implements Startable, Stoppable {
 
-    private static final Logger LOG = LogManager.getLogger(SignedStateSentinel.class);
+    private static final Logger logger = LogManager.getLogger(SignedStateSentinel.class);
 
     private final Time time;
     private final StoppableThread thread;
@@ -72,6 +73,11 @@ public class SignedStateSentinel implements Startable {
         thread.start();
     }
 
+    @Override
+    public void stop() {
+        thread.stop();
+    }
+
     /**
      * Check the maximum age of signed states, and take action if a really old state is observed.
      */
@@ -85,7 +91,7 @@ public class SignedStateSentinel implements Startable {
         if (CompareTo.isGreaterThan(objectRecord.getAge(time.now()), maxSignedStateAge)
                 && rateLimiter.request()) {
             final SignedStateHistory history = objectRecord.getMetadata();
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "old signed state detected, memory leak probable.\n{}",
                     history);

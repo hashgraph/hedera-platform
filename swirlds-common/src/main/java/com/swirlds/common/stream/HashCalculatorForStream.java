@@ -37,7 +37,7 @@ public class HashCalculatorForStream<T extends RunningHashable & SerializableHas
         extends AbstractLinkedObjectStream<T> {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOGGER = LogManager.getLogger(HashCalculatorForStream.class);
+    private static final Logger logger = LogManager.getLogger(HashCalculatorForStream.class);
     /** Used for hashing */
     private final Cryptography cryptography;
 
@@ -73,6 +73,6 @@ public class HashCalculatorForStream<T extends RunningHashable & SerializableHas
     @Override
     public void close() {
         super.close();
-        LOGGER.info(OBJECT_STREAM.getMarker(), "HashCalculatorForStream is closed");
+        logger.info(OBJECT_STREAM.getMarker(), "HashCalculatorForStream is closed");
     }
 }

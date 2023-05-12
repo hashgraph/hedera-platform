@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
  * <p>This is a first version, the plan is to put all round storing logic into this class.
  */
 class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
-    private static final Logger LOG = LogManager.getLogger(ConsensusRounds.class);
+    private static final Logger logger = LogManager.getLogger(ConsensusRounds.class);
     private final ConsensusConfig config;
 
     /** the address book of the network */
@@ -202,7 +202,7 @@ class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
         final RoundInfo round = rounds.get(fameDecidedBelow.get() - 1);
         if (round == null) {
             // this should never happen
-            LOG.error(
+            logger.error(
                     LogMarker.EXCEPTION.getMarker(),
                     "(fameDecidedBelow.get() - 1) round is null in updateMaxRoundGeneration()");
             return;
@@ -229,7 +229,7 @@ class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
         final RoundInfo ri = rounds.get(nonAncientRound);
         if (ri == null) {
             // should never happen
-            LOG.error(
+            logger.error(
                     LogMarker.EXCEPTION.getMarker(),
                     "nonAncientRound is null in updateMinGenNonAncient()");
             return;
@@ -246,7 +246,7 @@ class ConsensusRounds implements GraphGenerations, RoundNumberProvider {
         final RoundInfo round = rounds.get(getMinRound());
         if (round == null) {
             // this should never happen
-            LOG.error(
+            logger.error(
                     LogMarker.EXCEPTION.getMarker(),
                     "min round is null in updateMinRoundGeneration()");
             return;

@@ -25,9 +25,9 @@ import static com.swirlds.platform.state.signed.SignedStateFileUtils.getSignedSt
 import static com.swirlds.platform.state.signed.SignedStateFileUtils.getSignedStatesBaseDirectory;
 import static com.swirlds.platform.state.signed.SignedStateFileWriter.writeSignedStateToDisk;
 
-import com.swirlds.common.notification.NotificationEngine;
-import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteListener;
-import com.swirlds.common.notification.listeners.StateWriteToDiskCompleteNotification;
+import com.swirlds.common.config.BasicConfig;
+import com.swirlds.common.config.StateConfig;
+import com.swirlds.common.context.PlatformContext;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.framework.QueueThread;
 import com.swirlds.common.threading.framework.config.QueueThreadConfiguration;
@@ -35,7 +35,7 @@ import com.swirlds.common.threading.interrupt.Uninterruptable;
 import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.time.Time;
 import com.swirlds.common.utility.Startable;
-import com.swirlds.platform.Settings;
+import com.swirlds.platform.components.state.output.StateToDiskAttemptConsumer;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -49,13 +49,10 @@ import org.apache.logging.log4j.Logger;
 /** This class is responsible for managing the signed state writing pipeline. */
 public class SignedStateFileManager implements Startable {
 
-    private static final Logger LOG = LogManager.getLogger(SignedStateFileManager.class);
+    private static final Logger logger = LogManager.getLogger(SignedStateFileManager.class);
 
-    /**
-     * A runnable that indicates the freeze state has been written to disk and the freeze is
-     * complete.
-     */
-    private final Runnable freezeComplete;
+    /** A consumer of data when a state is written to disk */
+    private final StateToDiskAttemptConsumer stateToDiskAttemptConsumer;
 
     /**
      * The timestamp of the signed state that was most recently written to disk, or null if no
@@ -64,9 +61,6 @@ public class SignedStateFileManager implements Startable {
     private Instant previousSavedStateTimestamp;
 
     private final AtomicLong lastRoundSavedToDisk = new AtomicLong(-1);
-
-    /** Sends notifications to the app. */
-    private final NotificationEngine notificationEngine;
 
     /** The ID of this node. */
     private final NodeId selfId;
@@ -83,6 +77,8 @@ public class SignedStateFileManager implements Startable {
     /** Metrics provider */
     private final SignedStateMetrics metrics;
 
+    private final StateConfig stateConfig;
+
     /** Provides system time */
     private final Time time;
 
@@ -93,31 +89,32 @@ public class SignedStateFileManager implements Startable {
      * @param mainClassName the main class name of this node
      * @param selfId the ID of this node
      * @param swirldName the name of the swirld
-     * @param freezeComplete a runnable that tells the system a freeze is complete
      */
     public SignedStateFileManager(
+            final PlatformContext context,
             final ThreadManager threadManager,
-            final NotificationEngine notificationEngine,
             final SignedStateMetrics metrics,
             final Time time,
             final String mainClassName,
             final NodeId selfId,
             final String swirldName,
-            final Runnable freezeComplete) {
+            final StateToDiskAttemptConsumer stateToDiskAttemptConsumer) {
 
-        this.notificationEngine = notificationEngine;
         this.metrics = throwArgNull(metrics, "metrics");
         this.time = time;
         this.selfId = selfId;
         this.mainClassName = mainClassName;
         this.swirldName = swirldName;
-        this.freezeComplete = freezeComplete;
+        this.stateToDiskAttemptConsumer = stateToDiskAttemptConsumer;
+        this.stateConfig = context.getConfiguration().getConfigData(StateConfig.class);
+
+        final BasicConfig basicConfig = context.getConfiguration().getConfigData(BasicConfig.class);
 
         this.taskQueue =
                 new QueueThreadConfiguration<Runnable>(threadManager)
-                        .setCapacity(Settings.getInstance().getState().stateSavingQueueSize)
+                        .setCapacity(stateConfig.stateSavingQueueSize())
                         .setMaxBufferSize(1)
-                        .setPriority(Settings.getInstance().getThreadPriorityNonSync())
+                        .setPriority(basicConfig.threadPriorityNonSync())
                         .setNodeId(selfId.getId())
                         .setComponent(PLATFORM_THREAD_POOL_NAME)
                         .setThreadName("signed-state-file-manager")
@@ -146,26 +143,6 @@ public class SignedStateFileManager implements Startable {
      */
     public int getTaskQueueSize() {
         return taskQueue.size();
-    }
-
-    /**
-     * Notify signed state listeners that a new state has been saved.
-     *
-     * @param signedState the state that was saved
-     * @param savedStateDirectory the directory that contains the saved state
-     */
-    private static void notifySavedStateListeners(
-            final NotificationEngine notificationEngine,
-            final SignedState signedState,
-            final Path savedStateDirectory) {
-        notificationEngine.dispatch(
-                StateWriteToDiskCompleteListener.class,
-                new StateWriteToDiskCompleteNotification(
-                        signedState.getRound(),
-                        signedState.getConsensusTimestamp(),
-                        signedState.getSwirldState(),
-                        savedStateDirectory,
-                        signedState.isFreezeState()));
     }
 
     /**
@@ -203,20 +180,19 @@ public class SignedStateFileManager implements Startable {
                                                 TimeUnit.NANOSECONDS.toMillis(
                                                         time.nanoTime() - start));
 
-                                notifySavedStateListeners(
-                                        notificationEngine, signedState, directory);
                                 success = true;
                             } catch (final Throwable e) {
-                                LOG.error(
+                                logger.error(
                                         EXCEPTION.getMarker(),
                                         "Unable to write signed state to disk for round {} to {}.",
                                         signedState.getRound(),
                                         directory,
                                         e);
                             } finally {
-                                if (signedState.isFreezeState()) {
-                                    freezeComplete.run();
-                                }
+                                stateToDiskAttemptConsumer.stateToDiskAttempt(
+                                        new SignedStateWrapper(signedState, false),
+                                        directory,
+                                        success);
                                 signedState.weakReleaseState();
                                 if (finishedCallback != null) {
                                     finishedCallback.accept(success);
@@ -233,7 +209,7 @@ public class SignedStateFileManager implements Startable {
             if (finishedCallback != null) {
                 finishedCallback.accept(false);
             }
-            LOG.error(
+            logger.error(
                     STATE_TO_DISK.getMarker(),
                     "Unable to save signed state to disk for round {} due to backlog of "
                             + "operations in the SignedStateManager task queue.",
@@ -264,7 +240,7 @@ public class SignedStateFileManager implements Startable {
     /**
      * Dump a state to disk out of band.
      *
-     * @param signedState the signed state to write todisk
+     * @param signedState the signed state to write to disk
      * @param reason the reason why the state is being written, e.g. "fatal" or "iss". This string
      *     us used as a part of a file path, so it should not contain whitespace or special
      *     characters.
@@ -313,14 +289,14 @@ public class SignedStateFileManager implements Startable {
      *     if no previous state was saved to disk
      * @return true if the state should be written to disk
      */
-    private static boolean shouldSaveToDisk(
+    private boolean shouldSaveToDisk(
             final SignedState signedState, final Instant previousTimestamp) {
         if (signedState.isFreezeState()) {
             // the state right before a freeze should be written to disk
             return true;
         }
 
-        final int saveStatePeriod = Settings.getInstance().getState().getSaveStatePeriod();
+        final int saveStatePeriod = stateConfig.saveStatePeriod();
         if (saveStatePeriod <= 0) {
             // state saving is disabled
             return false;
@@ -345,7 +321,7 @@ public class SignedStateFileManager implements Startable {
     public synchronized void determineIfStateShouldBeSaved(final SignedState signedState) {
         if (shouldSaveToDisk(signedState, previousSavedStateTimestamp)) {
 
-            LOG.info(
+            logger.info(
                     STATE_TO_DISK.getMarker(),
                     "Signed state from round {} created, will eventually be written to disk once"
                             + " sufficient signatures are collected",
@@ -372,9 +348,7 @@ public class SignedStateFileManager implements Startable {
 
         // States are returned newest to oldest. So delete from the end of the list to delete the
         // oldest states.
-        for (int index = savedStates.length - 1;
-                index >= Settings.getInstance().getState().getSignedStateDisk();
-                index--) {
+        for (int index = savedStates.length - 1; index >= stateConfig.signedStateDisk(); index--) {
 
             final SavedStateInfo savedStateInfo = savedStates[index];
             try {

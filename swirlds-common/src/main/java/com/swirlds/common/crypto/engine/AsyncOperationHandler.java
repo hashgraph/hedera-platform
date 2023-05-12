@@ -34,7 +34,7 @@ import org.apache.logging.log4j.Logger;
 public abstract class AsyncOperationHandler<Element, Provider extends OperationProvider>
         extends StandardFuture<Void> implements Runnable {
 
-    private static final Logger LOG = LogManager.getLogger(AsyncOperationHandler.class);
+    private static final Logger logger = LogManager.getLogger(AsyncOperationHandler.class);
 
     private final List<Element> workItems;
     private final Provider provider;
@@ -91,7 +91,7 @@ public abstract class AsyncOperationHandler<Element, Provider extends OperationP
             try {
                 handleWorkItem(provider, item);
             } catch (RuntimeException | NoSuchAlgorithmException ex) {
-                LOG.warn(
+                logger.warn(
                         LogMarker.TESTING_EXCEPTIONS.getMarker(),
                         "Intercepted Uncaught Exception",
                         ex);

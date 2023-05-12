@@ -38,7 +38,7 @@ public class ConnectionServer implements InterruptableRunnable {
     /** number of milliseconds to sleep when a server socket binds fails until trying again */
     private static final int SLEEP_AFTER_BIND_FAILED_MS = 100;
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(ConnectionServer.class);
+    private static final Logger logger = LogManager.getLogger(ConnectionServer.class);
     /** overrides ip if null */
     private static final byte[] LISTEN_IP = new byte[] {0, 0, 0, 0};
 
@@ -83,7 +83,7 @@ public class ConnectionServer implements InterruptableRunnable {
         try (ServerSocket serverSocket = socketFactory.createServerSocket(ip, port)) {
             listen(serverSocket);
         } catch (final RuntimeException | IOException e) {
-            LOG.error(EXCEPTION.getMarker(), "Cannot bind ServerSocket", e);
+            logger.error(EXCEPTION.getMarker(), "Cannot bind ServerSocket", e);
         }
         // if the above fails, sleep a while before trying again
         Thread.sleep(SLEEP_AFTER_BIND_FAILED_MS);
@@ -105,7 +105,7 @@ public class ConnectionServer implements InterruptableRunnable {
                     throw new InterruptedException();
                 }
             } catch (final RuntimeException | IOException e) {
-                LOG.error(EXCEPTION.getMarker(), "SyncServer serverSocket.accept() error", e);
+                logger.error(EXCEPTION.getMarker(), "SyncServer serverSocket.accept() error", e);
             }
         }
     }

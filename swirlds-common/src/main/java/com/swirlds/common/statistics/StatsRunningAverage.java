@@ -32,7 +32,7 @@ import org.apache.logging.log4j.Logger;
 @Deprecated(forRemoval = true)
 public class StatsRunningAverage implements StatsBuffered {
 
-    private static final Logger LOG = LogManager.getLogger(StatsRunningAverage.class);
+    private static final Logger logger = LogManager.getLogger(StatsRunningAverage.class);
 
     private final Time time;
 
@@ -164,7 +164,8 @@ public class StatsRunningAverage implements StatsBuffered {
             allHistory.recordValue(mean);
             recentHistory.recordValue(mean);
         } catch (Exception e) {
-            LOG.error(LogMarker.EXCEPTION.getMarker(), "Exception while updating statistics!", e);
+            logger.error(
+                    LogMarker.EXCEPTION.getMarker(), "Exception while updating statistics!", e);
         }
     }
 

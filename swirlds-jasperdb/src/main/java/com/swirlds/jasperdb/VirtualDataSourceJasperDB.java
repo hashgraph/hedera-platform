@@ -111,7 +111,7 @@ import org.apache.logging.log4j.Logger;
 @SuppressWarnings({"DuplicatedCode"})
 public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extends VirtualValue>
         implements VirtualDataSource<K, V> {
-    private static final Logger LOG = LogManager.getLogger(VirtualDataSourceJasperDB.class);
+    private static final Logger logger = LogManager.getLogger(VirtualDataSourceJasperDB.class);
 
     /** The version number for format of current data files */
     private static final int METADATA_FILE_FORMAT_VERSION = 1;
@@ -331,7 +331,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                                 .setThreadName("Merging")
                                 .setExceptionHandler(
                                         (t, ex) ->
-                                                LOG.error(
+                                                logger.error(
                                                         EXCEPTION.getMarker(),
                                                         "[{}] Uncaught exception during merging",
                                                         label,
@@ -346,7 +346,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                                 .setThreadName("Store Internal Records")
                                 .setExceptionHandler(
                                         (t, ex) ->
-                                                LOG.error(
+                                                logger.error(
                                                         EXCEPTION.getMarker(),
                                                         "[{}] Uncaught exception during storing",
                                                         label,
@@ -361,7 +361,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                                 .setThreadName("Store Key to Path")
                                 .setExceptionHandler(
                                         (t, ex) ->
-                                                LOG.error(
+                                                logger.error(
                                                         EXCEPTION.getMarker(),
                                                         "[{}] Uncaught exception during storing"
                                                                 + " keys",
@@ -377,7 +377,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                                 .setThreadName("Snapshot")
                                 .setExceptionHandler(
                                         (t, ex) ->
-                                                LOG.error(
+                                                logger.error(
                                                         EXCEPTION.getMarker(),
                                                         "Uncaught exception during snapshots",
                                                         ex))
@@ -403,7 +403,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                     this.validLeafPathRange = new KeyRange(metaIn.readLong(), metaIn.readLong());
                 }
             } else {
-                LOG.info(
+                logger.info(
                         JASPER_DB.getMarker(),
                         "[{}] Loading existing set of data files but no metadata file was found in"
                                 + " [{}]",
@@ -459,6 +459,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                 hasDiskStoreForInternalHashes
                         ? new MemoryIndexDiskKeyValueStore<>(
                                 dbPaths.internalHashStoreDiskDirectory,
+                                label + "_internalhashes",
                                 label + ":internalHashes",
                                 virtualInternalRecordSerializer,
                                 null,
@@ -493,6 +494,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                             maxNumOfKeys,
                             keySerializer,
                             dbPaths.objectKeyToPathDirectory,
+                            label + "_objectkeytopath",
                             label + ":objectKeyToPath",
                             preferDiskBasedIndexes);
             objectKeyToPath.printStats();
@@ -503,6 +505,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
         pathToHashKeyValue =
                 new MemoryIndexDiskKeyValueStore<>(
                         dbPaths.pathToHashKeyValueDirectory,
+                        label + "_pathtohashkeyvalue",
                         label + ":pathToHashKeyValue",
                         virtualLeafRecordSerializer,
                         loadedDataCallback,
@@ -535,7 +538,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
 
         statistics = new JasperDbStatistics(label, isLongKeyMode);
 
-        LOG.info(
+        logger.info(
                 JASPER_DB.getMarker(),
                 "Created JDB [{}] with store path '{}', maxNumKeys = {}, hash RAM/disk cutoff = {}",
                 label,
@@ -663,7 +666,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                             try {
                                 writeInternalRecords(firstLeafPath, internalRecords);
                             } catch (IOException e) {
-                                LOG.error(
+                                logger.error(
                                         ERROR.getMarker(),
                                         "[{}] Failed to store internal records",
                                         label,
@@ -686,7 +689,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
             try {
                 countDownLatch.await();
             } catch (InterruptedException e) {
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         "[{}] Interrupted while waiting on internal record storage",
                         label,
@@ -759,13 +762,13 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
         // FUTURE WORK: once the reconnect key leak bug is fixed, this block should be removed
         if (!leafRecord.getKey().equals(key)) {
             if (settings.isReconnectKeyLeakMitigationEnabled()) {
-                LOG.warn(
+                logger.warn(
                         JASPER_DB.getMarker(),
                         "leaked key {} encountered, mitigation is enabled",
                         key);
                 return null;
             } else {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "leaked key {} encountered, mitigation is disabled, expect problems",
                         key);
@@ -964,7 +967,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                         snapshotExecutor);
             } finally {
                 // close all closable data stores
-                LOG.info(JASPER_DB.getMarker(), "Closing Data Source [{}]", label);
+                logger.info(JASPER_DB.getMarker(), "Closing Data Source [{}]", label);
                 if (internalHashStoreRam != null) {
                     internalHashStoreRam.close();
                 }
@@ -1107,14 +1110,14 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                 // wait for the others to finish
                 countDownLatch.await();
             } catch (InterruptedException e) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "[{}] InterruptedException from waiting for countDownLatch in snapshot",
                         label,
                         e);
                 Thread.currentThread().interrupt();
             }
-            LOG.info(
+            logger.info(
                     JASPER_DB.getMarker(),
                     "[{}] Snapshot all finished in {} seconds",
                     label,
@@ -1230,7 +1233,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                 }
             }
         } catch (InterruptedException e) {
-            LOG.warn(
+            logger.warn(
                     EXCEPTION.getMarker(),
                     "[{}] Interrupted while waiting on executors to shutdown",
                     label,
@@ -1260,7 +1263,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                         final long START = System.currentTimeMillis();
                         try {
                             runnable.call();
-                            LOG.trace(
+                            logger.trace(
                                     JASPER_DB.getMarker(),
                                     "[{}] Snapshot {} complete in {} seconds",
                                     label,
@@ -1302,7 +1305,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                             try {
                                 internalHashStoreDisk.put(rec.getPath(), rec);
                             } catch (IOException e) {
-                                LOG.error(
+                                logger.error(
                                         EXCEPTION.getMarker(),
                                         "[{}] IOException writing internal records",
                                         label,
@@ -1378,7 +1381,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                         try {
                             pathToHashKeyValue.put(leafRecord.getPath(), leafRecord);
                         } catch (IOException e) {
-                            LOG.error(
+                            logger.error(
                                     EXCEPTION.getMarker(),
                                     "[{}] IOException writing to pathToHashKeyValue",
                                     label,
@@ -1453,7 +1456,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                 /* Filter nothing during a full merge */
                 filesToMergeFilter = dataFileReaders -> dataFileReaders;
                 isLargeMerge = true;
-                LOG.info(JASPER_DB.getMarker(), "[{}] Starting Large Merge", label);
+                logger.info(JASPER_DB.getMarker(), "[{}] Starting Large Merge", label);
             } else if (isTimeForMediumMerge(now)) {
                 lastMediumMerge = now;
                 filesToMergeFilter =
@@ -1461,14 +1464,14 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
                                 settings.getMediumMergeCutoffMb(),
                                 settings.getMaxNumberOfFilesInMerge());
                 isMediumMerge = true;
-                LOG.info(JASPER_DB.getMarker(), "[{}] Starting Medium Merge", label);
+                logger.info(JASPER_DB.getMarker(), "[{}] Starting Medium Merge", label);
             } else {
                 filesToMergeFilter =
                         DataFileCommon.newestFilesSmallerThan(
                                 settings.getSmallMergeCutoffMb(),
                                 settings.getMaxNumberOfFilesInMerge());
                 isSmallMerge = true;
-                LOG.info(JASPER_DB.getMarker(), "[{}] Starting Small Merge", label);
+                logger.info(JASPER_DB.getMarker(), "[{}] Starting Small Merge", label);
             }
 
             // we need to merge disk files for internal hashes if they exist and pathToHashKeyValue
@@ -1573,7 +1576,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
             updateFileStats();
             return true;
         } catch (InterruptedException | ClosedByInterruptException e) {
-            LOG.info(JASPER_DB.getMarker(), "Interrupted while merging, this is allowed.");
+            logger.info(JASPER_DB.getMarker(), "Interrupted while merging, this is allowed.");
             Thread.currentThread().interrupt();
             return false;
         } catch (
@@ -1583,7 +1586,7 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
             // It is important that we capture all exceptions here, otherwise a single exception
             // will stop all
             // future merges from happening.
-            LOG.error(EXCEPTION.getMarker(), "[{}] Merge failed", label, e);
+            logger.error(EXCEPTION.getMarker(), "[{}] Merge failed", label, e);
             return false;
         }
     }

@@ -27,7 +27,7 @@ import org.apache.logging.log4j.Logger;
 
 /** A collection of static methods for validating events */
 public final class StaticValidators {
-    private static final Logger LOG = LogManager.getLogger(StaticValidators.class);
+    private static final Logger logger = LogManager.getLogger(StaticValidators.class);
 
     private StaticValidators() {}
 
@@ -45,7 +45,7 @@ public final class StaticValidators {
             if (selfParent != null
                     && !event.getTimeCreated().isAfter(selfParent.getTimeCreated())) {
 
-                LOG.debug(
+                logger.debug(
                         INVALID_EVENT_ERROR.getMarker(),
                         () ->
                                 String.format(
@@ -78,16 +78,17 @@ public final class StaticValidators {
                 hashedData.getOtherParentGen() >= GraphGenerations.FIRST_GENERATION;
 
         if (hasSpGen != hasSpHash) {
-            LOG.error(INVALID_EVENT_ERROR.getMarker(), "invalid self-parent: {} ", event::toString);
+            logger.error(
+                    INVALID_EVENT_ERROR.getMarker(), "invalid self-parent: {} ", event::toString);
             return false;
         }
         if (hasOpGen != hasOpHash) {
-            LOG.error(
+            logger.error(
                     INVALID_EVENT_ERROR.getMarker(), "invalid other-parent: {} ", event::toString);
             return false;
         }
         if (hasSpHash && hasOpHash && spHash.equals(opHash)) {
-            LOG.error(
+            logger.error(
                     INVALID_EVENT_ERROR.getMarker(),
                     "both parents have the same hash: {} ",
                     event::toString);

@@ -41,7 +41,7 @@ public final class Utilities {
     private Utilities() {}
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(Utilities.class);
+    private static final Logger logger = LogManager.getLogger(Utilities.class);
 
     /**
      * Convert a string to a boolean.
@@ -125,7 +125,7 @@ public final class Utilities {
             dis = new ObjectInputStream(bin);
             return dis.readObject();
         } catch (Exception e) {
-            log.error(EXCEPTION.getMarker(), "", e);
+            logger.error(EXCEPTION.getMarker(), "", e);
         } finally {
             try {
                 if (dos != null) {

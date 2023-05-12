@@ -38,9 +38,8 @@ import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.utility.Clearable;
 import com.swirlds.common.utility.Startable;
 import com.swirlds.platform.SettingsProvider;
+import com.swirlds.platform.components.common.output.RoundAppliedToStateConsumer;
 import com.swirlds.platform.config.ThreadConfig;
-import com.swirlds.platform.dispatch.DispatchBuilder;
-import com.swirlds.platform.dispatch.triggers.flow.RoundCompletedTrigger;
 import com.swirlds.platform.internal.ConsensusRound;
 import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.metrics.ConsensusHandlingMetrics;
@@ -67,7 +66,7 @@ import org.apache.logging.log4j.Logger;
 public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable, Startable {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(ConsensusRoundHandler.class);
+    private static final Logger logger = LogManager.getLogger(ConsensusRoundHandler.class);
 
     /** The class responsible for all interactions with the swirld state */
     private final SwirldStateManager swirldStateManager;
@@ -114,14 +113,13 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
 
     private final SoftwareVersion softwareVersion;
 
-    private final RoundCompletedTrigger roundCompletedDispatcher;
+    private final RoundAppliedToStateConsumer roundAppliedToStateConsumer;
 
     /**
      * Instantiate, but don't start any threads yet. The Platform should first instantiate the
      * {@link ConsensusRoundHandler}. Then the Platform should call start to start the queue thread.
      *
      * @param threadManager responsible for creating and managing threads
-     * @param dispatchBuilder responsible for building dispatchers
      * @param selfId the id of this node
      * @param settings a provider of static settings
      * @param swirldStateManager the swirld state manager to send events to
@@ -136,7 +134,6 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
     public ConsensusRoundHandler(
             final PlatformContext platformContext,
             final ThreadManager threadManager,
-            final DispatchBuilder dispatchBuilder,
             final long selfId,
             final SettingsProvider settings,
             final SwirldStateManager swirldStateManager,
@@ -145,10 +142,10 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
             final AddressBook addressBook,
             final BlockingQueue<SignedState> stateHashSignQueue,
             final Runnable enterFreezePeriod,
+            final RoundAppliedToStateConsumer roundAppliedToStateConsumer,
             final SoftwareVersion softwareVersion) {
 
-        this.roundCompletedDispatcher =
-                dispatchBuilder.getDispatcher(this, RoundCompletedTrigger.class)::dispatch;
+        this.roundAppliedToStateConsumer = roundAppliedToStateConsumer;
 
         this.settings = settings;
         this.swirldStateManager = swirldStateManager;
@@ -197,10 +194,10 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
 
     @Override
     public void clear() {
-        LOG.info(RECONNECT.getMarker(), "consensus handler: clearing queue thread");
+        logger.info(RECONNECT.getMarker(), "consensus handler: clearing queue thread");
         queueThread.clear();
 
-        LOG.info(RECONNECT.getMarker(), "consensus handler: clearing stateHashSignQueue queue");
+        logger.info(RECONNECT.getMarker(), "consensus handler: clearing stateHashSignQueue queue");
         clearStateHashSignQueueThread();
 
         // clear running Hash info
@@ -209,7 +206,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
         numEventsCons.set(0);
 
         eventsAndGenerations.clear();
-        LOG.info(RECONNECT.getMarker(), "consensus handler: ready for reconnect");
+        logger.info(RECONNECT.getMarker(), "consensus handler: ready for reconnect");
     }
 
     /** Clears and releases any signed states in the {@code stateHashSignQueueThread} queue. */
@@ -241,7 +238,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
 
         numEventsCons.set(signedState.getNumEventsCons());
 
-        LOG.info(
+        logger.info(
                 STARTUP.getMarker(),
                 "consensus event handler minGenFamous after startup: {}",
                 () -> Arrays.toString(signedState.getMinGenInfo().toArray()));
@@ -250,7 +247,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
         final Hash initialHash = new Hash(signedState.getHashEventsCons());
         eventStreamManager.setInitialHash(initialHash);
 
-        LOG.info(STARTUP.getMarker(), "initialHash after startup {}", () -> initialHash);
+        logger.info(STARTUP.getMarker(), "initialHash after startup {}", () -> initialHash);
         eventStreamManager.setStartWriteAtCompleteWindow(isReconnect);
     }
 
@@ -290,7 +287,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
             // this may block until the queue isn't full
             queueThread.put(consensusRound);
         } catch (final InterruptedException e) {
-            LOG.error(RECONNECT.getMarker(), "addEvent interrupted");
+            logger.error(RECONNECT.getMarker(), "addEvent interrupted");
             Thread.currentThread().interrupt();
         }
     }
@@ -324,7 +321,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
 
         consensusTimingStat.setTimePoint(2);
 
-        roundCompletedDispatcher.dispatch(round.getRoundNum());
+        roundAppliedToStateConsumer.roundAppliedToState(round.getRoundNum());
 
         consensusTimingStat.setTimePoint(3);
 
@@ -418,7 +415,8 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
 
         final EventImpl[] events = eventsAndGenerations.getEventsForSignedState();
 
-        LOG.info(SIGNED_STATE.getMarker(), "finished adding events, about to create a minGen list");
+        logger.info(
+                SIGNED_STATE.getMarker(), "finished adding events, about to create a minGen list");
         // create a minGen list with only the rounds up until this round received
         final List<MinGenInfo> minGen = eventsAndGenerations.getMinGenForSignedState();
 
@@ -427,7 +425,7 @@ public class ConsensusRoundHandler implements ConsensusRoundObserver, Clearable,
         // in the background. If the hashing cannot be done before the next state needs to be
         // signed, doCons
         // will block and wait.
-        LOG.info(
+        logger.info(
                 SIGNED_STATE.getMarker(),
                 "about to put a NewSignedStateInfo to stateToHashSign for round:{} , lastEvent: {}",
                 round.getRoundNum(),

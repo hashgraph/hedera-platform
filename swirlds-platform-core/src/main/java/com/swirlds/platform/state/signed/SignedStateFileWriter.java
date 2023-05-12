@@ -41,7 +41,7 @@ import org.apache.logging.log4j.Logger;
 /** Utility methods for writing a signed state to disk. */
 public final class SignedStateFileWriter {
 
-    private static final Logger LOG = LogManager.getLogger(SignedStateFileWriter.class);
+    private static final Logger logger = LogManager.getLogger(SignedStateFileWriter.class);
 
     private SignedStateFileWriter() {}
 
@@ -57,7 +57,7 @@ public final class SignedStateFileWriter {
             throws IOException {
         final String platformInfo = state.getPlatformState().getInfoString();
         final String hashInfo = generateHashDebugString(state, StateSettings.getDebugHashDepth());
-        LOG.info(
+        logger.info(
                 STATE_TO_DISK.getMarker(),
                 "Information for state written to disk:\n{}\n{}",
                 platformInfo,
@@ -135,7 +135,7 @@ public final class SignedStateFileWriter {
             throws IOException {
 
         try {
-            LOG.info(
+            logger.info(
                     STATE_TO_DISK.getMarker(),
                     "Started writing round {} state to disk. Reason: {}",
                     signedState.getRound(),
@@ -145,14 +145,14 @@ public final class SignedStateFileWriter {
                     savedStateDirectory,
                     directory -> writeSignedStateFilesToDirectory(directory, signedState));
 
-            LOG.info(
+            logger.info(
                     STATE_TO_DISK.getMarker(),
                     () ->
                             new StateSavedToDiskPayload(
                                             signedState.getRound(), signedState.isFreezeState())
                                     .toString());
         } catch (final Throwable e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Exception when writing the signed state for round {} to disk:",
                     signedState.getRound(),

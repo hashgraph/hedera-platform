@@ -38,7 +38,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class StandardWorkGroup {
 
-    private static final Logger LOG = LogManager.getLogger(StandardWorkGroup.class);
+    private static final Logger logger = LogManager.getLogger(StandardWorkGroup.class);
 
     private static final String DEFAULT_TASK_NAME = "IDLE";
 
@@ -74,7 +74,8 @@ public class StandardWorkGroup {
                         .setComponent("work group " + groupName)
                         .setExceptionHandler(
                                 (t, ex) ->
-                                        LOG.error(EXCEPTION.getMarker(), "Uncaught exception ", ex))
+                                        logger.error(
+                                                EXCEPTION.getMarker(), "Uncaught exception ", ex))
                         .setThreadName(DEFAULT_TASK_NAME);
 
         this.executorService = Executors.newCachedThreadPool(configuration.buildFactory());
@@ -152,7 +153,7 @@ public class StandardWorkGroup {
      */
     public void handleError(final Throwable ex) {
         if (!(ex instanceof InterruptedException)) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Work Group Exception [ groupName = {} ]",
                     groupName,

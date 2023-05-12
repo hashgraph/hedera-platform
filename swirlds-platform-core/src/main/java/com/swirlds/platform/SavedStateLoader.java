@@ -42,7 +42,7 @@ import org.apache.logging.log4j.Logger;
 public class SavedStateLoader {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(SavedStateLoader.class);
+    private static final Logger logger = LogManager.getLogger(SavedStateLoader.class);
     /** Current system settings */
     private final Settings settings = Settings.getInstance();
 
@@ -144,7 +144,7 @@ public class SavedStateLoader {
             final Hash newHash = stateWithHashes.newHash;
 
             if (!oldHash.equals(newHash)) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "Emergency recovery must not be performed during migration.");
                 shutdownRequestedTrigger.dispatch(
@@ -164,14 +164,14 @@ public class SavedStateLoader {
             try {
                 emergencyStateValidator.get().validate(signedState, addressBook);
                 emergencyRecoveryManager.emergencyStateLoaded();
-                LOG.info(
+                logger.info(
                         STARTUP.getMarker(),
                         "Found signed state (round {}) on disk that is compatible with the"
                                 + " emergency recovery state.",
                         signedState.getRound());
                 return signedState;
             } catch (final SignedStateInvalidException e) {
-                LOG.info(
+                logger.info(
                         STARTUP.getMarker(),
                         "Signed state from disk for round {} cannot be used "
                                 + "for emergency recovery ({}), checking next state.",
@@ -180,25 +180,32 @@ public class SavedStateLoader {
             }
         }
 
-        LOG.info(
+        logger.info(
                 STARTUP.getMarker(),
                 "No states on disk are compatible with the emergency recovery state. Attempting to"
-                        + " load a recent state as a starting point for emergency reconnect.");
+                    + " load a recent state prior to the emergency state round as a starting point"
+                    + " for emergency reconnect.");
 
+        // Since no state matched, we must load a state for a round before the emergency recovery
+        // state. If we already
+        // have a later state loaded, the emergency reconnect state received in emergency reconnect
+        // will be rejected
+        // because it is older than the already loaded state.
+        final long maxStateRound = emergencyRecoveryManager.getEmergencyRecoveryFile().round() - 1;
         SignedState latest = null;
         try {
-            latest = getRegularSavedStateToLoad();
+            latest = getRegularSavedStateToLoad(maxStateRound);
         } catch (final SignedStateLoadingException e) {
             // intentionally ignored
         } finally {
             if (latest != null) {
-                LOG.info(
+                logger.info(
                         STARTUP.getMarker(),
                         "Loading the latest available [round={}] as a starting point for emergency"
                                 + " reconnect.",
                         latest.getRound());
             } else {
-                LOG.info(
+                logger.info(
                         STARTUP.getMarker(),
                         "No states on disk could be loaded as a starting point. Starting from a"
                                 + " genesis state.");
@@ -217,6 +224,20 @@ public class SavedStateLoader {
      */
     private SignedState getRegularSavedStateToLoad()
             throws IOException, SignedStateLoadingException {
+        return getRegularSavedStateToLoad(Long.MAX_VALUE);
+    }
+
+    /**
+     * Returns the most recent signed state to load into the system at startup, if found.
+     *
+     * @param maxRound the maximum round number (inclusive) the returned state is permitted to have
+     * @return a signed state to load, or null if none was found
+     * @throws IOException if there was an exception reading a saved state file
+     * @throws SignedStateLoadingException if a signed state is required to start the node and none
+     *     are found
+     */
+    private SignedState getRegularSavedStateToLoad(final long maxRound)
+            throws IOException, SignedStateLoadingException {
 
         if (savedStateFiles == null || savedStateFiles.length == 0) {
             if (settings.isRequireStateLoad()) {
@@ -226,13 +247,18 @@ public class SavedStateLoader {
             }
         }
 
-        final SignedStateWithHashes stateWithHashes = readAndRehashState(savedStateFiles[0]);
+        for (final SavedStateInfo savedStateFile : savedStateFiles) {
+            if (savedStateFile.round() <= maxRound) {
+                final SignedStateWithHashes stateWithHashes = readAndRehashState(savedStateFile);
 
-        if (settings.isCheckSignedStateFromDisk()) {
-            evaluateLoadedStateHash(stateWithHashes, currentSoftwareVersion);
+                if (settings.isCheckSignedStateFromDisk()) {
+                    evaluateLoadedStateHash(stateWithHashes, currentSoftwareVersion);
+                }
+
+                return stateWithHashes.signedState;
+            }
         }
-
-        return stateWithHashes.signedState;
+        return null;
     }
 
     private static SignedStateWithHashes readAndRehashState(final SavedStateInfo file)
@@ -250,17 +276,17 @@ public class SavedStateLoader {
     private static void evaluateLoadedStateHash(
             final SignedStateWithHashes stateWithHashes, final SoftwareVersion currentVersion) {
         if (stateWithHashes.newHash.equals(stateWithHashes.oldHash)) {
-            LOG.info(STARTUP.getMarker(), "Signed state loaded from disk has a valid hash.");
+            logger.info(STARTUP.getMarker(), "Signed state loaded from disk has a valid hash.");
         } else {
             if (currentVersion == null) {
-                LOG.error(
+                logger.error(
                         STARTUP.getMarker(),
                         "Unable to determine the validity of the signed state loaded from disk"
                                 + " because the current software version is null");
                 return;
             }
             if (currentVersion.equals(stateWithHashes.getVersion())) {
-                LOG.error(
+                logger.error(
                         STARTUP.getMarker(),
                         "ERROR: Signed state loaded from disk has an invalid hash!\n"
                                 + "disk:{}\n"
@@ -268,7 +294,7 @@ public class SavedStateLoader {
                         stateWithHashes.oldHash,
                         stateWithHashes.newHash);
             } else {
-                LOG.info(
+                logger.info(
                         STARTUP.getMarker(),
                         """
 								Signed state loaded from disk has an invalid hash (expected during an upgrade)

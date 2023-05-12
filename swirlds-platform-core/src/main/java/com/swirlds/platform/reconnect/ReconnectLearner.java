@@ -22,6 +22,7 @@ import com.swirlds.common.io.streams.MerkleDataOutputStream;
 import com.swirlds.common.merkle.synchronization.LearningSynchronizer;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.threading.manager.ThreadManager;
+import com.swirlds.common.utility.StringFormattingUtilities;
 import com.swirlds.logging.payloads.ReconnectDataUsagePayload;
 import com.swirlds.platform.Connection;
 import com.swirlds.platform.metrics.ReconnectMetrics;
@@ -42,7 +43,7 @@ import org.apache.logging.log4j.Logger;
 public class ReconnectLearner {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(ReconnectLearner.class);
+    private static final Logger logger = LogManager.getLogger(ReconnectLearner.class);
 
     private final Connection connection;
     private final AddressBook addressBook;
@@ -100,7 +101,7 @@ public class ReconnectLearner {
      */
     private void resetSocketTimeout() throws ReconnectException {
         if (!connection.connected()) {
-            LOG.debug(
+            logger.debug(
                     RECONNECT.getMarker(),
                     "{} connection to {} is no longer connected. Returning.",
                     connection.getSelfId(),
@@ -160,7 +161,7 @@ public class ReconnectLearner {
         signedState.setSigSet(sigSet);
 
         final double mbReceived = connection.getDis().getSyncByteCounter().getMebiBytes();
-        LOG.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 () ->
                         new ReconnectDataUsagePayload("Reconnect data usage report", mbReceived)
@@ -175,9 +176,13 @@ public class ReconnectLearner {
      * @throws IOException if any I/O related errors occur
      */
     private void receiveSignatures() throws IOException {
-        LOG.info(RECONNECT.getMarker(), "Receiving signed state signatures");
-        sigSet = new SigSet(addressBook);
-        sigSet.deserialize(connection.getDis(), sigSet.getVersion());
+        logger.info(RECONNECT.getMarker(), "Receiving signed state signatures");
+        sigSet = connection.getDis().readSerializable();
+
+        final StringBuilder sb = new StringBuilder();
+        sb.append("Received signatures from nodes ");
+        StringFormattingUtilities.formattedList(sb, sigSet.iterator());
+        logger.info(RECONNECT.getMarker(), sb);
     }
 
     /** Get the signed state that was copied from the other node. */

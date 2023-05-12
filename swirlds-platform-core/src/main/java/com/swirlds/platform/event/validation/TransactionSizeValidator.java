@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Determines whether total size of all transactions in a given event is too large */
 public class TransactionSizeValidator implements GossipEventValidator {
-    private static final Logger LOG = LogManager.getLogger(TransactionSizeValidator.class);
+    private static final Logger logger = LogManager.getLogger(TransactionSizeValidator.class);
     private final int maxTransactionBytesPerEvent;
 
     public TransactionSizeValidator(final int maxTransactionBytesPerEvent) {
@@ -49,7 +49,7 @@ public class TransactionSizeValidator implements GossipEventValidator {
         // Ignore & log if we have encountered a transaction larger than the limit
         // This might be due to a malicious node in the network
         if (tmpEventTransSize > maxTransactionBytesPerEvent) {
-            LOG.error(
+            logger.error(
                     INVALID_EVENT_ERROR.getMarker(),
                     "maxTransactionBytesPerEvent exceeded by event {} with a total size of {}"
                             + " bytes",

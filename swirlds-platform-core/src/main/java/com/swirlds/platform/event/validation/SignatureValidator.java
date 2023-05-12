@@ -32,7 +32,7 @@ import org.apache.logging.log4j.Logger;
 
 /** A {@link GossipEventValidator} which validates the event's signature */
 public class SignatureValidator implements GossipEventValidator {
-    private static final Logger LOG = LogManager.getLogger(SignatureValidator.class);
+    private static final Logger logger = LogManager.getLogger(SignatureValidator.class);
     private final AddressBook addressBook;
 
     public SignatureValidator(final AddressBook addressBook) {
@@ -47,7 +47,7 @@ public class SignatureValidator implements GossipEventValidator {
      * @return true iff the signature is crypto-verified to be correct
      */
     private static boolean isValidSignature(final BaseEvent event, final PublicKey publicKey) {
-        LOG.debug(
+        logger.debug(
                 EVENT_SIG.getMarker(),
                 "event signature is about to be verified. {}",
                 () -> EventStrings.toShortString(event));
@@ -59,7 +59,7 @@ public class SignatureValidator implements GossipEventValidator {
                         publicKey);
 
         if (!valid) {
-            LOG.error(
+            logger.error(
                     INVALID_EVENT_ERROR.getMarker(),
                     """
 							failed the signature check {}
@@ -81,7 +81,7 @@ public class SignatureValidator implements GossipEventValidator {
         final long creatorId = event.getHashedData().getCreatorId();
         final Address address = addressBook.getAddress(creatorId);
         if (address == null) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Cannot find address for creator with ID: {}",
                     () -> creatorId);

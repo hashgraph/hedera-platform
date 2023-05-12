@@ -27,8 +27,6 @@ import com.swirlds.platform.components.EventCreationRules;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRules;
 import com.swirlds.platform.components.TransThrottleSyncRule;
 import com.swirlds.platform.components.TransactionTracker;
-import com.swirlds.platform.dispatch.Observer;
-import com.swirlds.platform.dispatch.triggers.control.HaltRequestedTrigger;
 import com.swirlds.platform.event.EventIntakeTask;
 import com.swirlds.platform.network.RandomGraph;
 import com.swirlds.platform.sync.FallenBehindManager;
@@ -49,7 +47,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class SyncManagerImpl implements SyncManager, FallenBehindManager {
 
-    private static final Logger LOG = LogManager.getLogger(SyncManagerImpl.class);
+    private static final Logger logger = LogManager.getLogger(SyncManagerImpl.class);
 
     /** initial value of transThrottleInitialCalls */
     private static final int TRANS_THROTTLE_INITIAL_CALLS_NUM = 10;
@@ -163,7 +161,7 @@ public class SyncManagerImpl implements SyncManager, FallenBehindManager {
         // we shouldn't sync if the event intake queue is too big
         final int intakeQueueSize = intakeQueue.size();
         if (intakeQueueSize > settings.getEventIntakeQueueThrottleSize()) {
-            LOG.debug(
+            logger.debug(
                     SYNC.getMarker(),
                     "don't accept sync because event intake queue is too big, size: {}",
                     intakeQueueSize);
@@ -227,10 +225,9 @@ public class SyncManagerImpl implements SyncManager, FallenBehindManager {
      *
      * @param reason the reason why gossip is being stopped
      */
-    @Observer(HaltRequestedTrigger.class)
     public void haltRequestedObserver(final String reason) {
         gossipHalted.set(true);
-        LOG.info(FREEZE.getMarker(), "Gossip frozen, reason: {}", reason);
+        logger.info(FREEZE.getMarker(), "Gossip frozen, reason: {}", reason);
     }
 
     /**

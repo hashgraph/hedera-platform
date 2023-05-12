@@ -40,7 +40,7 @@ import org.apache.logging.log4j.Logger;
 /** Utilities methods for validating stream files and stream signature files */
 public final class LinkedObjectStreamValidateUtils {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOGGER =
+    private static final Logger logger =
             LogManager.getLogger(LinkedObjectStreamValidateUtils.class);
 
     private LinkedObjectStreamValidateUtils() {}
@@ -72,7 +72,7 @@ public final class LinkedObjectStreamValidateUtils {
             Hash entireHash = LinkedObjectStreamUtilities.computeEntireHash(streamFile);
             result = validateSignature(entireHash, sigFile, publicKey, streamType);
         } catch (InvalidStreamFileException ex) {
-            LOGGER.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     () ->
                             new StreamParseErrorPayload(
@@ -82,7 +82,7 @@ public final class LinkedObjectStreamValidateUtils {
                     ex);
             result = PARSE_STREAM_FILE_FAIL;
         } catch (IOException | NoSuchAlgorithmException ex) {
-            LOGGER.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     () ->
                             new StreamParseErrorPayload(
@@ -116,7 +116,7 @@ public final class LinkedObjectStreamValidateUtils {
         try {
             parsedPairs = LinkedObjectStreamUtilities.parseSigFile(sigFile, streamType);
         } catch (IllegalArgumentException | IOException | InvalidStreamFileException ex) {
-            LOGGER.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     () ->
                             new StreamParseErrorPayload(
@@ -210,7 +210,7 @@ public final class LinkedObjectStreamValidateUtils {
             runningHash =
                     CryptographyHolder.get()
                             .calcRunningHash(runningHash, objectHash, DigestType.SHA_384);
-            LOGGER.info(
+            logger.info(
                     OBJECT_STREAM.getMarker(),
                     "validateIterator :: after consuming object {},"
                             + "hash: {}, updated runningHash: {}",
@@ -227,7 +227,7 @@ public final class LinkedObjectStreamValidateUtils {
         Hash endHash = (Hash) selfSerializable;
         // check if calculated endRunningHash matches the endHash read from file
         if (!runningHash.equals(endHash)) {
-            LOGGER.info(EXCEPTION.getMarker(), "calculated: {}, read: {}", runningHash, endHash);
+            logger.info(EXCEPTION.getMarker(), "calculated: {}, read: {}", runningHash, endHash);
             return Pair.of(StreamValidationResult.CALCULATED_END_HASH_NOT_MATCH, endHash);
         }
         return Pair.of(StreamValidationResult.OK, endHash);

@@ -33,7 +33,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class TeacherReceivingThread<T> {
 
-    private static final Logger LOG = LogManager.getLogger(TeacherReceivingThread.class);
+    private static final Logger logger = LogManager.getLogger(TeacherReceivingThread.class);
 
     private static final String NAME = "receiver";
 
@@ -83,7 +83,7 @@ public class TeacherReceivingThread<T> {
                 responseExpected = view.isResponseExpected();
             }
         } catch (final InterruptedException ex) {
-            LOG.warn(RECONNECT.getMarker(), "teacher's receiving thread interrupted");
+            logger.warn(RECONNECT.getMarker(), "teacher's receiving thread interrupted");
             Thread.currentThread().interrupt();
         } catch (final Exception ex) {
             throw new MerkleSynchronizationException(

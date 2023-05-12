@@ -87,6 +87,7 @@ public class HalfDiskVirtualKeySet<K extends VirtualKey<? super K>> implements V
                             halfDiskHashMapSize,
                             keySerializer,
                             tempDir,
+                            "halfdiskvirtualkeyset",
                             "halfDiskVirtualKeySet",
                             false);
         } catch (final IOException e) {

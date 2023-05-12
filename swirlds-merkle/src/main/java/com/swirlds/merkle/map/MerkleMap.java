@@ -34,12 +34,26 @@ import com.swirlds.common.utility.RuntimeObjectRegistry;
 import com.swirlds.fchashmap.FCHashMap;
 import com.swirlds.fchashmap.FCHashMapSettings;
 import com.swirlds.fchashmap.FCHashMapSettingsFactory;
+import com.swirlds.fchashmap.ModifiableValue;
 import com.swirlds.merkle.map.internal.MerkleMapEntrySet;
 import com.swirlds.merkle.map.internal.MerkleMapInfo;
 import com.swirlds.merkle.tree.MerkleBinaryTree;
 import com.swirlds.merkle.tree.MerkleTreeInternalNode;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.StampedLock;
 import org.apache.commons.lang3.time.StopWatch;
 
@@ -485,7 +499,7 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>> extends PartialBinary
         final long stamp = readLock();
         try {
 
-            final FCHashMap.ModifiableValue<V> value = index.getForModify(key);
+            final ModifiableValue<V> value = index.getForModify(key);
 
             if (value == null) {
                 return null;
@@ -863,7 +877,6 @@ public class MerkleMap<K, V extends MerkleNode & Keyed<K>> extends PartialBinary
     @SuppressWarnings("unchecked")
     @Override
     public void rebuild() {
-
         final FCHashMapSettings settings = FCHashMapSettingsFactory.get();
 
         final int splitDepth = settings.getRebuildSplitFactor() + getTree().getRoot().getDepth();

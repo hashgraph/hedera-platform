@@ -51,7 +51,7 @@ public class LearningSynchronizer implements ReconnectNodeCount {
 
     private static final String WORK_GROUP_NAME = "learning-synchronizer";
 
-    private static final Logger LOG = LogManager.getLogger(LearningSynchronizer.class);
+    private static final Logger logger = LogManager.getLogger(LearningSynchronizer.class);
 
     /** Used to get data from the teacher. */
     private final MerkleDataInputStream inputStream;
@@ -115,7 +115,7 @@ public class LearningSynchronizer implements ReconnectNodeCount {
             hash();
             logStatistics();
         } catch (final InterruptedException ex) {
-            LOG.warn(RECONNECT.getMarker(), "synchronization interrupted");
+            logger.warn(RECONNECT.getMarker(), "synchronization interrupted");
             Thread.currentThread().interrupt();
             abort();
             throw ex;
@@ -127,7 +127,7 @@ public class LearningSynchronizer implements ReconnectNodeCount {
 
     /** Attempt to free any and all resources that were acquired during the reconnect attempt. */
     private void abort() {
-        LOG.warn(RECONNECT.getMarker(), "deleting partially constructed tree");
+        logger.warn(RECONNECT.getMarker(), "deleting partially constructed tree");
         try {
             if (newRoot != null) {
                 newRoot.release();
@@ -136,13 +136,13 @@ public class LearningSynchronizer implements ReconnectNodeCount {
             // The tree may be in a partially constructed state. We don't expect exceptions, but
             // they
             // may be more likely to appear during this operation than at other times.
-            LOG.error(EXCEPTION.getMarker(), "exception thrown while releasing tree", ex);
+            logger.error(EXCEPTION.getMarker(), "exception thrown while releasing tree", ex);
         }
     }
 
     /** Receive the tree from the teacher. */
     private void receiveTree() throws InterruptedException {
-        LOG.info(RECONNECT.getMarker(), "synchronizing tree");
+        logger.info(RECONNECT.getMarker(), "synchronizing tree");
         final long start = System.currentTimeMillis();
 
         while (!rootsToReceive.isEmpty()) {
@@ -154,12 +154,12 @@ public class LearningSynchronizer implements ReconnectNodeCount {
         }
 
         synchronizationTimeMilliseconds = System.currentTimeMillis() - start;
-        LOG.info(RECONNECT.getMarker(), "synchronization complete");
+        logger.info(RECONNECT.getMarker(), "synchronization complete");
     }
 
     /** Initialize the tree. */
     private void initialize() {
-        LOG.info(RECONNECT.getMarker(), "initializing tree");
+        logger.info(RECONNECT.getMarker(), "initializing tree");
         final long start = System.currentTimeMillis();
 
         while (!viewsToInitialize.isEmpty()) {
@@ -167,18 +167,18 @@ public class LearningSynchronizer implements ReconnectNodeCount {
         }
 
         initializationTimeMilliseconds = System.currentTimeMillis() - start;
-        LOG.info(RECONNECT.getMarker(), "initialization complete");
+        logger.info(RECONNECT.getMarker(), "initialization complete");
     }
 
     /** Hash the tree. */
     private void hash() throws InterruptedException {
-        LOG.info(RECONNECT.getMarker(), "hashing tree");
+        logger.info(RECONNECT.getMarker(), "hashing tree");
         final long start = System.currentTimeMillis();
 
         try {
             MerkleCryptoFactory.getInstance().digestTreeAsync(newRoot).get();
         } catch (ExecutionException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "exception while computing hash of reconstructed tree",
                     e);
@@ -186,12 +186,12 @@ public class LearningSynchronizer implements ReconnectNodeCount {
         }
 
         hashTimeMilliseconds = System.currentTimeMillis() - start;
-        LOG.info(RECONNECT.getMarker(), "hashing complete");
+        logger.info(RECONNECT.getMarker(), "hashing complete");
     }
 
     /** Log information about the synchronization. */
     private void logStatistics() {
-        LOG.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 () ->
                         new SynchronizationCompletePayload("Finished synchronization")
@@ -226,7 +226,7 @@ public class LearningSynchronizer implements ReconnectNodeCount {
     @SuppressWarnings("unchecked")
     private <T> MerkleNode receiveTree(final MerkleNode root) throws InterruptedException {
 
-        LOG.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 "receiving tree rooted at {} with route {}",
                 root == null ? "(unknown)" : root.getClass().getName(),
@@ -269,7 +269,8 @@ public class LearningSynchronizer implements ReconnectNodeCount {
                 final InterruptedException
                         e) { // NOSONAR: Exception is rethrown below after cleanup.
             interruptException = e;
-            LOG.warn(RECONNECT.getMarker(), "interrupted while waiting for work group termination");
+            logger.warn(
+                    RECONNECT.getMarker(), "interrupted while waiting for work group termination");
         }
 
         if (interruptException != null || workGroup.hasExceptions()) {
@@ -284,7 +285,7 @@ public class LearningSynchronizer implements ReconnectNodeCount {
                 // If the root has a reference count of 0 then it is not underneath any other tree,
                 // and this thread holds the implicit reference to the root.
                 // This is the last chance to release that tree in this scenario.
-                LOG.warn(RECONNECT.getMarker(), "deleting partially constructed subtree");
+                logger.warn(RECONNECT.getMarker(), "deleting partially constructed subtree");
                 merkleRoot.release();
             }
             if (interruptException != null) {

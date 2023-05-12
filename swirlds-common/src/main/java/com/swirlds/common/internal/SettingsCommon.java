@@ -50,17 +50,6 @@ public class SettingsCommon {
     public static boolean showInternalStats;
     public static boolean verboseStatistics;
 
-    /**
-     * should a transaction be sent after each state signature transaction, giving all
-     * avgPingMilliseconds[] stats?
-     */
-    public static boolean enablePingTrans = true;
-    /**
-     * should a transaction be sent after each state signature transaction, giving all
-     * avgBytePerSecSent[] stats?
-     */
-    public static boolean enableBpsTrans = true;
-
     /** update some metrics every this many milliseconds (-1 for never) */
     public static int metricsUpdatePeriodMillis = 1000;
 

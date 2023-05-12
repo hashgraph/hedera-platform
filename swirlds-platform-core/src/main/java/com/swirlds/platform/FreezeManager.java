@@ -20,13 +20,15 @@ import static com.swirlds.logging.LogMarker.FREEZE;
 import com.swirlds.common.system.EventCreationRule;
 import com.swirlds.common.system.EventCreationRuleResponse;
 import com.swirlds.platform.components.TransThrottleSyncRule;
+import com.swirlds.platform.state.signed.SignedState;
+import java.nio.file.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /** The source freeze related information. */
 public class FreezeManager implements TransThrottleSyncRule, EventCreationRule {
 
-    private static final Logger log = LogManager.getLogger(FreezeManager.class);
+    private static final Logger logger = LogManager.getLogger(FreezeManager.class);
 
     /** this boolean states whether events should be created or not */
     private volatile boolean freezeEventCreation = false;
@@ -59,7 +61,7 @@ public class FreezeManager implements TransThrottleSyncRule, EventCreationRule {
     /** Sets event creation to be frozen */
     public void freezeEventCreation() {
         freezeEventCreation = true;
-        log.info(FREEZE.getMarker(), "Event creation frozen");
+        logger.info(FREEZE.getMarker(), "Event creation frozen");
     }
 
     /** Sets the system in a state a freeze. */
@@ -92,6 +94,62 @@ public class FreezeManager implements TransThrottleSyncRule, EventCreationRule {
     /** Returns true if the system is no longer handling consensus transactions */
     public boolean isFreezeComplete() {
         return freezeStatus == FreezeStatus.FREEZE_COMPLETE;
+    }
+
+    /**
+     * Freezes event creation when a freeze state collects enough signatures to be complete.
+     *
+     * @param signedState the signed state that just became complete
+     */
+    public void stateHasEnoughSignatures(final SignedState signedState) {
+        if (signedState.isFreezeState()) {
+            logger.info(
+                    FREEZE.getMarker(),
+                    "Collected enough signatures on the freeze state (round = {}). "
+                            + "Freezing event creation now.",
+                    signedState.getRound());
+            freezeEventCreation();
+        }
+    }
+
+    /**
+     * Transitions the platform to a freeze complete state when a freeze state is successfully
+     * written to disk.
+     *
+     * @param state the signed state attempted to be written
+     * @param directory the directory the state was attempted to be written to
+     * @param success {@code true} if the state was successfully written to disk, {@code false}
+     *     otherwise
+     */
+    public void stateToDisk(final SignedState state, final Path directory, final boolean success) {
+        if (state.isFreezeState()) {
+            if (!success) {
+                logger.error(
+                        FREEZE.getMarker(),
+                        "Failed to write freeze state to disk! Attempted write location: {}"
+                                + "\n Completing freeze anyways.",
+                        directory);
+            }
+            freezeComplete();
+        }
+    }
+
+    /**
+     * Freeze event creation and logs an error if a freeze state is ejected from memory without
+     * enough signatures.
+     *
+     * @param signedState the state that failed to collect enough signatures
+     */
+    public void stateLacksSignatures(final SignedState signedState) {
+        if (signedState.isFreezeState()) {
+            logger.error(
+                    FREEZE.getMarker(),
+                    "Unable to collect enough signatures on the freeze state (round = {}). THIS"
+                            + " SHOULD NEVER HAPPEN! This node may not start from the same state as"
+                            + " other nodes after a restart. Freezing event creation anyways.",
+                    signedState.getRound());
+            freezeEventCreation();
+        }
     }
 
     /** {@inheritDoc} */

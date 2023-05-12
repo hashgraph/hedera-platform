@@ -53,7 +53,7 @@ import org.apache.logging.log4j.Logger;
 public final class VirtualTeacherTreeView<K extends VirtualKey<? super K>, V extends VirtualValue>
         extends VirtualTreeViewBase<K, V> implements TeacherTreeView<Long> {
 
-    private static final Logger LOG = LogManager.getLogger(VirtualTeacherTreeView.class);
+    private static final Logger logger = LogManager.getLogger(VirtualTeacherTreeView.class);
 
     /**
      * A queue of the nodes (by path) that we are about to handle. Note that ConcurrentBitSetQueue
@@ -243,9 +243,10 @@ public final class VirtualTeacherTreeView<K extends VirtualKey<? super K>, V ext
             waitUntilReady();
             records.getDataSource().close();
         } catch (final IOException e) {
-            LOG.error(RECONNECT.getMarker(), "interrupted while attempting to close data source");
+            logger.error(
+                    RECONNECT.getMarker(), "interrupted while attempting to close data source");
         } catch (final InterruptedException e) {
-            LOG.error(RECONNECT.getMarker(), "Failed to close data source properly", e);
+            logger.error(RECONNECT.getMarker(), "Failed to close data source properly", e);
             Thread.currentThread().interrupt();
         }
     }

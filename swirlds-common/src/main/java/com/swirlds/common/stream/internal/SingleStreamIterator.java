@@ -37,7 +37,7 @@ import org.apache.logging.log4j.Marker;
  */
 public class SingleStreamIterator<T extends SelfSerializable> implements Iterator<T> {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOGGER = LogManager.getLogger(SingleStreamIterator.class);
+    private static final Logger logger = LogManager.getLogger(SingleStreamIterator.class);
 
     private static final Marker LOGM_OBJECT_STREAM = LogMarker.OBJECT_STREAM.getMarker();
 
@@ -61,7 +61,7 @@ public class SingleStreamIterator<T extends SelfSerializable> implements Iterato
             stream =
                     new SerializableDataInputStream(
                             new BufferedInputStream(new FileInputStream(file)));
-            LOGGER.info(
+            logger.info(
                     LOGM_OBJECT_STREAM,
                     "SingleStreamIterator :: reading file: {}",
                     () -> file.getName());
@@ -71,12 +71,12 @@ public class SingleStreamIterator<T extends SelfSerializable> implements Iterato
             }
             // read OBJECT_STREAM_VERSION
             int objectStreamVersion = stream.readInt();
-            LOGGER.info(
+            logger.info(
                     LOGM_OBJECT_STREAM,
                     "SingleStreamIterator :: read OBJECT_STREAM_VERSION: {}",
                     () -> objectStreamVersion);
         } catch (IllegalArgumentException | IOException e) {
-            LOGGER.error(
+            logger.error(
                     LOGM_EXCEPTION,
                     "SingleStreamIterator :: got Exception when parse File {}",
                     file.getName(),
@@ -109,7 +109,7 @@ public class SingleStreamIterator<T extends SelfSerializable> implements Iterato
             }
             return true;
         } catch (IOException e) {
-            LOGGER.error(
+            logger.error(
                     LOGM_EXCEPTION,
                     () ->
                             new StreamParseErrorPayload(
@@ -128,7 +128,7 @@ public class SingleStreamIterator<T extends SelfSerializable> implements Iterato
         try {
             return stream.readSerializable();
         } catch (IOException e) {
-            LOGGER.error(
+            logger.error(
                     LOGM_EXCEPTION,
                     () ->
                             new StreamParseErrorPayload(
@@ -146,7 +146,7 @@ public class SingleStreamIterator<T extends SelfSerializable> implements Iterato
                 stream.close();
             }
         } catch (IOException e) {
-            LOGGER.error(
+            logger.error(
                     LOGM_EXCEPTION,
                     "SingleStreamIterator :: got IOException when closing stream. ",
                     e);

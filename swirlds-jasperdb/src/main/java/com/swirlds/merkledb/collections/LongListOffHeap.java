@@ -46,7 +46,7 @@ import sun.misc.Unsafe;
  * writes.
  */
 public final class LongListOffHeap extends LongList {
-    private static final Logger LOG = LogManager.getLogger(LongListOffHeap.class);
+    private static final Logger logger = LogManager.getLogger(LongListOffHeap.class);
     /** Offset of the {@code java.nio.Buffer#address} field. */
     private static final long BYTE_BUFFER_ADDRESS_FIELD_OFFSET;
 
@@ -194,7 +194,7 @@ public final class LongListOffHeap extends LongList {
             final long chunkPointer = address(chunk);
             return UNSAFE.getLongVolatile(null, chunkPointer + subIndexOffset);
         } catch (final IndexOutOfBoundsException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Index out of bounds in lookupInChunk, "
                             + "buf={}, offset={}, chunkIndex={}, chunkIndex={}, subIndex={}",

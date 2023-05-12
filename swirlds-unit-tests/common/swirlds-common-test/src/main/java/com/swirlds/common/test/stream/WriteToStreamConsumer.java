@@ -33,7 +33,7 @@ import org.apache.logging.log4j.MarkerManager;
  */
 class WriteToStreamConsumer implements LinkedObjectStream<ObjectForTestStream> {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger logger = LogManager.getLogger();
 
     private static final Marker LOGM_OBJECT_STREAM = MarkerManager.getMarker("OBJECT_STREAM");
     private static final Marker LOGM_EXCEPTION = MarkerManager.getMarker("EXCEPTION");
@@ -60,7 +60,7 @@ class WriteToStreamConsumer implements LinkedObjectStream<ObjectForTestStream> {
                     ex.getCause());
         }
 
-        log.info(LOGM_OBJECT_STREAM, "write startRunningHash: {}", startRunningHash);
+        logger.info(LOGM_OBJECT_STREAM, "write startRunningHash: {}", startRunningHash);
     }
 
     /** {@inheritDoc} */
@@ -68,12 +68,12 @@ class WriteToStreamConsumer implements LinkedObjectStream<ObjectForTestStream> {
     public void addObject(ObjectForTestStream object) {
         try {
             outputStream.writeSerializable(object, true);
-            log.info(LOGM_OBJECT_STREAM, "write object: {}", object);
+            logger.info(LOGM_OBJECT_STREAM, "write object: {}", object);
             // update runningHash
             this.runningHash = object.getRunningHash();
             consumedCount++;
         } catch (IOException ex) {
-            log.error(LOGM_EXCEPTION, "", ex);
+            logger.error(LOGM_EXCEPTION, "", ex);
         }
     }
 
@@ -82,11 +82,11 @@ class WriteToStreamConsumer implements LinkedObjectStream<ObjectForTestStream> {
     public void close() {
         try {
             outputStream.writeSerializable(this.runningHash.getFutureHash().getAndRethrow(), true);
-            log.info(LOGM_OBJECT_STREAM, "write endRunningHash: {}", this.runningHash);
+            logger.info(LOGM_OBJECT_STREAM, "write endRunningHash: {}", this.runningHash);
             outputStream.close();
             isClosed = true;
         } catch (IOException ex) {
-            log.error(LOGM_EXCEPTION, "got IOException", ex);
+            logger.error(LOGM_EXCEPTION, "got IOException", ex);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
@@ -98,7 +98,7 @@ class WriteToStreamConsumer implements LinkedObjectStream<ObjectForTestStream> {
         try {
             outputStream.close();
         } catch (IOException ex) {
-            log.error(LOGM_EXCEPTION, "got IOException", ex);
+            logger.error(LOGM_EXCEPTION, "got IOException", ex);
         }
     }
 

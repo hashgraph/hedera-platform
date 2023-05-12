@@ -66,7 +66,7 @@ public class WinBrowser extends JFrame {
     /** needed to serializing */
     private static final long serialVersionUID = 1L;
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(WinBrowser.class);
+    private static final Logger logger = LogManager.getLogger(WinBrowser.class);
 
     /** refresh the screen every this many milliseconds */
     final int refreshPeriod = 500;
@@ -206,7 +206,7 @@ public class WinBrowser extends JFrame {
                 win.repaint();
             }
         } catch (Exception e) {
-            log.error(EXCEPTION.getMarker(), "error while prepainting or painting: ", e);
+            logger.error(EXCEPTION.getMarker(), "error while prepainting or painting: ", e);
         }
     }
 

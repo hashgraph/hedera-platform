@@ -44,7 +44,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Creates outbound connections to the requested peers */
 public class OutboundConnectionCreator {
-    private static final Logger LOG = LogManager.getLogger(OutboundConnectionCreator.class);
+    private static final Logger logger = LogManager.getLogger(OutboundConnectionCreator.class);
     private static final byte[] LOCALHOST = new byte[] {127, 0, 0, 1};
     private final NodeId selfId;
     private final SettingsProvider settings;
@@ -120,7 +120,7 @@ public class OutboundConnectionCreator {
                 throw new ConnectException(
                         "ack is not " + ByteConstants.COMM_CONNECT + ", it is " + ack);
             }
-            LOG.debug(
+            logger.debug(
                     NETWORK.getMarker(),
                     "`connect` : finished, {} connected to {}",
                     selfId,
@@ -130,7 +130,7 @@ public class OutboundConnectionCreator {
                     selfId, otherId, connectionTracker, true, clientSocket, dis, dos);
         } catch (final SocketTimeoutException | SocketException e) {
             NetworkUtils.close(clientSocket, dis, dos);
-            LOG.debug(
+            logger.debug(
                     TCP_CONNECT_EXCEPTIONS.getMarker(),
                     "{} failed to connect to {} with error:",
                     selfId,
@@ -145,7 +145,7 @@ public class OutboundConnectionCreator {
         } catch (final IOException e) {
             NetworkUtils.close(clientSocket, dis, dos);
             // log the SSL connection exception which is caused by socket exceptions as warning.
-            LOG.warn(
+            logger.warn(
                     SOCKET_EXCEPTIONS.getMarker(),
                     "{} failed to connect to {}",
                     selfId,
@@ -153,7 +153,7 @@ public class OutboundConnectionCreator {
                     e);
         } catch (final RuntimeException e) {
             NetworkUtils.close(clientSocket, dis, dos);
-            LOG.debug(EXCEPTION.getMarker(), "{} failed to connect to {}", selfId, otherId, e);
+            logger.debug(EXCEPTION.getMarker(), "{} failed to connect to {}", selfId, otherId, e);
         }
 
         return NotConnectedConnection.getSingleton();

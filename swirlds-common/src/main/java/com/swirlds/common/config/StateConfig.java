@@ -38,13 +38,24 @@ import com.swirlds.config.api.ConfigProperty;
  * @param signedStateDisk Keep at least this many of the old complete signed states on disk. This
  *     should be at least 2 so that we don't delete an old state while a new one is in the process
  *     of writing to disk. set to 0 to not keep any states to disk.
- * @param dumpStateOnISS If true, save the state to disk when an ISS is detected. May negatively
+ * @param dumpStateOnAnyISS If true, save the state to disk when an ISS is detected. May negatively
  *     affect the performance of the node where the ISS occurs. This feature is for debugging
  *     purposes and should not be active in production systems.
  * @param dumpStateOnFatal If true, then save the state to disk when there is a fatal exception.
+ * @param haltOnAnyIss
+ *     <p>Halt this node whenever any ISS in the network is detected. A halt causes the node to stop
+ *     doing work, but does not shut down the JVM.
+ *     <p>This feature is for debugging purposes only. Enabling this feature in production
+ *     environments enables a very simple denial of service attack on the network.
+ * @param automatedSelfIssRecovery If true, then attempt to recover automatically when a self ISS is
+ *     detected.
+ * @param haltOnCatastrophicIss If true, then halt this node if a catastrophic ISS is detected. A
+ *     halt causes the node to stop doing work, but does not shut down the JVM.
  * @param secondsBetweenISSDumps If one ISS is detected, it is likely that others will be detected
  *     shortly afterwards. Specify the minimum time, in seconds, that must transpire after dumping a
  *     state before another state dump is permitted. Ignored if dumpStateOnISS is false.
+ * @param secondsBetweenIssLogs The minimum time that must pass between log messages about ISS
+ *     events. If ISS events happen with a higher frequency then they are squelched.
  * @param stateDeletionErrorLogFrequencySeconds If there are problems with state lifecycle then
  *     write errors to the log at most once per this period of time.
  * @param enableHashStreamLogging When enabled, hashes for the nodes are logged per round.
@@ -56,6 +67,12 @@ import com.swirlds.config.api.ConfigProperty;
  * @param maxAgeOfFutureStateSignatures It's possible to receive state signatures before it's time
  *     to process the round signed by the signature. This is the maximum number of rounds, in the
  *     future, for which a node will accept a state signature.
+ * @param roundsToKeepForSigning The maximum number of rounds that a state will be kept in memory
+ *     while waiting for it to gather enough signatures. If a state becomes fully signed prior to
+ *     reaching this age it may be removed from memory.
+ * @param signedStateSentinelEnabled If true, then enable extra debug code that tracks signed
+ *     states. Very useful for debugging state leaks. This debug code is relatively expensive (it
+ *     takes and stores stack traces when operations are performed on signed state objects).
  */
 @ConfigData("state")
 public record StateConfig(
@@ -65,14 +82,20 @@ public record StateConfig(
         @ConfigProperty(defaultValue = "20") int stateSavingQueueSize,
         @ConfigProperty(defaultValue = "0") int saveStatePeriod,
         @ConfigProperty(defaultValue = "3") int signedStateDisk,
-        @ConfigProperty(defaultValue = "false") boolean dumpStateOnISS,
+        @ConfigProperty(defaultValue = "false") boolean dumpStateOnAnyISS,
         @ConfigProperty(defaultValue = "true") boolean dumpStateOnFatal,
-        @ConfigProperty(defaultValue = "21600") double secondsBetweenISSDumps,
+        @ConfigProperty(defaultValue = "false") boolean haltOnAnyIss,
+        @ConfigProperty(defaultValue = "false") boolean automatedSelfIssRecovery,
+        @ConfigProperty(defaultValue = "false") boolean haltOnCatastrophicIss,
+        @ConfigProperty(defaultValue = "21600") long secondsBetweenISSDumps,
+        @ConfigProperty(defaultValue = "300") long secondsBetweenIssLogs,
         @ConfigProperty(defaultValue = "60") int stateDeletionErrorLogFrequencySeconds,
         @ConfigProperty(defaultValue = "true") boolean enableHashStreamLogging,
         @ConfigProperty(defaultValue = "false") boolean backgroundHashChecking,
         @ConfigProperty(defaultValue = "5") int debugHashDepth,
-        @ConfigProperty(defaultValue = "1000") int maxAgeOfFutureStateSignatures) {
+        @ConfigProperty(defaultValue = "1000") int maxAgeOfFutureStateSignatures,
+        @ConfigProperty(defaultValue = "26") int roundsToKeepForSigning,
+        @ConfigProperty(defaultValue = "false") boolean signedStateSentinelEnabled) {
 
     /**
      * Get the main class name that should be used for signed states.

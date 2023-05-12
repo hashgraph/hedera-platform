@@ -17,18 +17,13 @@ package com.swirlds.platform.reconnect.emergency;
 
 import static com.swirlds.common.merkle.hash.MerkleHashChecker.generateHashDebugString;
 import static com.swirlds.logging.LogMarker.SIGNED_STATE;
-import static com.swirlds.platform.state.signed.SignedStateUtilities.logStakeInfo;
 
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.system.address.AddressBook;
-import com.swirlds.platform.Crypto;
-import com.swirlds.platform.Utilities;
 import com.swirlds.platform.state.EmergencyRecoveryFile;
 import com.swirlds.platform.state.StateSettings;
-import com.swirlds.platform.state.signed.SignatureSummary;
 import com.swirlds.platform.state.signed.SignedState;
 import com.swirlds.platform.state.signed.SignedStateInvalidException;
-import com.swirlds.platform.state.signed.SignedStateUtilities;
 import com.swirlds.platform.state.signed.SignedStateValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,17 +35,13 @@ import org.apache.logging.log4j.Logger;
  * valid. The emergency reconnect scenario is described in disaster-recovery.md.
  */
 public class EmergencySignedStateValidator implements SignedStateValidator {
-    private static final Logger LOG = LogManager.getLogger(EmergencySignedStateValidator.class);
-    private final Crypto crypto;
+    private static final Logger logger = LogManager.getLogger(EmergencySignedStateValidator.class);
     private final EmergencyRecoveryFile emergencyRecoveryFile;
 
     /**
-     * @param crypto the object that contains all key pairs and CSPRNG state for this member
      * @param emergencyRecoveryFile the emergency recovery file
      */
-    public EmergencySignedStateValidator(
-            final Crypto crypto, final EmergencyRecoveryFile emergencyRecoveryFile) {
-        this.crypto = crypto;
+    public EmergencySignedStateValidator(final EmergencyRecoveryFile emergencyRecoveryFile) {
         this.emergencyRecoveryFile = emergencyRecoveryFile;
     }
 
@@ -65,7 +56,7 @@ public class EmergencySignedStateValidator implements SignedStateValidator {
     @Override
     public void validate(final SignedState signedState, final AddressBook addressBook)
             throws SignedStateInvalidException {
-        LOG.info(
+        logger.info(
                 SIGNED_STATE.getMarker(),
                 "Requested round {} with hash {}, received round {} with hash {}",
                 emergencyRecoveryFile.round(),
@@ -84,7 +75,7 @@ public class EmergencySignedStateValidator implements SignedStateValidator {
 
     private void verifyStateHashMatches(final SignedState signedState) {
         if (!signedState.getState().getHash().equals(emergencyRecoveryFile.hash())) {
-            LOG.error(
+            logger.error(
                     SIGNED_STATE.getMarker(),
                     """
 							Emergency recovery signed state round matches the request but hash does not.
@@ -113,14 +104,14 @@ public class EmergencySignedStateValidator implements SignedStateValidator {
                 .getPlatformData()
                 .setNextEpochHash(emergencyRecoveryFile.hash());
 
-        LOG.info(
+        logger.info(
                 SIGNED_STATE.getMarker(),
                 "Emergency recovery signed state matches the requested round and hash. "
                         + "Validation succeeded, next epoch hash updated.");
     }
 
     private void throwStateTooOld(final SignedState signedState) {
-        LOG.error(
+        logger.error(
                 SIGNED_STATE.getMarker(),
                 """
 						State is too old. Failed emergency reconnect state:
@@ -140,7 +131,7 @@ public class EmergencySignedStateValidator implements SignedStateValidator {
 
     private void verifyLaterRoundIsValid(
             final SignedState signedState, final AddressBook addressBook) {
-        LOG.info(
+        logger.info(
                 SIGNED_STATE.getMarker(),
                 "Emergency recovery signed state is for round later than requested. "
                         + "Validating that the state is signed by a majority stake.");
@@ -151,7 +142,7 @@ public class EmergencySignedStateValidator implements SignedStateValidator {
         // must have the correct epoch hash
         checkEpochHash(signedState);
 
-        LOG.info(
+        logger.info(
                 SIGNED_STATE.getMarker(),
                 "Signed state is a later, fully signed state with the correct epoch hash."
                         + " Validation succeeded.");
@@ -161,7 +152,7 @@ public class EmergencySignedStateValidator implements SignedStateValidator {
         final Hash epochHash =
                 signedState.getState().getPlatformState().getPlatformData().getEpochHash();
         if (!emergencyRecoveryFile.hash().equals(epochHash)) {
-            LOG.error(
+            logger.error(
                     SIGNED_STATE.getMarker(),
                     """
 							State is fully signed but has an incorrect epoch hash. Failed emergency recovery state:
@@ -182,43 +173,9 @@ public class EmergencySignedStateValidator implements SignedStateValidator {
         }
     }
 
-    private void checkSignatures(final SignedState signedState, final AddressBook addressBook) {
-        final SignatureSummary sigSummary =
-                SignedStateUtilities.getSigningStake(signedState, crypto, addressBook);
-        final long validStake = sigSummary.validStake();
-        final boolean hasEnoughStake =
-                Utilities.isMajority(validStake, addressBook.getTotalStake());
-
-        logStakeInfo(LOG, validStake, hasEnoughStake, addressBook);
-
-        if (!hasEnoughStake) {
-            LOG.error(
-                    SIGNED_STATE.getMarker(),
-                    """
-							Not enough signatures. Failed emergency recovery state:
-							{}
-							{}""",
-                    () -> signedState.getState().getPlatformState().getInfoString(),
-                    () ->
-                            generateHashDebugString(
-                                    signedState.getState(), StateSettings.getDebugHashDepth()));
-
-            throw new SignedStateInvalidException(
-                    String.format(
-                            """
-							Emergency recovery signed state does not have enough valid signatures!
-							validCount:\t%d
-							addressBook size:\t%d
-							validStake:\t%d
-							addressBook total stake:\t%d""",
-                            sigSummary.numValidSigs(),
-                            addressBook.getSize(),
-                            validStake,
-                            addressBook.getTotalStake()));
-        }
-
-        LOG.info(
-                SIGNED_STATE.getMarker(),
-                "Signed state is a later, fully signed state. Validation succeeded.");
+    private static void checkSignatures(
+            final SignedState signedState, final AddressBook addressBook) {
+        signedState.pruneInvalidSignatures(addressBook);
+        signedState.throwIfIncomplete();
     }
 }

@@ -34,7 +34,7 @@ public class NoOpDurationGauge extends AbstractNoOpMetric implements DurationGau
 
     /** {@inheritDoc} */
     @Override
-    public void update(final Duration duration) {}
+    public void set(final Duration duration) {}
 
     /** {@inheritDoc} */
     @Override

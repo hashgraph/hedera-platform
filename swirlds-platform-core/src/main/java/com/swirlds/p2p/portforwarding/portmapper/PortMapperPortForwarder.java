@@ -45,7 +45,7 @@ public class PortMapperPortForwarder implements PortForwarder, Runnable {
     /** log marker related to port forwarding (uPNP & NAT-PMP) */
     private static final Marker MARKER = MarkerManager.getMarker("PORT_FORWARDING");
 
-    private static final Logger log = LogManager.getLogger(PortMapperPortForwarder.class);
+    private static final Logger logger = LogManager.getLogger(PortMapperPortForwarder.class);
 
     private Bus networkBus;
     private Bus processBus;
@@ -167,7 +167,7 @@ public class PortMapperPortForwarder implements PortForwarder, Runnable {
             Thread.currentThread().interrupt();
             closeService();
         } catch (Exception e) {
-            log.error(MARKER, "An exception occurred while trying to do port forwarding:", e);
+            logger.error(MARKER, "An exception occurred while trying to do port forwarding:", e);
         }
     }
 
@@ -188,7 +188,7 @@ public class PortMapperPortForwarder implements PortForwarder, Runnable {
                 Thread.currentThread().interrupt();
                 closeService();
             } catch (NullPointerException | IllegalArgumentException | IllegalStateException e) {
-                log.error(MARKER, "An exception occurred while refreshing a mapped port:", e);
+                logger.error(MARKER, "An exception occurred while refreshing a mapped port:", e);
                 i.remove();
                 for (PortMappingListener listener : listeners) {
                     listener.mappingFailed(pair.getSpecified(), e);
@@ -229,7 +229,7 @@ public class PortMapperPortForwarder implements PortForwarder, Runnable {
                 try {
                     mapper.unmapPort(mappedPort);
                 } catch (Exception e) {
-                    log.error(MARKER, "An exception occurred while unmapping a port:", e);
+                    logger.error(MARKER, "An exception occurred while unmapping a port:", e);
                 }
             }
         }

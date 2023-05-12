@@ -34,7 +34,9 @@ import static com.swirlds.platform.system.SystemExitReason.NODE_ADDRESS_MISMATCH
 import com.swirlds.common.StartupTime;
 import com.swirlds.common.config.BasicConfig;
 import com.swirlds.common.config.ConsensusConfig;
+import com.swirlds.common.config.OSHealthCheckConfig;
 import com.swirlds.common.config.StateConfig;
+import com.swirlds.common.config.WiringConfig;
 import com.swirlds.common.config.export.ConfigExport;
 import com.swirlds.common.config.singleton.ConfigurationHolder;
 import com.swirlds.common.config.sources.AliasConfigSource;
@@ -143,7 +145,7 @@ public class Browser {
     // [*] Two members are considered to be on the same LAN if their listed external addresses are
     // the same.
 
-    private static Logger log = LogManager.getLogger(Browser.class);
+    private static Logger logger = LogManager.getLogger(Browser.class);
 
     /** the thread for each Platform.run */
     private static Thread[] platformRunThreads;
@@ -158,7 +160,7 @@ public class Browser {
 
     /** Prevent this class from being instantiated. */
     private Browser(final Set<Integer> localNodesToStart) throws IOException {
-        log.debug(STARTUP.getMarker(), () -> new NodeStartPayload().toString());
+        logger.debug(STARTUP.getMarker(), () -> new NodeStartPayload().toString());
 
         // The properties from the config.txt
         final LegacyConfigProperties configurationProperties =
@@ -191,6 +193,8 @@ public class Browser {
                         .withConfigDataType(ThreadConfig.class)
                         .withConfigDataType(DispatchConfiguration.class)
                         .withConfigDataType(PrometheusMetricsConfig.class)
+                        .withConfigDataType(OSHealthCheckConfig.class)
+                        .withConfigDataType(WiringConfig.class)
                         .build();
 
         ConfigurationHolder.getInstance().setConfiguration(configuration);
@@ -261,7 +265,7 @@ public class Browser {
                     return;
                 }
                 // instantiate all Platform objects, which each instantiates a Statistics object
-                log.debug(STARTUP.getMarker(), "About to run startPlatforms()");
+                logger.debug(STARTUP.getMarker(), "About to run startPlatforms()");
                 startPlatforms(configuration, configurationProperties, localNodesToStart);
 
                 // create the browser window, which uses those Statistics objects
@@ -275,7 +279,7 @@ public class Browser {
                 CommonUtils.tellUserConsole(
                         "This computer has an internal IP address:  "
                                 + Network.getInternalIPAddress());
-                log.trace(
+                logger.trace(
                         STARTUP.getMarker(),
                         "All of this computer's addresses: {}",
                         () -> (Arrays.toString(Network.getOwnAddresses2())));
@@ -307,14 +311,14 @@ public class Browser {
                     Network.doPortForwarding(getStaticThreadManager(), portsToBeMapped);
                 }
             } catch (final Exception e) {
-                log.error(EXCEPTION.getMarker(), "", e);
+                logger.error(EXCEPTION.getMarker(), "", e);
             }
 
         } catch (final Exception e) {
-            log.error(EXCEPTION.getMarker(), "", e);
+            logger.error(EXCEPTION.getMarker(), "", e);
         }
 
-        log.debug(STARTUP.getMarker(), "main() finished");
+        logger.debug(STARTUP.getMarker(), "main() finished");
     }
 
     /**
@@ -345,7 +349,7 @@ public class Browser {
         try (final OutputStream outputStream = new FileOutputStream(settingsUsedPath.toFile())) {
             outputStream.write(settingsUsedBuilder.toString().getBytes(StandardCharsets.UTF_8));
         } catch (final IOException | RuntimeException e) {
-            log.error(STARTUP.getMarker(), () -> "Can not write settingsUsed to file", e);
+            logger.error(STARTUP.getMarker(), () -> "Can not write settingsUsed to file", e);
         }
     }
 
@@ -409,7 +413,7 @@ public class Browser {
         // working directory
         try {
             Log4jSetup.startLoggingFramework(Settings.getInstance().getLogPath());
-            log = LogManager.getLogger(Browser.class);
+            logger = LogManager.getLogger(Browser.class);
         } catch (final Exception e) {
             LogManager.getLogger(Browser.class).fatal("Unable to load log context", e);
             System.err.println("FATAL Unable to load log context: " + e);
@@ -446,7 +450,7 @@ public class Browser {
                     new JVMPauseDetectorThread(
                             (pauseTimeMs, allocTimeMs) -> {
                                 if (pauseTimeMs > Settings.getInstance().getJVMPauseReportMs()) {
-                                    log.warn(
+                                    logger.warn(
                                             JVM_PAUSE_WARN.getMarker(),
                                             "jvmPauseDetectorThread detected JVM paused for {} ms,"
                                                     + " allocation pause {} ms",
@@ -456,7 +460,7 @@ public class Browser {
                             },
                             Settings.getInstance().getJVMPauseDetectorSleepMs());
             jvmPauseDetectorThread.start();
-            log.debug(STARTUP.getMarker(), "jvmPauseDetectorThread started");
+            logger.debug(STARTUP.getMarker(), "jvmPauseDetectorThread started");
         }
     }
 
@@ -478,7 +482,7 @@ public class Browser {
                             + appDefinition.getMainClassName()
                             + "\n"
                             + ExceptionUtils.getStackTrace(e));
-            log.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Problems with class {}",
                     appDefinition.getMainClassName(),
@@ -518,6 +522,7 @@ public class Browser {
                         new DefaultPlatformContext(nodeId, metricsProvider, configuration);
 
                 final SwirldMain appMain = buildAppMain(appDefinition, appLoader);
+                appMain.setConfiguration(configuration);
 
                 final SwirldsPlatform platform =
                         new SwirldsPlatform(
@@ -621,7 +626,8 @@ public class Browser {
         }
 
         final int ownHostCount = getOwnHostCount(addressBook);
-        log.info(STARTUP.getMarker(), "there are {} nodes with local IP addresses", ownHostCount);
+        logger.info(
+                STARTUP.getMarker(), "there are {} nodes with local IP addresses", ownHostCount);
 
         // if the local machine did not match any address in the address book then we should log an
         // error and exit
@@ -630,7 +636,7 @@ public class Browser {
                     (Network.getExternalIpAddress() != null)
                             ? Network.getExternalIpAddress().getIpAddress()
                             : null;
-            log.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     new NodeAddressMismatchPayload(
                             Network.getInternalIPAddress(), externalIpAddress));
@@ -649,9 +655,9 @@ public class Browser {
         // Save the certificates in the trust stores.
         // Save the trust stores in the address book.
 
-        log.debug(STARTUP.getMarker(), "About do crypto instantiation");
+        logger.debug(STARTUP.getMarker(), "About do crypto instantiation");
         final Crypto[] crypto = initNodeSecurity(appDefinition.getAddressBook(), configuration);
-        log.debug(STARTUP.getMarker(), "Done with crypto instantiation");
+        logger.debug(STARTUP.getMarker(), "Done with crypto instantiation");
 
         // the AddressBook is not changed after this point, so we calculate the hash now
         CryptographyHolder.get().digestSync(addressBook);
@@ -659,7 +665,7 @@ public class Browser {
         final InfoApp infoApp = getStateHierarchy().getInfoApp(appDefinition.getApplicationName());
         final InfoSwirld infoSwirld = new InfoSwirld(infoApp, appDefinition.getSwirldId());
 
-        log.debug(STARTUP.getMarker(), "Starting platforms");
+        logger.debug(STARTUP.getMarker(), "Starting platforms");
 
         // Try to load the app
         final SwirldAppLoader appLoader;
@@ -673,16 +679,17 @@ public class Browser {
         }
 
         // Register all RuntimeConstructable classes
-        log.debug(STARTUP.getMarker(), "Scanning the classpath for RuntimeConstructable classes");
+        logger.debug(
+                STARTUP.getMarker(), "Scanning the classpath for RuntimeConstructable classes");
         final long start = System.currentTimeMillis();
         ConstructableRegistry.getInstance().registerConstructables("", appLoader.getClassLoader());
-        log.debug(
+        logger.debug(
                 STARTUP.getMarker(),
                 "Done with registerConstructables, time taken {}ms",
                 System.currentTimeMillis() - start);
 
         // Setup metrics system
-        final MetricsProvider metricsProvider = new DefaultMetricsProvider(time);
+        final DefaultMetricsProvider metricsProvider = new DefaultMetricsProvider();
         final Metrics globalMetrics = metricsProvider.createGlobalMetrics();
         CryptoMetrics.registerMetrics(globalMetrics);
 
@@ -702,9 +709,10 @@ public class Browser {
         // Initialize JVMPauseDetectorThread, if enabled via settings
         startJVMPauseDetectorThread();
 
-        globalMetrics.start();
+        logger.info(STARTUP.getMarker(), "Starting metrics");
+        metricsProvider.start();
 
-        log.debug(STARTUP.getMarker(), "Done with starting platforms");
+        logger.debug(STARTUP.getMarker(), "Done with starting platforms");
     }
 
     public static void main(final String[] args) {

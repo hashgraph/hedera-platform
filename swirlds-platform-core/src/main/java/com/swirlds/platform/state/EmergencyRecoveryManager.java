@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Contains the current state of emergency recovery. */
 public class EmergencyRecoveryManager {
-    private static final Logger LOG = LogManager.getLogger(EmergencyRecoveryManager.class);
+    private static final Logger logger = LogManager.getLogger(EmergencyRecoveryManager.class);
     private final ShutdownRequestedTrigger shutdownRequestedTrigger;
     private final EmergencyRecoveryFile emergencyRecoveryFile;
     private volatile boolean emergencyStateRequired;
@@ -71,7 +71,7 @@ public class EmergencyRecoveryManager {
         try {
             return EmergencyRecoveryFile.read(dir);
         } catch (final IOException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Detected an emergency recovery file at {} but was unable to read it",
                     dir,

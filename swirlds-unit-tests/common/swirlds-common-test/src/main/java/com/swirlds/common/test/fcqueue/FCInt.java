@@ -22,7 +22,7 @@ import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import java.io.IOException;
 import java.util.Objects;
 
-/** a FastCopyable class that does nothing but store a single 4-digit int */
+/** a FastCopyable class that does nothing but store a single 4-byte int */
 public class FCInt extends AbstractSerializableHashable implements FastCopyable {
     private static final long CLASS_ID = 0xe044c97abd231f8fL;
     private static final int CLASS_VERSION = 2;
@@ -45,6 +45,10 @@ public class FCInt extends AbstractSerializableHashable implements FastCopyable 
 
     public int getValue() {
         return value;
+    }
+
+    public void setValue(final int value) {
+        this.value = value;
     }
 
     @Override

@@ -41,7 +41,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Accept inbound connections and executes the platform handshake. This class is thread-safe */
 public class InboundConnectionHandler {
-    private static final Logger LOG = LogManager.getLogger(InboundConnectionHandler.class);
+    private static final Logger logger = LogManager.getLogger(InboundConnectionHandler.class);
 
     private final ConnectionTracker connectionTracker;
     private final NodeId selfId;
@@ -125,7 +125,7 @@ public class InboundConnectionHandler {
             newConnectionConsumer.accept(sc);
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
-            LOG.warn(
+            logger.warn(
                     SOCKET_EXCEPTIONS.getMarker(),
                     "Inbound connection from {} to {} was interrupted:",
                     selfId,
@@ -133,7 +133,7 @@ public class InboundConnectionHandler {
                     e);
             NetworkUtils.close(dis, dos, clientSocket);
         } catch (final IOException e) {
-            LOG.warn(
+            logger.warn(
                     SOCKET_EXCEPTIONS.getMarker(),
                     "Inbound connection from {} to {} had IOException:",
                     selfId,
@@ -141,14 +141,14 @@ public class InboundConnectionHandler {
                     e);
             NetworkUtils.close(dis, dos, clientSocket);
         } catch (final RuntimeException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Inbound connection error, remote IP: {}\n"
                             + "Time from accept to exception: {} ms",
                     clientSocket.getInetAddress().toString(),
                     acceptTime == 0 ? "N/A" : (System.currentTimeMillis() - acceptTime),
                     e);
-            LOG.error(
+            logger.error(
                     SYNC.getMarker(),
                     "Listener {} hearing {} had general Exception:",
                     selfId,

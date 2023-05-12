@@ -17,6 +17,7 @@ package com.swirlds.common.metrics.platform.prometheus;
 
 import com.swirlds.common.metrics.platform.Snapshot;
 import com.swirlds.common.system.NodeId;
+import io.prometheus.client.CollectorRegistry;
 
 /**
  * Common interface of all adapters, which synchronize a {@link com.swirlds.common.metrics.Metric}
@@ -33,4 +34,25 @@ public interface MetricAdapter {
      * @throws IllegalArgumentException if {@code snapshot} is {@code null}
      */
     void update(final Snapshot snapshot, final NodeId nodeId);
+
+    /**
+     * Increase the reference count
+     *
+     * @return the new reference count
+     */
+    int incAndGetReferenceCount();
+
+    /**
+     * Decrease the reference count
+     *
+     * @return the new reference count
+     */
+    int decAndGetReferenceCount();
+
+    /**
+     * Unregister all created Prometheus metrics
+     *
+     * @param registry The {@link CollectorRegistry} from which to unregister
+     */
+    void unregister(final CollectorRegistry registry);
 }

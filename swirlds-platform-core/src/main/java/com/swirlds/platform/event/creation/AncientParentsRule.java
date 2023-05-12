@@ -30,7 +30,7 @@ import org.apache.logging.log4j.Logger;
  * themselves
  */
 public class AncientParentsRule implements ParentBasedCreationRule {
-    private static final Logger LOG = LogManager.getLogger(AncientParentsRule.class);
+    private static final Logger logger = LogManager.getLogger(AncientParentsRule.class);
     /** Supplies the key generation number from the hashgraph */
     private final Supplier<GraphGenerations> graphGenerationsSupplier;
 
@@ -43,7 +43,7 @@ public class AncientParentsRule implements ParentBasedCreationRule {
             final BaseEvent selfParent, final BaseEvent otherParent) {
         // Don't create an event if both parents are old.
         if (areBothParentsAncient(selfParent, otherParent)) {
-            LOG.debug(
+            logger.debug(
                     CREATE_EVENT.getMarker(),
                     "Both parents are ancient, selfParent: {}, otherParent: {}",
                     () -> EventStrings.toShortString(selfParent),

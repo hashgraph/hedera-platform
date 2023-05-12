@@ -34,7 +34,7 @@ import org.apache.logging.log4j.Logger;
 public class QueueThreadObjectStream<T extends RunningHashable> implements LinkedObjectStream<T> {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(QueueThreadObjectStream.class);
+    private static final Logger logger = LogManager.getLogger(QueueThreadObjectStream.class);
 
     /** the next stream in the flow */
     private final LinkedObjectStream<T> nextStream;
@@ -69,7 +69,7 @@ public class QueueThreadObjectStream<T extends RunningHashable> implements Linke
         try {
             queueThread.put(t);
         } catch (InterruptedException e) {
-            log.error(
+            logger.error(
                     EXCEPTION.getMarker(), "interrupted while attempting to add object to stream");
             Thread.currentThread().interrupt();
         }

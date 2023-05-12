@@ -32,7 +32,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class MultiStream<T extends RunningHashable> implements LinkedObjectStream<T> {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOGGER = LogManager.getLogger(MultiStream.class);
+    private static final Logger logger = LogManager.getLogger(MultiStream.class);
 
     /** message of the exception thrown when setting a nextStream to be null */
     public static final String NEXT_STREAM_NULL = "MultiStream should not have null nextStream";
@@ -91,6 +91,6 @@ public class MultiStream<T extends RunningHashable> implements LinkedObjectStrea
         for (LinkedObjectStream<T> nextStream : nextStreams) {
             nextStream.close();
         }
-        LOGGER.info(OBJECT_STREAM.getMarker(), "MultiStream is closed");
+        logger.info(OBJECT_STREAM.getMarker(), "MultiStream is closed");
     }
 }

@@ -32,7 +32,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class ReconnectThrottle {
 
-    private static final Logger log = LogManager.getLogger(ReconnectThrottle.class);
+    private static final Logger logger = LogManager.getLogger(ReconnectThrottle.class);
 
     /** Reconnect settings for this node. */
     private final ReconnectSettings settings;
@@ -77,7 +77,7 @@ public class ReconnectThrottle {
      */
     public synchronized boolean initiateReconnect(final long nodeId) {
         if (reconnectingNode != null) {
-            log.info(
+            logger.info(
                     RECONNECT.getMarker(),
                     "This node is actively helping node {} to reconnect, rejecting "
                             + "concurrent reconnect request from node {}",
@@ -90,7 +90,7 @@ public class ReconnectThrottle {
 
         forgetOldReconnects(now);
         if (lastReconnectTime.containsKey(nodeId)) {
-            log.info(
+            logger.info(
                     RECONNECT.getMarker(),
                     "Rejecting reconnect request from node {} "
                             + "due to a previous reconnect attempt at {}",
@@ -103,8 +103,11 @@ public class ReconnectThrottle {
         return true;
     }
 
-    /** Signal that the ongoing reconnect has finished. */
-    public synchronized void markReconnectFinished() {
+    /**
+     * Signal that the ongoing reconnect attempt has finished. Should be called even if the
+     * reconnect fails.
+     */
+    public synchronized void reconnectAttemptFinished() {
         reconnectingNode = null;
     }
 

@@ -52,7 +52,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class StreamObjectTest {
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger logger = LogManager.getLogger();
     private static final Marker LOGM_EXCEPTION = MarkerManager.getMarker("EXCEPTION");
     private static final String dirPath = "src/test/resources/stream/writeDir";
     private static final StreamType streamType = TestStreamType.TEST_STREAM;
@@ -101,7 +101,7 @@ class StreamObjectTest {
         System.out.println(Arrays.asList(streamFiles));
         System.out.println(Arrays.asList(sigFiles));
         if (streamFiles.size() != sigFiles.size()) {
-            log.error(
+            logger.error(
                     LOGM_EXCEPTION,
                     "streamFiles size: {} doesn't match sigFiles size: {}",
                     streamFiles.size(),
@@ -115,7 +115,7 @@ class StreamObjectTest {
                     LinkedObjectStreamUtilities.readStartRunningHashFromStreamFile(
                             streamFiles.get(0), streamType);
             if (!startRunningHash.equals(initialHash)) {
-                log.error(
+                logger.error(
                         LOGM_EXCEPTION,
                         "the first stream file {} its startRunningHash {} doesn't match expected:"
                                 + " {}",
@@ -131,7 +131,7 @@ class StreamObjectTest {
                     LinkedObjectStreamValidateUtils.validateFileAndSignature(
                             streamFiles.get(i), sigFiles.get(i), publicKey, streamType);
             if (result != OK) {
-                log.error(
+                logger.error(
                         LOGM_EXCEPTION,
                         "streamFile: {}, sigFile: {}, validateResult: {}",
                         streamFiles.get(i),

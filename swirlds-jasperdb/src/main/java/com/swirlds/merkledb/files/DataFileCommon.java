@@ -55,7 +55,7 @@ import org.apache.logging.log4j.Logger;
 @SuppressWarnings("rawtypes")
 public final class DataFileCommon {
 
-    private static final Logger LOG = LogManager.getLogger(DataFileCommon.class);
+    private static final Logger logger = LogManager.getLogger(DataFileCommon.class);
 
     /** The inverse of the minimum decimal value to be reflected in rounding (that is, 0.01). */
     private static final int ROUNDING_SCALE_FACTOR = 100;
@@ -83,7 +83,7 @@ public final class DataFileCommon {
     public static final int FILE_FORMAT_VERSION = 1;
     /** Date formatter for dates used in data file names */
     private static final DateTimeFormatter DATE_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd--HH-mm-ss-SSS").withZone(ZoneId.of("Z"));
+            DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss-SSS").withZone(ZoneId.of("Z"));
     /** Extension to use for Merkle DB data files :-) */
     private static final String FILE_EXTENSION = ".jdb";
     /**
@@ -230,6 +230,9 @@ public final class DataFileCommon {
      * @return true if the name starts with prefix and has right extension
      */
     static boolean isFullyWrittenDataFile(final String filePrefix, final Path path) {
+        if (filePrefix == null) {
+            return false;
+        }
         final String fileName = path.getFileName().toString();
         final boolean validFile =
                 fileName.startsWith(filePrefix) && fileName.endsWith(FILE_EXTENSION);
@@ -276,7 +279,7 @@ public final class DataFileCommon {
                                         Collectors.counting()));
 
         if (!missingFileCounts.isEmpty()) {
-            LOG.trace(
+            logger.trace(
                     MERKLE_DB.getMarker(),
                     "{}:printDataLinkValidation index size={} numOfFiles={}, fileIndexes={},"
                             + " newFileIndexes={}",
@@ -289,13 +292,13 @@ public final class DataFileCommon {
                     () -> newFileIndexes);
             missingFileCounts.forEach(
                     (id, count) ->
-                            LOG.trace(
+                            logger.trace(
                                     MERKLE_DB.getMarker(),
                                     "{}:       missing file {} has {} references",
                                     storeName,
                                     id,
                                     count));
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "{} has references to files {} that don't exists in the index. "
                             + "Latest new files = {}",
@@ -378,9 +381,8 @@ public final class DataFileCommon {
             final long mergedFilesCreatedSize,
             final DataFileCollection<D> fileCollection,
             final Collection<DataFileReader<D>> filesToMerge,
-            final Collection<DataFileReader<D>> allMergeableFiles,
-            final Logger log) {
-        log.info(
+            final Collection<DataFileReader<D>> allMergeableFiles) {
+        logger.info(
                 MERKLE_DB.getMarker(),
                 """
 						[{}] Merged {} files into {} files in {} seconds. Read at {} Written at {}
@@ -421,12 +423,12 @@ public final class DataFileCommon {
                         .map(Path::toFile)
                         .forEach(File::delete);
                 Files.deleteIfExists(dir);
-                LOG.info(
+                logger.info(
                         MERKLE_DB.getMarker(),
                         "Deleted data directory [{}]",
                         dir.toFile().getAbsolutePath());
             } catch (Exception e) {
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         "Failed to delete test directory [{}]",
                         dir.toFile().getAbsolutePath(),

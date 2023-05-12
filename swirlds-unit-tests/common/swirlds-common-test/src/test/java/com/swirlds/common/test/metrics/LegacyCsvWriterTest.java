@@ -17,7 +17,9 @@ package com.swirlds.common.test.metrics;
 
 import static com.swirlds.common.metrics.FloatFormats.FORMAT_3_1;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.metrics.Counter;
@@ -37,7 +39,10 @@ import com.swirlds.common.metrics.platform.DefaultMetric;
 import com.swirlds.common.metrics.platform.DefaultMetrics;
 import com.swirlds.common.metrics.platform.DefaultMetricsFactory;
 import com.swirlds.common.metrics.platform.LegacyCsvWriter;
+import com.swirlds.common.metrics.platform.MetricKeyRegistry;
 import com.swirlds.common.metrics.platform.Snapshot;
+import com.swirlds.common.metrics.platform.SnapshotEvent;
+import com.swirlds.common.system.NodeId;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -49,6 +54,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class LegacyCsvWriterTest {
 
+    private static final NodeId NODE_ID = NodeId.createMain(42L);
     private Metrics metrics;
 
     @BeforeEach
@@ -56,31 +62,78 @@ class LegacyCsvWriterTest {
         SettingsCommon.csvAppend = false;
         SettingsCommon.showInternalStats = false;
         SettingsCommon.verboseStatistics = false;
+        final MetricKeyRegistry registry = mock(MetricKeyRegistry.class);
+        when(registry.register(any(), any(), any())).thenReturn(true);
         metrics =
                 new DefaultMetrics(
-                        mock(ScheduledExecutorService.class), new DefaultMetricsFactory());
+                        NODE_ID,
+                        registry,
+                        mock(ScheduledExecutorService.class),
+                        new DefaultMetricsFactory());
     }
 
     @Test
     void testToString(@TempDir Path tempDir) throws IOException {
         // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
 
         // then
-        assertThat(writer).hasToString("LegacyCsvWriter{csvFilePath=" + csvFilePath + '}');
+        assertThat(writer.toString()).matches("^LegacyCsvWriter\\{csvFilePath=" + tempDir + ".*}$");
     }
 
     @Test
-    void testPrepareFileDefault(@TempDir Path tempDir) throws IOException {
+    void testParentFolderCreation(@TempDir Path tempDir) throws IOException {
         // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        Files.delete(csvFilePath);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
-        final List<Metric> metrics = createCompleteList();
+        final Path grandParentPath = Files.createTempDirectory(tempDir, null);
+        final Path parentPath = Files.createTempDirectory(grandParentPath, null);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, parentPath);
+        final Path csvFilePath = writer.getCsvFilePath();
+        Files.deleteIfExists(csvFilePath);
+        Files.delete(parentPath);
+        Files.delete(grandParentPath);
+        final List<Metric> metrics = createShortList();
+        final List<Snapshot> snapshots =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification = new SnapshotEvent(NODE_ID, snapshots);
 
         // when
-        writer.init(metrics);
+        writer.handleSnapshots(notification);
+
+        // then
+        assertThat(grandParentPath).exists();
+        assertThat(parentPath).exists();
+        assertThat(csvFilePath).exists();
+    }
+
+    @Test
+    void testWriteDefault(@TempDir Path tempDir) throws IOException {
+        // given
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
+        final List<Metric> metrics = createCompleteList();
+        final List<Snapshot> snapshots1 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification1 = new SnapshotEvent(NODE_ID, snapshots1);
+
+        // when
+        writer.handleSnapshots(notification1);
+
+        // update metrics
+        ((Counter) metrics.get(0)).increment();
+        ((DoubleGauge) metrics.get(1)).set(Math.PI);
+        ((IntegerAccumulator) metrics.get(3)).update(42);
+        ((IntegerGauge) metrics.get(4)).set(42);
+        ((IntegerPairAccumulator<Double>) metrics.get(5)).update(4711, 42);
+        ((LongAccumulator) metrics.get(6)).update(42L);
+        ((LongGauge) metrics.get(7)).set(4711L);
+        ((RunningAverageMetric) metrics.get(8)).update(1000.0);
+        ((SpeedometerMetric) metrics.get(9)).update(10);
+        final List<Snapshot> snapshots2 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification2 = new SnapshotEvent(NODE_ID, snapshots2);
+
+        // when
+        writer.handleSnapshots(notification2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -102,19 +155,60 @@ class LegacyCsvWriterTest {
 
 				,,platform,platform,platform,platform,platform,platform,platform,platform,platform,platform,platform,
 				,,Counter,DoubleGauge,FunctionGauge,IntegerAccumulator,IntegerGauge,IntegerPairAccumulator,LongAccumulator,LongGauge,RunningAverageMetric,SpeedometerMetric,StatEntry,
+				,,0,0\\.0,Hello FunctionGauge,0,0,0.0,0,0,0\\.0,0\\.0,Hello StatEntry,
+				,,1,3\\.1,Hello FunctionGauge,42,42,112\\.2,42,4711,1000\\.0,\\d*\\.\\d,Hello StatEntry,
 				""");
     }
 
     @Test
-    void testPrepareFileWithExistingFile(@TempDir Path tempDir) throws IOException {
+    void testWritingOfSpecialValues(@TempDir Path tempDir) throws IOException {
         // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        Files.writeString(csvFilePath, "Hello World");
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
         final List<Metric> metrics = createShortList();
+        final DoubleGauge gauge = (DoubleGauge) metrics.get(1);
 
         // when
-        writer.init(metrics);
+        gauge.set(Double.NaN);
+        final List<Snapshot> snapshots1 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification1 = new SnapshotEvent(NODE_ID, snapshots1);
+        writer.handleSnapshots(notification1);
+        gauge.set(Double.POSITIVE_INFINITY);
+        final List<Snapshot> snapshots2 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification2 = new SnapshotEvent(NODE_ID, snapshots2);
+        writer.handleSnapshots(notification2);
+        gauge.set(Double.NEGATIVE_INFINITY);
+        final List<Snapshot> snapshots3 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification3 = new SnapshotEvent(NODE_ID, snapshots3);
+        writer.handleSnapshots(notification3);
+
+        // then
+        final String content = Files.readString(csvFilePath);
+        assertThat(content)
+                .matches("""
+				(.*\\n){5}.*
+				,,0,0.0,
+				,,0,0.0,
+				,,0,0.0,
+				""");
+    }
+
+    @Test
+    void testWriteWithExistingFile(@TempDir Path tempDir) throws IOException {
+        // given
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
+        Files.writeString(csvFilePath, "Hello World");
+        final List<Metric> metrics = createShortList();
+        final List<Snapshot> snapshots =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification = new SnapshotEvent(NODE_ID, snapshots);
+
+        // when
+        writer.handleSnapshots(notification);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -127,14 +221,16 @@ class LegacyCsvWriterTest {
 
 				,,platform,platform,
 				,,Counter,DoubleGauge,
+				,,0,0.0,
 				""");
     }
 
     @Test
-    void testPrepareFileWithAppendedModeAndExistingFile(@TempDir Path tempDir) throws IOException {
+    void testWriteWithAppendedModeAndExistingFile(@TempDir Path tempDir) throws IOException {
         // given
         SettingsCommon.csvAppend = true;
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
         Files.writeString(
                 csvFilePath,
                 """
@@ -147,42 +243,13 @@ class LegacyCsvWriterTest {
 				,,1,2.0,
 				,,11,12.0,
 				""");
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
         final List<Metric> metrics = createShortList();
+        final List<Snapshot> snapshots =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification = new SnapshotEvent(NODE_ID, snapshots);
 
         // when
-        writer.init(metrics);
-
-        // then
-        final String content = Files.readString(csvFilePath);
-        assertThat(content)
-                .isEqualTo(
-                        """
-				filename:,/tmp/tempfile.tmp,
-				Counter:,Counter,
-				DoubleGauge:,DoubleGauge,
-
-				,,platform,platform,
-				,,Counter,DoubleGauge,
-				,,1,2.0,
-				,,11,12.0,
-
-
-				""");
-    }
-
-    @Test
-    void testPrepareFileWithAppendedModeAndNonExistingFile(@TempDir Path tempDir)
-            throws IOException {
-        // given
-        SettingsCommon.csvAppend = true;
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        Files.delete(csvFilePath);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
-        final List<Metric> metrics = createShortList();
-
-        // when
-        writer.init(metrics);
+        writer.handleSnapshots(notification);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -195,18 +262,68 @@ class LegacyCsvWriterTest {
 
 				,,platform,platform,
 				,,Counter,DoubleGauge,
+				,,1,2.0,
+				,,11,12.0,
+
+
+				,,0,0.0,
 				""");
     }
 
     @Test
-    void testPrepareFileWithInternalIgnored(@TempDir Path tempDir) throws IOException {
+    void testWriteWithAppendedModeAndNonExistingFile(@TempDir Path tempDir) throws IOException {
         // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
-        final List<Metric> metrics = createListWithInternals();
+        SettingsCommon.csvAppend = true;
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
+        Files.deleteIfExists(csvFilePath);
+        final List<Metric> metrics = createShortList();
+        final List<Snapshot> snapshots =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification = new SnapshotEvent(NODE_ID, snapshots);
 
         // when
-        writer.init(metrics);
+        writer.handleSnapshots(notification);
+
+        // then
+        final String content = Files.readString(csvFilePath);
+        assertThat(content)
+                .matches(
+                        """
+				filename:,.*,
+				Counter:,Counter,
+				DoubleGauge:,DoubleGauge,
+
+				,,platform,platform,
+				,,Counter,DoubleGauge,
+				,,0,0.0,
+				""");
+    }
+
+    @Test
+    void testWriteWithInternalIgnored(@TempDir Path tempDir) throws IOException {
+        // given
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
+        final List<Metric> metrics = createListWithInternals();
+        final List<Snapshot> snapshots1 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification1 = new SnapshotEvent(NODE_ID, snapshots1);
+
+        // when
+        writer.handleSnapshots(notification1);
+
+        // update metrics
+        ((Counter) metrics.get(0)).add(2);
+        ((Counter) metrics.get(1)).add(3);
+        ((DoubleGauge) metrics.get(2)).set(Math.PI);
+        ((DoubleGauge) metrics.get(3)).set(Math.E);
+        final List<Snapshot> snapshots2 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification2 = new SnapshotEvent(NODE_ID, snapshots2);
+
+        // when
+        writer.handleSnapshots(notification2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -219,19 +336,36 @@ class LegacyCsvWriterTest {
 
 				,,platform,platform,
 				,,Public Counter,Public DoubleGauge,
+				,,0,0.0,
+				,,3,2.7,
 				""");
     }
 
     @Test
-    void testPrepareFileWithInternalNotIgnored(@TempDir Path tempDir) throws IOException {
+    void testWriteWithInternalNotIgnored(@TempDir Path tempDir) throws IOException {
         // given
         SettingsCommon.showInternalStats = true;
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
         final List<Metric> metrics = createListWithInternals();
+        final List<Snapshot> snapshots1 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification1 = new SnapshotEvent(NODE_ID, snapshots1);
 
         // when
-        writer.init(metrics);
+        writer.handleSnapshots(notification1);
+
+        // update metrics
+        ((Counter) metrics.get(0)).add(2);
+        ((Counter) metrics.get(1)).add(3);
+        ((DoubleGauge) metrics.get(2)).set(Math.PI);
+        ((DoubleGauge) metrics.get(3)).set(Math.E);
+        final List<Snapshot> snapshots2 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification2 = new SnapshotEvent(NODE_ID, snapshots2);
+
+        // when
+        writer.handleSnapshots(notification2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -246,18 +380,35 @@ class LegacyCsvWriterTest {
 
 				,,internal,platform,internal,platform,
 				,,Internal Counter,Public Counter,Internal DoubleGauge,Public DoubleGauge,
+				,,0,0,0.0,0.0,
+				,,2,3,3.1,2.7,
 				""");
     }
 
     @Test
-    void testPrepareFileWithSecondaryValuesNotIncluded(@TempDir Path tempDir) throws IOException {
+    void testWriteWithSecondaryValuesNotIncluded(@TempDir Path tempDir) throws IOException {
         // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
         final List<Metric> metrics = createListWithSecondaryValues();
+        final List<Snapshot> snapshots1 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification1 = new SnapshotEvent(NODE_ID, snapshots1);
 
         // when
-        writer.init(metrics);
+        writer.handleSnapshots(notification1);
+
+        // update metrics
+        ((RunningAverageMetric) metrics.get(0)).update(1000.0);
+        ((SpeedometerMetric) metrics.get(1)).update(2000.0);
+        ((RunningAverageMetric) metrics.get(2)).update(3000.0);
+        ((SpeedometerMetric) metrics.get(3)).update(4000.0);
+        final List<Snapshot> snapshots2 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification2 = new SnapshotEvent(NODE_ID, snapshots2);
+
+        // when
+        writer.handleSnapshots(notification2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -272,19 +423,36 @@ class LegacyCsvWriterTest {
 
 				,,platform,platform,platform\\.info,platform\\.info,
 				,,RunningAverageMetric,SpeedometerMetric,RunningAverageMetric Info,SpeedometerMetric Info,
+				,,0\\.0,0\\.0,0\\.0,0\\.0,
+				,,1000\\.0,\\d*\\.\\d,3000\\.0,\\d*\\.\\d,
 				""");
     }
 
     @Test
-    void testPrepareFileWithSecondaryValuesIncluded(@TempDir Path tempDir) throws IOException {
+    void testWriteWithSecondaryValuesIncluded(@TempDir Path tempDir) throws IOException {
         // given
         SettingsCommon.verboseStatistics = true;
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
         final List<Metric> metrics = createListWithSecondaryValues();
+        final List<Snapshot> snapshots1 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification1 = new SnapshotEvent(NODE_ID, snapshots1);
 
         // when
-        writer.init(metrics);
+        writer.handleSnapshots(notification1);
+
+        // update metrics
+        ((RunningAverageMetric) metrics.get(0)).update(1000.0);
+        ((SpeedometerMetric) metrics.get(1)).update(2000.0);
+        ((RunningAverageMetric) metrics.get(2)).update(3000.0);
+        ((SpeedometerMetric) metrics.get(3)).update(4000.0);
+        final List<Snapshot> snapshots2 =
+                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
+        final SnapshotEvent notification2 = new SnapshotEvent(NODE_ID, snapshots2);
+
+        // when
+        writer.handleSnapshots(notification2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -299,238 +467,6 @@ class LegacyCsvWriterTest {
 
 				,,platform,platform,platform,platform,platform,platform,platform,platform,platform\\.info,platform\\.info,
 				,,RunningAverageMetric,RunningAverageMetricMax,RunningAverageMetricMin,RunningAverageMetricStd,SpeedometerMetric,SpeedometerMetricMax,SpeedometerMetricMin,SpeedometerMetricStd,RunningAverageMetric Info,SpeedometerMetric Info,
-				""");
-    }
-
-    @Test
-    void testParentFolderCreation(@TempDir Path tempDir) throws IOException {
-        // given
-        final Path grandParentPath = Files.createTempDirectory(tempDir, null);
-        final Path parentPath = Files.createTempDirectory(grandParentPath, null);
-        final Path csvFilePath = Files.createTempFile(parentPath, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
-        Files.delete(csvFilePath);
-        Files.delete(parentPath);
-        Files.delete(grandParentPath);
-        final List<Metric> metrics = createShortList();
-
-        // when
-        writer.init(metrics);
-
-        // then
-        assertThat(grandParentPath).exists();
-        assertThat(parentPath).exists();
-        assertThat(csvFilePath).exists();
-    }
-
-    @Test
-    void testWriteDefault(@TempDir Path tempDir) throws IOException {
-        // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
-        final List<Metric> metrics = createCompleteList();
-        final List<Snapshot> snapshots1 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-
-        // when
-        writer.init(metrics);
-        writer.handleSnapshots(snapshots1);
-
-        // update metrics
-        ((Counter) metrics.get(0)).increment();
-        ((DoubleGauge) metrics.get(1)).set(Math.PI);
-        ((IntegerAccumulator) metrics.get(3)).update(42);
-        ((IntegerGauge) metrics.get(4)).set(42);
-        ((IntegerPairAccumulator<Double>) metrics.get(5)).update(4711, 42);
-        ((LongAccumulator) metrics.get(6)).update(42L);
-        ((LongGauge) metrics.get(7)).set(4711L);
-        ((RunningAverageMetric) metrics.get(8)).update(1000.0);
-        ((SpeedometerMetric) metrics.get(9)).update(10);
-        final List<Snapshot> snapshots2 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-
-        // when
-        writer.handleSnapshots(snapshots2);
-
-        // then
-        final String content = Files.readString(csvFilePath);
-        assertThat(content)
-                .matches(
-                        """
-				(.*\\n){14}.*
-				,,0,0\\.0,Hello FunctionGauge,0,0,0.0,0,0,0\\.0,0\\.0,Hello StatEntry,
-				,,1,3\\.1,Hello FunctionGauge,42,42,112\\.2,42,4711,1000\\.0,\\d*\\.\\d,Hello StatEntry,
-				""");
-    }
-
-    @Test
-    void testWritingOfSpecialValues(@TempDir Path tempDir) throws IOException {
-        // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
-        final List<Metric> metrics = createShortList();
-        final DoubleGauge gauge = (DoubleGauge) metrics.get(1);
-        writer.init(metrics);
-
-        // when
-        gauge.set(Double.NaN);
-        final List<Snapshot> snapshots1 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-        writer.handleSnapshots(snapshots1);
-        gauge.set(Double.POSITIVE_INFINITY);
-        final List<Snapshot> snapshots2 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-        writer.handleSnapshots(snapshots2);
-        gauge.set(Double.NEGATIVE_INFINITY);
-        final List<Snapshot> snapshots3 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-        writer.handleSnapshots(snapshots3);
-
-        // then
-        final String content = Files.readString(csvFilePath);
-        assertThat(content)
-                .matches("""
-				(.*\\n){5}.*
-				,,0,0.0,
-				,,0,0.0,
-				,,0,0.0,
-				""");
-    }
-
-    @Test
-    void testWriteWithInternalIgnored(@TempDir Path tempDir) throws IOException {
-        // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
-        final List<Metric> metrics = createListWithInternals();
-        final List<Snapshot> snapshots1 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-
-        // when
-        writer.init(metrics);
-        writer.handleSnapshots(snapshots1);
-
-        // update metrics
-        ((Counter) metrics.get(0)).add(2);
-        ((Counter) metrics.get(1)).add(3);
-        ((DoubleGauge) metrics.get(2)).set(Math.PI);
-        ((DoubleGauge) metrics.get(3)).set(Math.E);
-        final List<Snapshot> snapshots2 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-
-        // when
-        writer.handleSnapshots(snapshots2);
-
-        // then
-        final String content = Files.readString(csvFilePath);
-        assertThat(content).matches("""
-				(.*\\n){5}.*
-				,,0,0.0,
-				,,3,2.7,
-				""");
-    }
-
-    @Test
-    void testWriteWithInternalNotIgnored(@TempDir Path tempDir) throws IOException {
-        // given
-        SettingsCommon.showInternalStats = true;
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
-        final List<Metric> metrics = createListWithInternals();
-        final List<Snapshot> snapshots1 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-
-        // when
-        writer.init(metrics);
-        writer.handleSnapshots(snapshots1);
-
-        // update metrics
-        ((Counter) metrics.get(0)).add(2);
-        ((Counter) metrics.get(1)).add(3);
-        ((DoubleGauge) metrics.get(2)).set(Math.PI);
-        ((DoubleGauge) metrics.get(3)).set(Math.E);
-        final List<Snapshot> snapshots2 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-
-        // when
-        writer.handleSnapshots(snapshots2);
-
-        // then
-        final String content = Files.readString(csvFilePath);
-        assertThat(content)
-                .matches("""
-				(.*\\n){7}.*
-				,,0,0,0.0,0.0,
-				,,2,3,3.1,2.7,
-				""");
-    }
-
-    @Test
-    void testWriteWithSecondaryValuesNotIncluded(@TempDir Path tempDir) throws IOException {
-        // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
-        final List<Metric> metrics = createListWithSecondaryValues();
-        final List<Snapshot> snapshots1 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-
-        // when
-        writer.init(metrics);
-        writer.handleSnapshots(snapshots1);
-
-        // update metrics
-        ((RunningAverageMetric) metrics.get(0)).update(1000.0);
-        ((SpeedometerMetric) metrics.get(1)).update(2000.0);
-        ((RunningAverageMetric) metrics.get(2)).update(3000.0);
-        ((SpeedometerMetric) metrics.get(3)).update(4000.0);
-        final List<Snapshot> snapshots2 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-
-        // when
-        writer.handleSnapshots(snapshots2);
-
-        // then
-        final String content = Files.readString(csvFilePath);
-        assertThat(content)
-                .matches(
-                        """
-				(.*\\n){7}.*
-				,,0\\.0,0\\.0,0\\.0,0\\.0,
-				,,1000\\.0,\\d*\\.\\d,3000\\.0,\\d*\\.\\d,
-				""");
-    }
-
-    @Test
-    void testWriteWithSecondaryValuesIncluded(@TempDir Path tempDir) throws IOException {
-        // given
-        SettingsCommon.verboseStatistics = true;
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
-        final List<Metric> metrics = createListWithSecondaryValues();
-        final List<Snapshot> snapshots1 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-
-        // when
-        writer.init(metrics);
-        writer.handleSnapshots(snapshots1);
-
-        // update metrics
-        ((RunningAverageMetric) metrics.get(0)).update(1000.0);
-        ((SpeedometerMetric) metrics.get(1)).update(2000.0);
-        ((RunningAverageMetric) metrics.get(2)).update(3000.0);
-        ((SpeedometerMetric) metrics.get(3)).update(4000.0);
-        final List<Snapshot> snapshots2 =
-                metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-
-        // when
-        writer.handleSnapshots(snapshots2);
-
-        // then
-        final String content = Files.readString(csvFilePath);
-        assertThat(content)
-                .matches(
-                        """
-				(.*\\n){7}.*
 				,,0\\.0,0\\.0,0\\.0,0\\.0,0\\.0,0\\.0,0\\.0,0\\.0,0\\.0,0\\.0,
 				,,1000\\.0,1000\\.0,1000\\.0,0\\.0,\\d*\\.\\d,\\d*\\.\\d,\\d*\\.\\d,0\\.0,3000\\.0,\\d*\\.\\d,
 				""");
@@ -539,18 +475,18 @@ class LegacyCsvWriterTest {
     @Test
     void testBrokenFormatString(@TempDir Path tempDir) throws IOException {
         // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
         final DoubleGauge gauge =
                 metrics.getOrCreate(
                         new DoubleGauge.Config(Metrics.PLATFORM_CATEGORY, "DoubleGauge")
                                 .withFormat("%d")
                                 .withInitialValue(Math.PI));
         final Snapshot snapshot = Snapshot.of((DefaultMetric) gauge);
+        final SnapshotEvent notification = new SnapshotEvent(NODE_ID, List.of(snapshot));
 
         // when
-        writer.init(List.of(gauge));
-        writer.handleSnapshots(List.of(snapshot));
+        writer.handleSnapshots(notification);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -563,13 +499,11 @@ class LegacyCsvWriterTest {
     @Test
     void testChangedEntriesWithSimpleMetrics(@TempDir Path tempDir) throws IOException {
         // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        Files.delete(csvFilePath);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
         final List<Metric> metrics = createSimpleList();
 
         // when
-        writer.init(metrics);
 
         // first row
         ((Counter) metrics.get(1)).add(1L);
@@ -578,7 +512,8 @@ class LegacyCsvWriterTest {
         ((Counter) metrics.get(4)).add(4L);
         final List<Snapshot> snapshots1 =
                 metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-        writer.handleSnapshots(snapshots1);
+        final SnapshotEvent notification1 = new SnapshotEvent(NODE_ID, snapshots1);
+        writer.handleSnapshots(notification1);
 
         // second row
         ((Counter) metrics.get(1)).add(10L);
@@ -587,7 +522,8 @@ class LegacyCsvWriterTest {
                 List.of(
                         Snapshot.of((DefaultMetric) metrics.get(3)),
                         Snapshot.of((DefaultMetric) metrics.get(1)));
-        writer.handleSnapshots(snapshots2);
+        final SnapshotEvent notification2 = new SnapshotEvent(NODE_ID, snapshots2);
+        writer.handleSnapshots(notification2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -612,13 +548,11 @@ class LegacyCsvWriterTest {
     void testChangedEntriesWithComplexMetricsAndNoSecondaryValues(@TempDir Path tempDir)
             throws IOException {
         // given
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        Files.delete(csvFilePath);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
         final List<Metric> metrics = createComplexList();
 
         // when
-        writer.init(metrics);
 
         // first row
         ((RunningAverageMetric) metrics.get(1)).update(1000.0);
@@ -627,7 +561,8 @@ class LegacyCsvWriterTest {
         ((RunningAverageMetric) metrics.get(4)).update(4000.0);
         final List<Snapshot> snapshots1 =
                 metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-        writer.handleSnapshots(snapshots1);
+        final SnapshotEvent notification1 = new SnapshotEvent(NODE_ID, snapshots1);
+        writer.handleSnapshots(notification1);
 
         // second row
         ((RunningAverageMetric) metrics.get(1)).update(10000.0);
@@ -636,7 +571,8 @@ class LegacyCsvWriterTest {
                 List.of(
                         Snapshot.of((DefaultMetric) metrics.get(3)),
                         Snapshot.of((DefaultMetric) metrics.get(1)));
-        writer.handleSnapshots(snapshots2);
+        final SnapshotEvent notification2 = new SnapshotEvent(NODE_ID, snapshots2);
+        writer.handleSnapshots(notification2);
 
         // then
         final String content = Files.readString(csvFilePath);
@@ -662,13 +598,11 @@ class LegacyCsvWriterTest {
             throws IOException {
         // given
         SettingsCommon.verboseStatistics = true;
-        final Path csvFilePath = Files.createTempFile(tempDir, null, null);
-        Files.delete(csvFilePath);
-        final LegacyCsvWriter writer = new LegacyCsvWriter(csvFilePath);
+        final LegacyCsvWriter writer = new LegacyCsvWriter(NODE_ID, tempDir);
+        final Path csvFilePath = writer.getCsvFilePath();
         final List<Metric> metrics = createComplexList();
 
         // when
-        writer.init(metrics);
 
         // first row
         ((RunningAverageMetric) metrics.get(1)).update(1000.0);
@@ -677,7 +611,8 @@ class LegacyCsvWriterTest {
         ((RunningAverageMetric) metrics.get(4)).update(4000.0);
         final List<Snapshot> snapshots1 =
                 metrics.stream().map(DefaultMetric.class::cast).map(Snapshot::of).toList();
-        writer.handleSnapshots(snapshots1);
+        final SnapshotEvent notification1 = new SnapshotEvent(NODE_ID, snapshots1);
+        writer.handleSnapshots(notification1);
 
         // second row
         ((RunningAverageMetric) metrics.get(1)).update(10000.0);
@@ -686,7 +621,8 @@ class LegacyCsvWriterTest {
                 List.of(
                         Snapshot.of((DefaultMetric) metrics.get(3)),
                         Snapshot.of((DefaultMetric) metrics.get(1)));
-        writer.handleSnapshots(snapshots2);
+        final SnapshotEvent notification2 = new SnapshotEvent(NODE_ID, snapshots2);
+        writer.handleSnapshots(notification2);
 
         // then
         final String content = Files.readString(csvFilePath);

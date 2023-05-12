@@ -15,6 +15,8 @@
  */
 package com.swirlds.fcqueue;
 
+import static com.swirlds.common.utility.ByteUtils.byteArrayToLong;
+import static com.swirlds.common.utility.ByteUtils.longToByteArray;
 import static com.swirlds.common.utility.CommonUtils.hex;
 
 import com.swirlds.common.FastCopyable;
@@ -25,27 +27,21 @@ import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.ImmutableHash;
 import com.swirlds.common.crypto.SerializableHashable;
 import com.swirlds.common.exceptions.ListDigestException;
-import com.swirlds.common.io.exceptions.InvalidStreamPosition;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
 import com.swirlds.common.merkle.MerkleLeaf;
 import com.swirlds.common.merkle.impl.PartialMerkleLeaf;
-import com.swirlds.fcqueue.internal.FCQHashAlgorithm;
-import com.swirlds.fcqueue.internal.FCQueueNode;
-import com.swirlds.fcqueue.internal.FCQueueNodeBackwardIterator;
-import com.swirlds.fcqueue.internal.FCQueueNodeIterator;
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Queue;
-import java.util.concurrent.TimeUnit;
-import org.apache.commons.lang3.time.StopWatch;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A threadsafe fast-copyable queue, each of whose elements is fast-copyable. Elements must always
@@ -54,19 +50,16 @@ import org.apache.logging.log4j.Logger;
  * mutable fast copy can only be created from a mutable queue, which would then become immutable
  * after creating this mutable fast copy, or by using the "new" operator.
  *
- * <p>Element insertion/deletion and fast copy creation/deletion all take constant time. Except that
- * if a queue has n elements that are not in any other queue in its queue group, then deleting it
- * takes O(n) time.
+ * <p>Element insertion/deletion and fast copy creation/deletion all take constant time.
  *
  * <p>The FCQueue objects can be thought of as being organized into "queue groups". A fast copy of a
  * queue creates another queue in the same queue group. But instantiating a queue with "new" and the
  * constructor creates a new queue group.
  *
- * <p>All write operations are synchronized with the current instance. So it is possible to write to
- * two different queue groups at the same time. It is ok for multiple iterators to be running in
- * multiple threads at the same time within any thread group. An iterator for a queue will throw an
- * exception if it is used after a write to that queue, but it is unaffected by writes to other
- * queues in that queue group.
+ * <p>All write operations are synchronized with the current instance. It is ok for multiple
+ * iterators to be running in multiple threads at the same time. An iterator for a mutable queue
+ * provides a snapshot view of the queue at the time of iterator creation. A reverse iterator
+ * materializes the view (should not be used for huge queues).
  */
 public class FCQueue<E extends FastCopyable & SerializableHashable> extends PartialMerkleLeaf
         implements Queue<E>, MerkleLeaf {
@@ -91,17 +84,8 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
     /** Maximum number of elements FCQueue supports */
     public static final int MAX_ELEMENTS = 100_000_000;
 
-    /**
-     * Calculate hash as: sum hash, rolling hash, Merkle hash. rolling hash is recommended for now
-     * (unless Merkle is tried and found fast enough)
-     */
-    protected static final FCQHashAlgorithm HASH_ALGORITHM = FCQHashAlgorithm.ROLLING_HASH;
-
     /** The digest type used by FCQ */
-    private static final DigestType digestType = DigestType.SHA_384;
-
-    /** The default null hash, all zeros */
-    public static final byte[] NULL_HASH = new byte[digestType.digestLength()];
+    private static final DigestType DIGEST_TYPE = DigestType.SHA_384;
 
     /**
      * When deserializing, a hash is read and another hash is calculated. If set to true, it will
@@ -109,154 +93,168 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      */
     private static final boolean THROW_ON_HASH_MISMATCH = false;
 
-    /** log all problems here, not to the console or elsewhere */
-    private static final Logger log = LogManager.getLogger(FCQueue.class);
-
-    /** should markers be sent during serialization to aid debugging? */
-    private static final boolean USE_MARKERS = false;
-
-    /** serialized at the start of this queue, for detecting bugs */
-    private static final int BEGIN_QUEUE_MARKER = 175624369;
-
-    /** serialized at the end of this queue, for detecting bugs */
-    private static final int END_QUEUE_MARKER = 175654143;
-
-    /**
-     * the multiplicative inverse of 3 modulo 2 to the 64, in hex, is 15 "a" digits then a "b" digit
-     */
-    protected static final long INVERSE_3 = 0xaaaaaaaaaaaaaaabL;
-
-    /** number of elements hashed * */
-    private int runningHashSize;
+    private static final long HASH_RADIX = 3;
 
     /** the number of elements in this queue */
-    protected int size;
+    private int size;
 
-    /** the head of this queue */
-    protected FCQueueNode<E> head;
+    /** the head of this queue, inclusive */
+    private Node<E> head;
 
-    /** the tail of this queue */
-    protected FCQueueNode<E> tail;
+    /** the tail of this queue, exclusive */
+    private Node<E> tail;
 
-    /** the hash of set of elements in the queue. */
-    protected final byte[] hash = new byte[digestType.digestLength()];
+    /** the first unhashed node, shared between queues in a group */
+    private final AtomicReference<Node<E>> unhashed;
 
-    /**
-     * The number of times this queue has changed so far, such as by add/remove/clear. This could be
-     * made volatile to catch more bugs, but then operations would be slower.
-     */
-    protected int numChanges;
+    /** the hash of this queue once it becomes immutable */
+    private ImmutableHash hash;
+
+    static class Node<E extends FastCopyable> {
+        /** the element in the list */
+        E element;
+
+        /** the next node in the direction toward the tail, or null if none */
+        Node<E> next;
+
+        /** the running hash of all nodes from the origin up to, but excluding, the current node */
+        volatile long[] runningHash; // NOSONAR
+    }
 
     /** Instantiates a new empty queue which doesn't require deserialization */
     public FCQueue() {
         size = 0;
-        head = null;
-        tail = null;
-        // the first in a queue group is mutable until copy(true) is called on it
-        setImmutable(false);
+        head = new Node<>();
+        head.runningHash = new long[DIGEST_TYPE.digestLength() / Long.BYTES];
+        tail = head;
+        unhashed = new AtomicReference<>(head);
+        hash = null;
     }
 
     /**
      * Instantiate a queue with all the given parameters. This is just a helper function, not
      * visible to users.
      */
-    protected FCQueue(final FCQueue<E> fcQueue) {
+    FCQueue(final FCQueue<E> fcQueue) {
         super(fcQueue);
         this.size = fcQueue.size;
-        System.arraycopy(fcQueue.hash, 0, this.hash, 0, this.hash.length);
         this.head = fcQueue.head;
         this.tail = fcQueue.tail;
-        this.runningHashSize = fcQueue.runningHashSize;
-        this.setImmutable(false);
+        this.unhashed = fcQueue.unhashed;
+        this.hash = null;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public synchronized Hash getHash() {
+        if (hash != null) {
+            return hash;
+        }
+        final ImmutableHash result = new ImmutableHash(computeHash());
+        if (isImmutable()) {
+            hash = result;
+        }
+        return result;
     }
 
     /**
-     * Read an integer value, and throw an exception if it does not match the expected value.
+     * This is a rolling hash that takes the order into account. If the queue contains {a,b,c,d},
+     * where "a" is the head and "d" is the tail, then define:
      *
-     * @param dis an input stream
-     * @param markerName the log marker to use
-     * @param expectedValue the expected value
-     * @return the value read
+     * <p>hash64({a,b,c,d}) = a * 3^^3 + b * 3^^2 + c * 3^^1 + d * 3^^0 mod 2^^64
+     *
+     * <p>hash64({a,b,c}) = a * 3^^2 + b * 3^^1 + c * 3^^0 mod 2^^64
+     *
+     * <p>hash64({b,c,d}) = b * 3^^2 + c * 3^^1 + d * 3^^0 mod 2^^64
+     *
+     * <p>Which implies these:
+     *
+     * <p>hash64({a,b,c,d}) = hash64({a,b,c}) * 3 + d mod 2^^64 // add(d)
+     *
+     * <p>hash64({b,c,d}) = hash64({a,b,c,d}) - a * 3^^3 mod 2^^64 // remove()
+     *
+     * <p>hash64({c,d}) = hash64({a,b,c,d}) - a * 3^^3 - b * 3^^2 mod 2^^64 = hash64({a,b,c,d}) -
+     * hash64({a,b}) * 3^^size mod 2^^64
+     *
+     * <p>It would be much slower to use modulo 2^^384, but we don't have to do that. We can treat
+     * the 48-byte hash as a sequence of 6 numbers, each of which is an unsigned 64-bit integer. We
+     * do this rolling hash on each of the 6 numbers independently. Then it ends up being simple and
+     * fast.
+     *
+     * <p>To compute hashes of queue copies concurrently and efficiently we maintain a running hash
+     * for each node. Node's running hash is a weighted sum as above that covers all nodes from the
+     * origin up to, but excluding, the current node. It's invariant between all copies in a queue
+     * group. Example:
+     *
+     * <p>Queue: {a} -> {b} -> {c} -> {}
+     *
+     * <p>RunningHash: [0] [a] [a * 3 + b] [a * 3^2 + b * 3 + c]
+     *
+     * <p>A queue hash can be computed as:
+     *
+     * <p><code> tail.runningHash - head.runningHash * HASH_RADIX<sup>size</sup> </code>
+     *
+     * <p>Multiple queues in a group can compute their hashes concurrently without synchronization
+     * as all updates in the shared data structure are invariant. Volatile <code>runningHash</code>
+     * helps to reduce overlap between threads.
      */
-    private static int readValidInt(
-            final SerializableDataInputStream dis, final String markerName, final int expectedValue)
-            throws IOException {
-
-        final int value = dis.readInt();
-
-        if (value != expectedValue) {
-            throw new InvalidStreamPosition(markerName, expectedValue, value);
+    private byte[] computeHash() {
+        // Ensure we have tail's running hash
+        if (tail.runningHash == null) {
+            Node<E> node = unhashed.get();
+            while (tail.runningHash == null) {
+                final Node<E> next = node.next;
+                if (next.runningHash == null) {
+                    final byte[] elementHash = getHash(node.element);
+                    final long[] runningHash = node.runningHash.clone();
+                    for (int i = 0; i < runningHash.length; ++i) {
+                        runningHash[i] =
+                                runningHash[i] * HASH_RADIX
+                                        + byteArrayToLong(elementHash, i * Long.BYTES);
+                    }
+                    next.runningHash = runningHash;
+                }
+                node = next;
+            }
+            unhashed.set(
+                    node); // it's OK to advance unhashed non-deterministically between multiple
+            // threads
         }
 
-        return value;
+        // Compute the queue hash as a weighted difference of running hashes of head and tail
+        final long[] headHash = head.runningHash;
+        final long[] tailHash = tail.runningHash;
+        final long exponent = power(size);
+        byte[] result = new byte[headHash.length * Long.BYTES];
+        for (int i = 0; i < headHash.length; ++i) {
+            longToByteArray(tailHash[i] - headHash[i] * exponent, result, i * Long.BYTES);
+        }
+        return result;
     }
 
     /**
-     * @return the number of times this queue has changed since it was instantiated by {@code new}
-     *     or {@code copy}
+     * Computes a long value of <code>HASH_RADIX<sup>exponent</sup></code> ignoring multiplication
+     * overflow.
+     *
+     * @param y exponent
+     * @return (HASH_RADIX ^ y) mod 2^64
      */
-    public int getNumChanges() {
-        return numChanges;
+    private static long power(int y) {
+        long res = 1;
+        long x = HASH_RADIX;
+        while (y > 0) {
+            if ((y & 1) == 1) {
+                res *= x;
+            }
+            y >>= 1;
+            x *= x;
+        }
+        return res;
     }
 
     /** {@inheritDoc} */
     @Override
-    public Hash getHash() {
-        final StopWatch watch = new StopWatch();
-        watch.start();
-
-        final byte[] localHash;
-        final Iterator<FCQueueNode<E>> it;
-        final int currentSize;
-        final int currentRunningHashSize;
-
-        synchronized (this) {
-            if (head == null) {
-                return new ImmutableHash(getNullHash());
-            }
-
-            if (size == runningHashSize) {
-                return new ImmutableHash(hash);
-            }
-
-            currentSize = size;
-            it = nodeBackwardIterator();
-            localHash = Arrays.copyOf(hash, hash.length);
-            currentRunningHashSize = runningHashSize;
-        }
-
-        final int limit = currentSize - currentRunningHashSize;
-        FCQHashAlgorithm.increaseRollingBase(limit, localHash);
-        int index = 0;
-        while (index < limit) {
-            final FCQueueNode<E> node = it.next();
-            final byte[] elementHash;
-
-            if (node.getElementHashOfHash() == null) {
-                elementHash = getHash(node.getElement());
-                node.setElementHashOfHash(elementHash);
-            } else {
-                elementHash = node.getElementHashOfHash();
-            }
-
-            HASH_ALGORITHM.computeHash(localHash, elementHash, index);
-            index++;
-        }
-
-        synchronized (this) {
-            runningHashSize = currentSize;
-            System.arraycopy(localHash, 0, hash, 0, hash.length);
-        }
-
-        watch.stop();
-        FCQueueStatistics.updateFcqHashExecutionMicros(watch.getTime(TimeUnit.MICROSECONDS));
-
-        return new ImmutableHash(hash);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public void setHash(final Hash hash) {
+    public synchronized void setHash(final Hash hash) {
         throw new UnsupportedOperationException("FCQueue computes its own hash");
     }
 
@@ -274,7 +272,7 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      * violating capacity restrictions, returning {@code true} upon success and throwing an {@code
      * IllegalStateException} if no space is currently available.
      *
-     * @param o the element to add
+     * @param element the element to add
      * @return {@code true} (as specified by {@link Collection#add})
      * @throws IllegalStateException if the element cannot be added at this time due to capacity
      *     restrictions (this cannot happen)
@@ -287,19 +285,12 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      *     while serializing to create its hash.
      */
     @Override
-    public synchronized boolean add(final E o) {
-        StopWatch watch = null;
-
-        if (FCQueueStatistics.isRegistered()) {
-            watch = new StopWatch();
-            watch.start();
-        }
-
+    public synchronized boolean add(final E element) {
         if (isImmutable()) {
             throw new IllegalStateException("tried to modify an immutable FCQueue");
         }
 
-        if (o == null) {
+        if (element == null) {
             throw new NullPointerException("tried to add a null element into an FCQueue");
         }
 
@@ -311,27 +302,11 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
                             MAX_ELEMENTS));
         }
 
-        final FCQueueNode<E> node;
-
-        if (tail == null) { // current list is empty
-            node = new FCQueueNode<>(o);
-            head = node;
-        } else { // current list is nonempty, so add to the tail
-            node = this.tail.insertAtTail(o);
-            node.setTowardHead(tail);
-            node.setTowardTail(null);
-            tail.setTowardTail(node);
-            tail.decRefCount();
-        }
-        tail = node;
+        tail.element = element;
+        tail.next = new Node<>();
+        tail = tail.next;
 
         size++;
-        numChanges++;
-
-        if (watch != null) {
-            watch.stop();
-            FCQueueStatistics.updateFcqAddExecutionMicros(watch.getTime(TimeUnit.MICROSECONDS));
-        }
 
         return true;
     }
@@ -345,53 +320,18 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      */
     @Override
     public synchronized E remove() {
-        StopWatch watch = null;
-
-        if (FCQueueStatistics.isRegistered()) {
-            watch = new StopWatch();
-            watch.start();
-        }
-
-        final E element;
-        final byte[] elementHash;
-        final FCQueueNode<E> oldHead;
-
-        oldHead = head;
-
         if (isImmutable()) {
             throw new IllegalArgumentException("tried to remove from an immutable FCQueue");
         }
 
-        if (size == 0 || head == null) {
+        if (size == 0) {
             throw new NoSuchElementException("tried to remove from an empty FCQueue");
         }
 
-        // Retrieve the element and change the head pointer
-        elementHash = head.getElementHashOfHash();
+        E element = head.element;
+        head = head.next;
 
-        element = head.getElement();
-        head = head.getTowardTail();
-
-        if (head == null) { // if just removed the last one, then tail should be null, too
-            tail.decRefCount();
-            tail = null;
-        } else {
-            head.incRefCount();
-        }
-
-        oldHead.decRefCount(); // this will garbage collect the old head, if no copies point to it
         size--;
-        numChanges++;
-
-        if (elementHash != null && runningHashSize > 0) {
-            runningHashSize--;
-            HASH_ALGORITHM.computeRemoveHash(hash, elementHash, runningHashSize);
-        }
-
-        if (watch != null) {
-            watch.stop();
-            FCQueueStatistics.updateFcqRemoveExecutionMicros(watch.getTime(TimeUnit.MICROSECONDS));
-        }
 
         return element;
     }
@@ -420,7 +360,7 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      */
     @Override
     public synchronized E poll() {
-        if (this.head == null) {
+        if (size == 0) {
             return null;
         }
 
@@ -436,11 +376,11 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      */
     @Override
     public synchronized E element() {
-        if (this.head == null) {
+        if (size == 0) {
             throw new NoSuchElementException("tried to get the head of an empty FCQueue");
         }
 
-        return head.getElement();
+        return head.element;
     }
 
     /**
@@ -451,11 +391,11 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      */
     @Override
     public synchronized E peek() {
-        if (this.head == null) {
+        if (size == 0) {
             return null;
         }
 
-        return head.getElement();
+        return head.element;
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -474,14 +414,6 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
         // there can be only one mutable per queue group. If the copy is, then this isn't.
         setImmutable(true);
 
-        if (head != null) {
-            head.incRefCount();
-        }
-
-        if (tail != null) {
-            tail.incRefCount();
-        }
-
         return queue;
     }
 
@@ -492,6 +424,12 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
     @Override
     protected synchronized void destroyNode() {
         clearInternal();
+    }
+
+    private void clearInternal() {
+        head = tail;
+        size = 0;
+        hash = null;
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -535,12 +473,10 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
     @Override
     public synchronized boolean contains(final Object o) {
         for (final E e : this) {
-
             if (Objects.equals(o, e)) {
                 return true;
             }
         }
-
         return false;
     }
 
@@ -552,7 +488,26 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      */
     @Override
     public synchronized Iterator<E> iterator() {
-        return new FCQueueIterator<>(this, head, tail);
+        return new Iterator<>() {
+            Node<E> cur = head;
+            final Node<E> end = tail;
+
+            @Override
+            public boolean hasNext() {
+                return cur != end;
+            }
+
+            @Override
+            public E next() {
+                if (cur == null || cur == end) {
+                    throw new NoSuchElementException();
+                }
+
+                final E result = cur.element;
+                cur = cur.next;
+                return result;
+            }
+        };
     }
 
     /**
@@ -562,39 +517,9 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      * @return an {@code Iterator} over the elements in this collection in reverse order
      */
     public Iterator<E> reverseIterator() {
-        return new Iterator<>() {
-            private final Iterator<FCQueueNode<E>> nodeIterator = nodeBackwardIterator();
-
-            @Override
-            public boolean hasNext() {
-                return nodeIterator.hasNext();
-            }
-
-            @Override
-            public E next() {
-                return nodeIterator.next().getElement();
-            }
-        };
-    }
-
-    /**
-     * Returns an iterator over the internal nodes in this queue, in insertion order (head first,
-     * tail last).
-     *
-     * @return an {@code Iterator} over the elements in this collection
-     */
-    protected synchronized Iterator<FCQueueNode<E>> nodeIterator() {
-        return new FCQueueNodeIterator<>(this, head, tail);
-    }
-
-    /**
-     * Returns an iterator over the internal nodes in this queue, in reverse-insertion order (tail
-     * first, head last).
-     *
-     * @return an {@code Iterator} over the elements in this collection
-     */
-    protected synchronized Iterator<FCQueueNode<E>> nodeBackwardIterator() {
-        return new FCQueueNodeBackwardIterator<>(this, head, tail);
+        ArrayList<E> list = new ArrayList<>(this);
+        Collections.reverse(list);
+        return list.iterator();
     }
 
     /**
@@ -614,8 +539,7 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      */
     @Override
     public synchronized Object[] toArray() {
-        final int size = size();
-        final Object[] result = new Object[size];
+        final Object[] result = new Object[size()];
         int i = 0;
 
         for (final E e : this) {
@@ -769,25 +693,8 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
     @Override
     public synchronized void clear() {
         throwIfImmutable();
-        numChanges++;
 
         clearInternal();
-    }
-
-    private void clearInternal() {
-        if (head != null) {
-            head.decRefCount();
-            head = null;
-        }
-
-        if (tail != null) {
-            tail.decRefCount();
-            tail = null;
-        }
-
-        size = 0;
-        runningHashSize = 0;
-        resetHash();
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -806,13 +713,13 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
 
         final FCQueue<?> fcQueue = (FCQueue<?>) o;
 
-        return size == fcQueue.size && Arrays.equals(hash, fcQueue.hash);
+        return size == fcQueue.size && Objects.equals(getHash(), fcQueue.getHash());
     }
 
     @Override
     public int hashCode() {
         int result = Objects.hash(size);
-        result = 31 * result + Arrays.hashCode(hash);
+        result = 31 * result + Objects.hashCode(getHash());
         return result;
     }
 
@@ -825,43 +732,29 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      */
     @Override
     public synchronized void serialize(final SerializableDataOutputStream dos) throws IOException {
-        if (USE_MARKERS) {
-            dos.writeInt(BEGIN_QUEUE_MARKER);
-        }
         dos.writeInt(this.size());
-        dos.write(this.hash);
+        dos.write(getHash().getValue());
         dos.writeSerializableIterableWithSize(this.iterator(), this.size(), true, false);
-
-        if (USE_MARKERS) {
-            dos.writeInt(END_QUEUE_MARKER);
-        }
     }
 
     @Override
     public synchronized void deserialize(SerializableDataInputStream dis, int version)
             throws IOException {
-        numChanges++;
-        if (USE_MARKERS) {
-            readValidInt(dis, "BEGIN_QUEUE_MARKER", BEGIN_QUEUE_MARKER);
-        }
-        final byte[] recoveredHash = new byte[hash.length];
+        final byte[] recoveredHash = new byte[DIGEST_TYPE.digestLength()];
 
         final int listSize = dis.readInt();
         dis.readFully(recoveredHash);
 
         dis.readSerializableIterableWithSize(MAX_ELEMENTS, this::add);
 
-        if (USE_MARKERS) {
-            readValidInt(dis, "END_QUEUE_MARKER", END_QUEUE_MARKER);
-        }
-
-        if (THROW_ON_HASH_MISMATCH && recoveredHash != null && recoveredHash.length > 0) {
-            if (!Arrays.equals(hash, recoveredHash)) {
+        if (THROW_ON_HASH_MISMATCH) {
+            byte[] actualHash = getHash().getValue();
+            if (!Arrays.equals(actualHash, recoveredHash)) {
                 throw new ListDigestException(
                         String.format(
                                 "FCQueue: Invalid list signature detected during deserialization"
                                         + " (Actual: %s, Expected: %s for list of size %d)",
-                                hex(hash), hex(recoveredHash), listSize));
+                                hex(actualHash), hex(recoveredHash), listSize));
             }
         }
     }
@@ -871,25 +764,17 @@ public class FCQueue<E extends FastCopyable & SerializableHashable> extends Part
      *
      * @param element an element contained by this collection that is being added, deleted, or
      *     replaced
-     * @return the 48-byte hash of the element (getNullHash() if element is null)
+     * @return the 48-byte hash of the element (zero byte array if element is null)
      */
-    protected byte[] getHash(final E element) {
+    byte[] getHash(final E element) {
         // Handle cases where list methods return null if the list is empty
         if (element == null) {
-            return getNullHash();
+            return new byte[DIGEST_TYPE.digestLength()];
         }
         Cryptography crypto = CryptographyHolder.get();
         // return a hash of a hash, in order to make state proofs smaller in the future
         crypto.digestSync(element);
         return crypto.digestSync(element.getHash()).getValue();
-    }
-
-    protected static byte[] getNullHash() {
-        return Arrays.copyOf(NULL_HASH, NULL_HASH.length);
-    }
-
-    private synchronized void resetHash() {
-        System.arraycopy(NULL_HASH, 0, this.hash, 0, this.hash.length);
     }
 
     @Override

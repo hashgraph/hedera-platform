@@ -42,7 +42,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class LearnerThread<T> {
 
-    private static final Logger LOG = LogManager.getLogger(LearnerThread.class);
+    private static final Logger logger = LogManager.getLogger(LearnerThread.class);
 
     private static final String NAME = "send-and-receive";
 
@@ -194,7 +194,7 @@ public class LearnerThread<T> {
                 exceptionRateLimiter.handle(
                         new NullPointerException(),
                         (error) ->
-                                LOG.warn(
+                                logger.warn(
                                         RECONNECT.getMarker(),
                                         "originalHash for node {} is null",
                                         originalChild));
@@ -268,10 +268,10 @@ public class LearnerThread<T> {
             }
 
         } catch (final InterruptedException ex) {
-            LOG.warn(RECONNECT.getMarker(), "learner thread interrupted");
+            logger.warn(RECONNECT.getMarker(), "learner thread interrupted");
             Thread.currentThread().interrupt();
         } catch (final Exception ex) {
-            LOG.error(RECONNECT.getMarker(), "exception in the learner's receiving thread", ex);
+            logger.error(RECONNECT.getMarker(), "exception in the learner's receiving thread", ex);
             throw new MerkleSynchronizationException(
                     "exception in the learner's receiving thread", ex);
         }

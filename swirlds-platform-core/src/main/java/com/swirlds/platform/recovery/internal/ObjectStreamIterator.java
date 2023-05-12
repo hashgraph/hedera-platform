@@ -17,8 +17,11 @@ package com.swirlds.platform.recovery.internal;
 
 import com.swirlds.common.io.IOIterator;
 import com.swirlds.common.io.SelfSerializable;
+import com.swirlds.common.io.extendable.ExtendableInputStream;
+import com.swirlds.common.io.extendable.extensions.CountingStreamExtension;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import java.io.BufferedInputStream;
+import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -46,13 +49,15 @@ public class ObjectStreamIterator<T extends SelfSerializable> implements IOItera
     private T next;
 
     /**
-     * If true, then allow for the object file to be abbruptly terminated, and return the
-     * non-currpted data at the begining of the file.
+     * If true, then allow for the object file to be abruptly terminated, and return the
+     * non-corrupted data at the beginning of the file.
      */
     private final boolean toleratePartialFile;
 
+    private final CountingStreamExtension counter;
+
     private static final int EXPECTED_OBJECT_STREAM_VERSION = 1;
-    private static final int EXPECTED_RECORD_STREAM_VERSION = 5;
+    private static final int EXPECTED_EVENT_STREAM_VERSION = 5;
 
     /**
      * Create an iterator that reads from a file.
@@ -80,12 +85,13 @@ public class ObjectStreamIterator<T extends SelfSerializable> implements IOItera
      */
     public ObjectStreamIterator(final InputStream in, final boolean toleratePartialFile)
             throws IOException {
-        this.in = new SerializableDataInputStream(in);
+        this.counter = new CountingStreamExtension();
+        this.in = new SerializableDataInputStream(new ExtendableInputStream(in, counter));
         this.toleratePartialFile = toleratePartialFile;
 
         try {
             final int eventStreamVersion = this.in.readInt();
-            if (eventStreamVersion != EXPECTED_RECORD_STREAM_VERSION) {
+            if (eventStreamVersion != EXPECTED_EVENT_STREAM_VERSION) {
                 throw new IOException("unexpected event stream version " + eventStreamVersion);
             }
 
@@ -94,12 +100,14 @@ public class ObjectStreamIterator<T extends SelfSerializable> implements IOItera
                 throw new IOException("unexpected object stream version " + objectStreamVersion);
             }
 
-        } catch (final IOException ioException) {
-            if (toleratePartialFile) {
-                exception = ioException;
-            } else {
-                throw ioException;
+        } catch (final EOFException e) {
+            if (!toleratePartialFile) {
+                exception = e;
+                throw e;
             }
+        } catch (final IOException e) {
+            exception = e;
+            throw e;
         }
     }
 
@@ -107,23 +115,22 @@ public class ObjectStreamIterator<T extends SelfSerializable> implements IOItera
     @Override
     public boolean hasNext() throws IOException {
         if (exception != null) {
-            if (toleratePartialFile) {
-                return false;
-            } else {
-                throw new IOException(exception);
-            }
+            throw new IOException(exception);
         }
 
-        if (next == null && in.available() > 0) {
+        if (next == null) {
+            final long initialCount = counter.getCount();
             try {
                 next = in.readSerializable();
-            } catch (final IOException e) {
-                exception = e;
-                if (toleratePartialFile) {
-                    return false;
-                } else {
+            } catch (final EOFException e) {
+                if (counter.getCount() > initialCount && !toleratePartialFile) {
+                    exception = e;
                     throw e;
                 }
+                return false;
+            } catch (final IOException e) {
+                exception = e;
+                throw e;
             }
         }
 

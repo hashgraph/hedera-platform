@@ -49,7 +49,7 @@ import org.apache.logging.log4j.Logger;
 public class SwirldStateManagerDouble implements SwirldStateManager {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(SwirldStateManagerDouble.class);
+    private static final Logger logger = LogManager.getLogger(SwirldStateManagerDouble.class);
 
     /** Stats relevant to SwirldState operations. */
     private final SwirldStateMetrics stats;
@@ -173,7 +173,7 @@ public class SwirldStateManagerDouble implements SwirldStateManager {
     @Override
     public void clear() {
         // clear the transactions
-        LOG.info(RECONNECT.getMarker(), "SwirldStateManagerDouble: clearing transactionPool");
+        logger.info(RECONNECT.getMarker(), "SwirldStateManagerDouble: clearing transactionPool");
         transactionPool.clear();
     }
 

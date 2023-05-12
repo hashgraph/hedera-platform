@@ -63,10 +63,14 @@ import org.eclipse.collections.impl.map.mutable.primitive.IntObjectHashMap;
  */
 public class HalfDiskHashMap<K extends VirtualKey<? super K>>
         implements AutoCloseable, Snapshotable {
-    private static final Logger LOG = LogManager.getLogger(HalfDiskHashMap.class);
+    private static final Logger logger = LogManager.getLogger(HalfDiskHashMap.class);
 
     /** The version number for format of current data files */
     private static final int METADATA_FILE_FORMAT_VERSION = 1;
+    /** Metadata file name suffix with extension. */
+    private static final String METADATA_FILENAME_SUFFIX = "_metadata.hdhm";
+    /** Bucket index file name suffix with extension */
+    private static final String BUCKET_INDEX_FILENAME_SUFFIX = "_bucket_index.ll";
     /** Each index change includes both a bucket index and bucket location. */
     private static final int INDEX_CHANGE_COMPONENTS = 2;
     /** Nominal value for value to say please delete from map. */
@@ -130,6 +134,9 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
      * @param storeDir The directory to use for storing data files.
      * @param storeName The name for the data store, this allows more than one data store in a
      *     single directory.
+     * @param legacyStoreName Base name for the data store. If not null, the store will process
+     *     files with this prefix at startup. New files in the store will be prefixed with {@code
+     *     storeName}
      * @param preferDiskBasedIndexes When true we will use disk based indexes rather than ram where
      *     possible. This will come with a significant performance cost, especially for writing. It
      *     is possible to load a data source that was written with memory indexes with disk based
@@ -141,20 +148,27 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
             final KeySerializer<K> keySerializer,
             final Path storeDir,
             final String storeName,
+            final String legacyStoreName,
             final boolean preferDiskBasedIndexes)
             throws IOException {
         final MerkleDbSettings settings = MerkleDbSettingsFactory.get();
 
         this.mapSize = mapSize;
         this.storeName = storeName;
-        Path indexFile = storeDir.resolve(storeName + "_bucket_index.ll");
+        Path indexFile = storeDir.resolve(storeName + BUCKET_INDEX_FILENAME_SUFFIX);
         // create bucket serializer
         this.bucketSerializer = new BucketSerializer<>(keySerializer);
         // load or create new
         LoadedDataCallback loadedDataCallback;
         if (Files.exists(storeDir)) {
             // load metadata
-            Path metaDataFile = storeDir.resolve(storeName + "_metadata.hdhm");
+            Path metaDataFile = storeDir.resolve(storeName + METADATA_FILENAME_SUFFIX);
+            boolean loadedLegacyMetadata = false;
+            if (!Files.exists(metaDataFile)) {
+                metaDataFile = storeDir.resolve(legacyStoreName + METADATA_FILENAME_SUFFIX);
+                indexFile = storeDir.resolve(legacyStoreName + BUCKET_INDEX_FILENAME_SUFFIX);
+                loadedLegacyMetadata = true;
+            }
             if (Files.exists(metaDataFile)) {
                 try (DataInputStream metaIn =
                         new DataInputStream(Files.newInputStream(metaDataFile))) {
@@ -170,8 +184,11 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
                     minimumBuckets = metaIn.readInt();
                     numOfBuckets = metaIn.readInt();
                 }
+                if (loadedLegacyMetadata) {
+                    Files.delete(metaDataFile);
+                }
             } else {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "Loading existing set of data files but now metadata file was found in"
                                 + " [{}]",
@@ -213,7 +230,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
             numOfBuckets = Integer.highestOneBit(minimumBuckets) * 2;
             // we are new so no need for a loadedDataCallback
             loadedDataCallback = null;
-            LOG.info(
+            logger.info(
                     MERKLE_DB.getMarker(),
                     "HalfDiskHashMap [{}] created with minimumBuckets={} and numOfBuckets={}",
                     storeName,
@@ -222,7 +239,8 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
         }
         // create file collection
         fileCollection =
-                new DataFileCollection<>(storeDir, storeName, bucketSerializer, loadedDataCallback);
+                new DataFileCollection<>(
+                        storeDir, storeName, legacyStoreName, bucketSerializer, loadedDataCallback);
     }
 
     /**
@@ -260,7 +278,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
         }
         final int size = filesToMerge.size();
         if (size < minNumberOfFilesToMerge) {
-            LOG.info(
+            logger.info(
                     MERKLE_DB.getMarker(),
                     "[{}] No meed to merge as {} is less than the minimum {} files to merge.",
                     storeName,
@@ -269,7 +287,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
             return;
         }
         final long filesToMergeSize = getSizeOfFiles(filesToMerge);
-        LOG.info(
+        logger.info(
                 MERKLE_DB.getMarker(),
                 "[{}] Starting merging {} files total {} Gb",
                 storeName,
@@ -284,8 +302,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
                 getSizeOfFilesByPath(newFilesCreated),
                 fileCollection,
                 filesToMerge,
-                allFilesBefore,
-                LOG);
+                allFilesBefore);
     }
 
     /** {@inheritDoc} */
@@ -294,14 +311,14 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
         Files.createDirectories(snapshotDirectory);
         // write index to file
         bucketIndexToBucketLocation.writeToFile(
-                snapshotDirectory.resolve(storeName + "_bucket_index.ll"));
+                snapshotDirectory.resolve(storeName + BUCKET_INDEX_FILENAME_SUFFIX));
         // snapshot files
         fileCollection.snapshot(snapshotDirectory);
         // write metadata
         try (DataOutputStream metaOut =
                 new DataOutputStream(
                         Files.newOutputStream(
-                                snapshotDirectory.resolve(storeName + "_metadata.hdhm")))) {
+                                snapshotDirectory.resolve(storeName + METADATA_FILENAME_SUFFIX)))) {
             metaOut.writeInt(METADATA_FILE_FORMAT_VERSION);
             metaOut.writeInt(minimumBuckets);
             metaOut.writeInt(numOfBuckets);
@@ -392,7 +409,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
                     "Tried calling endWriting with different thread to startWriting()");
         }
         writingThread = null;
-        LOG.info(
+        logger.info(
                 MERKLE_DB.getMarker(),
                 "Finishing writing to {}, num of changed bins = {}, num of changed keys = {}",
                 storeName,
@@ -490,7 +507,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
 
     /** Debug dump stats for this map */
     public void printStats() {
-        LOG.info(
+        logger.info(
                 MERKLE_DB.getMarker(),
                 """
 				HalfDiskHashMap Stats {
@@ -507,7 +524,8 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
 
     /** Useful debug method to print the current state of the transaction cache */
     public void debugDumpTransactionCacheCondensed() {
-        LOG.info(MERKLE_DB.getMarker(), "=========== TRANSACTION CACHE ==========================");
+        logger.info(
+                MERKLE_DB.getMarker(), "=========== TRANSACTION CACHE ==========================");
         for (int bucketIndex = 0; bucketIndex < numOfBuckets; bucketIndex++) {
             final BucketMutation<K> bucketMap = oneTransactionsData.get(bucketIndex);
             if (bucketMap != null) {
@@ -515,22 +533,24 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
                         (bucketMap.size() > GOOD_AVERAGE_BUCKET_ENTRY_COUNT)
                                 ? ("TOO MANY! > " + GOOD_AVERAGE_BUCKET_ENTRY_COUNT)
                                 : "";
-                LOG.info(
+                logger.info(
                         MERKLE_DB.getMarker(),
                         "bucketIndex [{}] , count={} {}",
                         bucketIndex,
                         bucketMap.size(),
                         tooBig);
             } else {
-                LOG.info(MERKLE_DB.getMarker(), "bucketIndex [{}] , EMPTY!", bucketIndex);
+                logger.info(MERKLE_DB.getMarker(), "bucketIndex [{}] , EMPTY!", bucketIndex);
             }
         }
-        LOG.info(MERKLE_DB.getMarker(), "========================================================");
+        logger.info(
+                MERKLE_DB.getMarker(), "========================================================");
     }
 
     /** Useful debug method to print the current state of the transaction cache */
     public void debugDumpTransactionCache() {
-        LOG.info(MERKLE_DB.getMarker(), "=========== TRANSACTION CACHE ==========================");
+        logger.info(
+                MERKLE_DB.getMarker(), "=========== TRANSACTION CACHE ==========================");
         for (int bucketIndex = 0; bucketIndex < numOfBuckets; bucketIndex++) {
             final BucketMutation<K> bucketMap = oneTransactionsData.get(bucketIndex);
             if (bucketMap != null) {
@@ -538,7 +558,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
                         (bucketMap.size() > GOOD_AVERAGE_BUCKET_ENTRY_COUNT)
                                 ? ("TOO MANY! > " + GOOD_AVERAGE_BUCKET_ENTRY_COUNT)
                                 : "";
-                LOG.info(
+                logger.info(
                         MERKLE_DB.getMarker(),
                         "bucketIndex [{}] , count={} {}",
                         bucketIndex,
@@ -546,7 +566,7 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
                         tooBig);
                 bucketMap.forEachKeyValue(
                         (k, l) ->
-                                LOG.info(
+                                logger.info(
                                         MERKLE_DB.getMarker(),
                                         "        keyHash [{}] bucket [{}]  key [{}] value [{}]",
                                         k.hashCode(),
@@ -555,7 +575,8 @@ public class HalfDiskHashMap<K extends VirtualKey<? super K>>
                                         l));
             }
         }
-        LOG.info(MERKLE_DB.getMarker(), "========================================================");
+        logger.info(
+                MERKLE_DB.getMarker(), "========================================================");
     }
 
     // =================================================================================================================

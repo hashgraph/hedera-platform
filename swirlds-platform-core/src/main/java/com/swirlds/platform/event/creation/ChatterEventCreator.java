@@ -37,7 +37,7 @@ import org.apache.logging.log4j.Logger;
 
 /** This class encapsulates the workflow required to create new events. */
 public class ChatterEventCreator {
-    private static final Logger LOG = LogManager.getLogger(ChatterEventCreator.class);
+    private static final Logger logger = LogManager.getLogger(ChatterEventCreator.class);
 
     /** This node's address book ID */
     private final NodeId selfId;
@@ -140,6 +140,6 @@ public class ChatterEventCreator {
      * @param event the created event to be logged
      */
     protected void logEventCreation(final GossipEvent event) {
-        LOG.debug(CREATE_EVENT.getMarker(), "Creating {}", event::toString);
+        logger.debug(CREATE_EVENT.getMarker(), "Creating {}", event::toString);
     }
 }

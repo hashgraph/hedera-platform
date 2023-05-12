@@ -87,7 +87,7 @@ public class SwirldMenu extends JPanel {
     // standard blue for logo
     private static Color logoBlue = new Color(0, 76, 151, 255);
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(SwirldMenu.class);
+    private static final Logger logger = LogManager.getLogger(SwirldMenu.class);
 
     /**
      * Add a Swirlds menu icon to the upper-right corner of the given window. The height and width
@@ -345,7 +345,7 @@ public class SwirldMenu extends JPanel {
         try {
             display.setPage(url);
         } catch (IOException e) {
-            log.error(EXCEPTION.getMarker(), "", e);
+            logger.error(EXCEPTION.getMarker(), "", e);
         }
         display.setEditable(false);
         display.addHyperlinkListener(

@@ -22,7 +22,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public final class SystemUtils {
-    private static final Logger LOG = LogManager.getLogger(SystemUtils.class);
+    private static final Logger logger = LogManager.getLogger(SystemUtils.class);
 
     private SystemUtils() {}
 
@@ -34,7 +34,7 @@ public final class SystemUtils {
      */
     public static void exitSystem(final SystemExitReason reason, final boolean haltRuntime) {
         if (reason.isError()) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     new SystemExitPayload(reason.name(), reason.getExitCode()));
             final String exitMsg = "Exiting system, reason: " + reason;

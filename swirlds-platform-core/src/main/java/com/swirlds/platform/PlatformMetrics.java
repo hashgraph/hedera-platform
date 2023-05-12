@@ -371,7 +371,7 @@ public class PlatformMetrics {
                         ? platform.getEventStreamManager().getHashQueueSize()
                         : 0);
         avgStateToHashSignDepth.update(platform.getConsensusHandler().getStateToHashSignSize());
-        avgRoundSupermajority.update(platform.getSignedStateManager().getLastCompleteRound());
+        avgRoundSupermajority.update(platform.getStateManagementComponent().getLastCompleteRound());
         avgEventsInMem.update(EventCounter.getNumEventsInMemory());
     }
 

@@ -45,13 +45,13 @@ class WinTab2Consensus extends PrePaintableJPanel {
             if (WinBrowser.memberDisplayed == null) {
                 return;
             }
-            SwirldsPlatform platform = ((InfoMember) (WinBrowser.memberDisplayed)).platform;
+            SwirldsPlatform platform = WinBrowser.memberDisplayed.platform;
             String s = "";
             s += platform.getPlatformName();
             long r1 = platform.getConsensus().getDeleteRound();
             long r2 = platform.getConsensus().getFameDecidedBelow();
             long r3 = platform.getConsensus().getMaxRound();
-            long r0 = platform.getSignedStateManager().getLastCompleteRound();
+            long r0 = platform.getStateManagementComponent().getLastCompleteRound();
 
             if (r1 == -1) {
                 s += "\n           = latest deleted round-created";
@@ -76,7 +76,7 @@ class WinTab2Consensus extends PrePaintableJPanel {
             // the hash of a signed state is: Reference.toHex(state.getHash(), 0, 2)
 
             final List<SignedStateInfo> stateInfo =
-                    platform.getSignedStateManager().getSignedStateInfo();
+                    platform.getStateManagementComponent().getSignedStateInfo();
             SignedStateInfo first = null;
             if (!stateInfo.isEmpty()) {
                 first = stateInfo.get(0);
@@ -97,7 +97,7 @@ class WinTab2Consensus extends PrePaintableJPanel {
             s += "\n     Signatures collected:              ";
             for (SignedStateInfo state : stateInfo) {
                 if (state != null && state.getSigSet() != null) {
-                    int c = state.getSigSet().getCount();
+                    int c = state.getSigSet().size();
                     s += String.format("%," + d + "d ", c);
                 }
             }
@@ -105,15 +105,13 @@ class WinTab2Consensus extends PrePaintableJPanel {
             s += "\n                                        ";
             for (SignedStateInfo state : stateInfo) {
                 if (state != null && state.getSigSet() != null) {
-                    int c = state.getSigSet().getCount();
+                    int c = state.getSigSet().size();
                     int size = platform.getAddressBook().getSize();
 
                     s +=
                             String.format(
                                     "%" + d + "s ",
-                                    c == size
-                                            ? "___"
-                                            : state.getSigSet().isComplete() ? "ooo" : "###");
+                                    c == size ? "___" : state.isComplete() ? "ooo" : "###");
                 }
             }
 
@@ -139,6 +137,7 @@ class WinTab2Consensus extends PrePaintableJPanel {
                                 + " at least one third of stake (ooo), or even less than that"
                                 + " (###).");
             text.setFont(new Font("monospaced", Font.PLAIN, 14));
+
             text.setText(s);
         } catch (java.util.ConcurrentModificationException err) {
             // We started displaying before all the platforms were added. That's ok.

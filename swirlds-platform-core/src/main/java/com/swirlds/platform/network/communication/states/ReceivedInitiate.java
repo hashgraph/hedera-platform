@@ -68,8 +68,13 @@ public class ReceivedInitiate extends NegotiationStateWithDescription {
                     IOException {
         final Protocol protocol = protocols.getProtocol(protocolInitiated);
         if (protocol.shouldAccept()) {
-            byteOutput.write(NegotiatorBytes.ACCEPT);
-            byteOutput.flush();
+            try {
+                byteOutput.write(NegotiatorBytes.ACCEPT);
+                byteOutput.flush();
+            } catch (final IOException ex) {
+                protocol.acceptFailed();
+                throw ex;
+            }
             stateNegotiated.runProtocol(protocol);
             protocolInitiated = NegotiatorBytes.UNINITIALIZED;
             setDescription("accepted protocol initiated by peer - " + protocol.getProtocolName());

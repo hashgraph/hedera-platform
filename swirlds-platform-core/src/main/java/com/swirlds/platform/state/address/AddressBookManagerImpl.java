@@ -28,7 +28,7 @@ import org.apache.logging.log4j.Logger;
 /** An address book manager that can be modified. */
 public class AddressBookManagerImpl implements MutableAddressBookManager {
 
-    private static final Logger LOG = LogManager.getLogger(AddressBookManagerImpl.class);
+    private static final Logger logger = LogManager.getLogger(AddressBookManagerImpl.class);
 
     private final AtomicReference<AddressBook> mostRecentAddressBook = new AtomicReference<>();
     private final SequentialFutures<AddressBook> futures;
@@ -64,7 +64,7 @@ public class AddressBookManagerImpl implements MutableAddressBookManager {
                         (final long index,
                                 final StandardFuture<AddressBook> future,
                                 final AddressBook previousValue) -> {
-                            LOG.warn(
+                            logger.warn(
                                     STARTUP.getMarker(),
                                     "Address book for round {} skipped. Expected on round 1. "
                                             + "Probably a bug if it happens for a later round.",

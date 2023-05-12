@@ -26,6 +26,7 @@ import com.swirlds.test.framework.config.TestConfigBuilder;
 public final class TestPlatformContextBuilder {
 
     private TestConfigBuilder testConfigBuilder;
+    private Metrics metrics;
 
     private TestPlatformContextBuilder() {
         this.testConfigBuilder = new TestConfigBuilder();
@@ -51,6 +52,11 @@ public final class TestPlatformContextBuilder {
         return this;
     }
 
+    public TestPlatformContextBuilder withMetrics(final Metrics metrics) {
+        this.metrics = metrics;
+        return this;
+    }
+
     /**
      * Returns a new {@link PlatformContext} based on this builder
      *
@@ -72,7 +78,7 @@ public final class TestPlatformContextBuilder {
 
             @Override
             public Metrics getMetrics() {
-                return null;
+                return metrics;
             }
         };
     }

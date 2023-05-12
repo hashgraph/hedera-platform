@@ -41,7 +41,7 @@ import org.apache.logging.log4j.message.ParameterizedMessageFactory;
  * to configure how the log entries are outputted.
  */
 public class HashLogger {
-    private static final Logger LOGGER = LogManager.getLogger(HashLogger.class);
+    private static final Logger logger = LogManager.getLogger(HashLogger.class);
     private static final MessageFactory MESSAGE_FACTORY = ParameterizedMessageFactory.INSTANCE;
     private static final int LOGGING_QUEUE_CAPACITY = 100;
 
@@ -58,7 +58,7 @@ public class HashLogger {
      * @param nodeId the id of the current node that is logging.
      */
     public HashLogger(final ThreadManager threadManager, final NodeId nodeId) {
-        this(threadManager, nodeId, LOGGER);
+        this(threadManager, nodeId, logger);
     }
 
     // Visible for testing

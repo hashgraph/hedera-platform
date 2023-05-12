@@ -15,6 +15,7 @@
  */
 package com.swirlds.virtual.merkle.reconnect;
 
+import static com.swirlds.test.framework.TestQualifierTags.TIME_CONSUMING;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import com.swirlds.virtual.merkle.TestKey;
@@ -35,6 +36,7 @@ class VirtualMapMerkleDbLargeReconnectTest extends VirtualMapMerkleDbReconnectTe
     @ParameterizedTest
     @MethodSource("provideLargeTreePermutations")
     @Tags({@Tag("VirtualMerkle"), @Tag("Reconnect"), @Tag("VMAP-003"), @Tag("VMAP-003.14")})
+    @Tag(TIME_CONSUMING)
     @DisplayName("Permutations of very large trees reconnecting")
     void largeTeacherLargerLearnerPermutations(
             int teacherStart, int teacherEnd, int learnerStart, int learnerEnd) {
@@ -53,6 +55,7 @@ class VirtualMapMerkleDbLargeReconnectTest extends VirtualMapMerkleDbReconnectTe
     @ParameterizedTest
     @MethodSource("provideLargeTreePermutations")
     @Tags({@Tag("VirtualMerkle"), @Tag("Reconnect"), @Tag("VMAP-005"), @Tag("VMAP-006")})
+    @Tag(TIME_CONSUMING)
     @DisplayName("Reconnect aborts 3 times before success")
     void multipleAbortedReconnectsCanSucceed(
             int teacherStart, int teacherEnd, int learnerStart, int learnerEnd) {

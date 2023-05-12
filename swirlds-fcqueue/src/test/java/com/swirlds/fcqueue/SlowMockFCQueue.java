@@ -79,6 +79,18 @@ public class SlowMockFCQueue<E extends FastCopyable & SerializableHashable> exte
     /** the number of elements in this queue */
     protected int size;
 
+    /** the head of this queue */
+    protected FCQueueNode<E> head;
+
+    /** the tail of this queue */
+    protected FCQueueNode<E> tail;
+
+    /**
+     * The number of times this queue has changed so far, such as by add/remove/clear. This could be
+     * made volatile to catch more bugs, but then operations would be slower.
+     */
+    protected int numChanges;
+
     /** 3 to the power of size, modulo 2 to the 64. Used for the rolling hash */
     protected long threeToSize;
 
@@ -407,6 +419,11 @@ public class SlowMockFCQueue<E extends FastCopyable & SerializableHashable> exte
         synchronized (original) {
             return new FCQueueNodeIterator<>(this, head, tail);
         }
+    }
+
+    @Override
+    public synchronized Iterator<E> iterator() {
+        return new FCQueueIterator<>(this, head, tail);
     }
 
     /**

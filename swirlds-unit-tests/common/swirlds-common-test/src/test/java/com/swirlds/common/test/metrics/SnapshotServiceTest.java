@@ -15,8 +15,6 @@
  */
 package com.swirlds.common.test.metrics;
 
-import static com.swirlds.common.metrics.platform.SnapshotService.createGlobalSnapshotService;
-import static com.swirlds.common.metrics.platform.SnapshotService.createPlatformSnapshotService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -24,204 +22,185 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mock.Strictness.LENIENT;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.swirlds.common.internal.SettingsCommon;
-import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.metrics.platform.DefaultMetric;
 import com.swirlds.common.metrics.platform.DefaultMetrics;
 import com.swirlds.common.metrics.platform.Snapshot;
-import com.swirlds.common.metrics.platform.SnapshotReceiver;
+import com.swirlds.common.metrics.platform.SnapshotEvent;
 import com.swirlds.common.metrics.platform.SnapshotService;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.common.test.FakeTime;
-import com.swirlds.common.time.OSTime;
 import com.swirlds.common.time.Time;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.stubbing.Answer;
 
+@ExtendWith(MockitoExtension.class)
 class SnapshotServiceTest {
 
-    @Test
-    void testRunState() throws InterruptedException {
-        // given
-        final DefaultMetrics metrics = mock(DefaultMetrics.class);
-        final ScheduledExecutorService executorService =
-                Executors.newSingleThreadScheduledExecutor();
+    private static final NodeId NODE_ID_1 = NodeId.createMain(1L);
+    private static final NodeId NODE_ID_2 = NodeId.createMain(2L);
 
-        try {
-            final SnapshotService service =
-                    createGlobalSnapshotService(metrics, executorService, OSTime.getInstance());
+    @Mock private DefaultMetric globalMetric;
+    @Mock private DefaultMetrics globalMetrics;
 
-            // initial state
-            assertFalse(service.isRunning(), "Service should not run right after initialization");
+    @Mock(strictness = LENIENT)
+    private DefaultMetric platform1Metric;
 
-            // when
-            service.start();
+    @Mock(strictness = LENIENT)
+    private DefaultMetrics platform1Metrics;
 
-            // then
-            assertTrue(service.isRunning(), "Service should run");
-            assertThrows(
-                    IllegalStateException.class,
-                    service::start,
-                    "Trying to start the service again should throw an IllegalStateException");
+    @Mock(strictness = LENIENT)
+    private DefaultMetric platform2Metric;
 
-            // when
-            service.shutdown();
+    @Mock(strictness = LENIENT)
+    private DefaultMetrics platform2Metrics;
 
-            // then
-            assertFalse(service.isRunning(), "Service should not run");
-            assertDoesNotThrow(
-                    service::shutdown, "Trying to shutdown the service again should be a no-op");
-        } finally {
-            executorService.shutdownNow();
-        }
+    @Mock private Consumer<SnapshotEvent> subscriber;
+
+    private SnapshotService service;
+
+    @BeforeEach
+    void setup(@Mock(strictness = LENIENT) final ScheduledExecutorService executorService) {
+        when(globalMetrics.isGlobalMetrics()).thenReturn(true);
+        when(globalMetrics.getAll()).thenReturn(List.of(globalMetric));
+
+        when(platform1Metric.getName()).thenReturn("platform");
+
+        when(platform1Metrics.isPlatformMetrics()).thenReturn(true);
+        when(platform1Metrics.getNodeId()).thenReturn(NODE_ID_1);
+        when(platform1Metrics.getAll()).thenReturn(List.of(globalMetric, platform1Metric));
+
+        when(platform2Metric.getName()).thenReturn("platform");
+
+        when(platform2Metrics.isPlatformMetrics()).thenReturn(true);
+        when(platform2Metrics.getNodeId()).thenReturn(NODE_ID_2);
+        when(platform2Metrics.getAll()).thenReturn(List.of(globalMetric, platform2Metric));
+
+        when(executorService.schedule(any(Runnable.class), anyLong(), any()))
+                .thenAnswer(
+                        (Answer<Future<?>>)
+                                invocation -> {
+                                    invocation.getArgument(0, Runnable.class).run();
+                                    return mock(ScheduledFuture.class);
+                                })
+                .thenAnswer(invocation -> mock(ScheduledFuture.class));
+
+        service = new SnapshotService(globalMetrics, executorService, Duration.ZERO);
+        service.subscribe(subscriber);
     }
 
     @Test
-    void testGlobalServiceInit() {
-        // given
-        final Metric metric = mock(Metric.class);
-        final List<Metric> metricList = new ArrayList<>();
-        metricList.add(metric);
-        final DefaultMetrics metrics = mock(DefaultMetrics.class);
-        when(metrics.getAll()).thenReturn(metricList);
-        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final SnapshotService service =
-                createGlobalSnapshotService(metrics, executorService, OSTime.getInstance());
-        final SnapshotReceiver receiver = mock(SnapshotReceiver.class);
-        service.addSnapshotReceiver(receiver);
+    void testRunState() {
+        // initial state
+        assertFalse(service.isRunning(), "Service should not run right after initialization");
 
         // when
         service.start();
-        // we change the original list, the receiver should have received a copy
-        metricList.add(mock(Metric.class));
 
         // then
-        verify(receiver).init(List.of(metric));
+        assertTrue(service.isRunning(), "Service should run");
+        assertThrows(
+                IllegalStateException.class,
+                service::start,
+                "Trying to start the service again should throw an IllegalStateException");
+
+        // when
+        service.shutdown();
+
+        // then
+        assertFalse(service.isRunning(), "Service should not run");
+        assertDoesNotThrow(
+                service::shutdown, "Trying to shutdown the service again should be a no-op");
     }
 
     @Test
-    void testPlatformServiceInit() {
-        // given
-        final Metric metric = mock(Metric.class);
-        final List<Metric> metricList = new ArrayList<>();
-        metricList.add(metric);
-        final DefaultMetrics metrics = mock(DefaultMetrics.class);
-        when(metrics.getAll()).thenReturn(metricList);
-
-        final Metric globalMetric = mock(Metric.class);
-        final List<Metric> globalMetricList = new ArrayList<>();
-        globalMetricList.add(globalMetric);
-        final DefaultMetrics globalMetrics = mock(DefaultMetrics.class);
-        when(globalMetrics.getAll()).thenReturn(globalMetricList);
-        when(globalMetrics.getSnapshotService()).thenReturn(mock(SnapshotService.class));
-
-        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final SnapshotService service =
-                createPlatformSnapshotService(
-                        metrics, executorService, globalMetrics, OSTime.getInstance());
-        final SnapshotReceiver receiver = mock(SnapshotReceiver.class);
-        service.addSnapshotReceiver(receiver);
-
+    void testNoPlatforms() {
         // when
         service.start();
-        // we change the original lists, the receiver should have received a copy
-        metricList.add(mock(Metric.class));
-        globalMetricList.add(mock(Metric.class));
 
         // then
-        verify(receiver).init(List.of(metric, globalMetric));
+        final ArgumentCaptor<SnapshotEvent> notification =
+                ArgumentCaptor.forClass(SnapshotEvent.class);
+        verify(subscriber).accept(notification.capture());
+        assertThat(notification.getValue().nodeId()).isNull();
+        assertThat(notification.getValue().snapshots()).containsExactly(Snapshot.of(globalMetric));
     }
 
     @Test
-    void testGlobalServiceLoop() {
-        // given
-        final DefaultMetric metric = mock(DefaultMetric.class);
-        when(metric.takeSnapshot())
-                .thenReturn(
-                        List.of(new Snapshot.SnapshotEntry(Metric.ValueType.VALUE, new Object())));
-        final List<Metric> metricList = new ArrayList<>();
-        metricList.add(metric);
-        final DefaultMetrics metrics = mock(DefaultMetrics.class);
-        when(metrics.getAll()).thenReturn(metricList);
-        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final SnapshotService service =
-                createGlobalSnapshotService(metrics, executorService, OSTime.getInstance());
-        final SnapshotReceiver receiver = mock(SnapshotReceiver.class);
-        service.addSnapshotReceiver(receiver);
+    void testAddingOnePlatform() {
+        // when
+        service.addPlatformMetric(platform1Metrics);
         service.start();
 
-        // when
-        service.mainLoop();
-        // we change the original list, the receiver should have received a copy
-        metricList.add(mock(Metric.class));
-
         // then
-        verify(receiver).handleSnapshots(List.of(Snapshot.of(metric)));
+        final ArgumentCaptor<SnapshotEvent> notification =
+                ArgumentCaptor.forClass(SnapshotEvent.class);
+        verify(subscriber, times(2)).accept(notification.capture());
+        assertThat(notification.getValue().nodeId()).isEqualTo(NODE_ID_1);
+        assertThat(notification.getValue().snapshots())
+                .containsExactly(Snapshot.of(globalMetric), Snapshot.of(platform1Metric));
     }
 
     @Test
-    void testPlatformServiceLoop() {
-        // given
-        final DefaultMetric metric = mock(DefaultMetric.class);
-        when(metric.takeSnapshot())
-                .thenReturn(
-                        List.of(new Snapshot.SnapshotEntry(Metric.ValueType.VALUE, new Object())));
-        final List<Metric> metricList = new ArrayList<>();
-        metricList.add(metric);
-        final DefaultMetrics metrics = mock(DefaultMetrics.class);
-        when(metrics.getAll()).thenReturn(metricList);
-
-        final DefaultMetric globalMetric = mock(DefaultMetric.class);
-        when(globalMetric.takeSnapshot())
-                .thenReturn(
-                        List.of(new Snapshot.SnapshotEntry(Metric.ValueType.VALUE, new Object())));
-        final List<Metric> globalMetricList = new ArrayList<>();
-        globalMetricList.add(globalMetric);
-        final DefaultMetrics globalMetrics = mock(DefaultMetrics.class);
-        when(globalMetrics.getAll()).thenReturn(globalMetricList);
-        when(globalMetrics.getSnapshotService()).thenReturn(mock(SnapshotService.class));
-
-        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final SnapshotService globalService =
-                createGlobalSnapshotService(globalMetrics, executorService, OSTime.getInstance());
-        when(globalMetrics.getSnapshotService()).thenReturn(globalService);
-        final SnapshotService platformService =
-                createPlatformSnapshotService(
-                        metrics, executorService, globalMetrics, OSTime.getInstance());
-        final SnapshotReceiver receiver = mock(SnapshotReceiver.class);
-        platformService.addSnapshotReceiver(receiver);
-        globalService.start();
-        globalService.mainLoop();
-        platformService.start();
-
+    void testAddingTwoPlatforms() {
         // when
-        platformService.mainLoop();
-        // we change the original lists, the receiver should have received a copy
-        metricList.add(mock(Metric.class));
-        globalMetricList.add(mock(Metric.class));
+        service.addPlatformMetric(platform1Metrics);
+        service.addPlatformMetric(platform2Metrics);
+        service.start();
 
         // then
-        verify(receiver).handleSnapshots(List.of(Snapshot.of(metric), Snapshot.of(globalMetric)));
+        final ArgumentCaptor<SnapshotEvent> notification =
+                ArgumentCaptor.forClass(SnapshotEvent.class);
+        verify(subscriber, times(3)).accept(notification.capture());
+        assertThat(notification.getValue().nodeId()).isEqualTo(NODE_ID_2);
+        assertThat(notification.getValue().snapshots())
+                .containsExactly(Snapshot.of(globalMetric), Snapshot.of(platform2Metric));
     }
 
     @Test
-    void testRegularLoopBehavior() {
+    void testRemovingPlatforms() {
+        // when
+        service.addPlatformMetric(platform1Metrics);
+        service.addPlatformMetric(platform2Metrics);
+        service.removePlatformMetric(platform2Metrics);
+        service.start();
+
+        // then
+        final ArgumentCaptor<SnapshotEvent> notification =
+                ArgumentCaptor.forClass(SnapshotEvent.class);
+        verify(subscriber, times(2)).accept(notification.capture());
+        assertThat(notification.getValue().nodeId()).isEqualTo(NODE_ID_1);
+        assertThat(notification.getValue().snapshots())
+                .containsExactly(Snapshot.of(globalMetric), Snapshot.of(platform1Metric));
+    }
+
+    @Test
+    void testRegularLoopBehavior(@Mock final ScheduledExecutorService executorService) {
         // given
         final Duration loopDelay = Duration.ofMillis(SettingsCommon.csvWriteFrequency);
-        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final DefaultMetrics metrics = mock(DefaultMetrics.class);
         final Time time = new FakeTime(Duration.ofMillis(100));
-        final SnapshotService service = createGlobalSnapshotService(metrics, executorService, time);
+        final SnapshotService service =
+                new SnapshotService(globalMetrics, executorService, loopDelay, time);
 
         // when
         service.start();
@@ -231,9 +210,9 @@ class SnapshotServiceTest {
         final ArgumentCaptor<Long> delay = ArgumentCaptor.forClass(Long.class);
         final ArgumentCaptor<TimeUnit> timeUnit = ArgumentCaptor.forClass(TimeUnit.class);
         verify(executorService).schedule(mainLoop.capture(), delay.capture(), timeUnit.capture());
-        final Duration initialDelay =
+        final Duration firstDelay =
                 Duration.of(delay.getValue(), timeUnit.getValue().toChronoUnit());
-        assertThat(initialDelay).isCloseTo(loopDelay, Duration.ofMillis(1));
+        assertThat(firstDelay).isCloseTo(loopDelay, Duration.ofMillis(1));
         reset(executorService);
 
         // when
@@ -247,17 +226,18 @@ class SnapshotServiceTest {
     }
 
     @Test
-    void testLongLoopBehavior() {
+    void testLongLoopBehavior(@Mock final ScheduledExecutorService executorService) {
         // given
-        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final DefaultMetrics metrics = mock(DefaultMetrics.class);
+        final Duration loopDelay = Duration.ofMillis(SettingsCommon.csvWriteFrequency);
         final Time time = new FakeTime(Duration.ofSeconds(10 * SettingsCommon.csvWriteFrequency));
-        final SnapshotService service = createGlobalSnapshotService(metrics, executorService, time);
+        final SnapshotService service =
+                new SnapshotService(globalMetrics, executorService, loopDelay, time);
+
         final ArgumentCaptor<Runnable> mainLoop = ArgumentCaptor.forClass(Runnable.class);
         final ArgumentCaptor<Long> delay = ArgumentCaptor.forClass(Long.class);
         final ArgumentCaptor<TimeUnit> timeUnit = ArgumentCaptor.forClass(TimeUnit.class);
         service.start();
-        verify(executorService).schedule(mainLoop.capture(), anyLong(), any());
+        verify(executorService, timeout(10)).schedule(mainLoop.capture(), anyLong(), any());
         reset(executorService);
 
         // when
@@ -268,30 +248,5 @@ class SnapshotServiceTest {
         final Duration longLoopDelay =
                 Duration.of(delay.getValue(), timeUnit.getValue().toChronoUnit());
         assertThat(longLoopDelay).isCloseTo(Duration.ofMillis(0), Duration.ofMillis(1));
-    }
-
-    @Test
-    void testLongPauseBehavior() {
-        // given
-        final Duration loopDelay = Duration.ofMillis(SettingsCommon.csvWriteFrequency);
-        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final DefaultMetrics metrics = mock(DefaultMetrics.class);
-        final Time time = new FakeTime(Duration.ofMillis(100));
-        final SnapshotService service = createGlobalSnapshotService(metrics, executorService, time);
-        final ArgumentCaptor<Runnable> mainLoop = ArgumentCaptor.forClass(Runnable.class);
-        final ArgumentCaptor<Long> delay = ArgumentCaptor.forClass(Long.class);
-        final ArgumentCaptor<TimeUnit> timeUnit = ArgumentCaptor.forClass(TimeUnit.class);
-        service.start();
-        verify(executorService).schedule(mainLoop.capture(), anyLong(), any());
-        reset(executorService);
-
-        // when
-        mainLoop.getValue().run();
-
-        // then
-        verify(executorService).schedule(any(Runnable.class), delay.capture(), timeUnit.capture());
-        final Duration regularDelay =
-                Duration.of(delay.getValue(), timeUnit.getValue().toChronoUnit());
-        assertThat(regularDelay).isCloseTo(loopDelay.minusMillis(100), Duration.ofMillis(1));
     }
 }

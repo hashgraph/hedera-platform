@@ -28,7 +28,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
 
 public final class NetworkUtils {
-    private static final Logger LOG = LogManager.getLogger(NetworkUtils.class);
+    private static final Logger logger = LogManager.getLogger(NetworkUtils.class);
 
     private NetworkUtils() {}
 
@@ -73,7 +73,7 @@ public final class NetworkUtils {
             throw ie;
         }
         // we use a different marker depending on what the root cause is
-        LOG.error(determineExceptionMarker(e), "Connection broken: {}", description, e);
+        logger.error(determineExceptionMarker(e), "Connection broken: {}", description, e);
     }
 
     /**

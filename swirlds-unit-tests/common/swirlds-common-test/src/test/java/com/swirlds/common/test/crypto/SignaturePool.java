@@ -60,7 +60,7 @@ public class SignaturePool {
     /** logs events related to the startup of the application */
     static final Marker LOGM_ADV_CRYPTO_SYSTEM = MarkerManager.getMarker("ADV_CRYPTO_SYSTEM");
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger logger = LogManager.getLogger();
 
     private boolean transactionLogged = false;
 
@@ -210,7 +210,7 @@ public class SignaturePool {
             }
 
             if (!transactionLogged) {
-                log.trace(
+                logger.trace(
                         LOGM_STARTUP,
                         "StatsSigningDemo: Signed Message { publicKey = '{}', privateKey ='{}',"
                                 + " signature = '{}', message = '{}' }",
@@ -224,7 +224,7 @@ public class SignaturePool {
 
             System.arraycopy(sig, 0, buffer, offset, sig.length);
         } catch (Exception ex) {
-            log.error(LOGM_EXCEPTION, "Adv Crypto Subsystem: Failed to sign transaction", ex);
+            logger.error(LOGM_EXCEPTION, "Adv Crypto Subsystem: Failed to sign transaction", ex);
         }
     }
 
@@ -238,7 +238,7 @@ public class SignaturePool {
             privateKey = new byte[PRIVATE_KEY_LENGTH];
 
             algorithmAvailable = signer.cryptoSignKeypair(publicKey, privateKey);
-            log.trace(LOGM_STARTUP, "StatsSigningDemo: Public Key -> hex('{}')", hex(publicKey));
+            logger.trace(LOGM_STARTUP, "StatsSigningDemo: Public Key -> hex('{}')", hex(publicKey));
         } catch (Exception ex) {
             algorithmAvailable = false;
         }

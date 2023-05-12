@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class RoundHashValidator {
 
-    private static final Logger LOG = LogManager.getLogger(RoundHashValidator.class);
+    private static final Logger logger = LogManager.getLogger(RoundHashValidator.class);
 
     /** The round number. Known at construction time. */
     private final long round;
@@ -187,7 +187,7 @@ public class RoundHashValidator {
 
         if (hashFinder.getStatus() == ConsensusHashStatus.DECIDED) {
             if (selfStateHash == null) {
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         "self state hash for round {} was never reported",
                         round);

@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
 /** A thread can run this to repeatedly initiate syncs with other members. */
 class SyncCaller implements Runnable {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(SyncCaller.class);
+    private static final Logger logger = LogManager.getLogger(SyncCaller.class);
     /** ID number for this caller thread (0 is the first created by this platform, 1 next, etc) */
     final int callerNumber;
     /** the Platform object that is using this to call other members */
@@ -111,7 +111,7 @@ class SyncCaller implements Runnable {
                 }
             } catch (final Exception e) {
                 failedAttempts++;
-                log.error(EXCEPTION.getMarker(), "SyncCaller.run error", e);
+                logger.error(EXCEPTION.getMarker(), "SyncCaller.run error", e);
             }
         }
     }
@@ -151,7 +151,7 @@ class SyncCaller implements Runnable {
                 } else {
                     return -1;
                 }
-                log.debug(
+                logger.debug(
                         RECONNECT.getMarker(),
                         "`callRequestSync` : node {} fell behind and has reconnected, thread ID"
                                 + " callerNumber = {}",
@@ -206,7 +206,7 @@ class SyncCaller implements Runnable {
                 otherId = aLong.intValue();
                 // otherId is now the member to call
 
-                log.debug(
+                logger.debug(
                         SYNC_START.getMarker(),
                         "{} about to call {} (connection looks good)",
                         selfId,
@@ -241,7 +241,7 @@ class SyncCaller implements Runnable {
                         } catch (final IOException e) {
                             // IOException covers both SocketTimeoutException and EOFException, plus
                             // more
-                            log.error(
+                            logger.error(
                                     SOCKET_EXCEPTIONS.getMarker(),
                                     "SyncCaller.sync SocketException (so incrementing iCSyncPerSec)"
                                             + " while {} listening for {}:",
@@ -253,7 +253,7 @@ class SyncCaller implements Runnable {
                             conn.disconnect();
                         } catch (final Exception e) {
                             // we use a different marker depending on what the root cause is
-                            log.error(
+                            logger.error(
                                     NetworkUtils.determineExceptionMarker(e),
                                     "! SyncCaller.sync Exception (so incrementing iCSyncPerSec)"
                                             + " while {} listening for {}:",
@@ -276,7 +276,7 @@ class SyncCaller implements Runnable {
             }
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.warn(
+            logger.warn(
                     EXCEPTION.getMarker(),
                     "! SyncCaller.sync Interrupted (so incrementing iCSyncPerSec) while {}"
                             + " listening for {}:",
@@ -286,7 +286,7 @@ class SyncCaller implements Runnable {
 
             return -1;
         } catch (final Exception e) {
-            log.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "! SyncCaller.sync Exception (so incrementing iCSyncPerSec) while {} listening"
                             + " for {}:",
@@ -303,7 +303,7 @@ class SyncCaller implements Runnable {
      * @return true if the reconnect attempt completed successfully; otherwise false
      */
     private boolean doReconnect() {
-        log.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 "{} has fallen behind, will wait for all syncs to finish",
                 platform.getSelfId());
@@ -313,7 +313,7 @@ class SyncCaller implements Runnable {
         reconnectHelper.prepareForReconnect();
 
         final List<Long> reconnectNeighbors = platform.getSyncManager().getNeighborsForReconnect();
-        log.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 "{} has fallen behind, will try to reconnect with {}",
                 platform::getSelfId,
@@ -363,7 +363,7 @@ class SyncCaller implements Runnable {
             return reconnectHelper.loadSignedState(signedState);
         }
 
-        log.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 "{} `doReconnect` : finished, could not reconnect with any peer, reasons:\n{}",
                 platform.getSelfId(),

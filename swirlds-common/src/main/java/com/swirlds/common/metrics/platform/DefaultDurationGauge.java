@@ -50,7 +50,7 @@ public class DefaultDurationGauge extends DefaultMetric implements DurationGauge
     }
 
     @Override
-    public void update(final Duration duration) {
+    public void set(final Duration duration) {
         if (duration == null) {
             return;
         }

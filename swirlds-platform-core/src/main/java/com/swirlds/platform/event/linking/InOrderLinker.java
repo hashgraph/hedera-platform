@@ -31,7 +31,7 @@ import org.apache.logging.log4j.Logger;
  * out-of-order event is provided, it is logged and discarded.
  */
 public class InOrderLinker extends AbstractEventLinker {
-    private static final Logger LOG = LogManager.getLogger(InOrderLinker.class);
+    private static final Logger logger = LogManager.getLogger(InOrderLinker.class);
     private final ParentFinder parentFinder;
     /** Provides the most recent event by the supplied creator ID */
     private final Function<Long, EventImpl> mostRecentEvent;
@@ -57,7 +57,7 @@ public class InOrderLinker extends AbstractEventLinker {
             return;
         }
         if (linkedEvent != null) {
-            LOG.error(
+            logger.error(
                     LogMarker.EXCEPTION.getMarker(),
                     "Unprocessed linked event: {}",
                     () -> EventStrings.toMediumString(linkedEvent));
@@ -82,7 +82,7 @@ public class InOrderLinker extends AbstractEventLinker {
 
     private void logMissingParents(final ChildEvent event) {
         final GossipEvent e = event.getChild().getBaseEvent();
-        LOG.error(
+        logger.error(
                 INVALID_EVENT_ERROR.getMarker(),
                 "Invalid event! {} missing for {} min gen:{}\n"
                         + "most recent event by missing self parent creator:{}\n"

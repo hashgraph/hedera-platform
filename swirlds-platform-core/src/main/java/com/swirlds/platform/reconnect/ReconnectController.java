@@ -35,7 +35,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Responsible for executing the whole reconnect process */
 public class ReconnectController implements Runnable {
-    private static final Logger LOG = LogManager.getLogger(ReconnectController.class);
+    private static final Logger logger = LogManager.getLogger(ReconnectController.class);
     private static final int FAILED_RECONNECT_SLEEP_MILLIS = 1000;
 
     private final ReconnectHelper helper;
@@ -64,12 +64,12 @@ public class ReconnectController implements Runnable {
     /** Starts the reconnect controller thread if it's not already running */
     public void start() {
         if (!threadRunning.tryAcquire()) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Attempting to start reconnect controller while its already running");
             return;
         }
-        LOG.info(LogMarker.RECONNECT.getMarker(), "Starting ReconnectController");
+        logger.info(LogMarker.RECONNECT.getMarker(), "Starting ReconnectController");
         new ThreadConfiguration(threadManager)
                 .setComponent("reconnect")
                 .setThreadName("reconnect-controller")
@@ -84,11 +84,11 @@ public class ReconnectController implements Runnable {
             // failed attempts
             // so in this thread we can just try until it succeeds or the throttle kicks in
             while (!executeReconnect()) {
-                LOG.error(LogMarker.RECONNECT.getMarker(), "Reconnect failed, retrying");
+                logger.error(LogMarker.RECONNECT.getMarker(), "Reconnect failed, retrying");
                 Thread.sleep(FAILED_RECONNECT_SLEEP_MILLIS);
             }
         } catch (final RuntimeException | InterruptedException e) {
-            LOG.error(EXCEPTION.getMarker(), "Unexpected error occurred while reconnecting", e);
+            logger.error(EXCEPTION.getMarker(), "Unexpected error occurred while reconnecting", e);
             SystemUtils.exitSystem(SystemExitReason.RECONNECT_FAILURE);
         } finally {
             threadRunning.release();
@@ -99,12 +99,12 @@ public class ReconnectController implements Runnable {
         helper.prepareForReconnect();
 
         final SignedState signedState;
-        LOG.info(RECONNECT.getMarker(), "waiting for reconnect connection");
+        logger.info(RECONNECT.getMarker(), "waiting for reconnect connection");
         try (final LockedResource<Connection> connection = connectionProvider.waitForResource()) {
-            LOG.info(RECONNECT.getMarker(), "acquired reconnect connection");
+            logger.info(RECONNECT.getMarker(), "acquired reconnect connection");
             signedState = helper.receiveSignedState(connection.getResource(), validator.get());
         } catch (final RuntimeException e) {
-            LOG.info(RECONNECT.getMarker(), "receiving signed state failed", e);
+            logger.info(RECONNECT.getMarker(), "receiving signed state failed", e);
             return false;
         }
         if (!helper.loadSignedState(signedState)) {

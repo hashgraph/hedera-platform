@@ -12,6 +12,13 @@ module com.swirlds.platform {
     exports com.swirlds.platform.chatter.protocol.output;
     exports com.swirlds.platform.chatter.protocol.peer;
     exports com.swirlds.platform.chatter.protocol.heartbeat;
+    exports com.swirlds.platform.components;
+    exports com.swirlds.platform.components.appcomm;
+    exports com.swirlds.platform.components.common.output;
+    exports com.swirlds.platform.components.common.query;
+    exports com.swirlds.platform.components.state;
+    exports com.swirlds.platform.components.state.output;
+    exports com.swirlds.platform.components.state.query;
     exports com.swirlds.platform.event.report;
     exports com.swirlds.platform.gui.hashgraph;
     exports com.swirlds.platform.gui.hashgraph.internal;
@@ -55,8 +62,6 @@ module com.swirlds.platform {
     exports com.swirlds.platform.event.creation to
             com.swirlds.platform.test;
     exports com.swirlds.platform.swirldapp to
-            com.swirlds.platform.test;
-    exports com.swirlds.platform.components to
             com.swirlds.platform.test;
     exports com.swirlds.platform.observers to
             com.swirlds.platform.test;
@@ -103,6 +108,10 @@ module com.swirlds.platform {
     exports com.swirlds.platform.chatter.config;
     exports com.swirlds.platform.config;
     exports com.swirlds.platform.config.legacy;
+    exports com.swirlds.platform.health;
+    exports com.swirlds.platform.health.clock;
+    exports com.swirlds.platform.health.entropy;
+    exports com.swirlds.platform.health.filesystem;
 
     /* Swirlds Libraries */
     requires transitive com.swirlds.common;

@@ -41,7 +41,7 @@ import org.apache.logging.log4j.Logger;
 /** This class generates augmented thread dumps which include lock information. */
 class ThreadDumpGenerator {
 
-    private static final Logger log = LogManager.getLogger(ThreadDumpGenerator.class);
+    private static final Logger logger = LogManager.getLogger(ThreadDumpGenerator.class);
 
     /** random used to append to file names in case the timestamp is the same */
     private static final Random random = new Random();
@@ -139,7 +139,7 @@ class ThreadDumpGenerator {
                 writer.append("\n\n");
             }
         } catch (Exception e) {
-            log.error(EXCEPTION.getMarker(), "exception in generating thread file\n", e);
+            logger.error(EXCEPTION.getMarker(), "exception in generating thread file\n", e);
         }
     }
 

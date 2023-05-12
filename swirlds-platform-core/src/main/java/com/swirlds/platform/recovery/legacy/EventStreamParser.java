@@ -52,7 +52,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class EventStreamParser {
 
-    private static final Logger LOG = LogManager.getLogger(EventStreamParser.class);
+    private static final Logger logger = LogManager.getLogger(EventStreamParser.class);
     private static final int EVENTS_QUEUE_CAPACITY = 100_000;
     private final BlockingQueue<EventImpl> events =
             new LinkedBlockingQueue<>(EVENTS_QUEUE_CAPACITY);
@@ -160,7 +160,7 @@ public class EventStreamParser {
         try {
             return events.poll(timeout, timeoutUnit);
         } catch (final InterruptedException e) {
-            LOG.info(EXCEPTION.getMarker(), "Interrupted while polling event stream queue: ", e);
+            logger.info(EXCEPTION.getMarker(), "Interrupted while polling event stream queue: ", e);
             Thread.currentThread().interrupt();
             return null;
         }
@@ -183,14 +183,14 @@ public class EventStreamParser {
     private void eventPlayback() {
         parseEventFolder();
         doneParsing = true;
-        LOG.info(
+        logger.info(
                 EVENT_PARSER.getMarker(),
                 "Recovered {} events from stream file",
                 eventCounter::get);
     }
 
     private void parseEventFolder() {
-        LOG.info(EVENT_PARSER.getMarker(), "Loading event file from {} ", () -> eventStreamDir);
+        logger.info(EVENT_PARSER.getMarker(), "Loading event file from {} ", () -> eventStreamDir);
 
         final LinkedList<Path> filesBeforeEndTime = getFilesBeforeEndTime();
 
@@ -217,14 +217,14 @@ public class EventStreamParser {
             final Hash initialHash =
                     readStartRunningHashFromStreamFile(
                             path.toFile(), EventStreamType.getInstance());
-            LOG.info(EVENT_PARSER.getMarker(), "Set init hash as {}", initialHash);
+            logger.info(EVENT_PARSER.getMarker(), "Set init hash as {}", initialHash);
             hashConsumer.accept(initialHash);
             initialHashSent = true;
         }
     }
 
     private void readEventsFromFile(final Path path) {
-        LOG.info(EVENT_PARSER.getMarker(), "Parsing events in file {}", () -> filename(path));
+        logger.info(EVENT_PARSER.getMarker(), "Parsing events in file {}", () -> filename(path));
         sendInitialHash(path);
         parseEventStreamFile(path, this::handleParsedEvent, populateSettingsCommon);
     }
@@ -234,7 +234,7 @@ public class EventStreamParser {
         final Instant consensusTimestamp = event.getConsensusTimestamp();
 
         if (consensusTimestamp.isAfter(endTimestamp)) {
-            LOG.info(
+            logger.info(
                     EVENT_PARSER.getMarker(),
                     "Parsing complete. Found event with consensusTimestamp after endTimestamp");
             return false;
@@ -254,7 +254,7 @@ public class EventStreamParser {
         try {
             events.put(event);
         } catch (final InterruptedException ex) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Interrupted while adding a recovered event to the queue of parsed events",
                     ex);
@@ -277,7 +277,7 @@ public class EventStreamParser {
                     .filter(this::isFileBeforeEndTimestamp)
                     .forEachOrdered(filesBeforeEnd::add);
         } catch (final IOException e) {
-            LOG.error("Unable to access {} for event playback", eventStreamDir, e);
+            logger.error("Unable to access {} for event playback", eventStreamDir, e);
         }
         return filesBeforeEnd;
     }
@@ -285,14 +285,15 @@ public class EventStreamParser {
     private boolean isFileBeforeEndTimestamp(final Path path) {
         final Instant fileTimestamp = timestamp(path);
         if (fileTimestamp == null) {
-            LOG.warn("Not parsing file {} due to invalid timestamp format.", () -> filename(path));
+            logger.warn(
+                    "Not parsing file {} due to invalid timestamp format.", () -> filename(path));
             return false;
         }
         return fileTimestamp.isBefore(endTimestamp);
     }
 
     private void handleException(final Thread t, final Throwable e) {
-        LOG.error(
+        logger.error(
                 EXCEPTION.getMarker(), "Error while parsing event files in {}", eventStreamDir, e);
     }
 }

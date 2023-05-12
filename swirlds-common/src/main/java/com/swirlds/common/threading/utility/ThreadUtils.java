@@ -24,7 +24,7 @@ import org.apache.logging.log4j.Logger;
 /** Utility class for performing common actions with threads. */
 public final class ThreadUtils {
 
-    private static final Logger LOG = LogManager.getLogger(ThreadUtils.class);
+    private static final Logger logger = LogManager.getLogger(ThreadUtils.class);
 
     // Prevent instantiation of a static utility class
     private ThreadUtils() {}
@@ -36,20 +36,20 @@ public final class ThreadUtils {
      */
     public static void stopThreads(final StoppableThread... threadsToStop)
             throws InterruptedException {
-        LOG.info(THREADS.getMarker(), "{} thread(s) will be terminated", threadsToStop.length);
+        logger.info(THREADS.getMarker(), "{} thread(s) will be terminated", threadsToStop.length);
         for (final StoppableThread thread : threadsToStop) {
             if (thread != null) {
-                LOG.info(THREADS.getMarker(), "stopping thread {}", thread.getName());
+                logger.info(THREADS.getMarker(), "stopping thread {}", thread.getName());
                 thread.stop();
             }
         }
 
         for (final StoppableThread thread : threadsToStop) {
             if (thread != null) {
-                LOG.info(THREADS.getMarker(), "joining thread {}", thread.getName());
+                logger.info(THREADS.getMarker(), "joining thread {}", thread.getName());
                 thread.join();
             }
         }
-        LOG.info(THREADS.getMarker(), "{} thread(s) terminated", threadsToStop.length);
+        logger.info(THREADS.getMarker(), "{} thread(s) terminated", threadsToStop.length);
     }
 }

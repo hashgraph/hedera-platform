@@ -24,7 +24,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Event creation rules that are static and do not need to be instantiated */
 public final class StaticCreationRules {
-    private static final Logger LOG = LogManager.getLogger(StaticCreationRules.class);
+    private static final Logger logger = LogManager.getLogger(StaticCreationRules.class);
 
     private StaticCreationRules() {}
 
@@ -41,7 +41,8 @@ public final class StaticCreationRules {
             final BaseEvent selfParent, final BaseEvent otherParent) {
         if (otherParent == null) {
             // we only have a null other-parent when creating a genesis event
-            LOG.debug(CREATE_EVENT.getMarker(), "Not creating event because otherParent is null");
+            logger.debug(
+                    CREATE_EVENT.getMarker(), "Not creating event because otherParent is null");
             return EventCreationRuleResponse.DONT_CREATE;
         }
         return EventCreationRuleResponse.PASS;

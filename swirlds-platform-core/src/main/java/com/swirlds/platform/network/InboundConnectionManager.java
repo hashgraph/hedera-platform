@@ -36,7 +36,7 @@ import org.apache.logging.log4j.Logger;
  * them.
  */
 public class InboundConnectionManager implements ConnectionManager {
-    private static final Logger LOG = LogManager.getLogger(InboundConnectionManager.class);
+    private static final Logger logger = LogManager.getLogger(InboundConnectionManager.class);
     /**
      * the current connection in use, initially not connected. there is no synchronization on this
      * variable
@@ -100,7 +100,7 @@ public class InboundConnectionManager implements ConnectionManager {
         try (final LockedResource<Connection> lockedConn = lock.lockInterruptibly()) {
             final Connection old = lockedConn.getResource();
             if (old.connected()) {
-                LOG.error(
+                logger.error(
                         SOCKET_EXCEPTIONS.getMarker(),
                         "{} got new connection from {}, disconnecting old one",
                         old.getSelfId(),

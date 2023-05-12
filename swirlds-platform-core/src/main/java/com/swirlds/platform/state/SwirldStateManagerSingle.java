@@ -78,7 +78,7 @@ import org.apache.logging.log4j.Logger;
 public class SwirldStateManagerSingle implements SwirldStateManager {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(SwirldStateManagerSingle.class);
+    private static final Logger logger = LogManager.getLogger(SwirldStateManagerSingle.class);
 
     /** The component name for threads managed by this class. */
     private static final String COMPONENT_NAME = "swirld-state-manager-single";
@@ -259,7 +259,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
                             try {
                                 shuffler.shuffle();
                             } catch (final Exception e) {
-                                LOG.error(
+                                logger.error(
                                         EXCEPTION.getMarker(),
                                         "shuffle exception {}",
                                         () -> e + Arrays.toString(e.getStackTrace()));
@@ -344,7 +344,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
         // Add this event to the threadWork queue it to handle
         if (!threadWork.offer(event)) {
             // this should never happen, because threadWork should have unlimited capacity.
-            LOG.error(ERROR.getMarker(), "Offer to threadWork failed");
+            logger.error(ERROR.getMarker(), "Offer to threadWork failed");
         }
         stats.preConsensusHandleTime(startTime, System.nanoTime());
     }
@@ -462,7 +462,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
                 shuffleBarrier.await(); // wait for all 3 threads, shuffle, continue
                 return true;
             } catch (final InterruptedException | BrokenBarrierException e) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "shuffleBarrier interrupted or broken for state {}",
                         stateInfo,
@@ -527,7 +527,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
         // applied to the new forWork state after the next shuffle
         if (!forNext.offer(event)) {
             // this should never happen, because forNext should have unlimited capacity.
-            LOG.error(EXCEPTION.getMarker(), "forNext.offer returned false");
+            logger.error(EXCEPTION.getMarker(), "forNext.offer returned false");
         }
     }
 
@@ -539,7 +539,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 
         // Discard events that have already been applied to stateCons
         if (round.isComplete() && shouldDiscardEvent(true, round.getLastEvent(), stateCons)) {
-            LOG.error(
+            logger.error(
                     ERROR.getMarker(),
                     "Encountered out of order consensus event! Event Order = {}, stateCons lastCons"
                             + " = {}",
@@ -586,7 +586,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
         try {
             future.get();
         } catch (final InterruptedException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Transaction polling thread [ nodeId = {} ] was interrupted while handling"
                             + " consensus round {}",
@@ -595,7 +595,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
                     e);
             Thread.currentThread().interrupt();
         } catch (final ExecutionException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Execution exception while executing transaction polling thread [ nodeId = {} ]"
                             + " for round {}",
@@ -684,20 +684,20 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
      */
     @Override
     public void clear() {
-        LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: pausing threadWork");
+        logger.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: pausing threadWork");
         threadWork.pause();
 
-        LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: clearing forWork");
+        logger.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: clearing forWork");
         threadWork.clear();
 
-        LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: clearing forNext");
+        logger.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: clearing forNext");
         forNext.clear();
 
         // clear the transactions
-        LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: clearing transactionPool");
+        logger.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: clearing transactionPool");
         transactionPool.clear();
 
-        LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: releasing states");
+        logger.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: releasing states");
 
         // delete the states
         releaseState(stateWork);
@@ -705,7 +705,8 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
 
         stateWork = null;
 
-        LOG.info(RECONNECT.getMarker(), "SwirldStateManagerSingle: {} is now cleared", CLASS_NAME);
+        logger.info(
+                RECONNECT.getMarker(), "SwirldStateManagerSingle: {} is now cleared", CLASS_NAME);
     }
 
     private static void releaseState(final StateInfo stateInfo) {
@@ -717,7 +718,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
             }
         } catch (final Exception e) {
             // defensive: catch exceptions from a bad app
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "exception in {} trying to release state {}:",
                     CLASS_NAME,
@@ -815,7 +816,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
                 stateCurrReturned.release();
             } catch (final Exception e) {
                 // defensive: catch exceptions from a bad app
-                LOG.error(EXCEPTION.getMarker(), "exception in app during delete:", e);
+                logger.error(EXCEPTION.getMarker(), "exception in app during delete:", e);
             }
         }
         stateCurrReturned = null;
@@ -863,13 +864,13 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
             stateWork = stateCons.copy();
 
             transactionPool.shuffle(); // move and copy the lists of transactions, too
-            LOG.debug(
+            logger.debug(
                     QUEUES.getMarker(),
                     "SHUFFLE stateWork:{}",
                     stateWork.getState().getSwirldState());
 
             if (!threadWork.isEmpty()) {
-                LOG.error(STARTUP.getMarker(), "threadWork is not empty after draining!");
+                logger.error(STARTUP.getMarker(), "threadWork is not empty after draining!");
             }
 
             // threadWork's queue is empty, so simply add the forNext events, then clear forNext.
@@ -910,7 +911,7 @@ public class SwirldStateManagerSingle implements SwirldStateManager {
                         stateCurr.release();
                     } catch (final Exception e) {
                         // defensive: catch exceptions from a bad app
-                        LOG.error(
+                        logger.error(
                                 EXCEPTION.getMarker(),
                                 "exception in app during release of state:",
                                 e);

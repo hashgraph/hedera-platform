@@ -52,7 +52,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class ReconnectNodeRemover<K extends VirtualKey<? super K>, V extends VirtualValue> {
 
-    private static final Logger LOG = LogManager.getLogger(ReconnectNodeRemover.class);
+    private static final Logger logger = LogManager.getLogger(ReconnectNodeRemover.class);
 
     private static final int QUEUE_CAPACITY = 100_000;
 
@@ -142,7 +142,7 @@ public class ReconnectNodeRemover<K extends VirtualKey<? super K>, V extends Vir
 
     /** This method is called if there is an exception on the background thread. */
     private void exceptionHandler(final Thread t, final Throwable cause) {
-        LOG.error(EXCEPTION.getMarker(), "exception on VM reconnect node removal thread");
+        logger.error(EXCEPTION.getMarker(), "exception on VM reconnect node removal thread");
         workGroup.handleError(cause);
         exceptionEncountered.set(true);
     }

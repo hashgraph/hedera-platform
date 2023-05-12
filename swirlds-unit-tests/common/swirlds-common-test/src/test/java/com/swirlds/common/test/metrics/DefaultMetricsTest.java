@@ -15,13 +15,18 @@
  */
 package com.swirlds.common.test.metrics;
 
-import static com.swirlds.test.framework.TestQualifierTags.TIME_CONSUMING;
+import static com.swirlds.common.metrics.platform.MetricsEvent.Type.ADDED;
+import static com.swirlds.common.metrics.platform.MetricsEvent.Type.REMOVED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mock.Strictness.LENIENT;
 import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,18 +38,23 @@ import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.metrics.MetricConfig;
 import com.swirlds.common.metrics.MetricsFactory;
 import com.swirlds.common.metrics.platform.DefaultMetrics;
-import com.swirlds.common.metrics.platform.SnapshotService;
-import com.swirlds.test.framework.TestQualifierTags;
+import com.swirlds.common.metrics.platform.MetricKeyRegistry;
+import com.swirlds.common.metrics.platform.MetricsEvent;
+import com.swirlds.common.system.NodeId;
 import java.util.Collection;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+@ExtendWith(MockitoExtension.class)
 class DefaultMetricsTest {
 
+    private static final NodeId NODE_ID = NodeId.createMain(42L);
     private static final String CATEGORY_1 = "CaTeGoRy1";
     private static final String CATEGORY_1a = "CaTeGoRy1.a";
     private static final String CATEGORY_1b = "CaTeGoRy1.b";
@@ -53,52 +63,91 @@ class DefaultMetricsTest {
     private static final String NAME_1 = "NaMe1";
     private static final String NAME_2 = "NaMe2";
 
+    @Mock private MetricKeyRegistry registry;
+
+    @Mock(strictness = LENIENT)
     private ScheduledExecutorService executor;
-    private MetricsFactory factory;
+
+    @Mock private MetricsFactory factory;
+    @Mock private Consumer<MetricsEvent> subscriber;
     private DefaultMetrics metrics;
 
+    @Mock(strictness = LENIENT)
     private Counter counter_1_1;
+
+    @Mock(strictness = LENIENT)
     private Counter counter_1a_1;
+
+    @Mock(strictness = LENIENT)
     private Counter counter_1b_1;
+
+    @Mock(strictness = LENIENT)
     private Counter counter_1_2;
+
+    @Mock(strictness = LENIENT)
     private Counter counter_2_1;
+
+    @Mock(strictness = LENIENT)
     private Counter counter_11_1;
 
+    @SuppressWarnings("unchecked")
     @BeforeEach
     void setupService() {
-        SettingsCommon.metricsUpdatePeriodMillis = -1;
-        executor = mock(ScheduledExecutorService.class);
-        factory = mock(MetricsFactory.class);
-        metrics = new DefaultMetrics(executor, factory);
-        final SnapshotService snapshotService = mock(SnapshotService.class);
-        metrics.setSnapshotService(snapshotService);
-        setupFactory();
+        SettingsCommon.metricsUpdatePeriodMillis = 10;
+
+        when(registry.register(any(), any(), any())).thenReturn(true);
+
+        doAnswer(
+                        invocation -> {
+                            invocation.getArgument(0, Runnable.class).run();
+                            return null;
+                        })
+                .when(executor)
+                .execute(any());
+        doAnswer(
+                        invocation -> {
+                            invocation.getArgument(0, Runnable.class).run();
+                            return null;
+                        })
+                .when(executor)
+                .scheduleAtFixedRate(any(), anyLong(), anyLong(), any());
+
+        metrics = new DefaultMetrics(NODE_ID, registry, executor, factory);
+        setupDefaultData();
+        metrics.subscribe(subscriber);
+        reset(subscriber);
     }
 
-    private void setupFactory() {
-        counter_1_1 = mock(Counter.class);
+    private void setupDefaultData() {
         when(counter_1_1.getCategory()).thenReturn(CATEGORY_1);
         when(counter_1_1.getName()).thenReturn(NAME_1);
+        when(counter_1_1.toString())
+                .thenReturn(String.format("Counter(%s, %s)", CATEGORY_1, NAME_1));
 
-        counter_1a_1 = mock(Counter.class);
         when(counter_1a_1.getCategory()).thenReturn(CATEGORY_1a);
         when(counter_1a_1.getName()).thenReturn(NAME_1);
+        when(counter_1a_1.toString())
+                .thenReturn(String.format("Counter(%s, %s)", CATEGORY_1a, NAME_1));
 
-        counter_1b_1 = mock(Counter.class);
         when(counter_1b_1.getCategory()).thenReturn(CATEGORY_1b);
         when(counter_1b_1.getName()).thenReturn(NAME_1);
+        when(counter_1b_1.toString())
+                .thenReturn(String.format("Counter(%s, %s)", CATEGORY_1b, NAME_1));
 
-        counter_1_2 = mock(Counter.class);
         when(counter_1_2.getCategory()).thenReturn(CATEGORY_1);
         when(counter_1_2.getName()).thenReturn(NAME_2);
+        when(counter_1_2.toString())
+                .thenReturn(String.format("Counter(%s, %s)", CATEGORY_1, NAME_2));
 
-        counter_2_1 = mock(Counter.class);
         when(counter_2_1.getCategory()).thenReturn(CATEGORY_2);
         when(counter_2_1.getName()).thenReturn(NAME_1);
+        when(counter_2_1.toString())
+                .thenReturn(String.format("Counter(%s, %s)", CATEGORY_2, NAME_1));
 
-        counter_11_1 = mock(Counter.class);
         when(counter_11_1.getCategory()).thenReturn(CATEGORY_11);
         when(counter_11_1.getName()).thenReturn(NAME_1);
+        when(counter_11_1.toString())
+                .thenReturn(String.format("Counter(%s, %s)", CATEGORY_11, NAME_1));
 
         when(factory.createMetric(any()))
                 .thenReturn(
@@ -124,12 +173,13 @@ class DefaultMetricsTest {
 
     @Test
     void testConstructorWithNullParameter() {
-        SettingsCommon.metricsUpdatePeriodMillis = 3000;
-        assertThatThrownBy(() -> new DefaultMetrics(null, factory))
+        assertThatCode(() -> new DefaultMetrics(null, registry, executor, factory))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> new DefaultMetrics(NODE_ID, null, executor, factory))
                 .isInstanceOf(IllegalArgumentException.class);
-        SettingsCommon.metricsUpdatePeriodMillis = -1;
-        assertThatCode(() -> new DefaultMetrics(null, factory)).doesNotThrowAnyException();
-        assertThatThrownBy(() -> new DefaultMetrics(executor, null))
+        assertThatThrownBy(() -> new DefaultMetrics(NODE_ID, registry, null, factory))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new DefaultMetrics(NODE_ID, registry, executor, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -178,12 +228,9 @@ class DefaultMetricsTest {
     }
 
     @Test
-    void testGetMetricsOfCategoryAfterMetricWasAdded() {
+    void testGetMetricsOfCategoryAfterMetricWasAdded(@Mock final Counter newCounter) {
         // given
         final Collection<Metric> actual = metrics.findMetricsByCategory(CATEGORY_1);
-        final Counter newCounter = mock(Counter.class);
-        when(newCounter.getCategory()).thenReturn(CATEGORY_1);
-        when(newCounter.getName()).thenReturn("New Counter");
         when(factory.createMetric(any())).thenReturn(newCounter);
 
         // when
@@ -231,12 +278,9 @@ class DefaultMetricsTest {
     }
 
     @Test
-    void testGetAllMetricsAfterMetricWasAdded() {
+    void testGetAllMetricsAfterMetricWasAdded(@Mock final Counter newCounter) {
         // given
         final Collection<Metric> actual = metrics.getAll();
-        final Counter newCounter = mock(Counter.class);
-        when(newCounter.getCategory()).thenReturn(CATEGORY_1);
-        when(newCounter.getName()).thenReturn("New Counter");
         when(factory.createMetric(any())).thenReturn(newCounter);
 
         // when
@@ -280,25 +324,145 @@ class DefaultMetricsTest {
     }
 
     @Test
+    void testSubscribeAfterAdd(@Mock final Consumer<MetricsEvent> secondSubscriber) {
+        // given
+        final Metric metric = metrics.getOrCreate(new Counter.Config(CATEGORY_1, "New Counter"));
+
+        // when
+        metrics.subscribe(secondSubscriber);
+
+        // then
+        verify(secondSubscriber, atLeastOnce()).accept(new MetricsEvent(ADDED, NODE_ID, metric));
+    }
+
+    @Test
+    void testSubscribeBeforeAdd() {
+        // when
+        final Metric metric = metrics.getOrCreate(new Counter.Config(CATEGORY_1, "New Counter"));
+
+        // then
+        verify(subscriber, atLeastOnce()).accept(new MetricsEvent(ADDED, NODE_ID, metric));
+    }
+
+    @Test
+    void testSubscribeAfterRemoveMetricKey(@Mock final Consumer<MetricsEvent> secondSubscriber) {
+        // given
+        final Metric metric = metrics.getOrCreate(new Counter.Config(CATEGORY_1, NAME_1));
+        metrics.remove(CATEGORY_1, NAME_1);
+
+        // when
+        metrics.subscribe(secondSubscriber);
+
+        // then
+        verify(secondSubscriber, never()).accept(new MetricsEvent(REMOVED, NODE_ID, metric));
+    }
+
+    @Test
+    void testSubscribeBeforeRemoveMetricKey() {
+        // given
+        final Metric metric = metrics.getOrCreate(new Counter.Config(CATEGORY_1, NAME_1));
+
+        // when
+        metrics.remove(CATEGORY_1, NAME_1);
+
+        // then
+        verify(subscriber).accept(new MetricsEvent(REMOVED, NODE_ID, metric));
+    }
+
+    @Test
+    void testSubscribeAfterRemoveMetric(@Mock final Consumer<MetricsEvent> secondSubscriber) {
+        // given
+        final Metric metric = metrics.getOrCreate(new Counter.Config(CATEGORY_1, NAME_1));
+        metrics.remove(metric);
+
+        // when
+        metrics.subscribe(secondSubscriber);
+
+        // then
+        verify(secondSubscriber, never()).accept(new MetricsEvent(REMOVED, NODE_ID, metric));
+    }
+
+    @Test
+    void testSubscribeBeforeRemoveMetric() {
+        // given
+        final Metric metric = metrics.getOrCreate(new Counter.Config(CATEGORY_1, NAME_1));
+
+        // when
+        metrics.remove(metric);
+
+        // then
+        verify(subscriber).accept(new MetricsEvent(REMOVED, NODE_ID, metric));
+    }
+
+    @Test
+    void testSubscribeAfterRemoveMetricConfig(@Mock final Consumer<MetricsEvent> secondSubscriber) {
+        // given
+        final Counter.Config config = new Counter.Config(CATEGORY_1, NAME_1);
+        final Metric metric = metrics.getOrCreate(config);
+        metrics.remove(config);
+
+        // when
+        metrics.subscribe(secondSubscriber);
+
+        // then
+        verify(secondSubscriber, never()).accept(new MetricsEvent(REMOVED, NODE_ID, metric));
+    }
+
+    @Test
+    void testSubscribeBeforeRemoveMetricConfig() {
+        // given
+        final Counter.Config config = new Counter.Config(CATEGORY_1, NAME_1);
+        final Metric metric = metrics.getOrCreate(config);
+
+        // when
+        metrics.remove(config);
+
+        // then
+        verify(subscriber).accept(new MetricsEvent(REMOVED, NODE_ID, metric));
+    }
+
+    @Test
     void testCreateDuplicateMetric() {
         // when
         final Counter actual = metrics.getOrCreate(new Counter.Config(CATEGORY_1, NAME_1));
 
         // then
         assertThat(actual).isSameAs(counter_1_1);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
     void testCreateDuplicateMetricWithWrongType() {
+        // given
         final IntegerGauge.Config config = new IntegerGauge.Config(CATEGORY_1, NAME_1);
+
+        // then
         assertThatThrownBy(() -> metrics.getOrCreate(config))
                 .isInstanceOf(IllegalStateException.class);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
     void testCreateMetricWithNullParameter() {
+        // then
         assertThatThrownBy(() -> metrics.getOrCreate(null))
                 .isInstanceOf(IllegalArgumentException.class);
+        verify(subscriber, never()).accept(any());
+    }
+
+    @Test
+    void testCreateMetricWithReservedMetricKey() {
+        // given
+        final String category = "SomeCategory";
+        final String name = "SomeName";
+        final String metricKey = DefaultMetrics.calculateMetricKey(category, name);
+        when(registry.register(NODE_ID, metricKey, Counter.class)).thenReturn(false);
+
+        // then
+        final Counter.Config config = new Counter.Config(category, name);
+        assertThatThrownBy(() -> metrics.getOrCreate(config))
+                .isInstanceOf(IllegalStateException.class);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
@@ -311,6 +475,7 @@ class DefaultMetricsTest {
         assertThat(remaining)
                 .containsExactly(
                         counter_1_2, counter_1a_1, counter_1b_1, counter_11_1, counter_2_1);
+        verify(subscriber).accept(new MetricsEvent(REMOVED, NODE_ID, counter_1_1));
     }
 
     @Test
@@ -328,6 +493,7 @@ class DefaultMetricsTest {
                         counter_1b_1,
                         counter_11_1,
                         counter_2_1);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
@@ -336,6 +502,7 @@ class DefaultMetricsTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> metrics.remove(CATEGORY_1, null))
                 .isInstanceOf(IllegalArgumentException.class);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
@@ -348,12 +515,12 @@ class DefaultMetricsTest {
         assertThat(remaining)
                 .containsExactly(
                         counter_1_2, counter_1a_1, counter_1b_1, counter_11_1, counter_2_1);
+        verify(subscriber).accept(new MetricsEvent(REMOVED, NODE_ID, counter_1_1));
     }
 
     @Test
-    void testRemoveByMetricWithWrongClass() {
+    void testRemoveByMetricWithWrongClass(@Mock final IntegerGauge gauge) {
         // given
-        final IntegerGauge gauge = mock(IntegerGauge.class);
         when(gauge.getCategory()).thenReturn(CATEGORY_1);
         when(gauge.getName()).thenReturn(NAME_1);
 
@@ -370,12 +537,12 @@ class DefaultMetricsTest {
                         counter_1b_1,
                         counter_11_1,
                         counter_2_1);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
-    void testRemoveNonExistingByMetric() {
+    void testRemoveNonExistingByMetric(@Mock final Counter counter) {
         // given
-        final Counter counter = mock(Counter.class);
         when(counter.getCategory()).thenReturn(CATEGORY_2);
         when(counter.getName()).thenReturn(NAME_2);
 
@@ -392,16 +559,17 @@ class DefaultMetricsTest {
                         counter_1b_1,
                         counter_11_1,
                         counter_2_1);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
     void testRemoveByMetricWithNullParameter() {
         assertThatThrownBy(() -> metrics.remove((Metric) null))
                 .isInstanceOf(IllegalArgumentException.class);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
-    @Tag(TIME_CONSUMING)
     void testRemoveByConfig() {
         // when
         metrics.remove(new Counter.Config(CATEGORY_1, NAME_1));
@@ -411,6 +579,7 @@ class DefaultMetricsTest {
         assertThat(remaining)
                 .containsExactly(
                         counter_1_2, counter_1a_1, counter_1b_1, counter_11_1, counter_2_1);
+        verify(subscriber).accept(new MetricsEvent(REMOVED, NODE_ID, counter_1_1));
     }
 
     @Test
@@ -428,6 +597,7 @@ class DefaultMetricsTest {
                         counter_1b_1,
                         counter_11_1,
                         counter_2_1);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
@@ -445,53 +615,43 @@ class DefaultMetricsTest {
                         counter_1b_1,
                         counter_11_1,
                         counter_2_1);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
-    @Tag(TestQualifierTags.TIME_CONSUMING)
     void testRemoveByConfigWithNullParameter() {
         assertThatThrownBy(() -> metrics.remove((MetricConfig<?, ?>) null))
                 .isInstanceOf(IllegalArgumentException.class);
+        verify(subscriber, never()).accept(any());
     }
 
     @Test
-    @Tag(TIME_CONSUMING)
-    void testUpdater() {
+    void testUpdater(@Mock final Runnable updater) {
         // given
-        SettingsCommon.metricsUpdatePeriodMillis = 10;
-        final ScheduledExecutorService executor1 = Executors.newSingleThreadScheduledExecutor();
-        final DefaultMetrics metrics = new DefaultMetrics(executor1, factory);
-        final SnapshotService snapshotService = mock(SnapshotService.class);
-        metrics.setSnapshotService(snapshotService);
-        final Runnable updater = mock(Runnable.class);
         metrics.addUpdater(updater);
 
         // then
-        verify(updater, Mockito.after(100).never()).run();
+        verify(updater, never()).run();
 
         // when
         metrics.start();
 
         // then
-        verify(updater, timeout(100).atLeastOnce()).run();
+        verify(updater, atLeastOnce()).run();
     }
 
     @Test
-    void testDisabledUpdater() {
+    void testDisabledUpdater(@Mock final Runnable updater) {
         // given
         SettingsCommon.metricsUpdatePeriodMillis = 0;
-        final ScheduledExecutorService executor1 = Executors.newSingleThreadScheduledExecutor();
-        final DefaultMetrics metrics = new DefaultMetrics(executor1, factory);
-        final SnapshotService snapshotService = mock(SnapshotService.class);
-        metrics.setSnapshotService(snapshotService);
-        final Runnable updater = mock(Runnable.class);
+        final DefaultMetrics metrics = new DefaultMetrics(NODE_ID, registry, executor, factory);
         metrics.addUpdater(updater);
 
         // when
         metrics.start();
 
         // then
-        verify(updater, Mockito.after(100).never()).run();
+        verify(updater, never()).run();
     }
 
     @Test
@@ -501,14 +661,10 @@ class DefaultMetricsTest {
     }
 
     @Test
-    void testUpdaterAddedAfterStart() {
+    void testUpdaterAddedAfterStart(@Mock final Runnable updater) {
         // given
-        SettingsCommon.metricsUpdatePeriodMillis = 10;
         final ScheduledExecutorService executor1 = Executors.newSingleThreadScheduledExecutor();
-        final DefaultMetrics metrics = new DefaultMetrics(executor1, factory);
-        final SnapshotService snapshotService = mock(SnapshotService.class);
-        metrics.setSnapshotService(snapshotService);
-        final Runnable updater = mock(Runnable.class);
+        final DefaultMetrics metrics = new DefaultMetrics(NODE_ID, registry, executor1, factory);
         metrics.start();
 
         // when
@@ -516,5 +672,40 @@ class DefaultMetricsTest {
 
         // then
         verify(updater, timeout(100).atLeastOnce()).run();
+    }
+
+    @Test
+    void testAddGlobalMetric(@Mock final Counter newCounter) {
+        // given
+        when(newCounter.getCategory()).thenReturn(CATEGORY_1);
+        when(newCounter.getName()).thenReturn("New Counter");
+        when(factory.createMetric(any())).thenReturn(newCounter);
+        final DefaultMetrics globalMetric = new DefaultMetrics(null, registry, executor, factory);
+        globalMetric.subscribe(metrics::handleGlobalMetrics);
+
+        // when
+        globalMetric.getOrCreate(new Counter.Config(CATEGORY_1, "New Counter"));
+
+        // then
+        assertThat(metrics.getMetric(CATEGORY_1, "New Counter")).isEqualTo(newCounter);
+        verify(subscriber, never()).accept(any());
+    }
+
+    @Test
+    void testRemoveGlobalMetric(@Mock final Counter newCounter) {
+        // given
+        when(newCounter.getCategory()).thenReturn(CATEGORY_1);
+        when(newCounter.getName()).thenReturn("New Counter");
+        when(factory.createMetric(any())).thenReturn(newCounter);
+        final DefaultMetrics globalMetric = new DefaultMetrics(null, registry, executor, factory);
+        globalMetric.subscribe(metrics::handleGlobalMetrics);
+        globalMetric.getOrCreate(new Counter.Config(CATEGORY_1, "New Counter"));
+
+        // when
+        globalMetric.remove(CATEGORY_1, "New Counter");
+
+        // then
+        assertThat(metrics.getMetric(CATEGORY_1, "New Counter")).isNull();
+        verify(subscriber, never()).accept(any());
     }
 }

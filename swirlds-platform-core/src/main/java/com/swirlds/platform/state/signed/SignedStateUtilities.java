@@ -15,94 +15,12 @@
  */
 package com.swirlds.platform.state.signed;
 
-import static com.swirlds.logging.LogMarker.EXCEPTION;
-import static com.swirlds.logging.LogMarker.RECONNECT;
-import static com.swirlds.logging.LogMarker.SIGNED_STATE;
-
-import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.utility.AutoCloseableWrapper;
-import com.swirlds.platform.Crypto;
-import java.security.PublicKey;
-import java.util.concurrent.Future;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-/** Utilities for evaluating signed states */
+/** {@link SignedState} utilities. */
 public final class SignedStateUtilities {
-    private static final Logger LOG = LogManager.getLogger(SignedStateUtilities.class);
 
     private SignedStateUtilities() {}
-
-    /**
-     * Calculates the amount of stake among valid signatures on the signed state.
-     *
-     * @param signedState the signed state to calculate stake on
-     * @param crypto the object capable of determining the validity of member signatures
-     * @param addressBook the address book used for the signed state
-     * @return the signature summary of the signed state
-     */
-    public static SignatureSummary getSigningStake(
-            final SignedState signedState, final Crypto crypto, final AddressBook addressBook) {
-
-        final Future<Boolean>[] maybeValidFutures =
-                getValidFutures(signedState, crypto, addressBook);
-
-        // how many valid signatures
-        int validCount = 0;
-
-        // how much stake owned by members with valid signatures
-        long validStake = 0;
-
-        final int numSigs = signedState.getSigSet().getNumMembers();
-        for (int i = 0; i < numSigs; i++) {
-            if (maybeValidFutures[i] == null) {
-                continue;
-            }
-            try {
-                if (maybeValidFutures[i].get()) {
-                    validCount++;
-                    validStake += signedState.getAddressBook().getAddress(i).getStake();
-                }
-            } catch (final InterruptedException e) {
-                Thread.currentThread().interrupt();
-                LOG.warn(RECONNECT.getMarker(), "interrupted while validating signatures");
-            } catch (final Exception e) {
-                LOG.info(
-                        EXCEPTION.getMarker(),
-                        "Error while validating signature from received state: ",
-                        e);
-            }
-        }
-        return new SignatureSummary(maybeValidFutures.length, validCount, validStake);
-    }
-
-    /**
-     * Calculates the validity of each signature on the {@code signedState} and returns them as a
-     * list of {@link Future} objects.
-     *
-     * @param signedState the signed state to evaluate
-     * @param addressBook the address book to use for signature verification
-     * @return a list of {@link Future}s indicating the validity of each signature
-     */
-    private static Future<Boolean>[] getValidFutures(
-            final SignedState signedState, final Crypto crypto, final AddressBook addressBook) {
-        final int numSigs = signedState.getSigSet().getNumMembers();
-        final Future<Boolean>[] validFutures = new Future[numSigs];
-        for (int i = 0; i < numSigs; i++) {
-            final PublicKey key = addressBook.getAddress(i).getSigPublicKey();
-            final SigInfo sigInfo = signedState.getSigSet().getSigInfo(i);
-            if (sigInfo == null) {
-                continue;
-            }
-            validFutures[i] =
-                    crypto.verifySignatureParallel(
-                            signedState.getState().getHash().getValue(),
-                            sigInfo.getSignature().getSignatureBytes(),
-                            key,
-                            (Boolean b) -> {});
-        }
-        return validFutures;
-    }
 
     /**
      * Wraps a signed state in an {@link AutoCloseableWrapper} with a reservation taken out on it.
@@ -133,23 +51,5 @@ public final class SignedStateUtilities {
                         }
                     }
                 });
-    }
-
-    /**
-     * Logs information about the signed state validity.
-     *
-     * @param log the logger to use
-     * @param validStake the amount of stake from valid signatures
-     * @param hasEnoughStake true if the state has enough valid stake
-     * @param addressBook the address book used to validate the signed state
-     */
-    public static void logStakeInfo(
-            final Logger log,
-            final long validStake,
-            final boolean hasEnoughStake,
-            final AddressBook addressBook) {
-        log.info(SIGNED_STATE.getMarker(), "Signed State valid Stake: {} ", validStake);
-        log.info(SIGNED_STATE.getMarker(), "AddressBook Stake: {} ", addressBook.getTotalStake());
-        log.info(SIGNED_STATE.getMarker(), "Sufficient signatures status: {}", hasEnoughStake);
     }
 }

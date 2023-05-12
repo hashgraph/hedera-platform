@@ -88,7 +88,7 @@ import org.junit.jupiter.api.Test;
  * StreamObjectTest.generateFileRestartTest() with the last line `clearDir();` be commented out
  */
 class StreamUtilitiesTest {
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger logger = LogManager.getLogger();
     private static final Marker LOGM_OBJECT_STREAM = MarkerManager.getMarker("OBJECT_STREAM");
     private static final Marker LOGM_EXCEPTION = MarkerManager.getMarker("EXCEPTION");
     private static final int logPeriodMs = 500;
@@ -128,7 +128,7 @@ class StreamUtilitiesTest {
             resource = classLoader.getResource(path);
             return new File(resource.getPath());
         } catch (Exception ex) {
-            log.error(LOGM_EXCEPTION, "resource: {}", resource, ex);
+            logger.error(LOGM_EXCEPTION, "resource: {}", resource, ex);
             return null;
         }
     }
@@ -319,7 +319,7 @@ class StreamUtilitiesTest {
                                 .calcRunningHash(runningHash, objectHash, DigestType.SHA_384);
             }
             objectsCount++;
-            log.info(LOGM_OBJECT_STREAM, "parsed object: {}", object);
+            logger.info(LOGM_OBJECT_STREAM, "parsed object: {}", object);
         }
         // assertNotNull(startRunningHash);
         assertNotNull(endRunningHash, "endRunningHash should not be null");
@@ -348,7 +348,7 @@ class StreamUtilitiesTest {
             SelfSerializable object2 = iterator2.next();
             if (!object1.equals(object2)) {
                 diffObjectsCount++;
-                log.info(
+                logger.info(
                         LOGM_EXCEPTION,
                         "got different object. " + "from iterator1: {}, from iterator2: {}",
                         object1,
@@ -358,11 +358,11 @@ class StreamUtilitiesTest {
             objectsCount++;
         }
         while (iterator1.hasNext()) {
-            log.info(LOGM_EXCEPTION, "only in iterator1: {}", iterator1.next());
+            logger.info(LOGM_EXCEPTION, "only in iterator1: {}", iterator1.next());
             diffObjectsCount++;
         }
         while (iterator2.hasNext()) {
-            log.info(LOGM_EXCEPTION, "only in iterator2: {}", iterator2.next());
+            logger.info(LOGM_EXCEPTION, "only in iterator2: {}", iterator2.next());
             diffObjectsCount++;
         }
 
@@ -370,8 +370,8 @@ class StreamUtilitiesTest {
                 0,
                 diffObjectsCount,
                 "iterator1 and iterator2 should not contain different numbers of objects");
-        log.info(LOGM_OBJECT_STREAM, "objectsCount: {}", objectsCount);
-        log.info(LOGM_OBJECT_STREAM, "diffObjectsCount: {}", diffObjectsCount);
+        logger.info(LOGM_OBJECT_STREAM, "objectsCount: {}", objectsCount);
+        logger.info(LOGM_OBJECT_STREAM, "diffObjectsCount: {}", diffObjectsCount);
     }
 
     @Test

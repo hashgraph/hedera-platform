@@ -34,7 +34,7 @@ import org.apache.logging.log4j.Logger;
  * event creation. Useful for debugging, should be eventually replaced with metrics.
  */
 public final class LoggingEventCreationRules extends EventCreationRules {
-    private static final Logger LOG = LogManager.getLogger(LoggingEventCreationRules.class);
+    private static final Logger logger = LogManager.getLogger(LoggingEventCreationRules.class);
     private static final Duration logEvery = Duration.ofSeconds(3);
     private final List<RuleWrapper> wrappedRules;
     private Instant nextLog = Instant.now().plus(logEvery);
@@ -74,7 +74,7 @@ public final class LoggingEventCreationRules extends EventCreationRules {
 
     private void maybeLog() {
         if (nextLog.isBefore(Instant.now())) {
-            LOG.info(
+            logger.info(
                     LogMarker.EVENT_CREATION_THROTTLE.getMarker(),
                     "Event creation throttles counts:\n{}",
                     this::throttlesToString);

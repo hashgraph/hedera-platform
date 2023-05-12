@@ -66,7 +66,7 @@ import org.apache.logging.log4j.Logger;
  */
 public final class EventRecoveryWorkflow {
 
-    private static final Logger LOG = LogManager.getLogger(EventRecoveryWorkflow.class);
+    private static final Logger logger = LogManager.getLogger(EventRecoveryWorkflow.class);
 
     public static final long NO_FINAL_ROUND = Long.MAX_VALUE;
 
@@ -110,32 +110,32 @@ public final class EventRecoveryWorkflow {
         ConfigurationUtils.scanAndRegisterAllConfigTypes(configurationBuilder, "com.swirlds");
 
         for (final Path configurationFile : configurationFiles) {
-            LOG.info(STARTUP.getMarker(), "Loading configuration from {}", configurationFile);
+            logger.info(STARTUP.getMarker(), "Loading configuration from {}", configurationFile);
             configurationBuilder.withSource(new LegacyFileConfigSource(configurationFile));
         }
 
         final Configuration configuration = configurationBuilder.build();
         ConfigurationHolder.getInstance().setConfiguration(configuration);
 
-        LOG.info(STARTUP.getMarker(), "Loading state from {}", signedStateFile);
+        logger.info(STARTUP.getMarker(), "Loading state from {}", signedStateFile);
 
         final SignedState initialState =
                 SignedStateFileReader.readStateFile(signedStateFile).signedState();
 
-        LOG.info(STARTUP.getMarker(), "State from round {} loaded.", initialState.getRound());
-        LOG.info(STARTUP.getMarker(), "Loading event stream at {}", eventStreamDirectory);
+        logger.info(STARTUP.getMarker(), "State from round {} loaded.", initialState.getRound());
+        logger.info(STARTUP.getMarker(), "Loading event stream at {}", eventStreamDirectory);
 
         final IOIterator<Round> roundIterator =
                 new EventStreamRoundIterator(
                         eventStreamDirectory, initialState.getRound() + 1, allowPartialRounds);
 
-        LOG.info(STARTUP.getMarker(), "Reapplying transactions");
+        logger.info(STARTUP.getMarker(), "Reapplying transactions");
 
         final SignedState resultingState =
                 reapplyTransactions(
                         configuration, initialState, appMain, roundIterator, finalRound, selfId);
 
-        LOG.info(
+        logger.info(
                 STARTUP.getMarker(),
                 "Finished reapplying transactions, writing state to {}",
                 resultingStateDirectory);
@@ -143,7 +143,7 @@ public final class EventRecoveryWorkflow {
         SignedStateFileWriter.writeSignedStateFilesToDirectory(
                 resultingStateDirectory, resultingState);
 
-        LOG.info(STARTUP.getMarker(), "Recovery process completed");
+        logger.info(STARTUP.getMarker(), "Recovery process completed");
 
         resultingState.releaseState();
     }
@@ -196,7 +196,7 @@ public final class EventRecoveryWorkflow {
         initialState.getState().throwIfImmutable("initial state must be mutable");
         initialState.reserveState();
 
-        LOG.info(STARTUP.getMarker(), "Initializing application state");
+        logger.info(STARTUP.getMarker(), "Initializing application state");
 
         final RecoveryPlatform platform = new RecoveryPlatform(configuration, initialState, selfId);
 
@@ -204,7 +204,6 @@ public final class EventRecoveryWorkflow {
                 .getSwirldState()
                 .init(
                         platform,
-                        initialState.getState().getPlatformState().getAddressBook(),
                         initialState.getState().getSwirldDualState(),
                         InitTrigger.EVENT_STREAM_RECOVERY,
                         initialState
@@ -224,7 +223,7 @@ public final class EventRecoveryWorkflow {
                 && (finalRound == -1 || roundIterator.peek().getRoundNum() <= finalRound)) {
             final Round round = roundIterator.next();
 
-            LOG.info(
+            logger.info(
                     STARTUP.getMarker(),
                     "Applying {} events from round {}",
                     round.getEventCount(),
@@ -234,7 +233,7 @@ public final class EventRecoveryWorkflow {
             platform.setLatestState(signedState);
         }
 
-        LOG.info(STARTUP.getMarker(), "Hashing resulting signed state");
+        logger.info(STARTUP.getMarker(), "Hashing resulting signed state");
         try {
             MerkleCryptoFactory.getInstance().digestTreeAsync(signedState.getState()).get();
         } catch (final InterruptedException e) {
@@ -242,7 +241,7 @@ public final class EventRecoveryWorkflow {
         } catch (final ExecutionException e) {
             throw new RuntimeException(e);
         }
-        LOG.info(STARTUP.getMarker(), "Hashing complete");
+        logger.info(STARTUP.getMarker(), "Hashing complete");
 
         // Let the application know about the recovered state
         notifyStateRecovered(platform.getNotificationEngine(), signedState);

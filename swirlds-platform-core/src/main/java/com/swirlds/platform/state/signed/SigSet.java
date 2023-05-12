@@ -15,244 +15,176 @@
  */
 package com.swirlds.platform.state.signed;
 
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
+
 import com.swirlds.common.FastCopyable;
-import com.swirlds.common.constructable.ConstructableIgnored;
+import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
-import com.swirlds.common.system.address.AddressBook;
-import com.swirlds.platform.Utilities;
 import java.io.IOException;
-import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReferenceArray;
-import org.apache.commons.lang3.builder.EqualsBuilder;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
-/** all the known signatures for a particular signed state */
-@ConstructableIgnored /* has to be ignored, doesn't work with a no-args constructor at the moment */
-public class SigSet implements FastCopyable, SelfSerializable {
+/** Signatures of the hash of a state. */
+public class SigSet
+        implements FastCopyable, Iterable<Long /* signing node ID */>, SelfSerializable {
     private static final long CLASS_ID = 0x756d0ee945226a92L;
+
+    /** The maximum allowed signature count. Used to prevent serialization DOS attacks. */
+    public static final int MAX_SIGNATURE_COUNT = 1024;
 
     private static class ClassVersion {
         public static final int ORIGINAL = 1;
         public static final int MIGRATE_TO_SERIALIZABLE = 2;
+        public static final int CLEANUP = 3;
     }
 
-    /** the number of signatures collected */
-    private volatile int count;
-    /** total stake of all members whose signatures have been collected so far */
-    private volatile long stakeCollected = 0;
-    /** the number of members, each of which can sign */
-    private int numMembers;
-    /** have members with more than 1/2 of the total stake signed? */
-    private volatile boolean complete = false;
-    /** array element i is the signature for the member with ID i */
-    private AtomicReferenceArray<SigInfo> sigInfos;
-    /** the address book in force at the time of this state */
-    private final AddressBook addressBook;
+    private final Map<Long /* node ID */, Signature> signatures = new HashMap<>();
 
-    /** get array where element i is the signature for the member with ID i */
-    private SigInfo[] getSigInfosCopy() {
-        SigInfo[] a = new SigInfo[numMembers];
-        for (int i = 0; i < a.length; i++) {
-            a[i] = sigInfos.get(i);
-        }
-        return a;
-    }
-
-    private SigSet(final SigSet sourceSigSet) {
-        this.count = sourceSigSet.getCount();
-        this.stakeCollected = sourceSigSet.getStakeCollected();
-        this.numMembers = sourceSigSet.getNumMembers();
-        this.complete = sourceSigSet.isComplete();
-        this.sigInfos = sourceSigSet.sigInfos;
-        this.addressBook = sourceSigSet.getAddressBook().copy();
-    }
+    /** Zero arg constructor. */
+    public SigSet() {}
 
     /**
-     * create the signature set, taking the address book at this moment as the population
+     * Copy constructor.
      *
-     * @param addressBook the address book at this moment
+     * @param that the sig set to copy
      */
-    public SigSet(AddressBook addressBook) {
-        this.addressBook = addressBook;
-        this.numMembers = addressBook.getSize();
-        sigInfos = new AtomicReferenceArray<>(numMembers);
-        count = 0;
-        stakeCollected = 0;
+    private SigSet(final SigSet that) {
+        this.signatures.putAll(that.signatures);
     }
 
     /**
-     * Register a new signature for one member. If this member already has a signed state here, then
-     * the new one that was passed in is ignored.
+     * Add a signature to the sigset. Does not validate the signature.
      *
-     * @param sigInfo a sigInfo to be added
+     * @param nodeId the ID of the node that provided the signature
+     * @param signature the signature to add
      */
-    public synchronized void addSigInfo(SigInfo sigInfo) {
-        int id = (int) sigInfo.getMemberId();
-        if (sigInfos.get(id) != null) {
-            return; // ignore if we already have a signature for this member
-        }
-        sigInfos.set(id, sigInfo);
-        count++;
-        stakeCollected += addressBook.getAddress(id).getStake();
-        calculateComplete();
+    public void addSignature(final long nodeId, final Signature signature) {
+        throwArgNull(signature, "signature");
+        signatures.put(nodeId, signature);
     }
 
     /**
-     * Although &ge;1/3 is sufficient proof that at least 1 honest node has signed this state, in
-     * the presence of ISS bugs a &gt;1/2 threshold makes it very difficult to accidentally produce
-     * two different completely signed states from the same round.(Although this is not impossible
-     * in the theoretical sense, given that a malicious nodes could sign multiple versions of the
-     * state.)
-     */
-    private void calculateComplete() {
-        complete = Utilities.isMajority(stakeCollected, addressBook.getTotalStake());
-    }
-
-    /**
-     * Get the SigInfo for the given ID
+     * Remove a signature from the sigset.
      *
-     * @param memberId the ID of the member
-     * @return returns the SigInfo object or null if we don't have this members sig
+     * @param nodeId the ID of the signature to remove
      */
-    public SigInfo getSigInfo(int memberId) {
-        return sigInfos.get(memberId);
+    public void removeSignature(final long nodeId) {
+        signatures.remove(nodeId);
     }
 
     /**
-     * @return does this contain signatures from members with greater than 1/2 of the total stake?
+     * Get the signature for the given node ID, or null if there is no signature for the requested
+     * node.
+     *
+     * @param nodeId the ID of the node
+     * @return a signature for the node, or null if there is no signature for the node
      */
-    public boolean isComplete() {
-        return complete;
+    public Signature getSignature(final long nodeId) {
+        return signatures.get(nodeId);
+    }
+
+    /**
+     * Check if this sigset has a signature for a given node.
+     *
+     * @param nodeId the node ID in question
+     * @return true if a signature from this node is present
+     */
+    public boolean hasSignature(final long nodeId) {
+        return signatures.containsKey(nodeId);
+    }
+
+    /** Get an iterator that walks over the set of nodes that have signed the state. */
+    @Override
+    public Iterator<Long> iterator() {
+        final Iterator<Long> iterator = signatures.keySet().iterator();
+
+        // Wrap the iterator so that it can't be used to modify the SigSet.
+        return new Iterator<>() {
+            @Override
+            public boolean hasNext() {
+                return iterator.hasNext();
+            }
+
+            @Override
+            public Long next() {
+                return iterator.next();
+            }
+        };
+    }
+
+    /**
+     * Get the number of signatures.
+     *
+     * @return the number of signatures
+     */
+    public int size() {
+        return signatures.size();
     }
 
     /** {@inheritDoc} */
+    @SuppressWarnings("unchecked")
     @Override
     public SigSet copy() {
-        throwIfImmutable();
-        return null;
+        return new SigSet(this);
     }
 
     /** {@inheritDoc} */
     @Override
-    public void serialize(SerializableDataOutputStream out) throws IOException {
-        out.writeInt(numMembers);
-        out.writeSerializableArray(getSigInfosCopy(), false, true);
+    public int getMinimumSupportedVersion() {
+        return ClassVersion.MIGRATE_TO_SERIALIZABLE;
     }
 
     /** {@inheritDoc} */
     @Override
-    public void deserialize(SerializableDataInputStream in, int version) throws IOException {
-        numMembers = in.readInt();
-        SigInfo[] sigInfoArr =
-                in.readSerializableArray(
-                        SigInfo[]::new, addressBook.getSize(), false, SigInfo::new);
-        processDeserializedSigInfoArray(sigInfoArr);
+    public void serialize(final SerializableDataOutputStream out) throws IOException {
+        out.writeInt(signatures.size());
+
+        final List<Long> sortedIds = new ArrayList<>(signatures.size());
+        signatures.keySet().stream().sorted().forEachOrdered(sortedIds::add);
+
+        for (final Long nodeId : sortedIds) {
+            out.writeLong(nodeId);
+            out.writeSerializable(signatures.get(nodeId), false);
+        }
     }
 
-    private synchronized void processDeserializedSigInfoArray(SigInfo[] sigInfoArr) {
-        count = 0;
-        stakeCollected = 0;
-        sigInfos = new AtomicReferenceArray<>(numMembers);
-        for (int id = 0; id < sigInfoArr.length; id++) {
-            if (sigInfoArr[id] != null) {
-                sigInfos.set(id, sigInfoArr[id]);
-                count++;
-                stakeCollected += addressBook.getAddress(id).getStake();
+    /** {@inheritDoc} */
+    @Override
+    public void deserialize(final SerializableDataInputStream in, final int version)
+            throws IOException {
+        if (version == ClassVersion.MIGRATE_TO_SERIALIZABLE) {
+            final int numMembers = in.readInt();
+
+            final SigInfo[] sigInfoArr =
+                    in.readSerializableArray(SigInfo[]::new, numMembers, false, SigInfo::new);
+
+            for (final SigInfo sigInfo : sigInfoArr) {
+                if (sigInfo != null) {
+                    signatures.put(sigInfo.getMemberId(), sigInfo.getSignature());
+                }
             }
-        }
-    }
-
-    /**
-     * getter for the number of signatures collected
-     *
-     * @return number of signatures collected
-     */
-    public int getCount() {
-        return count;
-    }
-
-    /**
-     * getter for total stake of all members whose signatures have been collected so far
-     *
-     * @return total stake of members whose signatures have been collected
-     */
-    public long getStakeCollected() {
-        return stakeCollected;
-    }
-
-    /**
-     * getter for the number of members, each of which can sign
-     *
-     * @return number of members
-     */
-    public int getNumMembers() {
-        return numMembers;
-    }
-
-    public AddressBook getAddressBook() {
-        return addressBook;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
+            return;
         }
 
-        if (o == null || getClass() != o.getClass()) {
-            return false;
+        final int signatureCount = in.readInt();
+        if (signatureCount > MAX_SIGNATURE_COUNT) {
+            throw new IOException(
+                    "Signature count of "
+                            + signatureCount
+                            + " exceeds maximum of "
+                            + MAX_SIGNATURE_COUNT);
         }
 
-        SigSet sigSet = (SigSet) o;
-
-        if (sigInfos.length() != sigSet.sigInfos.length()) {
-            return false;
+        for (int index = 0; index < signatureCount; index++) {
+            final long nodeId = in.readLong();
+            final Signature signature = in.readSerializable(false, Signature::new);
+            signatures.put(nodeId, signature);
         }
-
-        for (int i = 0; i < sigInfos.length(); i++) {
-            if (!Objects.equals(sigInfos.get(i), sigSet.sigInfos.get(i))) {
-                return false;
-            }
-        }
-
-        return new EqualsBuilder()
-                .append(count, sigSet.count)
-                .append(stakeCollected, sigSet.stakeCollected)
-                .append(numMembers, sigSet.numMembers)
-                .append(complete, sigSet.complete)
-                // .append(sigInfos, sigSet.sigInfos) atomic array does not implement equals()
-                .append(addressBook, sigSet.addressBook)
-                .isEquals();
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public int hashCode() {
-        return new HashCodeBuilder(17, 37)
-                .append(count)
-                .append(stakeCollected)
-                .append(numMembers)
-                .append(complete)
-                .append(sigInfos)
-                .append(addressBook)
-                .toHashCode();
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this, ToStringStyle.MULTI_LINE_STYLE)
-                .append("count", count)
-                .append("stakeCollected", stakeCollected)
-                .append("numMembers", numMembers)
-                .append("complete", complete)
-                .append("sigInfos", sigInfos)
-                .toString();
     }
 
     /** {@inheritDoc} */
@@ -264,12 +196,6 @@ public class SigSet implements FastCopyable, SelfSerializable {
     /** {@inheritDoc} */
     @Override
     public int getVersion() {
-        return ClassVersion.MIGRATE_TO_SERIALIZABLE;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public int getMinimumSupportedVersion() {
-        return ClassVersion.MIGRATE_TO_SERIALIZABLE;
+        return ClassVersion.CLEANUP;
     }
 }

@@ -24,6 +24,7 @@ import java.util.List;
 /** Represents a metric computed over a distribution function */
 public abstract class AbstractDistributionMetric extends DefaultMetric {
 
+    /** Half-life of the metric */
     protected final double halfLife;
 
     AbstractDistributionMetric(final MetricConfig<?, ?> config, final double halfLife) {

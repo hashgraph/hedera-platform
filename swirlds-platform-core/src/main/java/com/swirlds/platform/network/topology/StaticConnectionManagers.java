@@ -31,7 +31,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Pre-builds connection managers for the supplied topology, does not allow changes at runtime */
 public class StaticConnectionManagers {
-    private static final Logger LOG = LogManager.getLogger(StaticConnectionManagers.class);
+    private static final Logger logger = LogManager.getLogger(StaticConnectionManagers.class);
     private final NetworkTopology topology;
     private final Map<ConnectionMapping, ConnectionManager> connectionManagers;
 
@@ -67,7 +67,7 @@ public class StaticConnectionManagers {
      */
     public void newConnection(final Connection newConn) throws InterruptedException {
         if (!topology.shouldConnectToMe(newConn.getOtherId())) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Unexpected new connection {}",
                     newConn.getDescription());
@@ -77,14 +77,14 @@ public class StaticConnectionManagers {
         final ConnectionMapping key = new ConnectionMapping(newConn.getOtherId(), false);
         final ConnectionManager cs = connectionManagers.get(key);
         if (cs == null) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Unexpected new connection {}",
                     newConn.getDescription());
             newConn.disconnect();
             return;
         }
-        LOG.debug(
+        logger.debug(
                 NETWORK.getMarker(),
                 "{} accepted connection from {}",
                 newConn.getSelfId(),
@@ -92,7 +92,7 @@ public class StaticConnectionManagers {
         try {
             cs.newConnection(newConn);
         } catch (final InterruptedException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Interrupted while handling over new connection {}",
                     newConn.getDescription(),

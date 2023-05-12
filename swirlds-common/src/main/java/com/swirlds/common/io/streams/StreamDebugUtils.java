@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Logger;
 /** Utility methods for debugging streams. */
 public final class StreamDebugUtils {
 
-    private static final Logger LOG = LogManager.getLogger(StreamDebugUtils.class);
+    private static final Logger logger = LogManager.getLogger(StreamDebugUtils.class);
 
     private StreamDebugUtils() {}
 
@@ -74,7 +74,7 @@ public final class StreamDebugUtils {
             return deserializer.deserialize(in);
         } catch (final Throwable ex) {
 
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Deserialization failure. "
                             + "Will re-attempt deserialization with extra debug information.",
@@ -85,13 +85,13 @@ public final class StreamDebugUtils {
                 in = new DebuggableMerkleDataInputStream(baseStream);
                 deserializer.deserialize(in);
             } catch (final Throwable innerEx) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "Deserialization re-attempt also encountered a failure.",
                         innerEx);
             } finally {
                 if (in != null) {
-                    LOG.error(
+                    logger.error(
                             EXCEPTION.getMarker(),
                             "Deserialization stack trace:\n{}",
                             in.getFormattedStackTrace());

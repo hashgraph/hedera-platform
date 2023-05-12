@@ -18,7 +18,6 @@ package com.swirlds.platform.reconnect.emergency;
 import static com.swirlds.logging.LogMarker.RECONNECT;
 
 import com.swirlds.platform.Connection;
-import com.swirlds.platform.Crypto;
 import com.swirlds.platform.reconnect.ReconnectController;
 import com.swirlds.platform.reconnect.ReconnectException;
 import com.swirlds.platform.state.EmergencyRecoveryFile;
@@ -28,7 +27,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Executes emergency reconnect in the role of the learner */
 public class EmergencyReconnectLearner {
-    private static final Logger LOG = LogManager.getLogger(EmergencyReconnectLearner.class);
+    private static final Logger logger = LogManager.getLogger(EmergencyReconnectLearner.class);
     private final EmergencyRecoveryFile emergencyRecoveryFile;
     private final ReconnectController reconnectController;
     private final EmergencySignedStateValidator validator;
@@ -36,38 +35,39 @@ public class EmergencyReconnectLearner {
     /**
      * @param emergencyRecoveryFile the emergency recovery file used for this reconnect
      * @param reconnectController controls reconnecting as a learner
-     * @param crypto the object that contains all key pairs and CSPRNG state for this member
      */
     public EmergencyReconnectLearner(
             final EmergencyRecoveryFile emergencyRecoveryFile,
-            final ReconnectController reconnectController,
-            final Crypto crypto) {
+            final ReconnectController reconnectController) {
         this.emergencyRecoveryFile = emergencyRecoveryFile;
         this.reconnectController = reconnectController;
-        validator = new EmergencySignedStateValidator(crypto, emergencyRecoveryFile);
+        validator = new EmergencySignedStateValidator(emergencyRecoveryFile);
     }
 
     /**
      * Performs emergency reconnect in the role of the learner using the given connection.
      *
      * @param connection the connection to perform the reconnect on
+     * @return {@code true} if the peer has a compatible state to send, {@code false} otherwise
      */
-    public void execute(final Connection connection) {
+    public boolean execute(final Connection connection) {
         try {
             final boolean teacherHasState = teacherHasState(connection);
             if (teacherHasState) {
-                LOG.info(
+                logger.info(
                         RECONNECT.getMarker(),
                         "Peer {} has a compatible state. Continuing with emergency reconnect.",
                         connection.getOtherId());
                 reconnectController.setStateValidator(validator);
                 reconnectController.provideLearnerConnection(connection);
+                return true;
             } else {
-                LOG.info(
+                logger.info(
                         RECONNECT.getMarker(),
                         "Peer {} does not have a compatible state. Attempting emergency reconnect"
                                 + " with another peer.",
                         connection.getOtherId());
+                return false;
             }
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();

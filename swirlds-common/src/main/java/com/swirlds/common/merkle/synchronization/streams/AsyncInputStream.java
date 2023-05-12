@@ -46,7 +46,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class AsyncInputStream<T extends SelfSerializable> implements AutoCloseable {
 
-    private static final Logger LOG = LogManager.getLogger(AsyncInputStream.class);
+    private static final Logger logger = LogManager.getLogger(AsyncInputStream.class);
 
     private static final String THREAD_NAME = "async-input-stream";
 
@@ -144,7 +144,7 @@ public class AsyncInputStream<T extends SelfSerializable> implements AutoCloseab
                             message.getClass().toString()),
                     e);
         } catch (final InterruptedException e) {
-            LOG.warn(RECONNECT.getMarker(), "AsyncInputStream interrupted");
+            logger.warn(RECONNECT.getMarker(), "AsyncInputStream interrupted");
             Thread.currentThread().interrupt();
         } finally {
             finishedLatch.countDown();

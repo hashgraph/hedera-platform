@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Logger;
 /** A utility for shutting down the JVM. */
 public final class Shutdown {
 
-    private static final Logger LOG = LogManager.getLogger(Shutdown.class);
+    private static final Logger logger = LogManager.getLogger(Shutdown.class);
 
     public Shutdown() {}
 
@@ -48,7 +48,11 @@ public final class Shutdown {
      * @param exitCode the exit code to return when the JVM has been shut down
      */
     public static void immediateShutDown(final String reason, final Integer exitCode) {
-        LOG.info(STARTUP.getMarker(), "Node shutting down. Reason: {}", reason);
-        System.exit(exitCode);
+        logger.info(STARTUP.getMarker(), "Node shutting down. Reason: {}", reason);
+        if (exitCode == null) {
+            System.exit(SystemExitReason.FATAL_ERROR.getExitCode());
+        } else {
+            System.exit(exitCode);
+        }
     }
 }

@@ -38,7 +38,7 @@ class WinTabSwirlds extends PrePaintableJPanel {
     private static final long serialVersionUID = 1L;
     private JTextPane lastText = null;
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(WinTabSwirlds.class);
+    private static final Logger logger = LogManager.getLogger(WinTabSwirlds.class);
 
     private JTextPane instructions;
     /** should the next prePaint rebuild the window contents? */
@@ -159,7 +159,7 @@ class WinTabSwirlds extends PrePaintableJPanel {
             if (!(member instanceof InfoMember)) {
                 // only entities representing a Member should be clickable to select as
                 // WinBrowser.memberDisplayed
-                log.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "WinTabSwirlds.ClickToSelect instantiated with {} which is not an"
                                 + " InfoMember",

@@ -37,7 +37,7 @@ import org.apache.logging.log4j.Logger;
 public class RunningHashCalculatorForStream<T extends RunningHashable & SerializableHashable>
         extends AbstractLinkedObjectStream<T> {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOGGER = LogManager.getLogger(RunningHashCalculatorForStream.class);
+    private static final Logger logger = LogManager.getLogger(RunningHashCalculatorForStream.class);
     /** Used for hashing */
     private final Cryptography cryptography;
     /** current running Hash */
@@ -81,7 +81,7 @@ public class RunningHashCalculatorForStream<T extends RunningHashable & Serializ
     @Override
     public void close() {
         super.close();
-        LOGGER.info(OBJECT_STREAM.getMarker(), "RunningHashCalculatorForStream is closed");
+        logger.info(OBJECT_STREAM.getMarker(), "RunningHashCalculatorForStream is closed");
     }
 
     public Hash getRunningHash() {
@@ -93,7 +93,7 @@ public class RunningHashCalculatorForStream<T extends RunningHashable & Serializ
     public void setRunningHash(final Hash hash) {
         this.runningHash = hash;
         super.setRunningHash(hash);
-        LOGGER.info(
+        logger.info(
                 OBJECT_STREAM.getMarker(),
                 "RunningHashCalculatorForStream :: setRunningHash: {}",
                 hash);

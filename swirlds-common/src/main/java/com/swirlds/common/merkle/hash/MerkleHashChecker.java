@@ -40,7 +40,7 @@ import org.apache.logging.log4j.Logger;
 
 public final class MerkleHashChecker {
 
-    private static final Logger LOGGER = LogManager.getLogger(MerkleHashChecker.class);
+    private static final Logger logger = LogManager.getLogger(MerkleHashChecker.class);
 
     private MerkleHashChecker() {}
 
@@ -196,7 +196,7 @@ public final class MerkleHashChecker {
             sb.append("\n");
         }
 
-        LOGGER.error(EXCEPTION.getMarker(), sb);
+        logger.error(EXCEPTION.getMarker(), sb);
         return false;
     }
 

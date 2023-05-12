@@ -15,18 +15,22 @@
  */
 package com.swirlds.platform.state.signed;
 
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.SIGNED_STATE;
 
 import com.swirlds.common.crypto.Hash;
+import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.system.SoftwareVersion;
 import com.swirlds.common.system.SwirldState;
+import com.swirlds.common.system.address.Address;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.time.OSTime;
 import com.swirlds.common.utility.ReferenceCounter;
 import com.swirlds.common.utility.RuntimeObjectRecord;
 import com.swirlds.common.utility.RuntimeObjectRegistry;
 import com.swirlds.platform.Settings;
+import com.swirlds.platform.Utilities;
 import com.swirlds.platform.internal.EventImpl;
 import com.swirlds.platform.state.MinGenInfo;
 import com.swirlds.platform.state.PlatformData;
@@ -34,6 +38,7 @@ import com.swirlds.platform.state.PlatformState;
 import com.swirlds.platform.state.State;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import org.apache.commons.lang3.builder.EqualsBuilder;
@@ -58,10 +63,13 @@ import org.apache.logging.log4j.Logger;
  */
 public class SignedState implements SignedStateInfo {
 
-    private static final Logger LOG = LogManager.getLogger(SignedState.class);
+    private static final Logger logger = LogManager.getLogger(SignedState.class);
 
     /** the signatures collected so far (including from self) */
     private SigSet sigSet;
+
+    /** The total stake that has signed this state. */
+    private long signingStake;
 
     /** Is this the last state saved before the freeze period */
     private boolean freezeState;
@@ -87,9 +95,6 @@ public class SignedState implements SignedStateInfo {
 
     /** The root of the merkle state. */
     private State state;
-
-    /** A cached copy of the address book. */
-    private AddressBook addressBook;
 
     /** The timestamp of when this object was created. */
     private final Instant creationTimestamp = Instant.now();
@@ -169,7 +174,7 @@ public class SignedState implements SignedStateInfo {
         platformState.setAddressBook(addressBook);
 
         this.freezeState = freezeState;
-        sigSet = new SigSet(addressBook);
+        sigSet = new SigSet();
     }
 
     public SignedState(final State state) {
@@ -216,15 +221,24 @@ public class SignedState implements SignedStateInfo {
      * @param sigSet the signatures to be attached to this signed state
      */
     public void setSigSet(final SigSet sigSet) {
+        signingStake = 0;
         this.sigSet = sigSet;
+        for (final long signingNode : sigSet) {
+            final Address address = getAddressBook().getAddress(signingNode);
+            if (address == null) {
+                throw new IllegalStateException(
+                        "Signature for node "
+                                + signingNode
+                                + " found, but that node is not in the address book");
+            }
+            signingStake += address.getStake();
+        }
     }
 
+    /** {@inheritDoc} */
     @Override
     public AddressBook getAddressBook() {
-        if (addressBook == null) {
-            addressBook = getSwirldState().getAddressBookCopy();
-        }
-        return addressBook;
+        return getState().getPlatformState().getAddressBook();
     }
 
     /**
@@ -299,7 +313,7 @@ public class SignedState implements SignedStateInfo {
         if (signedStateGarbageCollector == null
                 || !signedStateGarbageCollector.executeOnGarbageCollectionThread(
                         this::archiveOrDelete)) {
-            LOG.warn(
+            logger.warn(
                     SIGNED_STATE.getMarker(),
                     "unable to enqueue state for deletion/archival, "
                             + "will delete/archive state on calling thread {}",
@@ -355,7 +369,7 @@ public class SignedState implements SignedStateInfo {
                                 Duration.between(start, Instant.now()));
                     }
                 } catch (final Throwable ex) {
-                    LOG.error(
+                    logger.error(
                             EXCEPTION.getMarker(),
                             "exception while attempting to delete signed state",
                             ex);
@@ -378,7 +392,7 @@ public class SignedState implements SignedStateInfo {
                                 Duration.between(start, Instant.now()));
                     }
                 } catch (final Throwable ex) {
-                    LOG.error(
+                    logger.error(
                             EXCEPTION.getMarker(),
                             "exception while attempting to archive signed state",
                             ex);
@@ -425,8 +439,8 @@ public class SignedState implements SignedStateInfo {
         return String.format(
                 "SS(round: %d, sigs: %d/%s, hash: %s)",
                 getRound(),
-                (sigSet == null ? 0 : sigSet.getStakeCollected()),
-                (addressBook == null ? "?" : addressBook.getTotalStake()),
+                signingStake,
+                (getAddressBook() == null ? "?" : getAddressBook().getTotalStake()),
                 state.getHash());
     }
 
@@ -529,27 +543,6 @@ public class SignedState implements SignedStateInfo {
     }
 
     /**
-     * Check that the size of the signature set matches the number of nodes in the provided address
-     * book. If it has fewer entries, create a new {@link SigSet} of the correct size and copy the
-     * existing signatures into it. This can be necessary when a new node reconnects from genesis
-     * and is provided a signed state created by the network prior to this node joining.
-     *
-     * @param newAddressBook the address book to check if the sigset needs to be expanded
-     */
-    public void expandSigSetIfNeeded(final AddressBook newAddressBook) {
-        if (sigSet.getNumMembers() < newAddressBook.getSize()) {
-            final SigSet newSigSet = new SigSet(newAddressBook);
-            for (int i = 0; i < sigSet.getNumMembers(); i++) {
-                final SigInfo sigInfo = sigSet.getSigInfo(i);
-                if (sigInfo != null) {
-                    newSigSet.addSigInfo(sigInfo);
-                }
-            }
-            setSigSet(newSigSet);
-        }
-    }
-
-    /**
      * Check if this is a state that needs to be eventually written to disk.
      *
      * @return true if this state eventually needs to be written to disk
@@ -565,5 +558,142 @@ public class SignedState implements SignedStateInfo {
      */
     public void setStateToSave(final boolean stateToSave) {
         this.stateToSave = stateToSave;
+    }
+
+    /**
+     * Get the total signing stake collected so far.
+     *
+     * @return total stake of members whose signatures have been collected
+     */
+    public long getSigningStake() {
+        return signingStake;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean isComplete() {
+        return Utilities.isMajority(signingStake, getAddressBook().getTotalStake());
+    }
+
+    /**
+     * Throw an exception if this state has not been completely signed. This method does not
+     * validate signatures, call {@link #pruneInvalidSignatures()} to guarantee that only valid
+     * signatures are considered.
+     *
+     * @throws SignedStateInvalidException if this state lacks sufficient signatures to be
+     *     considered complete
+     */
+    public void throwIfIncomplete() {
+        if (!isComplete()) {
+            throw new SignedStateInvalidException(
+                    "Signed state lacks sufficient valid signatures. This state has "
+                            + sigSet.size()
+                            + " valid signatures representing "
+                            + signingStake
+                            + "/"
+                            + getAddressBook().getTotalStake()
+                            + " stake");
+        }
+    }
+
+    /**
+     * Add a signature to the sigset if the signature is valid.
+     *
+     * @param nodeId the ID of the signing node
+     * @param signature the signature to add
+     * @return true if the signed state is now complete as a result of the signature being added,
+     *     false if the signed state is either not complete or was previously complete prior to this
+     *     signature
+     */
+    public boolean addSignature(final long nodeId, final Signature signature) {
+        return addSignature(getAddressBook(), nodeId, signature);
+    }
+
+    /**
+     * Check if a signature is valid.
+     *
+     * @param address the address of the signer, or null if there is no signing address
+     * @param signature the signature to check
+     * @return true if the signature is valid, false otherwise
+     */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    private boolean isSignatureValid(final Address address, final Signature signature) {
+        if (address == null) {
+            // Signing node is not in the address book.
+            return false;
+        }
+
+        return signature.verifySignature(state.getHash().getValue(), address.getSigPublicKey());
+    }
+
+    /**
+     * Add a signature to the sigset if the signature is valid.
+     *
+     * @param addressBook use this address book to determine if the signature is valid or not
+     * @param nodeId the ID of the signing node
+     * @param signature the signature to add
+     * @return true if the signed state is now complete as a result of the signature being added,
+     *     false if the signed state is either not complete or was previously complete prior to this
+     *     signature
+     */
+    private boolean addSignature(
+            final AddressBook addressBook, final long nodeId, final Signature signature) {
+        throwArgNull(addressBook, "addressBook");
+        throwArgNull(signature, "signature");
+
+        if (isComplete()) {
+            // No need to add more signatures
+            return false;
+        }
+
+        final Address address = addressBook.getAddress(nodeId);
+        if (!isSignatureValid(address, signature)) {
+            return false;
+        }
+
+        if (sigSet.hasSignature(address.getId())) {
+            // We already have this signature.
+            return false;
+        }
+
+        sigSet.addSignature(nodeId, signature);
+        signingStake += address.getStake();
+
+        return isComplete();
+    }
+
+    /**
+     * Remove all invalid signatures from a signed state. Uses the address book in the state when
+     * judging the validity of signatures.
+     */
+    public void pruneInvalidSignatures() {
+        pruneInvalidSignatures(getAddressBook());
+    }
+
+    /**
+     * Remove all invalid signatures from a signed state.
+     *
+     * @param trustedAddressBook use this address book to determine signature validity instead of
+     *     the one inside the signed state. Useful if validating signed states from untrusted
+     *     sources.
+     */
+    public void pruneInvalidSignatures(final AddressBook trustedAddressBook) {
+        final List<Long> signaturesToRemove = new ArrayList<>();
+        for (final long nodeId : sigSet) {
+            final Address address = trustedAddressBook.getAddress(nodeId);
+            if (!isSignatureValid(address, sigSet.getSignature(nodeId))) {
+                signaturesToRemove.add(nodeId);
+            }
+        }
+
+        for (final long nodeId : signaturesToRemove) {
+            sigSet.removeSignature(nodeId);
+        }
+
+        // Recalculate signing stake. We should do this even if we don't remove signatures.
+        signingStake = 0;
+        for (final long nodeId : sigSet) {
+            signingStake += trustedAddressBook.getAddress(nodeId).getStake();
+        }
     }
 }

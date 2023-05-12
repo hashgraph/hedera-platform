@@ -117,7 +117,7 @@ import org.apache.logging.log4j.Logger;
 public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends VirtualValue>
         implements FastCopyable, SelfSerializable {
 
-    private static final Logger LOG = LogManager.getLogger(VirtualNodeCache.class);
+    private static final Logger logger = LogManager.getLogger(VirtualNodeCache.class);
 
     private static final long CLASS_ID = 0x493743f0ace96d2cL;
 
@@ -178,7 +178,7 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
                                     .setThreadName("cache-cleaner")
                                     .setExceptionHandler(
                                             (t, ex) ->
-                                                    LOG.error(
+                                                    logger.error(
                                                             "Failed to purge unneeded"
                                                                     + " key/mutationList pairs",
                                                             ex))
@@ -449,8 +449,8 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
                     dirtyInternals = null;
                 });
 
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Released {}", fastCopyVersion);
+        if (logger.isTraceEnabled()) {
+            logger.trace("Released {}", fastCopyVersion);
         }
 
         return true;
@@ -500,8 +500,8 @@ public final class VirtualNodeCache<K extends VirtualKey<? super K>, V extends V
         } finally {
             releaseLock.unlock();
 
-            if (LOG.isTraceEnabled()) {
-                LOG.trace(
+            if (logger.isTraceEnabled()) {
+                logger.trace(
                         "Merged version {}, {} dirty leaves, {} dirty internals",
                         fastCopyVersion,
                         dirtyLeaves.size(),

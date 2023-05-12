@@ -35,10 +35,9 @@ import io.prometheus.client.Gauge;
  * com.swirlds.common.metrics.SpeedometerMetric} with the corresponding Prometheus {@link
  * Collector}.
  */
-public class DistributionAdapter implements MetricAdapter {
+public class DistributionAdapter extends AbstractMetricAdapter {
 
     private final Gauge gauge;
-    private final AdapterType adapterType;
 
     /**
      * Constructor of {@code DistributionAdapter}.
@@ -52,9 +51,9 @@ public class DistributionAdapter implements MetricAdapter {
      */
     public DistributionAdapter(
             final CollectorRegistry registry, final Metric metric, final AdapterType adapterType) {
+        super(adapterType);
         throwArgNull(registry, "registry");
         throwArgNull(metric, "metric");
-        this.adapterType = throwArgNull(adapterType, "adapterType");
         final Gauge.Builder builder =
                 new Gauge.Builder()
                         .subsystem(fix(metric.getCategory()))
@@ -73,6 +72,9 @@ public class DistributionAdapter implements MetricAdapter {
     @Override
     public void update(final Snapshot snapshot, final NodeId nodeId) {
         throwArgNull(snapshot, "snapshot");
+        if (adapterType != GLOBAL) {
+            throwArgNull(nodeId, "nodeId");
+        }
         for (final Snapshot.SnapshotEntry entry : snapshot.entries()) {
             final String valueType =
                     switch (entry.valueType()) {
@@ -87,5 +89,11 @@ public class DistributionAdapter implements MetricAdapter {
                             : gauge.labels(Long.toString(nodeId.getId()), valueType);
             child.set(((Number) entry.value()).doubleValue());
         }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void unregister(final CollectorRegistry registry) {
+        registry.unregister(gauge);
     }
 }

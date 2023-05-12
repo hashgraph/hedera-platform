@@ -38,7 +38,7 @@ import org.apache.logging.log4j.Marker;
  */
 public class StreamFilesIterator<T extends SelfSerializable> implements Iterator<T> {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOGGER = LogManager.getLogger(StreamFilesIterator.class);
+    private static final Logger logger = LogManager.getLogger(StreamFilesIterator.class);
 
     private static final Marker LOGM_OBJECT_STREAM_FILE = LogMarker.OBJECT_STREAM_FILE.getMarker();
 
@@ -67,7 +67,7 @@ public class StreamFilesIterator<T extends SelfSerializable> implements Iterator
                         .sorted(Comparator.comparing(File::getName))
                         .toArray(File[]::new);
         Arrays.sort(files, Comparator.comparing(File::getName));
-        LOGGER.info(
+        logger.info(
                 LOGM_OBJECT_STREAM_FILE,
                 "StreamFilesIterator : files to be parsed: {}",
                 () -> Arrays.toString(files));
@@ -133,7 +133,7 @@ public class StreamFilesIterator<T extends SelfSerializable> implements Iterator
                 next = object;
                 // update startRunningHash
                 startRunningHash = (Hash) object;
-                LOGGER.info(
+                logger.info(
                         LOGM_OBJECT_STREAM_FILE,
                         "StreamFilesIterator : first startRunningHash: {}",
                         () -> startRunningHash);
@@ -142,14 +142,14 @@ public class StreamFilesIterator<T extends SelfSerializable> implements Iterator
                 // this is endRunningHash of current file
                 // update endRunningHash
                 endRunningHash = (Hash) object;
-                LOGGER.info(
+                logger.info(
                         LOGM_OBJECT_STREAM_FILE,
                         "StreamFilesIterator : update endRunningHash: {}",
                         () -> endRunningHash);
                 if (idx == files.length - 1) {
                     // if current file is the last file, should output it
                     next = object;
-                    LOGGER.info(
+                    logger.info(
                             LOGM_OBJECT_STREAM_FILE,
                             "StreamFilesIterator : last endRunningHash: {}",
                             () -> object);
@@ -173,7 +173,7 @@ public class StreamFilesIterator<T extends SelfSerializable> implements Iterator
         idx++;
         currentFileIterator = LinkedObjectStreamUtilities.parseStreamFile(files[idx], streamType);
         if (!currentFileIterator.hasNext()) {
-            LOGGER.error(
+            logger.error(
                     LOGM_EXCEPTION,
                     () ->
                             new StreamParseErrorPayload(
@@ -182,7 +182,7 @@ public class StreamFilesIterator<T extends SelfSerializable> implements Iterator
         }
         T hash = currentFileIterator.next();
         if (!(hash instanceof Hash)) {
-            LOGGER.error(
+            logger.error(
                     LOGM_EXCEPTION,
                     () ->
                             new StreamParseErrorPayload(
@@ -193,13 +193,13 @@ public class StreamFilesIterator<T extends SelfSerializable> implements Iterator
         }
         // update startRunningHash
         startRunningHash = (Hash) hash;
-        LOGGER.info(
+        logger.info(
                 LOGM_OBJECT_STREAM_FILE,
                 "StreamFilesIterator : update startRunningHash: {}",
                 () -> startRunningHash);
         // validate startRunningHash against endRunningHash of previous file
         if (!startRunningHash.equals(endRunningHash)) {
-            LOGGER.error(
+            logger.error(
                     LOGM_EXCEPTION,
                     () ->
                             new StreamParseErrorPayload(
@@ -213,7 +213,7 @@ public class StreamFilesIterator<T extends SelfSerializable> implements Iterator
             return false;
         } else if (!currentFileIterator.hasNext()) {
             // log error if the file is ended
-            LOGGER.error(
+            logger.error(
                     LOGM_EXCEPTION,
                     () ->
                             new StreamParseErrorPayload(

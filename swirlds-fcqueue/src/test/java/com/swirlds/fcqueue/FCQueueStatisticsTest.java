@@ -25,6 +25,7 @@ import com.swirlds.common.metrics.MetricsFactory;
 import com.swirlds.common.metrics.RunningAverageMetric;
 import com.swirlds.common.metrics.platform.DefaultMetrics;
 import com.swirlds.common.metrics.platform.DefaultMetricsFactory;
+import com.swirlds.common.metrics.platform.MetricKeyRegistry;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.jupiter.api.Test;
@@ -34,9 +35,10 @@ class FCQueueStatisticsTest {
     @Test
     void test() {
         // given
+        final MetricKeyRegistry registry = new MetricKeyRegistry();
         final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
         final MetricsFactory factory = new DefaultMetricsFactory();
-        final Metrics metrics = new DefaultMetrics(executor, factory);
+        final Metrics metrics = new DefaultMetrics(null, registry, executor, factory);
 
         // when
         FCQueueStatistics.register(metrics);

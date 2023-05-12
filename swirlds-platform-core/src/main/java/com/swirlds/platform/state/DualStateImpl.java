@@ -36,7 +36,7 @@ import org.apache.logging.log4j.Logger;
 /** Contains any data that is either read or written by the platform and the application */
 public class DualStateImpl extends PartialMerkleLeaf
         implements PlatformDualState, SwirldDualState, MerkleLeaf {
-    private static final Logger LOGGER = LogManager.getLogger(DualStateImpl.class);
+    private static final Logger logger = LogManager.getLogger(DualStateImpl.class);
 
     public static final long CLASS_ID = 0x565e2e04ce3782b8L;
 
@@ -76,8 +76,8 @@ public class DualStateImpl extends PartialMerkleLeaf
     @Override
     public void setFreezeTime(Instant freezeTime) {
         this.freezeTime = freezeTime;
-        LOGGER.info(FREEZE.getMarker(), "setFreezeTime: {}", () -> freezeTime);
-        LOGGER.info(FREEZE.getMarker(), () -> new SetFreezeTimePayload(freezeTime).toString());
+        logger.info(FREEZE.getMarker(), "setFreezeTime: {}", () -> freezeTime);
+        logger.info(FREEZE.getMarker(), () -> new SetFreezeTimePayload(freezeTime).toString());
     }
 
     /** {@inheritDoc} */
@@ -94,11 +94,11 @@ public class DualStateImpl extends PartialMerkleLeaf
     @Override
     public void setLastFrozenTimeToBeCurrentFreezeTime() {
         this.lastFrozenTime = freezeTime;
-        LOGGER.info(
+        logger.info(
                 FREEZE.getMarker(),
                 "setLastFrozenTimeToBeCurrentFreezeTime: {}",
                 () -> lastFrozenTime);
-        LOGGER.info(FREEZE.getMarker(), () -> new SetLastFrozenTimePayload(freezeTime).toString());
+        logger.info(FREEZE.getMarker(), () -> new SetLastFrozenTimePayload(freezeTime).toString());
     }
 
     /** {@inheritDoc} */

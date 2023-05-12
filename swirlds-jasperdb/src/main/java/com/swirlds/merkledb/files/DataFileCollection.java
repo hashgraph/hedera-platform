@@ -82,7 +82,7 @@ import org.apache.logging.log4j.Logger;
  */
 @SuppressWarnings({"unused", "unchecked"})
 public class DataFileCollection<D> implements Snapshotable {
-    private static final Logger LOG = LogManager.getLogger(DataFileCollection.class);
+    private static final Logger logger = LogManager.getLogger(DataFileCollection.class);
 
     /**
      * Since {@code com.swirlds.platform.Browser} populates settings, and it is loaded before any
@@ -97,8 +97,14 @@ public class DataFileCollection<D> implements Snapshotable {
      * merging.
      */
     private static final int MOVE_LIST_CHUNK_SIZE = 500_000;
-    /** The version number for format of current data files */
+    /** The version number for format of current data files. */
     private static final int METADATA_FILE_FORMAT_VERSION = 1;
+    /**
+     * Metadata file name suffix. Full metadata file name is storeName + suffix. If legacy store
+     * name is provided, and metadata file with the name above isn't found, metadata file with name
+     * legacyStoreName + suffix is tried.
+     */
+    private static final String METADATA_FILENAME_SUFFIX = "_metadata.dfc";
     /**
      * Maximum number of items that can be in a data file, this is computed based on the max ram we
      * are willing to use while merging.
@@ -118,6 +124,12 @@ public class DataFileCollection<D> implements Snapshotable {
      * Base name for the data files, allowing more than one DataFileCollection to share a directory
      */
     private final String storeName;
+    /**
+     * Another base name for the data files. If files with this base name exist, they are loaded by
+     * this file collection at startup. New files will have storeName as the prefix, not
+     * legacyStoreName *
+     */
+    private final String legacyStoreName;
     /** Serializer responsible for serializing/deserializing data items into and out of files */
     private final DataItemSerializer<D> dataItemSerializer;
     /** True if this DataFileCollection was loaded from an existing set of files */
@@ -143,10 +155,10 @@ public class DataFileCollection<D> implements Snapshotable {
      * is trace level
      */
     private final ConcurrentSkipListSet<Integer> setOfNewFileIndexes =
-            LOG.isTraceEnabled() ? new ConcurrentSkipListSet<>() : null;
+            logger.isTraceEnabled() ? new ConcurrentSkipListSet<>() : null;
 
     /**
-     * Construct a new DataFileCollection with custom DataFileReaderFactory
+     * Construct a new DataFileCollection.
      *
      * @param storeDir The directory to store data files
      * @param storeName Base name for the data files, allowing more than one DataFileCollection to
@@ -166,17 +178,57 @@ public class DataFileCollection<D> implements Snapshotable {
         this(
                 storeDir,
                 storeName,
+                null,
                 dataItemSerializer,
                 loadedDataCallback,
                 ImmutableIndexedObjectListUsingArray::new);
     }
 
     /**
-     * Construct a new DataFileCollection with custom DataFileReaderFactory
+     * Construct a new DataFileCollection with a custom legacy store name. If data files and/or
+     * metadata file exist with the legacy store name prefix, they will be processed by this file
+     * collection. New data files will be written with {@code storeName} as the prefix.
      *
      * @param storeDir The directory to store data files
      * @param storeName Base name for the data files, allowing more than one DataFileCollection to
      *     share a directory
+     * @param legacyStoreName Base name for the data files. If not null, data files with this prefix
+     *     are processed by this file collection at startup same way as files prefixed with
+     *     storeName
+     * @param dataItemSerializer Serializer responsible for serializing/deserializing data items
+     *     into and out of files.
+     * @param loadedDataCallback Callback for rebuilding indexes from existing files, can be null if
+     *     not needed. Using this is expensive as it requires all files to be read and parsed.
+     * @throws IOException If there was a problem creating new data set or opening existing one
+     */
+    public DataFileCollection(
+            final Path storeDir,
+            final String storeName,
+            final String legacyStoreName,
+            final DataItemSerializer<D> dataItemSerializer,
+            final LoadedDataCallback loadedDataCallback)
+            throws IOException {
+        this(
+                storeDir,
+                storeName,
+                legacyStoreName,
+                dataItemSerializer,
+                loadedDataCallback,
+                ImmutableIndexedObjectListUsingArray::new);
+    }
+
+    /**
+     * Construct a new DataFileCollection with custom legacy store name and indexed object list
+     * constructor. If data files and/or metadata file exist with the legacy store name prefix, they
+     * will be processed by this file collection. New data files will be written with {@code
+     * storeName} as the prefix.
+     *
+     * @param storeDir The directory to store data files
+     * @param storeName Base name for the data files, allowing more than one DataFileCollection to
+     *     share a directory
+     * @param legacyStoreName Base name for the data files. If not null, data files with this prefix
+     *     are processed by this file collection at startup same way as files prefixed with
+     *     storeName
      * @param dataItemSerializer Serializer responsible for serializing/deserializing data items
      *     into and out of files.
      * @param loadedDataCallback Callback for rebuilding indexes from existing files, can be null if
@@ -188,6 +240,7 @@ public class DataFileCollection<D> implements Snapshotable {
     protected DataFileCollection(
             final Path storeDir,
             final String storeName,
+            final String legacyStoreName,
             final DataItemSerializer<D> dataItemSerializer,
             final LoadedDataCallback loadedDataCallback,
             final Function<List<DataFileReader<D>>, ImmutableIndexedObjectList<DataFileReader<D>>>
@@ -195,6 +248,7 @@ public class DataFileCollection<D> implements Snapshotable {
             throws IOException {
         this.storeDir = storeDir;
         this.storeName = storeName;
+        this.legacyStoreName = legacyStoreName;
         this.dataItemSerializer = dataItemSerializer;
         this.indexedObjectListConstructor = indexedObjectListConstructor;
 
@@ -315,7 +369,8 @@ public class DataFileCollection<D> implements Snapshotable {
         // *no* files that need to be merged.
         if (filesToMerge.size() < 2) {
             // nothing to do we have merged since the last data update
-            LOG.info(MERKLE_DB.getMarker(), "No files were available for merging [{}]", storeName);
+            logger.info(
+                    MERKLE_DB.getMarker(), "No files were available for merging [{}]", storeName);
             return Collections.emptyList();
         }
 
@@ -360,7 +415,7 @@ public class DataFileCollection<D> implements Snapshotable {
                     blockIteratorsIterator.remove();
                 }
             } catch (IOException e) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "Failed while removing finished data file iterators",
                         e);
@@ -389,7 +444,7 @@ public class DataFileCollection<D> implements Snapshotable {
                 final long llk = lastLowestKey;
                 final long[] trk = thisRoundsKeys;
                 final long[] lrk = lastRoundsKeys;
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         () ->
                                 String.format(
@@ -399,7 +454,7 @@ public class DataFileCollection<D> implements Snapshotable {
 								last rounds keys =%s""",
                                         lk, llk, Arrays.toString(trk), Arrays.toString(lrk)));
                 for (final DataFileIterator blockIterator : blockIterators) {
-                    LOG.error(EXCEPTION.getMarker(), "blockIterator={}", blockIterator);
+                    logger.error(EXCEPTION.getMarker(), "blockIterator={}", blockIterator);
                 }
                 throw new IllegalStateException(
                         "This should never happen, lowestKey is less than the last lowestKey. This"
@@ -449,7 +504,7 @@ public class DataFileCollection<D> implements Snapshotable {
                         // finish writing current file, add it for reading then open new file for
                         // writing
                         closeCurrentMergeFile(newFileWriter, index, movesMap, mergingPaused);
-                        LOG.info(MERKLE_DB.getMarker(), "MovesMap.size() = {}", movesMap.size());
+                        logger.info(MERKLE_DB.getMarker(), "MovesMap.size() = {}", movesMap.size());
                         movesMap.clear();
                         newFileWriter = newDataFile(mergeTime, true);
                         newFilesCreated.add(newFileWriter.getPath());
@@ -472,7 +527,7 @@ public class DataFileCollection<D> implements Snapshotable {
                             blockIteratorsIterator.remove();
                         }
                     } catch (IOException e) {
-                        LOG.error(
+                        logger.error(
                                 EXCEPTION.getMarker(),
                                 "Failed to purge iterators containing lowestKey",
                                 e);
@@ -636,7 +691,7 @@ public class DataFileCollection<D> implements Snapshotable {
         } else {
             // Let's log this as it should happen very rarely but if we see it a lot then we should
             // have a rethink.
-            LOG.warn(
+            logger.warn(
                     EXCEPTION.getMarker(),
                     "Store [{}] DataFile was closed while trying to read from file",
                     storeName);
@@ -717,7 +772,7 @@ public class DataFileCollection<D> implements Snapshotable {
                 final int currentRetry = retries;
                 // Log as much useful information that we can to help diagnose this problem before
                 // throwing exception.
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         () -> {
                             final String currentFiles =
@@ -771,7 +826,7 @@ public class DataFileCollection<D> implements Snapshotable {
      * @return Direct access to set of all indexes of files that are currently being written
      */
     Set<Integer> getSetOfNewFileIndexes() {
-        if (LOG.isTraceEnabled()) {
+        if (logger.isTraceEnabled()) {
             return setOfNewFileIndexes;
         } else {
             throw new IllegalStateException(
@@ -843,7 +898,7 @@ public class DataFileCollection<D> implements Snapshotable {
             final Path filePath, final DataFileMetadata metadata) throws IOException {
         final DataFileReader<D> newDataFileReader =
                 new DataFileReader<>(filePath, dataItemSerializer, metadata);
-        if (LOG.isTraceEnabled()) {
+        if (logger.isTraceEnabled()) {
             setOfNewFileIndexes.remove(metadata.getIndex());
         }
         indexedFileList.getAndUpdate(
@@ -854,7 +909,7 @@ public class DataFileCollection<D> implements Snapshotable {
                                         singletonList(newDataFileReader))
                                 : currentFileList.withAddedObject(newDataFileReader);
                     } catch (IllegalArgumentException e) {
-                        LOG.error(
+                        logger.error(
                                 EXCEPTION.getMarker(),
                                 "Failed when updated the indexed files list",
                                 e);
@@ -895,7 +950,7 @@ public class DataFileCollection<D> implements Snapshotable {
     private DataFileWriter<D> newDataFile(final Instant creationTime, final boolean isMergeFile)
             throws IOException {
         final int newFileIndex = nextFileIndex.getAndIncrement();
-        if (LOG.isTraceEnabled()) {
+        if (logger.isTraceEnabled()) {
             setOfNewFileIndexes.add(newFileIndex);
         }
         return new DataFileWriter<>(
@@ -915,7 +970,8 @@ public class DataFileCollection<D> implements Snapshotable {
         // while in save lock
         try (DataOutputStream metaOut =
                 new DataOutputStream(
-                        Files.newOutputStream(directory.resolve(storeName + "_metadata.dfc")))) {
+                        Files.newOutputStream(
+                                directory.resolve(storeName + METADATA_FILENAME_SUFFIX)))) {
             final KeyRange keyRange = this.validKeyRange;
             metaOut.writeInt(METADATA_FILE_FORMAT_VERSION);
             metaOut.writeLong(keyRange.getMinValidKey());
@@ -936,7 +992,11 @@ public class DataFileCollection<D> implements Snapshotable {
         try (final Stream<Path> storePaths = Files.list(storeDir)) {
             final Path[] fullWrittenFilePaths =
                     storePaths
-                            .filter(path -> isFullyWrittenDataFile(storeName, path))
+                            .filter(
+                                    path ->
+                                            isFullyWrittenDataFile(storeName, path)
+                                                    || isFullyWrittenDataFile(
+                                                            legacyStoreName, path))
                             .toArray(Path[]::new);
             final DataFileReader<D>[] dataFileReaders =
                     new DataFileReader[fullWrittenFilePaths.length];
@@ -972,13 +1032,19 @@ public class DataFileCollection<D> implements Snapshotable {
     private void loadFromExistingFiles(
             final DataFileReader<D>[] dataFileReaders, final LoadedDataCallback loadedDataCallback)
             throws IOException {
-        LOG.info(
+        logger.info(
                 MERKLE_DB.getMarker(),
                 "Loading existing set of [{}] data files for DataFileCollection [{}]",
                 dataFileReaders.length,
                 storeName);
         // read metadata
-        Path metaDataFile = storeDir.resolve(storeName + "_metadata.dfc");
+        Path metaDataFile = storeDir.resolve(storeName + METADATA_FILENAME_SUFFIX);
+        boolean loadedLegacyMetadata = false;
+        if (!Files.exists(metaDataFile)) {
+            // try loading using legacy name
+            metaDataFile = storeDir.resolve(legacyStoreName + METADATA_FILENAME_SUFFIX);
+            loadedLegacyMetadata = true;
+        }
         if (Files.exists(metaDataFile)) {
             try (DataInputStream metaIn = new DataInputStream(Files.newInputStream(metaDataFile))) {
                 final int fileVersion = metaIn.readInt();
@@ -992,8 +1058,11 @@ public class DataFileCollection<D> implements Snapshotable {
                 }
                 validKeyRange = new KeyRange(metaIn.readLong(), metaIn.readLong());
             }
+            if (loadedLegacyMetadata) {
+                Files.delete(metaDataFile);
+            }
         } else {
-            LOG.warn(
+            logger.warn(
                     EXCEPTION.getMarker(),
                     "Loading existing set of data files but no metadata file was found in [{}]",
                     storeDir.toAbsolutePath());
@@ -1022,7 +1091,7 @@ public class DataFileCollection<D> implements Snapshotable {
         for (DataFileReader<D> dataFileReader : dataFileReaders) {
             dataFileReader.setFileAvailableForMerging(true);
         }
-        LOG.info(
+        logger.info(
                 MERKLE_DB.getMarker(),
                 "Finished loading existing data files for DataFileCollection [{}]",
                 storeName);

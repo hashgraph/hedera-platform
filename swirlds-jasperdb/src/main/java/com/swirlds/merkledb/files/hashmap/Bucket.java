@@ -55,7 +55,7 @@ import org.apache.logging.log4j.Logger;
  */
 @SuppressWarnings("unused")
 public final class Bucket<K extends VirtualKey<? super K>> {
-    private static final Logger LOG = LogManager.getLogger(Bucket.class);
+    private static final Logger logger = LogManager.getLogger(Bucket.class);
 
     /** When increasing the capacity of a bucket, increase it by this many bytes. */
     private static final int CAPACITY_INCREMENT = 1024;
@@ -177,7 +177,7 @@ public final class Bucket<K extends VirtualKey<? super K>> {
                     LARGEST_SIZE_OF_BUCKET_CREATED.updateAndGet(
                             oldMaxSize -> Math.max(oldMaxSize, size));
             if (newMaxSize > BUCKET_HEADER_SIZE) {
-                LOG.info(
+                logger.info(
                         MERKLE_DB.getMarker(),
                         "New largest buckets, now = {} bytes, {} entries",
                         newMaxSize,
@@ -297,7 +297,7 @@ public final class Bucket<K extends VirtualKey<? super K>> {
                 incrementBucketEntryCount();
             }
         } catch (IOException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Failed putting key={} value={} in a bucket",
                     key,
@@ -470,7 +470,7 @@ public final class Bucket<K extends VirtualKey<? super K>> {
                 entryOffset += KEY_HASHCODE_SIZE + VALUE_SIZE + keySize;
             }
         } catch (IOException e) {
-            LOG.error(EXCEPTION.getMarker(), "Failed enumerating bucket entries", e);
+            logger.error(EXCEPTION.getMarker(), "Failed enumerating bucket entries", e);
         }
         bucketBuffer.clear();
         sb.append("} RAW DATA = ");

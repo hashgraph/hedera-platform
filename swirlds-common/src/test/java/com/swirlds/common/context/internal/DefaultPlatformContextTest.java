@@ -21,8 +21,6 @@ import com.swirlds.common.context.PlatformContext;
 import com.swirlds.common.metrics.MetricsProvider;
 import com.swirlds.common.metrics.platform.DefaultMetricsProvider;
 import com.swirlds.common.system.NodeId;
-import com.swirlds.common.time.OSTime;
-import com.swirlds.common.time.Time;
 import com.swirlds.config.api.Configuration;
 import com.swirlds.config.api.ConfigurationBuilder;
 import org.junit.jupiter.api.Test;
@@ -33,9 +31,8 @@ class DefaultPlatformContextTest {
     void testNoNullServices() {
         // given
         final Configuration configuration = ConfigurationBuilder.create().build();
-        final Time time = OSTime.getInstance();
         final NodeId nodeId = new NodeId(false, 3256733545L);
-        final MetricsProvider metricsProvider = new DefaultMetricsProvider(time);
+        final MetricsProvider metricsProvider = new DefaultMetricsProvider();
         metricsProvider.createGlobalMetrics();
 
         // when

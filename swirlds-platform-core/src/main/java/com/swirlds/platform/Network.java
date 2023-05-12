@@ -45,7 +45,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class Network {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(Network.class);
+    private static final Logger logger = LogManager.getLogger(Network.class);
 
     private static Collection<InetAddress> ownAddresses;
     private static String[] addresses;
@@ -170,7 +170,7 @@ public class Network {
             try {
                 ownAddresses = computeOwnAddresses();
             } catch (SocketException e) {
-                log.error(EXCEPTION.getMarker(), "", e);
+                logger.error(EXCEPTION.getMarker(), "", e);
             }
         }
 

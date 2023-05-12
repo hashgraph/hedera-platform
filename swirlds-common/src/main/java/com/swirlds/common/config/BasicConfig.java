@@ -74,6 +74,8 @@ import java.nio.file.Path;
  * @param statsSkipSeconds number of seconds that the "all" history window skips at the start
  * @param threadPrioritySync priority for threads that sync (in SyncCaller, SyncListener,
  *     SyncServer)
+ * @param threadPriorityNonSync priority for threads that don't sync (all but SyncCaller,
+ *     SyncListener,SyncServer
  * @param maxAddressSizeAllowed the maximum number of address allowed in a address book, the same as
  *     the maximum allowed network size
  * @param freezeSecondsAfterStartup do not create events for this many seconds after the platform
@@ -134,8 +136,10 @@ import java.nio.file.Path;
  * @param gossipWithDifferentVersions if set to false, the platform will refuse to gossip with a
  *     node which has a different version of either platform or application
  * @param metricsUpdatePeriodMillis
- * @param enablePingTrans
- * @param enableBpsTrans
+ * @param enablePingTrans if set to true, send a transaction every {@code pingTransFreq} providing
+ *     the ping in milliseconds from self to all peers
+ * @param pingTransFreq if {@code enablePingTrans} is set to true, the frequency at which to send
+ *     transactions containing the average ping from self to all peers, in seconds
  * @param staleEventPreventionThreshold A setting used to prevent a node from generating events that
  *     will probably become stale. This value is multiplied by the address book size and compared to
  *     the number of events received in a sync. If ( numEventsReceived >
@@ -196,6 +200,8 @@ public record BasicConfig(
         @ConfigProperty(value = "sleepCallerSkips", defaultValue = "50") long sleepCallerSkips,
         @ConfigProperty(value = "statsSkipSeconds", defaultValue = "60") double statsSkipSeconds,
         @ConfigProperty(value = "threadPrioritySync", defaultValue = "5") int threadPrioritySync,
+        @ConfigProperty(value = "threadPriorityNonSync", defaultValue = "5")
+                int threadPriorityNonSync,
         @ConfigProperty(value = "maxAddressSizeAllowed", defaultValue = "1024")
                 int maxAddressSizeAllowed,
         @ConfigProperty(value = "freezeSecondsAfterStartup", defaultValue = "10")
@@ -248,7 +254,7 @@ public record BasicConfig(
         @ConfigProperty(value = "metricsUpdatePeriodMillis", defaultValue = "1000")
                 long metricsUpdatePeriodMillis,
         @ConfigProperty(value = "enablePingTrans", defaultValue = "true") boolean enablePingTrans,
-        @ConfigProperty(value = "enableBpsTrans", defaultValue = "true") boolean enableBpsTrans,
+        @ConfigProperty(value = "pingTransFreq", defaultValue = "1") long pingTransFreq,
         @ConfigProperty(value = "staleEventPreventionThreshold", defaultValue = "5")
                 int staleEventPreventionThreshold,
         @ConfigProperty(value = "eventIntakeQueueThrottleSize", defaultValue = "1000")

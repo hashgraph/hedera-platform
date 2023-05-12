@@ -31,7 +31,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Executes emergency reconnect in the role of the teacher */
 public class EmergencyReconnectTeacher {
-    private static final Logger LOG = LogManager.getLogger(EmergencyReconnectTeacher.class);
+    private static final Logger logger = LogManager.getLogger(EmergencyReconnectTeacher.class);
     private final EmergencyStateFinder stateFinder;
     private final int reconnectSocketTimeout;
     private final ReconnectMetrics reconnectMetrics;
@@ -68,7 +68,7 @@ public class EmergencyReconnectTeacher {
                 final SignedState state = stateWrapper.get();
                 if (state != null) {
                     writeHasState(connection, true);
-                    LOG.info(
+                    logger.info(
                             RECONNECT.getMarker(),
                             "Beginning emergency reconnect in the role of teacher for node {}",
                             connection.getOtherId());
@@ -89,7 +89,7 @@ public class EmergencyReconnectTeacher {
                             .execute();
                 } else {
                     writeHasState(connection, false);
-                    LOG.info(
+                    logger.info(
                             RECONNECT.getMarker(),
                             "Peer {} requested to perform an emergency reconnect but no compatible"
                                     + " state was found.",

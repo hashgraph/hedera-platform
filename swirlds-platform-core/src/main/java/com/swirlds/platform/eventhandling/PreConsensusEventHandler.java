@@ -45,7 +45,7 @@ import org.apache.logging.log4j.Logger;
 public class PreConsensusEventHandler implements PreConsensusEventObserver, Clearable, Startable {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(PreConsensusEventHandler.class);
+    private static final Logger logger = LogManager.getLogger(PreConsensusEventHandler.class);
 
     /** The initial size of the pre-consensus event queue. */
     private static final int INITIAL_PRE_CONS_EVENT_QUEUE_CAPACITY = 100;
@@ -111,9 +111,9 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Clea
 
     @Override
     public void clear() {
-        LOG.info(RECONNECT.getMarker(), "pre-consensus handler: preparing for reconnect");
+        logger.info(RECONNECT.getMarker(), "pre-consensus handler: preparing for reconnect");
         queueThread.clear();
-        LOG.info(RECONNECT.getMarker(), "pre-consensus handler: ready for reconnect");
+        logger.info(RECONNECT.getMarker(), "pre-consensus handler: ready for reconnect");
     }
 
     /**
@@ -145,7 +145,7 @@ public class PreConsensusEventHandler implements PreConsensusEventObserver, Clea
                     metrics.getAvgOtherReceivedTimestamp());
             queueThread.put(event);
         } catch (final InterruptedException e) {
-            LOG.error(EXCEPTION.getMarker(), "error:{} event:{}", e, event);
+            logger.error(EXCEPTION.getMarker(), "error:{} event:{}", e, event);
             Thread.currentThread().interrupt();
         }
     }

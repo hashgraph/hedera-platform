@@ -432,7 +432,7 @@ public class StatsBuffer {
                 yVars[i] = (yVars[j] + yVars[k] + dj * dj + dk * dk) / 2;
             }
             final int newNumBins = numBins.updateAndGet(DIVIDE_NUM_BY_TWO);
-            currBin = newNumBins - 1;
+            currBin = Math.max(0, newNumBins - 1);
             numPerBin *= 2;
             numLastBin = numPerBin;
         }

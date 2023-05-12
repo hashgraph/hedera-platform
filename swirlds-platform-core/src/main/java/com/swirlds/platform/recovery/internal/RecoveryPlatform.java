@@ -26,13 +26,12 @@ import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.metrics.platform.DefaultMetrics;
 import com.swirlds.common.metrics.platform.DefaultMetricsFactory;
-import com.swirlds.common.metrics.platform.SnapshotService;
+import com.swirlds.common.metrics.platform.MetricKeyRegistry;
 import com.swirlds.common.notification.NotificationEngine;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.Platform;
 import com.swirlds.common.system.SwirldState;
 import com.swirlds.common.system.address.AddressBook;
-import com.swirlds.common.time.OSTime;
 import com.swirlds.common.utility.AutoCloseableWrapper;
 import com.swirlds.config.api.Configuration;
 import com.swirlds.platform.Crypto;
@@ -78,11 +77,12 @@ public class RecoveryPlatform implements Platform, AutoCloseableNonThrowing {
                 Executors.newSingleThreadScheduledExecutor(
                         getStaticThreadManager()
                                 .createThreadFactory("recovery-platform", "MetricsThread"));
-        metrics = new DefaultMetrics(metricsExecutor, new DefaultMetricsFactory());
-        ((DefaultMetrics) metrics)
-                .setSnapshotService(
-                        SnapshotService.createGlobalSnapshotService(
-                                (DefaultMetrics) metrics, metricsExecutor, OSTime.getInstance()));
+        metrics =
+                new DefaultMetrics(
+                        this.selfId,
+                        new MetricKeyRegistry(),
+                        metricsExecutor,
+                        new DefaultMetricsFactory());
         metrics.start();
 
         notificationEngine = NotificationEngine.buildEngine(getStaticThreadManager());

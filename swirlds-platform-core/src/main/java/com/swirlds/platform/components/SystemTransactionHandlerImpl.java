@@ -19,9 +19,8 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
 import com.swirlds.common.system.transaction.internal.SystemTransaction;
-import com.swirlds.platform.dispatch.DispatchBuilder;
-import com.swirlds.platform.dispatch.triggers.transaction.PostConsensusStateSignatureTrigger;
-import com.swirlds.platform.dispatch.triggers.transaction.PreConsensusStateSignatureTrigger;
+import com.swirlds.platform.components.common.output.StateSignature;
+import com.swirlds.platform.components.common.output.StateSignatureConsumer;
 import com.swirlds.platform.internal.ConsensusRound;
 import com.swirlds.platform.internal.EventImpl;
 import java.util.Iterator;
@@ -31,23 +30,17 @@ import org.apache.logging.log4j.Logger;
 /** Handles all system transactions */
 public class SystemTransactionHandlerImpl implements SystemTransactionHandler {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(SystemTransactionHandlerImpl.class);
+    private static final Logger logger = LogManager.getLogger(SystemTransactionHandlerImpl.class);
 
-    private final PreConsensusStateSignatureTrigger preConsensusStateSignatureDispatcher;
-    private final PostConsensusStateSignatureTrigger postConsensusStateSignatureDispatcher;
+    private final StateSignatureConsumer signatureConsumer;
 
     /**
      * Constructor
      *
-     * @param dispatchBuilder responsible for building dispatchers
+     * @param consumer consumer of state signatures
      */
-    public SystemTransactionHandlerImpl(final DispatchBuilder dispatchBuilder) {
-        preConsensusStateSignatureDispatcher =
-                dispatchBuilder.getDispatcher(this, PreConsensusStateSignatureTrigger.class)
-                        ::dispatch;
-        postConsensusStateSignatureDispatcher =
-                dispatchBuilder.getDispatcher(this, PostConsensusStateSignatureTrigger.class)
-                        ::dispatch;
+    public SystemTransactionHandlerImpl(final StateSignatureConsumer consumer) {
+        this.signatureConsumer = consumer;
     }
 
     /** {@inheritDoc} */
@@ -80,19 +73,14 @@ public class SystemTransactionHandlerImpl implements SystemTransactionHandler {
                     final StateSignatureTransaction signatureTransaction =
                             (StateSignatureTransaction) transaction;
 
-                    if (isConsensus) {
-                        postConsensusStateSignatureDispatcher.dispatch(
-                                signatureTransaction.getRound(),
-                                creatorId,
-                                signatureTransaction.getStateHash(),
-                                signatureTransaction.getStateSignature());
-                    } else {
-                        preConsensusStateSignatureDispatcher.dispatch(
-                                signatureTransaction.getRound(),
-                                creatorId,
-                                signatureTransaction.getStateHash(),
-                                signatureTransaction.getStateSignature());
-                    }
+                    final StateSignature signature =
+                            new StateSignature(
+                                    signatureTransaction.getRound(),
+                                    creatorId,
+                                    signatureTransaction.getStateHash(),
+                                    signatureTransaction.getStateSignature());
+
+                    signatureConsumer.handleStateSignature(signature, isConsensus);
 
                     break;
                 case SYS_TRANS_PING_MICROSECONDS: // latency between members
@@ -100,14 +88,14 @@ public class SystemTransactionHandlerImpl implements SystemTransactionHandler {
                     break;
 
                 default:
-                    LOG.error(
+                    logger.error(
                             EXCEPTION.getMarker(),
                             "Unknown system transaction type {}",
                             transaction.getType());
                     break;
             }
         } catch (final RuntimeException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Error while handling system transaction: "
                             + "type: {}, id: {}, isConsensus: {}, transaction: {}, error:",

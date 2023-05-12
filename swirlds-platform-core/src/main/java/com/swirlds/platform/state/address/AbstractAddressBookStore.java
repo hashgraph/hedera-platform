@@ -32,7 +32,7 @@ import org.apache.logging.log4j.Logger;
 /** An {@link AddressBookStore} that is included in the state. */
 public abstract class AbstractAddressBookStore implements AddressBookStore {
 
-    private static final Logger LOG = LogManager.getLogger(AbstractAddressBookStore.class);
+    private static final Logger logger = LogManager.getLogger(AbstractAddressBookStore.class);
 
     private final AddressBookConfig addressBookConfig;
 
@@ -117,7 +117,7 @@ public abstract class AbstractAddressBookStore implements AddressBookStore {
             }
 
             if (round != getLatestRound() + 1) {
-                LOG.warn(
+                logger.warn(
                         STARTUP.getMarker(),
                         "gap in address books detected, address book store was expecting an address"
                             + " book from round {}  but got the address book from round {} instead."
@@ -136,7 +136,7 @@ public abstract class AbstractAddressBookStore implements AddressBookStore {
             }
 
             if (!isNextAddressBookValid(getLatest(), addressBook)) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "address book for round {} is invalid",
                         addressBook.getRound());

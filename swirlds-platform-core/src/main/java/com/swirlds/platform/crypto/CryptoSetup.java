@@ -53,7 +53,7 @@ import org.apache.logging.log4j.Logger;
  */
 public final class CryptoSetup {
 
-    private static final Logger LOG = LogManager.getLogger(CryptoSetup.class);
+    private static final Logger logger = LogManager.getLogger(CryptoSetup.class);
 
     private CryptoSetup() {}
 
@@ -84,7 +84,7 @@ public final class CryptoSetup {
                             "Reading crypto keys from the files here:   "
                                     + list.filter(path -> path.getFileName().endsWith("pfx"))
                                             .toList());
-                    LOG.debug(STARTUP.getMarker(), "About start loading keys");
+                    logger.debug(STARTUP.getMarker(), "About start loading keys");
                     keysAndCerts =
                             CryptoStatic.loadKeysAndCerts(
                                     addressBook,
@@ -93,15 +93,15 @@ public final class CryptoSetup {
                                             .getConfigData(CryptoConfig.class)
                                             .keystorePassword()
                                             .toCharArray());
-                    LOG.debug(STARTUP.getMarker(), "Done loading keys");
+                    logger.debug(STARTUP.getMarker(), "Done loading keys");
                 }
             } else {
                 // if there are no keys on the disk, then create our own keys
                 CommonUtils.tellUserConsole(
                         "Creating keys, because there are no files in " + keysDirPath);
-                LOG.debug(STARTUP.getMarker(), "About to start creating generating keys");
+                logger.debug(STARTUP.getMarker(), "About to start creating generating keys");
                 keysAndCerts = CryptoStatic.generateKeysAndCerts(addressBook, cryptoThreadPool);
-                LOG.debug(STARTUP.getMarker(), "Done generating keys");
+                logger.debug(STARTUP.getMarker(), "Done generating keys");
             }
         } catch (final InterruptedException
                 | ExecutionException
@@ -110,7 +110,7 @@ public final class CryptoSetup {
                 | UnrecoverableKeyException
                 | NoSuchAlgorithmException
                 | IOException e) {
-            LOG.error(EXCEPTION.getMarker(), "Exception while loading/generating keys", e);
+            logger.error(EXCEPTION.getMarker(), "Exception while loading/generating keys", e);
             if (Utilities.isRootCauseSuppliedType(e, NoSuchAlgorithmException.class)
                     || Utilities.isRootCauseSuppliedType(e, NoSuchProviderException.class)) {
                 CommonUtils.tellUserConsolePopup(
@@ -130,9 +130,9 @@ public final class CryptoSetup {
                 .filter(Objects::nonNull)
                 .forEach(
                         k -> {
-                            LOG.debug(CERTIFICATES.getMarker(), msg, k.sigCert());
-                            LOG.debug(CERTIFICATES.getMarker(), msg, k.encCert());
-                            LOG.debug(CERTIFICATES.getMarker(), msg, k.agrCert());
+                            logger.debug(CERTIFICATES.getMarker(), msg, k.sigCert());
+                            logger.debug(CERTIFICATES.getMarker(), msg, k.encCert());
+                            logger.debug(CERTIFICATES.getMarker(), msg, k.agrCert());
                         });
 
         return Arrays.stream(keysAndCerts)

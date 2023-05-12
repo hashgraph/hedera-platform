@@ -70,7 +70,7 @@ public class TimestampStreamFileWriter<
     /** The serialization format of the signature files. */
     public static final int OBJECT_STREAM_SIG_VERSION = 1;
 
-    private static final Logger LOG = LogManager.getLogger(TimestampStreamFileWriter.class);
+    private static final Logger logger = LogManager.getLogger(TimestampStreamFileWriter.class);
     private static final SignatureType SIGNATURE_TYPE = RSA;
     /** Describes the type of object being streamed. (e.g. record stream / event stream). */
     private final StreamType streamType;
@@ -183,7 +183,7 @@ public class TimestampStreamFileWriter<
             output.writeSerializable(metaHash, true);
             output.writeSerializable(metaSignature, true);
 
-            LOG.info(OBJECT_STREAM_FILE.getMarker(), "signature file saved: {}", sigFilePath);
+            logger.info(OBJECT_STREAM_FILE.getMarker(), "signature file saved: {}", sigFilePath);
         }
     }
 
@@ -193,7 +193,7 @@ public class TimestampStreamFileWriter<
             out.writeSerializable(object, true);
             out.flush();
         } catch (IOException e) {
-            LOG.warn(EXCEPTION.getMarker(), "IOException when serializing {}", object, e);
+            logger.warn(EXCEPTION.getMarker(), "IOException when serializing {}", object, e);
         }
     }
 
@@ -206,7 +206,7 @@ public class TimestampStreamFileWriter<
         currentFile = new File(generateStreamFilePath(object));
         try {
             if (currentFile.exists() && !currentFile.isDirectory()) {
-                LOG.info(
+                logger.info(
                         OBJECT_STREAM.getMarker(),
                         "Stream file already exists {}",
                         currentFile::getName);
@@ -219,13 +219,13 @@ public class TimestampStreamFileWriter<
                 metadataOut =
                         new SerializableDataOutputStream(
                                 new HashingOutputStream(metadataStreamDigest));
-                LOG.info(
+                logger.info(
                         OBJECT_STREAM_FILE.getMarker(),
                         "Stream file created {}",
                         currentFile::getName);
             }
         } catch (final FileNotFoundException e) {
-            LOG.error(EXCEPTION.getMarker(), "startNewFile :: FileNotFound: ", e);
+            logger.error(EXCEPTION.getMarker(), "startNewFile :: FileNotFound: ", e);
         }
     }
 
@@ -241,7 +241,7 @@ public class TimestampStreamFileWriter<
             out.writeInt(OBJECT_STREAM_VERSION);
             metadataOut.writeInt(OBJECT_STREAM_VERSION);
 
-            LOG.info(
+            logger.info(
                     OBJECT_STREAM_FILE.getMarker(),
                     "begin :: write OBJECT_STREAM_VERSION {}",
                     OBJECT_STREAM_VERSION);
@@ -249,19 +249,19 @@ public class TimestampStreamFileWriter<
             Hash startRunningHash = runningHash.getFutureHash().getAndRethrow();
             out.writeSerializable(startRunningHash, true);
             metadataOut.writeSerializable(startRunningHash, true);
-            LOG.info(
+            logger.info(
                     OBJECT_STREAM_FILE.getMarker(),
                     "begin :: write startRunningHash {}",
                     startRunningHash);
         } catch (final IOException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "begin :: Got IOException when writing startRunningHash to {}",
                     currentFile.getName(),
                     e);
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "begin :: Got interrupted when getting startRunningHash for writing {}",
                     currentFile.getName(),
@@ -279,13 +279,13 @@ public class TimestampStreamFileWriter<
                 final Hash finalRunningHash = runningHash.getFutureHash().getAndRethrow();
                 out.writeSerializable(finalRunningHash, true);
                 metadataOut.writeSerializable(finalRunningHash, true);
-                LOG.info(
+                logger.info(
                         OBJECT_STREAM_FILE.getMarker(),
                         "closeCurrentAndSign {} :: write endRunningHash {}",
                         currentFile,
                         finalRunningHash);
             } catch (final IOException e) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "closeCurrentAndSign :: Got Exception when writing endRunningHash to {}",
                         currentFile.getName(),
@@ -293,7 +293,7 @@ public class TimestampStreamFileWriter<
                 return;
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "closeCurrentAndSign :: Got interrupted when getting endRunningHash for"
                                 + " writing {}",
@@ -327,7 +327,7 @@ public class TimestampStreamFileWriter<
                         generateSigFilePath(closedFile),
                         streamType);
             } catch (final IOException e) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "closeCurrentAndSign ::  :: Fail to generate signature file for {}",
                         closedFile.getName(),
@@ -356,9 +356,9 @@ public class TimestampStreamFileWriter<
                 out = null;
                 metadataOut = null;
             } catch (final IOException e) {
-                LOG.warn(EXCEPTION.getMarker(), "Exception in close file", e);
+                logger.warn(EXCEPTION.getMarker(), "Exception in close file", e);
             }
-            LOG.info(
+            logger.info(
                     OBJECT_STREAM_FILE.getMarker(),
                     "File {} is closed at {}",
                     () -> fileName,
@@ -482,12 +482,12 @@ public class TimestampStreamFileWriter<
             try {
                 // delete this file since it is half written
                 Files.delete(closedFile.toPath());
-                LOG.info(
+                logger.info(
                         OBJECT_STREAM.getMarker(),
                         "TimestampStreamFileWriter::clear deleted {}",
                         closedFile::getName);
             } catch (final IOException ex) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "TimestampStreamFileWriter::clear got IOException "
                                 + "when deleting file {}",
@@ -501,7 +501,7 @@ public class TimestampStreamFileWriter<
     @Override
     public void close() {
         closeCurrentAndSign();
-        LOG.info(
+        logger.info(
                 FREEZE.getMarker(),
                 "TimestampStreamFileWriter finished writing the last object, is stopped");
     }
@@ -522,7 +522,7 @@ public class TimestampStreamFileWriter<
      */
     public void setStartWriteAtCompleteWindow(final boolean startWriteAtCompleteWindow) {
         this.startWriteAtCompleteWindow = startWriteAtCompleteWindow;
-        LOG.info(
+        logger.info(
                 OBJECT_STREAM.getMarker(),
                 "TimestampStreamFileWriter::setStartWriteAtCompleteWindow: {}",
                 startWriteAtCompleteWindow);

@@ -62,7 +62,7 @@ public final class LegacyConfigPropertiesLoader {
 
     private static final String GENESIS_FREEZE_TIME_PROPERTY_NAME = "genesisfreezetime";
 
-    private static final Logger LOG = LogManager.getLogger(LegacyConfigPropertiesLoader.class);
+    private static final Logger logger = LogManager.getLogger(LegacyConfigPropertiesLoader.class);
 
     private LegacyConfigPropertiesLoader() {}
 
@@ -73,7 +73,7 @@ public final class LegacyConfigPropertiesLoader {
         // Load config.txt file, parse application jar file name, main class name, address book, and
         // parameters
         if (!Files.exists(configPath)) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "ERROR: Browser.startPlatforms called on non-existent config.txt");
             throw new ConfigurationException(
@@ -168,7 +168,7 @@ public final class LegacyConfigPropertiesLoader {
             return configurationProperties;
         } catch (final FileNotFoundException ex) {
             // this should never happen
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Config.txt file was not found but File#exists() claimed the file does exist",
                     ex);

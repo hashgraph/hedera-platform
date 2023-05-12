@@ -89,7 +89,8 @@ public class FileSignTool {
     public static final String ALIAS_PROPERTY = "alias";
     public static final String PASSWORD_PROPERTY = "password";
     public static final String DIR_PROPERTY = "dir";
-    private static final Logger LOGGER = LogManager.getLogger(FileSignTool.class);
+
+    private static final Logger logger = LogManager.getLogger(FileSignTool.class);
     private static final Marker MARKER = MarkerManager.getMarker("FILE_SIGN");
     private static final int BYTES_COUNT_IN_INT = 4;
     /** default log4j2 file name */
@@ -126,8 +127,8 @@ public class FileSignTool {
                 Signature.getInstance(
                         SignatureType.RSA.signingAlgorithm(), SignatureType.RSA.provider());
         signature.initSign(sigKeyPair.getPrivate());
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(
+        if (logger.isDebugEnabled()) {
+            logger.debug(
                     MARKER,
                     "data is being signed, publicKey={}",
                     hex(sigKeyPair.getPublic().getEncoded()));
@@ -162,7 +163,7 @@ public class FileSignTool {
                 | NoSuchProviderException
                 | InvalidKeyException
                 | SignatureException e) {
-            LOGGER.error(
+            logger.error(
                     MARKER,
                     "Failed to verify Signature: {}, PublicKey: {}, File: {}",
                     hex(signature),
@@ -192,13 +193,13 @@ public class FileSignTool {
                     new KeyPair(
                             keyStore.getCertificate(alias).getPublicKey(),
                             (PrivateKey) keyStore.getKey(alias, password.toCharArray()));
-            LOGGER.info(MARKER, "keypair has loaded successfully from file {}", keyFileName);
+            logger.info(MARKER, "keypair has loaded successfully from file {}", keyFileName);
         } catch (final NoSuchAlgorithmException
                 | KeyStoreException
                 | UnrecoverableKeyException
                 | IOException
                 | CertificateException e) {
-            LOGGER.error(MARKER, "loadPfxKey :: ERROR ", e);
+            logger.error(MARKER, "loadPfxKey :: ERROR ", e);
         }
         return sigKeyPair;
     }
@@ -233,7 +234,7 @@ public class FileSignTool {
             output.write(integerToBytes(signature.length));
             output.write(signature);
         } catch (final IOException e) {
-            LOGGER.error(
+            logger.error(
                     MARKER,
                     "generateSigFile :: Fail to generate signature file for {}. Exception: {}",
                     filePath,
@@ -274,7 +275,7 @@ public class FileSignTool {
             if (streamType.isStreamFile(streamFile)) {
                 final int version = readFirstIntFromFile(streamFile);
                 if (version != VERSION_5) {
-                    LOGGER.error(
+                    logger.error(
                             MARKER,
                             "Failed to sign file {} with unsupported version {} ",
                             streamFile.getName(),
@@ -311,9 +312,9 @@ public class FileSignTool {
                 | SignatureException
                 | InvalidStreamFileException
                 | IOException e) {
-            LOGGER.error(MARKER, "Failed to sign file {} ", streamFile.getName(), e);
+            logger.error(MARKER, "Failed to sign file {} ", streamFile.getName(), e);
         }
-        LOGGER.info(MARKER, "Finish generating signature file {}", destSigFilePath);
+        logger.info(MARKER, "Finish generating signature file {}", destSigFilePath);
     }
 
     /**
@@ -359,7 +360,7 @@ public class FileSignTool {
         registry.registerConstructables("com.swirlds.common");
 
         if (streamType.getExtension().equalsIgnoreCase(RECORD_STREAM_EXTENSION)) {
-            LOGGER.info(MARKER, "registering Constructables for parsing record stream files");
+            logger.info(MARKER, "registering Constructables for parsing record stream files");
             // if we are parsing new record stream files,
             // we need to add HederaNode.jar and hedera-protobuf-java-*.jar into class path,
             // so that we can register for parsing RecordStreamObject
@@ -384,7 +385,7 @@ public class FileSignTool {
             try {
                 streamType = loadStreamTypeFromJson(streamTypeJsonPath);
             } catch (final IOException e) {
-                LOGGER.error(MARKER, "fail to load StreamType from {}.", streamTypeJsonPath, e);
+                logger.error(MARKER, "fail to load StreamType from {}.", streamTypeJsonPath, e);
                 return;
             }
         }
@@ -393,7 +394,7 @@ public class FileSignTool {
         try {
             prepare(streamType);
         } catch (final ConstructableRegistryException e) {
-            LOGGER.error(MARKER, "fail to register constructables.", e);
+            logger.error(MARKER, "fail to register constructables.", e);
             return;
         }
 
@@ -427,7 +428,7 @@ public class FileSignTool {
                     signSingleFile(sigKeyPair, new File(fileName), destDir, streamType);
                 }
             } catch (final IOException e) {
-                LOGGER.error(MARKER, "Got IOException", e);
+                logger.error(MARKER, "Got IOException", e);
             }
         }
     }

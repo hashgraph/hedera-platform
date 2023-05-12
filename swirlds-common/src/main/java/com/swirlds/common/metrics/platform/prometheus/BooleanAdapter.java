@@ -34,12 +34,11 @@ import io.prometheus.client.Gauge;
  * Adapter that synchronizes a {@link Metric} with a single value of {@link Metric#getDataType()
  * type} {@code boolean} with the corresponding Prometheus {@link Collector}.
  */
-public class BooleanAdapter implements MetricAdapter {
+public class BooleanAdapter extends AbstractMetricAdapter {
 
     private static final double TRUE_VALUE = 1.0;
     private static final double FALSE_VALUE = 0.0;
     private final Gauge gauge;
-    private final AdapterType adapterType;
 
     /**
      * Constructor of {@code BooleanAdapter}.
@@ -53,9 +52,9 @@ public class BooleanAdapter implements MetricAdapter {
      */
     public BooleanAdapter(
             final CollectorRegistry registry, final Metric metric, final AdapterType adapterType) {
+        super(adapterType);
         throwArgNull(registry, "registry");
         throwArgNull(metric, "metric");
-        this.adapterType = throwArgNull(adapterType, "adapterType");
         final Gauge.Builder builder =
                 new Gauge.Builder()
                         .subsystem(fix(metric.getCategory()))
@@ -75,8 +74,15 @@ public class BooleanAdapter implements MetricAdapter {
         if (adapterType == GLOBAL) {
             gauge.set(newValue);
         } else {
+            throwArgNull(nodeId, "nodeId");
             final Gauge.Child child = gauge.labels(Long.toString(nodeId.getId()));
             child.set(newValue);
         }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void unregister(final CollectorRegistry registry) {
+        registry.unregister(gauge);
     }
 }

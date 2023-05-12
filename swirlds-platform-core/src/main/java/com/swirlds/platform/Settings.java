@@ -160,7 +160,7 @@ public class Settings {
     // -Djavax.net.debug=ssl,handshake
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(Settings.class);
+    private static final Logger logger = LogManager.getLogger(Settings.class);
 
     private static final Settings INSTANCE = new Settings();
     /** path to config.txt (which might not exist) */
@@ -557,7 +557,7 @@ public class Settings {
             }
             writer.flush();
         } catch (final IOException e) {
-            log.error(EXCEPTION.getMarker(), "Error in writing to settingsUsed.txt", e);
+            logger.error(EXCEPTION.getMarker(), "Error in writing to settingsUsed.txt", e);
         }
     }
 
@@ -643,7 +643,7 @@ public class Settings {
     private void validateSettings() {
         // if the settings allow a transaction larger than the maximum event size
         if (maxTransactionBytesPerEvent < transactionMaxBytes) {
-            log.error(
+            logger.error(
                     STARTUP.getMarker(),
                     "Settings Mismatch: transactionMaxBytes ({}) is larger than"
                             + " maxTransactionBytesPerEvent ({}), truncating transactionMaxBytes to"
@@ -694,7 +694,7 @@ public class Settings {
             } catch (final IllegalArgumentException
                     | IllegalAccessException
                     | SettingsException e) {
-                log.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "illegal line in settings.txt: {}, {}  {}",
                         pars[0],
@@ -707,7 +707,7 @@ public class Settings {
             final String err = "WARNING: " + pars[0] + " is not a valid setting name.";
             // this only happens if settings.txt exist, so it's internal, not users, so print it
             CommonUtils.tellUserConsole(err);
-            log.warn(STARTUP.getMarker(), err);
+            logger.warn(STARTUP.getMarker(), err);
             return false;
         }
         return true;
@@ -804,7 +804,7 @@ public class Settings {
                         list.add(new String[] {f.getName(), f.get(this).toString()});
                     }
                 } catch (final IllegalArgumentException | IllegalAccessException e) {
-                    log.error(EXCEPTION.getMarker(), "error while reading settings.txt", e);
+                    logger.error(EXCEPTION.getMarker(), "error while reading settings.txt", e);
                 }
             }
         }

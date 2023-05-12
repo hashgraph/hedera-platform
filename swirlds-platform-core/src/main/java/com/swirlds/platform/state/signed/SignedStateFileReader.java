@@ -43,7 +43,7 @@ import org.apache.logging.log4j.Logger;
 /** Utility methods for reading a signed state from disk. */
 public final class SignedStateFileReader {
 
-    private static final Logger LOG = LogManager.getLogger(SignedStateFileReader.class);
+    private static final Logger logger = LogManager.getLogger(SignedStateFileReader.class);
 
     private SignedStateFileReader() {}
 
@@ -75,7 +75,7 @@ public final class SignedStateFileReader {
                     final long round = Long.parseLong(subDir.getFileName().toString());
                     final Path stateFile = subDir.resolve(SIGNED_STATE_FILE_NAME);
                     if (!exists(stateFile)) {
-                        LOG.warn(
+                        logger.warn(
                                 LogMarker.ERROR.getMarker(),
                                 "Saved state file ({}) not found, but directory exists '{}'",
                                 stateFile.getFileName(),
@@ -85,7 +85,7 @@ public final class SignedStateFileReader {
 
                     savedStates.put(round, new SavedStateInfo(round, stateFile));
                 } catch (final NumberFormatException e) {
-                    LOG.warn(
+                    logger.warn(
                             LogMarker.ERROR.getMarker(),
                             "Unexpected directory '{}' in '{}'",
                             subDir.getFileName(),
@@ -135,13 +135,7 @@ public final class SignedStateFileReader {
                             final State state =
                                     in.readMerkleTree(directory, MAX_MERKLE_NODES_IN_STATE);
                             final Hash hash = in.readSerializable();
-                            final SigSet sigSet =
-                                    in.readSerializable(
-                                            true,
-                                            () ->
-                                                    new SigSet(
-                                                            state.getPlatformState()
-                                                                    .getAddressBook()));
+                            final SigSet sigSet = in.readSerializable();
 
                             return Triple.of(state, hash, sigSet);
                         });

@@ -38,7 +38,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public final class SyncComms {
-    private static final Logger LOG = LogManager.getLogger(SyncComms.class);
+    private static final Logger logger = LogManager.getLogger(SyncComms.class);
     /**
      * send a {@link ByteConstants#COMM_SYNC_ONGOING} every this many milliseconds after we are done
      * writing events, until we are done reading events
@@ -84,12 +84,12 @@ public final class SyncComms {
             conn.getDos().writeGenerations(generations);
             conn.getDos().writeTipHashes(tipHashes);
             conn.getDos().flush();
-            LOG.info(
+            logger.info(
                     SYNC_INFO.getMarker(),
                     "{} sent generations: {}",
                     conn::getDescription,
                     generations::toString);
-            LOG.info(
+            logger.info(
                     SYNC_INFO.getMarker(),
                     "{} sent tips: {}",
                     conn::getDescription,
@@ -127,12 +127,12 @@ public final class SyncComms {
             final Generations generations = conn.getDis().readGenerations();
             final List<Hash> tips = conn.getDis().readTipHashes(numberOfNodes);
 
-            LOG.info(
+            logger.info(
                     SYNC_INFO.getMarker(),
                     "{} received generations: {}",
                     conn::getDescription,
                     generations::toString);
-            LOG.info(
+            logger.info(
                     SYNC_INFO.getMarker(),
                     "{} received tips: {}",
                     conn::getDescription,
@@ -149,7 +149,7 @@ public final class SyncComms {
         return () -> {
             conn.getDos().writeBooleanList(booleans);
             conn.getDos().flush();
-            LOG.info(
+            logger.info(
                     SYNC_INFO.getMarker(),
                     "{} sent booleans: {}",
                     conn::getDescription,
@@ -168,7 +168,7 @@ public final class SyncComms {
             if (booleans == null) {
                 throw new SyncException(conn, "peer sent null booleans");
             }
-            LOG.info(
+            logger.info(
                     SYNC_INFO.getMarker(),
                     "{} received booleans: {}",
                     conn::getDescription,
@@ -194,7 +194,7 @@ public final class SyncComms {
             final CountDownLatch eventReadingDone,
             final AtomicBoolean writeAborted) {
         return () -> {
-            LOG.info(
+            logger.info(
                     SYNC_INFO.getMarker(),
                     "{} writing events start. send list size: {}",
                     conn.getDescription(),
@@ -219,9 +219,10 @@ public final class SyncComms {
             conn.getDos().flush();
 
             if (writeAborted.get()) {
-                LOG.info(SYNC_INFO.getMarker(), "{} writing events aborted", conn.getDescription());
+                logger.info(
+                        SYNC_INFO.getMarker(), "{} writing events aborted", conn.getDescription());
             } else {
-                LOG.info(
+                logger.info(
                         SYNC_INFO.getMarker(),
                         "{} writing events done, wrote {} events",
                         conn.getDescription(),
@@ -242,7 +243,7 @@ public final class SyncComms {
             conn.getDos().writeByte(ByteConstants.COMM_SYNC_DONE);
             conn.getDos().flush();
 
-            LOG.debug(SYNC_INFO.getMarker(), "{} sent COMM_SYNC_DONE", conn.getDescription());
+            logger.debug(SYNC_INFO.getMarker(), "{} sent COMM_SYNC_DONE", conn.getDescription());
 
             // (ignored)
             return null;
@@ -266,7 +267,7 @@ public final class SyncComms {
             final SyncMetrics syncMetrics,
             final CountDownLatch eventReadingDone) {
         return () -> {
-            LOG.info(SYNC_INFO.getMarker(), "{} reading events start", conn.getDescription());
+            logger.info(SYNC_INFO.getMarker(), "{} reading events start", conn.getDescription());
             int eventsRead = 0;
             try {
                 final long startTime = System.nanoTime();
@@ -284,7 +285,7 @@ public final class SyncComms {
                             eventsRead++;
                         }
                         case ByteConstants.COMM_EVENT_ABORT -> {
-                            LOG.info(
+                            logger.info(
                                     SYNC_INFO.getMarker(),
                                     "{} reading events aborted",
                                     conn.getDescription());
@@ -295,7 +296,7 @@ public final class SyncComms {
                         }
                         case ByteConstants.COMM_EVENT_DONE -> {
                             syncMetrics.eventsReceived(startTime, eventsRead);
-                            LOG.info(
+                            logger.info(
                                     SYNC_INFO.getMarker(),
                                     "{} reading events done, read {} events",
                                     conn.getDescription(),
@@ -309,12 +310,12 @@ public final class SyncComms {
                             // if they are still busy reading events
                         case ByteConstants.COMM_SYNC_ONGOING ->
                         // peer is still reading events, waiting for them to finish
-                        LOG.debug(
+                        logger.debug(
                                 SYNC_INFO.getMarker(),
                                 "{} received COMM_SYNC_ONGOING",
                                 conn.getDescription());
                         case ByteConstants.COMM_SYNC_DONE -> {
-                            LOG.debug(
+                            logger.debug(
                                     SYNC_INFO.getMarker(),
                                     "{} received COMM_SYNC_DONE",
                                     conn.getDescription());

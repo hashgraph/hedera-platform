@@ -31,12 +31,13 @@ public interface StateAccessor {
     <T extends SwirldState> AutoCloseableWrapper<T> getLatestImmutableState();
 
     /**
-     * Get the most recent fully signed state. State may not be fully signed if the state was read
-     * from disk. Wrapper must be closed when use of the state is no longer needed else resources
-     * may be leaked.
+     * Get the most recent fully signed state. May return a wrapper around null if the platform does
+     * not have any fully signed states still in memory (e.g. right after boot or if there is
+     * trouble with the collection of state signatures).
      *
      * @param <T> the type of the state
-     * @return a wrapper around the most recent fully signed state
+     * @return a wrapper around the most recent fully signed state, or a wrapper around null if
+     *     there are no available fully signed states
      */
     <T extends SwirldState> AutoCloseableWrapper<T> getLatestSignedState();
 }

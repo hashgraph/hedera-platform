@@ -36,7 +36,7 @@ import org.apache.logging.log4j.Logger;
 /** A SerializableDataOutputStream that also handles merkle trees. */
 public class MerkleDataOutputStream extends SerializableDataOutputStream {
 
-    private static final Logger LOG = LogManager.getLogger(MerkleDataOutputStream.class);
+    private static final Logger logger = LogManager.getLogger(MerkleDataOutputStream.class);
 
     private static final Predicate<MerkleInternal> DESCENDANT_FILTER =
             node -> !(node instanceof ExternalSelfSerializable);
@@ -122,7 +122,7 @@ public class MerkleDataOutputStream extends SerializableDataOutputStream {
                     sb.append("\n   ").append(path);
                 }
 
-                LOG.info(STATE_TO_DISK.getMarker(), sb);
+                logger.info(STATE_TO_DISK.getMarker(), sb);
             }
         } catch (final IOException e) {
             throw new UncheckedIOException(e);

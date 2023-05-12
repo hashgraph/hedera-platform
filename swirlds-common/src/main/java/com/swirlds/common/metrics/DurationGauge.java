@@ -59,7 +59,7 @@ public interface DurationGauge extends Metric {
      *
      * @param duration the value to set the gauge to
      */
-    void update(Duration duration);
+    void set(Duration duration);
 
     /**
      * Get the current value in units supplied in the constructor

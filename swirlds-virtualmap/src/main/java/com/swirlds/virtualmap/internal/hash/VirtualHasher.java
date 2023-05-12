@@ -56,7 +56,7 @@ import org.apache.logging.log4j.Logger;
  */
 public final class VirtualHasher<K extends VirtualKey<? super K>, V extends VirtualValue> {
     /** Use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(VirtualHasher.class);
+    private static final Logger logger = LogManager.getLogger(VirtualHasher.class);
 
     /**
      * The number of threads to use when hashing. Can either be supplied by a system property, or
@@ -81,7 +81,7 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
                             .setThreadName("hasher")
                             .setExceptionHandler(
                                     (t, ex) ->
-                                            LOG.error(
+                                            logger.error(
                                                     EXCEPTION.getMarker(),
                                                     "Uncaught exception during hashing",
                                                     ex))
@@ -931,7 +931,8 @@ public final class VirtualHasher<K extends VirtualKey<? super K>, V extends Virt
                 latch.await();
             } catch (final InterruptedException ex) {
                 if (!shutdown.get()) {
-                    LOG.error(EXCEPTION.getMarker(), "Failed to wait for all hashing threads", ex);
+                    logger.error(
+                            EXCEPTION.getMarker(), "Failed to wait for all hashing threads", ex);
                 }
                 Thread.currentThread().interrupt();
             }

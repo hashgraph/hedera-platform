@@ -28,7 +28,6 @@ import com.swirlds.common.metrics.SpeedometerMetric;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.utility.CommonUtils;
 import com.swirlds.platform.Connection;
-import com.swirlds.platform.SwirldsPlatform;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Queue;
@@ -75,20 +74,17 @@ public class NetworkMetrics {
     /**
      * Constructor of {@code NetworkMetrics}
      *
-     * @param platform the {@link SwirldsPlatform} that the metrics should be linked with
+     * @param metrics a reference to the metrics-system
+     * @param selfId this node's id
+     * @param addressBookSize the number of nodes in the address book
      * @throws IllegalArgumentException if {@code platform} is {@code null}
      */
-    public NetworkMetrics(final SwirldsPlatform platform) {
-        CommonUtils.throwArgNull(platform, "platform");
-        this.selfId = platform.getSelfId();
+    public NetworkMetrics(final Metrics metrics, final NodeId selfId, final int addressBookSize) {
+        CommonUtils.throwArgNull(selfId, "selfId");
+        this.selfId = selfId;
 
-        // 0 during unit tests
-        final int abSize =
-                platform.getAddressBook() == null ? 0 : platform.getAddressBook().getSize();
-
-        final Metrics metrics = platform.getMetrics();
         avgPingMilliseconds =
-                IntStream.range(0, abSize)
+                IntStream.range(0, addressBookSize)
                         .mapToObj(
                                 i ->
                                         metrics.getOrCreate(
@@ -104,7 +100,7 @@ public class NetworkMetrics {
                                                         .withFormat(FORMAT_4_2)))
                         .toList();
         avgBytePerSecSent =
-                IntStream.range(0, abSize)
+                IntStream.range(0, addressBookSize)
                         .mapToObj(
                                 i ->
                                         metrics.getOrCreate(

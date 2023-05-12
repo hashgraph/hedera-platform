@@ -42,7 +42,7 @@ import org.apache.logging.log4j.Logger;
 /** Verifies signatures created with a ECDSA(secp256k1) private key. */
 public class EcdsaSecp256k1Verifier {
     public static final int EC_COORD_SIZE = 32;
-    private static final Logger LOGGER = LogManager.getLogger(EcdsaSecp256k1Verifier.class);
+    private static final Logger logger = LogManager.getLogger(EcdsaSecp256k1Verifier.class);
     private static final byte SIGN_MASK = (byte) 0x80;
     private static final byte ASN1_INTEGER_TAG = (byte) 0x02;
     private static final byte ASN1_SEQUENCE_TAG = (byte) 0x30;
@@ -157,7 +157,7 @@ public class EcdsaSecp256k1Verifier {
             final byte[] asn1DerSig = asn1DerEncode(rawSig);
             return algorithm.verify(asn1DerSig);
         } catch (InvalidKeySpecException | SignatureException | InvalidKeyException e) {
-            LOGGER.debug(
+            logger.debug(
                     LogMarker.TESTING_EXCEPTIONS.getMarker(),
                     "Failure while verifying signature [ publicKey = {}, rawSig = {} ]",
                     hex(pubKey),

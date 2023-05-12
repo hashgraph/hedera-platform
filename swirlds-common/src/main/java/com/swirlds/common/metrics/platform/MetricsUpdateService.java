@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
  */
 class MetricsUpdateService implements Startable {
 
-    private static final Logger LOG = LogManager.getLogger(MetricsUpdateService.class);
+    private static final Logger logger = LogManager.getLogger(MetricsUpdateService.class);
 
     private enum State {
         INIT,
@@ -115,7 +115,7 @@ class MetricsUpdateService implements Startable {
                 return false;
             } catch (final ExecutionException e) {
                 // this should not happen
-                LOG.error("MetricsUpdateService.runUpdaters threw an unexpected exception", e);
+                logger.error("MetricsUpdateService.runUpdaters threw an unexpected exception", e);
             } catch (final CancellationException e) {
                 // ignore, this is expected behavior
             }
@@ -131,7 +131,7 @@ class MetricsUpdateService implements Startable {
                 exceptionRateLimiter.handle(
                         e,
                         error ->
-                                LOG.error(
+                                logger.error(
                                         EXCEPTION.getMarker(),
                                         "Exception while updating metrics.",
                                         error));

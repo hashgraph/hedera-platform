@@ -52,7 +52,7 @@ class WinTab2Stats extends PrePaintableJPanel {
     /** number of columns of statistics boxes to display */
     final int numCols = 8;
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(WinTab2Stats.class);
+    private static final Logger logger = LogManager.getLogger(WinTab2Stats.class);
     /** a sentence describing each stat */
     private JTextArea descriptions;
 
@@ -418,7 +418,7 @@ class WinTab2Stats extends PrePaintableJPanel {
                 g.drawLine(minXs, maxYs, maxXs, maxYs); // x axis
                 g.drawLine(minXs, minYs, minXs, maxYs); // y axis
             } catch (Exception e) {
-                log.error(EXCEPTION.getMarker(), "error while painting: {}", e);
+                logger.error(EXCEPTION.getMarker(), "error while painting: {}", e);
             }
         }
     }
@@ -605,7 +605,7 @@ class WinTab2Stats extends PrePaintableJPanel {
             }
             return String.format(Locale.US, metric.getFormat(), metric.get(VALUE));
         } catch (final IllegalFormatException e) {
-            log.error(
+            logger.error(
                     EXCEPTION.getMarker(), "unable to compute string for {}", metric.getName(), e);
         }
         return "";

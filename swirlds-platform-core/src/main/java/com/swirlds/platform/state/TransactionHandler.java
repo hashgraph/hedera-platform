@@ -41,7 +41,7 @@ import org.apache.logging.log4j.Logger;
 public class TransactionHandler {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(TransactionHandler.class);
+    private static final Logger logger = LogManager.getLogger(TransactionHandler.class);
 
     /** The id of this node. */
     private final NodeId selfId;
@@ -65,7 +65,7 @@ public class TransactionHandler {
         try {
             swirldState.preHandle(event);
         } catch (final Throwable t) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "error invoking SwirldState2.preHandle() [ nodeId = {} ] with event {}",
                     selfId.getId(),
@@ -99,7 +99,7 @@ public class TransactionHandler {
         try {
             swirldState.preHandle(transaction);
         } catch (final Throwable t) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "error invoking SwirldState1.preHandle() [ nodeId = {} ] with transaction {}",
                     selfId.getId(),
@@ -146,7 +146,7 @@ public class TransactionHandler {
                 swirldState.handleTransaction(
                         creatorId, timeCreated, transConsTime, transactions[i], dualState);
             } catch (final Throwable t) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "error invoking SwirldState.handlePreConsensusEvent() [ nodeId = {} ] with"
                                 + " event {}",
@@ -191,7 +191,7 @@ public class TransactionHandler {
                 }
             }
         } catch (final Throwable t) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "error invoking SwirldState.handleConsensusRound() [ nodeId = {} ] with round"
                             + " {}",
@@ -262,7 +262,7 @@ public class TransactionHandler {
             swirldState.handleTransaction(
                     selfId.getId(), Instant.now(), consTime, transaction, dualState);
         } catch (final Throwable t) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "error invoking SwirldState.handleTransaction() [ nodeId = {} ] with"
                             + " transaction {}",

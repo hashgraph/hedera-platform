@@ -335,6 +335,8 @@ public class AddressBook extends PartialMerkleLeaf implements Iterable<Address>,
         } else if (oldStake != 0 && newStake == 0) {
             numberWithStake--;
         }
+
+        addresses.put(address.getId(), address);
     }
 
     /**
@@ -383,6 +385,7 @@ public class AddressBook extends PartialMerkleLeaf implements Iterable<Address>,
         throwArgNull(address, "address");
 
         if (addresses.containsKey(address.getId())) {
+            // FUTURE WORK: adding an address here is a strange API pattern
             updateAddress(address);
         } else {
             addNewAddress(address);

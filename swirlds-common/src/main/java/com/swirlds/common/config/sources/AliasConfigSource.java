@@ -35,7 +35,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class AliasConfigSource extends AbstractConfigSource {
 
-    private static final Logger LOG = LogManager.getLogger(AliasConfigSource.class);
+    private static final Logger logger = LogManager.getLogger(AliasConfigSource.class);
 
     private final ConfigSource wrappedSource;
 
@@ -72,19 +72,19 @@ public class AliasConfigSource extends AbstractConfigSource {
             aliases.forEach(
                     alias -> {
                         if (internalProperties.containsKey(alias.alias)) {
-                            LOG.error(
+                            logger.error(
                                     CONFIG.getMarker(),
                                     "Will not create alias {} since property '{}' already exits",
                                     alias,
                                     alias.alias);
                         } else if (aliasProperties.containsKey(alias.alias)) {
-                            LOG.error(
+                            logger.error(
                                     CONFIG.getMarker(),
                                     "Will not create alias {} since alias '{}' already exits",
                                     alias,
                                     alias.alias);
                         } else if (!internalProperties.containsKey(alias.originalName)) {
-                            LOG.error(
+                            logger.error(
                                     CONFIG.getMarker(),
                                     "Will not create alias {} since property '{}' does not exits",
                                     alias,
@@ -92,7 +92,7 @@ public class AliasConfigSource extends AbstractConfigSource {
                         } else {
                             aliasProperties.put(
                                     alias.alias, internalProperties.get(alias.originalName));
-                            LOG.debug(CONFIG.getMarker(), "Added alias {}", alias);
+                            logger.debug(CONFIG.getMarker(), "Added alias {}", alias);
                         }
                     });
             properties = new HashMap<>();
@@ -113,7 +113,7 @@ public class AliasConfigSource extends AbstractConfigSource {
             CommonUtils.throwArgBlank(alias, "alias");
             CommonUtils.throwArgBlank(originalName, "originalName");
             if (Objects.equals(originalName, alias)) {
-                LOG.warn(
+                logger.warn(
                         CONFIG.getMarker(),
                         "originalName and alias are the same ({})! Will not create an alias",
                         alias);

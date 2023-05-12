@@ -37,7 +37,7 @@ import org.apache.logging.log4j.Logger;
 /** Utilities for creating GUI elements. */
 public final class SwirldsGui {
 
-    private static final Logger LOG = LogManager.getLogger(SwirldsGui.class);
+    private static final Logger logger = LogManager.getLogger(SwirldsGui.class);
 
     private static Map<Long, String> aboutStrings = new ConcurrentHashMap<>();
 
@@ -105,7 +105,7 @@ public final class SwirldsGui {
             frame.requestFocusInWindow();
             frame.setVisible(visible); // show it
         } catch (final Exception e) {
-            LOG.error(EXCEPTION.getMarker(), "", e);
+            logger.error(EXCEPTION.getMarker(), "", e);
         }
 
         return frame;

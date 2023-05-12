@@ -32,7 +32,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public abstract class EventUtils {
-    private static final Logger LOG = LogManager.getLogger(EventUtils.class);
+    private static final Logger logger = LogManager.getLogger(EventUtils.class);
 
     /**
      * Converts the event to a short string. Should be replaced by {@link
@@ -91,7 +91,7 @@ public abstract class EventUtils {
         try {
             checkForGenerationGaps(forShadowGraph);
         } catch (final IllegalArgumentException e) {
-            LOG.error(
+            logger.error(
                     LogMarker.EXCEPTION.getMarker(),
                     "Issue found when checking event to provide to the Shadowgraph.This issue might"
                             + " not be fatal, so loading of the state will proceed.",

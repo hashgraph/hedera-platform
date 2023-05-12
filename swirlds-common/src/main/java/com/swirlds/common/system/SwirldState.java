@@ -18,7 +18,6 @@ package com.swirlds.common.system;
 import com.swirlds.common.Releasable;
 import com.swirlds.common.merkle.MerkleNode;
 import com.swirlds.common.merkle.interfaces.Archivable;
-import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.events.ConsensusEvent;
 
 /**
@@ -46,13 +45,12 @@ public sealed interface SwirldState extends Archivable, MerkleNode
      * Initialize a state. Called exactly once each time a node creates/recreates a state (e.g.
      * restart, reconnect, genesis).
      *
-     * <p>The application should check to see if the address book has changed, and if so those
-     * changes should be handled (in the future the address book will not be changed in this
-     * method). It may also be convenient for the application to initialize internal data structures
-     * at this time.
+     * <p>If applicable, the application should check to see if the address book has changed, and if
+     * so those changes should be handled (in the future the address book will not be changed in
+     * this method). It may also be convenient for the application to initialize internal data
+     * structures at this time.
      *
      * @param platform the Platform that instantiated this state
-     * @param addressBook the members and info about them
      * @param swirldDualState the dual state instance used by the initialization function
      * @param trigger describes the reason why the state was created/recreated
      * @param previousSoftwareVersion the previous version of the software, {@link
@@ -61,19 +59,11 @@ public sealed interface SwirldState extends Archivable, MerkleNode
      */
     default void init(
             final Platform platform,
-            final AddressBook addressBook,
             final SwirldDualState swirldDualState,
             final InitTrigger trigger,
             final SoftwareVersion previousSoftwareVersion) {
         // Override if needed
     }
-
-    /**
-     * Return a deep copy of the current address book.
-     *
-     * @return a deep copy of the current address book
-     */
-    AddressBook getAddressBookCopy();
 
     /**
      * Given a round of consensus ordered events, update the state to reflect their effect. Events

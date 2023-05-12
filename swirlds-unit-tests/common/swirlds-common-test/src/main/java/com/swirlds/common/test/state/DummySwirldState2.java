@@ -68,6 +68,7 @@ public class DummySwirldState2 extends AbstractDummySwirldState implements Swirl
 
     private DummySwirldState2(final DummySwirldState2 that) {
         super(that);
+        this.addressBook = that.addressBook;
     }
 
     /** {@inheritDoc} */
@@ -151,12 +152,12 @@ public class DummySwirldState2 extends AbstractDummySwirldState implements Swirl
             abortAndThrowIfInterrupted(
                     serializationLatch::await, "interrupted while waiting for latch");
         }
-        out.writeSerializable(getHashOverride(), true);
+        out.writeSerializable(addressBook, true);
     }
 
     @Override
     public void deserialize(final SerializableDataInputStream in, final int version)
             throws IOException {
-        setHashOverride(in.readSerializable());
+        addressBook = in.readSerializable();
     }
 }

@@ -15,7 +15,7 @@
  */
 package com.swirlds.common.system;
 
-import com.swirlds.common.system.address.AddressBook;
+import com.swirlds.config.api.Configuration;
 
 /**
  * To implement a swirld, create a class that implements SwirldMain. Its constructor should have no
@@ -24,11 +24,20 @@ import com.swirlds.common.system.address.AddressBook;
 public interface SwirldMain extends Runnable {
 
     /**
+     * Pass in a copy of the configuration.
+     *
+     * @param configuration configuration for this node
+     */
+    default void setConfiguration(final Configuration configuration) {
+        // override if needed
+    }
+
+    /**
      * This should only be called by the Platform. It is passed a reference to the platform, so the
      * SwirldMain will know who to call. (This is dependency injection).
      *
      * <p>Any changes necessary to initialize {@link SwirldState} should be made in {@link
-     * SwirldState#init(Platform, AddressBook, SwirldDualState, InitTrigger, SoftwareVersion)}
+     * SwirldState#init(Platform, SwirldDualState, InitTrigger, SoftwareVersion)}
      *
      * @param platform the Platform that instantiated this SwirldMain
      * @param selfId the ID number for this member (myself)

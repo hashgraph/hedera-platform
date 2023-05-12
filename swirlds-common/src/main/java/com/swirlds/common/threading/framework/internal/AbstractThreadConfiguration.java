@@ -40,7 +40,7 @@ import org.apache.logging.log4j.Logger;
 public abstract class AbstractThreadConfiguration<C extends AbstractThreadConfiguration<C>>
         implements Copyable, Mutable {
 
-    private static final Logger LOG = LogManager.getLogger(AbstractThreadConfiguration.class);
+    private static final Logger logger = LogManager.getLogger(AbstractThreadConfiguration.class);
 
     /** Responsible for creating and managing threads used by this object. */
     private final ThreadManager threadManager;
@@ -298,7 +298,7 @@ public abstract class AbstractThreadConfiguration<C extends AbstractThreadConfig
     /** Builds a default uncaught exception handler. */
     private static Thread.UncaughtExceptionHandler buildDefaultExceptionHandler() {
         return (Thread t, Throwable e) ->
-                LOG.error(EXCEPTION.getMarker(), "exception on thread {}", t.getName(), e);
+                logger.error(EXCEPTION.getMarker(), "exception on thread {}", t.getName(), e);
     }
 
     /**

@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Logger;
  */
 public final class AddressBookValidator {
 
-    private static final Logger LOG = LogManager.getLogger(AddressBookValidator.class);
+    private static final Logger logger = LogManager.getLogger(AddressBookValidator.class);
 
     private AddressBookValidator() {}
 
@@ -42,7 +42,7 @@ public final class AddressBookValidator {
      */
     public static boolean hasNonZeroStake(final AddressBook addressBook) {
         if (addressBook.getTotalStake() <= 0) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "address book for round {} has {} total stake",
                     addressBook.getRound(),
@@ -60,7 +60,7 @@ public final class AddressBookValidator {
      */
     public static boolean isNonEmpty(final AddressBook addressBook) {
         if (addressBook.getSize() == 0) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "address book for round {} is empty",
                     addressBook.getRound());
@@ -81,7 +81,7 @@ public final class AddressBookValidator {
             final AddressBook previousAddressBook, final AddressBook addressBook) {
 
         if (previousAddressBook.getNextNodeId() > addressBook.getNextNodeId()) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Invalid next node ID. Previous address book has a next node ID of {}, "
                             + "new address book has a next node ID of {}",
@@ -109,7 +109,7 @@ public final class AddressBookValidator {
         for (final Address address : addressBook) {
             final long nodeId = address.getId();
             if (nodeId < previousNextId && !previousAddressBook.contains(nodeId)) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "Once an address is removed or a node ID is skipped, an address with that"
                                 + " some node ID may never be added again. Invalid node ID = {}",

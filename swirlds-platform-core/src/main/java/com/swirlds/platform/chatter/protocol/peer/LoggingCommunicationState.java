@@ -21,7 +21,7 @@ import org.apache.logging.log4j.Marker;
 
 /** Used for debugging state transitions */
 public class LoggingCommunicationState extends CommunicationState {
-    private static final Logger LOG = LogManager.getLogger(LoggingCommunicationState.class);
+    private static final Logger logger = LogManager.getLogger(LoggingCommunicationState.class);
     private final long peerId;
     private final Marker marker;
 
@@ -31,7 +31,8 @@ public class LoggingCommunicationState extends CommunicationState {
     }
 
     private void log(final String method) {
-        LOG.info(marker, "'{}' peer: {}, new states:{} {}", method, peerId, syncState, commState);
+        logger.info(
+                marker, "'{}' peer: {}, new states:{} {}", method, peerId, syncState, commState);
     }
 
     @Override

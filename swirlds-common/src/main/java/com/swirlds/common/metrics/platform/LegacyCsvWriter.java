@@ -15,6 +15,7 @@
  */
 package com.swirlds.common.metrics.platform;
 
+import static com.swirlds.common.utility.CommonUtils.throwArgNull;
 import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STARTUP;
 import static java.lang.Double.isInfinite;
@@ -27,6 +28,7 @@ import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.metrics.Metric.ValueType;
 import com.swirlds.common.metrics.Metrics;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.common.utility.ThresholdLimitingHandler;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -34,21 +36,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.IllegalFormatException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
- * This implementation of {@link SnapshotReceiver} writes the current CSV-format. It is called
- * "legacy", because we plan to replace the CSV-format with something that is closer to the CSV
- * standard.
+ * A {@code LegacyCsvWriter} writes the current CSV-format. It is called "legacy", because we plan
+ * to replace the CSV-format with something that is closer to the CSV standard.
  *
  * <p>The {@code LegacyCsvWriter} can be configured with the following settings:
  *
@@ -67,14 +70,15 @@ import org.apache.logging.log4j.Logger;
  *       CSV-file
  * </dl>
  */
-public class LegacyCsvWriter implements SnapshotReceiver {
+public class LegacyCsvWriter {
 
-    private static final Logger LOGGER = LogManager.getLogger(LegacyCsvWriter.class);
+    private static final Logger logger = LogManager.getLogger(LegacyCsvWriter.class);
 
     // category contains this substring should not be expanded even Settings.verboseStatistics is
     // true
     private static final String EXCLUDE_CATEGORY = "info";
 
+    private final NodeId selfId;
     // path and filename of the .csv file to write to
     private final Path csvFilePath;
 
@@ -84,20 +88,39 @@ public class LegacyCsvWriter implements SnapshotReceiver {
     private final ThresholdLimitingHandler<String> warningRateLimiter =
             new ThresholdLimitingHandler<>(1, Function.identity());
 
+    private final AtomicBoolean initialized = new AtomicBoolean();
+
     /**
      * Constructor of a {@code LegacyCsvWriter}
      *
-     * @param csvFilePath path to the CSV-file
+     * @param selfId {@link NodeId} of the platform for which the CSV-file is written
+     * @param folderPath {@link Path} to the folder where the file should be stored
      */
-    public LegacyCsvWriter(final Path csvFilePath) {
-        this.csvFilePath = csvFilePath;
+    public LegacyCsvWriter(final NodeId selfId, final Path folderPath) {
+        this.selfId = throwArgNull(selfId, "selfId");
+
+        final String fileName =
+                String.format("%s%d.csv", SettingsCommon.csvFileName, selfId.getId());
+        this.csvFilePath = folderPath.resolve(fileName);
     }
 
-    /** {@inheritDoc} */
-    @SuppressWarnings("deprecation")
-    @Override
-    public void init(final List<Metric> metrics) {
-        LOGGER.info(
+    /**
+     * Returns the {@link Path} of the output-file
+     *
+     * @return {@code Path} to the csv-file
+     */
+    public Path getCsvFilePath() {
+        return csvFilePath;
+    }
+
+    /**
+     * Initializes the file with all known metrics. Once writing metrics to a legacy CSV-file has
+     * started, it is not possible to add new metrics.
+     *
+     * @param snapshots {@link List} of {@link Snapshot}s of all known metrics at this point in time
+     */
+    private void init(final Collection<Snapshot> snapshots) {
+        logger.info(
                 STARTUP.getMarker(),
                 "CsvWriter: Initializing statistics output in CSV format [ csvOutputFolder = '{}',"
                         + " csvFileName = '{}' ]",
@@ -106,7 +129,10 @@ public class LegacyCsvWriter implements SnapshotReceiver {
 
         // eventually filter out internal metrics
         final List<Metric> filteredMetrics =
-                metrics.stream().filter(LegacyCsvWriter::shouldWrite).toList();
+                snapshots.stream()
+                        .map(Snapshot::metric)
+                        .filter(LegacyCsvWriter::shouldWrite)
+                        .toList();
 
         indexLookup.clear();
         cellCount.clear();
@@ -192,15 +218,26 @@ public class LegacyCsvWriter implements SnapshotReceiver {
         }
     }
 
-    /** {@inheritDoc} */
-    @Override
-    public void handleSnapshots(final List<Snapshot> allSnapshots) {
-        final Snapshot[] snapshots = new Snapshot[indexLookup.size()];
-        for (final Snapshot snapshot : allSnapshots) {
+    /**
+     * Handle notification with new snapshots
+     *
+     * @param snapshotEvent the {@link SnapshotEvent}
+     */
+    public void handleSnapshots(final SnapshotEvent snapshotEvent) {
+        if (snapshotEvent.nodeId() != selfId) {
+            return;
+        }
+
+        final Collection<Snapshot> snapshots = snapshotEvent.snapshots();
+        if (initialized.compareAndSet(false, true)) {
+            init(snapshots);
+        }
+        final Snapshot[] sortedSnapshots = new Snapshot[indexLookup.size()];
+        for (final Snapshot snapshot : snapshots) {
             final Metric metric = snapshot.metric();
             final Integer index = indexLookup.get(Pair.of(metric.getCategory(), metric.getName()));
             if (index != null) {
-                snapshots[index] = snapshot;
+                sortedSnapshots[index] = snapshot;
             }
         }
 
@@ -210,8 +247,8 @@ public class LegacyCsvWriter implements SnapshotReceiver {
         builder.addCell("").addCell("");
 
         // extract values
-        for (int i = 0, n = snapshots.length; i < n; i++) {
-            final Snapshot snapshot = snapshots[i];
+        for (int i = 0, n = sortedSnapshots.length; i < n; i++) {
+            final Snapshot snapshot = sortedSnapshots[i];
             if (snapshot != null) {
                 addSnapshotData(builder, snapshot);
             } else {
@@ -258,7 +295,7 @@ public class LegacyCsvWriter implements SnapshotReceiver {
             warningRateLimiter.handle(
                     identifier,
                     id ->
-                            LOGGER.warn(
+                            logger.warn(
                                     EXCEPTION.getMarker(),
                                     "Metric '{}' has illegal value: {}",
                                     id,
@@ -274,7 +311,7 @@ public class LegacyCsvWriter implements SnapshotReceiver {
             warningRateLimiter.handle(
                     identifier,
                     id ->
-                            LOGGER.error(
+                            logger.error(
                                     EXCEPTION.getMarker(),
                                     "Metric '{}' has wrong format: {}",
                                     id,
@@ -296,14 +333,14 @@ public class LegacyCsvWriter implements SnapshotReceiver {
         final Path parentFolder = csvFilePath.getParent();
 
         if (!Files.exists(parentFolder)) {
-            LOGGER.debug(
+            logger.debug(
                     STARTUP.getMarker(),
                     "CsvWriter: Creating the metrics folder [ folder = '{}' ]",
                     parentFolder);
             Files.createDirectories(parentFolder);
 
         } else {
-            LOGGER.debug(
+            logger.debug(
                     STARTUP.getMarker(),
                     "CsvWriter: Using the existing metrics folder [ folder = '{}' ]",
                     parentFolder);

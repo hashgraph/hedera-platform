@@ -54,7 +54,7 @@ public class StreamEventParser extends Thread {
     /** current event stream version */
     public static final int EVENT_STREAM_FILE_VERSION = 5;
 
-    private static final Logger LOGGER = LogManager.getLogger(StreamEventParser.class);
+    private static final Logger logger = LogManager.getLogger(StreamEventParser.class);
     private static final int POLL_WAIT = 5000;
     private final LinkedBlockingQueue<EventImpl> events = new LinkedBlockingQueue<>();
     private final String fileDir;
@@ -109,7 +109,7 @@ public class StreamEventParser extends Thread {
                 // so the whole parsing process can stop
                 return parseEventStreamV5(file, eventHandler);
             } else {
-                LOGGER.info(
+                logger.info(
                         EVENT_PARSER.getMarker(),
                         "failed to parse file {} whose version is {}",
                         file::getName,
@@ -118,7 +118,7 @@ public class StreamEventParser extends Thread {
                 return false;
             }
         } catch (IOException e) {
-            LOGGER.info(EXCEPTION.getMarker(), "Unexpected", e);
+            logger.info(EXCEPTION.getMarker(), "Unexpected", e);
             return false;
         }
     }
@@ -138,14 +138,14 @@ public class StreamEventParser extends Thread {
                 return false;
             }
             if (isStartRunningHash) {
-                LOGGER.info(
+                logger.info(
                         EVENT_PARSER.getMarker(),
                         "From file {} read startRunningHash = {}",
                         file::getName,
                         () -> object);
                 isStartRunningHash = false;
             } else if (object instanceof Hash) {
-                LOGGER.info(
+                logger.info(
                         EVENT_PARSER.getMarker(),
                         "From file {} read endRunningHash = {}",
                         file::getName,
@@ -164,7 +164,7 @@ public class StreamEventParser extends Thread {
         try {
             return events.poll(POLL_WAIT, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
-            LOGGER.info(EXCEPTION.getMarker(), "Unexpected", e);
+            logger.info(EXCEPTION.getMarker(), "Unexpected", e);
             Thread.currentThread().interrupt();
             return null;
         }
@@ -191,7 +191,7 @@ public class StreamEventParser extends Thread {
         parseEventFolder(this.fileDir, this::handleEvent);
         handleEvent(null); // push the last prevParsedEvent to queue
         isParsingDone = true;
-        LOGGER.info(
+        logger.info(
                 EVENT_PARSER.getMarker(),
                 "Recovered {} event from stream file",
                 () -> eventsCounter);
@@ -205,7 +205,7 @@ public class StreamEventParser extends Thread {
      */
     private void parseEventFolder(String fileDir, EventConsumer eventHandler) {
         if (fileDir != null) {
-            LOGGER.info(
+            logger.info(
                     EVENT_PARSER.getMarker(), "Loading event file from path {} ", () -> fileDir);
 
             // Only get .evts files from the directory
@@ -213,7 +213,7 @@ public class StreamEventParser extends Thread {
             File[] files =
                     folder.listFiles(
                             (dir, name) -> EventStreamType.getInstance().isStreamFile(name));
-            LOGGER.info(
+            logger.info(
                     EVENT_PARSER.getMarker(),
                     "Files before sorting {}",
                     () -> Arrays.toString(files));
@@ -225,7 +225,7 @@ public class StreamEventParser extends Thread {
                 Instant currTimestamp = getTimeStampFromFileName(files[i].getName());
 
                 if (currTimestamp.compareTo(endTimestamp) > 0) {
-                    LOGGER.info(
+                    logger.info(
                             EVENT_PARSER.getMarker(),
                             "Search event file ended because file timestamp {} is after"
                                     + " endTimestamp {}",
@@ -235,7 +235,7 @@ public class StreamEventParser extends Thread {
                 }
 
                 if (!processEventFile(files, i, eventHandler)) {
-                    LOGGER.error(
+                    logger.error(
                             EXCEPTION.getMarker(),
                             () ->
                                     new StreamParseErrorPayload(
@@ -270,7 +270,7 @@ public class StreamEventParser extends Thread {
                 result = parseEventFile(files[index], eventHandler);
             } else {
                 // else we can skip this file
-                LOGGER.info(
+                logger.info(
                         EVENT_PARSER.getMarker(),
                         " Skip file {}: startTimestamp {} nextTimestamp {}",
                         files[index]::getName,
@@ -299,13 +299,13 @@ public class StreamEventParser extends Thread {
      */
     private boolean parseEventFile(final File file, final EventConsumer eventHandler) {
         if (!file.exists()) {
-            LOGGER.error(EXCEPTION.getMarker(), "File {} does not exist: ", file::getName);
+            logger.error(EXCEPTION.getMarker(), "File {} does not exist: ", file::getName);
             return false;
         }
-        LOGGER.info(EVENT_PARSER.getMarker(), "Processing file {}", file::getName);
+        logger.info(EVENT_PARSER.getMarker(), "Processing file {}", file::getName);
 
         if (!EventStreamType.getInstance().isStreamFile(file)) {
-            LOGGER.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "parseEventFile fails :: {} is not an event stream file",
                     file::getName);
@@ -328,9 +328,9 @@ public class StreamEventParser extends Thread {
      */
     private boolean handleEvent(final Event event) {
         if (event == null) {
-            LOGGER.info(EVENT_PARSER.getMarker(), "Finished parsing events");
+            logger.info(EVENT_PARSER.getMarker(), "Finished parsing events");
             if (prevParsedEvent != null) {
-                LOGGER.info(
+                logger.info(
                         EVENT_PARSER.getMarker(),
                         "Last recovered event consensus timestamp {}, round {}",
                         prevParsedEvent.getConsensusTimestamp(),
@@ -381,7 +381,7 @@ public class StreamEventParser extends Thread {
             prevParsedEvent = eventImpl;
             shouldContinue = true;
         } else if (consensusTimestamp.isAfter(endTimestamp)) {
-            LOGGER.info(
+            logger.info(
                     EVENT_PARSER.getMarker(),
                     "Search finished due to consensusTimestamp is after endTimestamp");
             shouldContinue = false;
@@ -390,7 +390,7 @@ public class StreamEventParser extends Thread {
             // for event not playing back in swirldsState, insert to event stream manager to get
             // the same event stream file as the original one.
             // skip being played back by handleTransaction function
-            LOGGER.info(
+            logger.info(
                     EVENT_PARSER.getMarker(),
                     "Adding event {} to stream writer directly",
                     eventImpl.getConsensusTimestamp());
@@ -404,7 +404,7 @@ public class StreamEventParser extends Thread {
     /** Set initial hash only once */
     private void trySetInitialRunningHash() {
         if (!setInitRunningHashAlready && initialHash != null) {
-            LOGGER.info(EVENT_PARSER.getMarker(), "Set init hash as {}", initialHash);
+            logger.info(EVENT_PARSER.getMarker(), "Set init hash as {}", initialHash);
             eventStreamManager.setInitialHash(initialHash);
             setInitRunningHashAlready = true;
         }
@@ -427,7 +427,7 @@ public class StreamEventParser extends Thread {
             if (isStartRunningHash) {
                 isStartRunningHash = false;
             } else if (object instanceof Hash) {
-                LOGGER.info(
+                logger.info(
                         EVENT_PARSER.getMarker(),
                         "Found file {} endRunningHash = {}",
                         file::getName,

@@ -45,7 +45,7 @@ import org.apache.logging.log4j.Logger;
  * </ol>
  */
 public class ReconnectHelper {
-    private static final Logger LOG = LogManager.getLogger(ReconnectHelper.class);
+    private static final Logger logger = LogManager.getLogger(ReconnectHelper.class);
 
     /** stops all gossiping */
     private final Runnable stopGossip;
@@ -88,11 +88,11 @@ public class ReconnectHelper {
      */
     public void prepareForReconnect() {
         reconnectLearnerThrottle.exitIfReconnectIsDisabled();
-        LOG.info(RECONNECT.getMarker(), "Preparing for reconnect, stopping gossip");
+        logger.info(RECONNECT.getMarker(), "Preparing for reconnect, stopping gossip");
         stopGossip.run();
-        LOG.info(RECONNECT.getMarker(), "Preparing for reconnect, start clearing queues");
+        logger.info(RECONNECT.getMarker(), "Preparing for reconnect, start clearing queues");
         clearAll.clear();
-        LOG.info(RECONNECT.getMarker(), "Queues have been cleared");
+        logger.info(RECONNECT.getMarker(), "Queues have been cleared");
         // Hash the state if it has not yet been hashed
         ReconnectUtils.hashStateForReconnect(workingStateSupplier.get());
     }
@@ -111,7 +111,7 @@ public class ReconnectHelper {
             signedState = reconnectLearner(conn, validator);
             reconnectLearnerThrottle.successfulReconnect();
 
-            LOG.debug(
+            logger.debug(
                     RECONNECT.getMarker(),
                     "`doReconnect` : finished, found peer node {}",
                     conn.getOtherId());
@@ -126,7 +126,7 @@ public class ReconnectHelper {
             final Connection conn, final SignedStateValidator validator) throws ReconnectException {
         final SignedState signedState;
 
-        LOG.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 () ->
                         new ReconnectStartPayload(
@@ -145,7 +145,7 @@ public class ReconnectHelper {
         signedState = reconnect.getSignedState();
         final long lastRoundReceived = signedState.getRound();
 
-        LOG.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 () ->
                         new ReconnectFinishPayload(
@@ -156,7 +156,7 @@ public class ReconnectHelper {
                                         lastRoundReceived)
                                 .toString());
 
-        LOG.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 "Information for state received during reconnect:\n{}\n{}",
                 () -> signedState.getState().getPlatformState().getInfoString(),
@@ -164,7 +164,7 @@ public class ReconnectHelper {
                         generateHashDebugString(
                                 signedState.getState(), StateSettings.getDebugHashDepth()));
 
-        LOG.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 "signed state events:\n{}",
                 () -> EventUtils.toShortStrings(signedState.getEvents()));
@@ -182,7 +182,7 @@ public class ReconnectHelper {
         try {
             loadSignedState.accept(signedState);
         } catch (final RuntimeException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     () ->
                             new ReconnectLoadFailurePayload(
@@ -190,7 +190,7 @@ public class ReconnectHelper {
                                     .toString(),
                     e);
             // this means we need to start the reconnect process from the beginning
-            LOG.debug(
+            logger.debug(
                     RECONNECT.getMarker(),
                     "`reloadState` : reloading state, finished, failed, returning `false`: Restart"
                             + " the reconnection process");

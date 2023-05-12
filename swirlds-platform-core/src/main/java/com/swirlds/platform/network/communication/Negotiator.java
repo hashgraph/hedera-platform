@@ -34,7 +34,7 @@ import org.apache.logging.log4j.Logger;
 
 /** A state machine responsible for negotiating the protocol to run over the provided connection */
 public class Negotiator {
-    private static final Logger LOG = LogManager.getLogger(Negotiator.class);
+    private static final Logger logger = LogManager.getLogger(Negotiator.class);
     private final NegotiationProtocols protocols;
     private final NegotiationState initialState;
     private final ProtocolNegotiated protocolNegotiated;
@@ -92,7 +92,7 @@ public class Negotiator {
             try {
                 prev = current;
                 current = current.transition();
-                LOG.debug(
+                logger.debug(
                         LogMarker.PROTOCOL_NEGOTIATION.getMarker(),
                         "Negotiator {} last transition: {}",
                         negotiatorName,

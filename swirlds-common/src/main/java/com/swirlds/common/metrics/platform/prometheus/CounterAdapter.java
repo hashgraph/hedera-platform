@@ -33,10 +33,9 @@ import io.prometheus.client.Counter;
  * Adapter that synchronizes a {@link com.swirlds.common.metrics.Counter} with the corresponding
  * Prometheus {@link Collector}.
  */
-public class CounterAdapter implements MetricAdapter {
+public class CounterAdapter extends AbstractMetricAdapter {
 
     private final Counter counter;
-    private final AdapterType adapterType;
 
     /**
      * Constructor of {@code CounterAdapter}.
@@ -51,9 +50,9 @@ public class CounterAdapter implements MetricAdapter {
      */
     public CounterAdapter(
             final CollectorRegistry registry, final Metric metric, final AdapterType adapterType) {
+        super(adapterType);
         throwArgNull(registry, "registry");
         throwArgNull(metric, "metric");
-        this.adapterType = throwArgNull(adapterType, "adapterType");
         final Counter.Builder builder =
                 new Counter.Builder()
                         .subsystem(fix(metric.getCategory()))
@@ -76,9 +75,16 @@ public class CounterAdapter implements MetricAdapter {
             final double oldValue = counter.get();
             counter.inc(newValue - oldValue);
         } else {
+            throwArgNull(nodeId, "nodeId");
             final Counter.Child child = counter.labels(Long.toString(nodeId.getId()));
             final double oldValue = child.get();
             child.inc(newValue - oldValue);
         }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void unregister(final CollectorRegistry registry) {
+        registry.unregister(counter);
     }
 }

@@ -38,5 +38,12 @@ public interface SignedStateInfo {
      */
     SigSet getSigSet();
 
+    /**
+     * Check if this object contains a complete set of signatures with respect to an address book.
+     *
+     * @return does this contain signatures from members with greater than 1/2 of the total stake?
+     */
+    boolean isComplete();
+
     AddressBook getAddressBook();
 }

@@ -34,7 +34,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class StandardFuture<T> implements Future<T> {
 
-    private static final Logger LOG = LogManager.getLogger(StandardFuture.class);
+    private static final Logger logger = LogManager.getLogger(StandardFuture.class);
 
     private final CountDownLatch latch;
     private final CompletionCallback<T> completionCallback;
@@ -254,14 +254,14 @@ public class StandardFuture<T> implements Future<T> {
     public synchronized void complete(final T value) {
         if (isDone()) {
             if (cancelled) {
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         "Future has already been cancelled, can't complete "
                                 + "(provided value = {})\n{}",
                         value,
                         getStackTrace());
             } else {
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         "Future has already been completed can not complete again "
                                 + "(current value = {}, provided value = {})\n{}",
@@ -285,12 +285,12 @@ public class StandardFuture<T> implements Future<T> {
     public synchronized boolean cancel(final boolean mayInterruptIfRunning) {
         if (isDone()) {
             if (cancelled) {
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         "Future has already been cancelled\n{}",
                         getStackTrace());
             } else {
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         "Future has already been completed, can not cancel "
                                 + "(current value = {})\n{}",
@@ -344,12 +344,12 @@ public class StandardFuture<T> implements Future<T> {
             final boolean mayInterruptIfRunning, final Throwable error) {
         if (isDone()) {
             if (cancelled) {
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         "Future has already been cancelled\n{}",
                         getStackTrace());
             } else {
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         "Future has already been completed, can not cancel "
                                 + "(current value = {})\n{}",

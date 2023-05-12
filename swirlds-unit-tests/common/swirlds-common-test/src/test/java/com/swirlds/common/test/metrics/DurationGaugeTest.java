@@ -131,14 +131,14 @@ class DurationGaugeTest {
         testDurationUpdate(gauge, Duration.ofMillis(700), SECONDS);
 
         // test null
-        gauge.update(null);
+        gauge.set(null);
         assertValue(gauge, Duration.ofMillis(700), SECONDS);
     }
 
     private void testDurationUpdate(
             final DurationGauge gauge, final Duration value, final ChronoUnit unit) {
         // when
-        gauge.update(value);
+        gauge.set(value);
 
         // then
         assertValue(gauge, value, unit);

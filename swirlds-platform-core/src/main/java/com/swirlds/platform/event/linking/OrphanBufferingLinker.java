@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
  * orphan, it is returned by this linker.
  */
 public class OrphanBufferingLinker extends AbstractEventLinker {
-    private static final Logger LOG = LogManager.getLogger(OrphanBufferingLinker.class);
+    private static final Logger logger = LogManager.getLogger(OrphanBufferingLinker.class);
     private final ParentFinder parentFinder;
     private final Queue<EventImpl> eventOutput;
     private final Queue<EventImpl> newlyLinkedEvents;
@@ -73,7 +73,7 @@ public class OrphanBufferingLinker extends AbstractEventLinker {
         try {
             child.parentNoLongerMissing(parentHash, parent);
         } catch (final IllegalArgumentException e) {
-            LOG.error(
+            logger.error(
                     LogMarker.EXCEPTION.getMarker(),
                     "Error while reuniting a child with its parent :( child: {} parent hash: {}",
                     child,
@@ -87,11 +87,11 @@ public class OrphanBufferingLinker extends AbstractEventLinker {
         // will no longer be an
         // orphan
         if (orphan == null) {
-            LOG.error(LogMarker.EXCEPTION.getMarker(), "Null orphan, descriptor: {}", key);
+            logger.error(LogMarker.EXCEPTION.getMarker(), "Null orphan, descriptor: {}", key);
             return;
         }
         orphan.orphanForever();
-        LOG.error(LogMarker.EXCEPTION.getMarker(), "Purging an orphan: {}", orphan.getChild());
+        logger.error(LogMarker.EXCEPTION.getMarker(), "Purging an orphan: {}", orphan.getChild());
     }
 
     /** {@inheritDoc} */
@@ -107,7 +107,7 @@ public class OrphanBufferingLinker extends AbstractEventLinker {
 
         if (orphanMap.put(event.getDescriptor(), childEvent) != null) {
             // this should never happen
-            LOG.error(LogMarker.INVALID_EVENT_ERROR.getMarker(), "duplicate orphan: {}", event);
+            logger.error(LogMarker.INVALID_EVENT_ERROR.getMarker(), "duplicate orphan: {}", event);
         }
 
         if (childEvent.isMissingSelfParent()) {
@@ -126,7 +126,7 @@ public class OrphanBufferingLinker extends AbstractEventLinker {
         final Set<ChildEvent> childSet =
                 missingParents.computeIfAbsent(parentDescriptor, d -> new HashSet<>());
         if (childSet == null) {
-            LOG.error(
+            logger.error(
                     LogMarker.INVALID_EVENT_ERROR.getMarker(),
                     "Orphan event {} is missing {} parent outside of missing parent window ({}-{})",
                     () -> childEvent.getChild().toMediumString(),

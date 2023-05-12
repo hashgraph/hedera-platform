@@ -49,7 +49,7 @@ import org.apache.logging.log4j.Logger;
 @Deprecated(forRemoval = true)
 public final class ApplicationDefinitionLoader {
 
-    private static final Logger LOG = LogManager.getLogger(ApplicationDefinitionLoader.class);
+    private static final Logger logger = LogManager.getLogger(ApplicationDefinitionLoader.class);
 
     private ApplicationDefinitionLoader() {}
 
@@ -109,7 +109,7 @@ public final class ApplicationDefinitionLoader {
             mainClassname = attributes.getValue("Main-Class");
         } catch (final Exception e) {
             CommonUtils.tellUserConsolePopup("ERROR", "ERROR: Couldn't load app " + appJarPath);
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Couldn't find Main-Class name in jar file {}",
                     appJarPath,

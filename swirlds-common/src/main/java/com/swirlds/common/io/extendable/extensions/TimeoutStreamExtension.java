@@ -43,7 +43,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class TimeoutStreamExtension implements InputStreamExtension, OutputStreamExtension {
 
-    private static final Logger LOG = LogManager.getLogger(TimeoutStreamExtension.class);
+    private static final Logger logger = LogManager.getLogger(TimeoutStreamExtension.class);
 
     private final Duration timeoutPeriod;
 
@@ -138,7 +138,7 @@ public class TimeoutStreamExtension implements InputStreamExtension, OutputStrea
 
     /** Called on a stream after it has timed out. */
     private void triggerTimeout() {
-        LOG.error(EXCEPTION.getMarker(), "operation timed out on stream");
+        logger.error(EXCEPTION.getMarker(), "operation timed out on stream");
         close();
         try {
             if (inputStream != null) {
@@ -148,7 +148,7 @@ public class TimeoutStreamExtension implements InputStreamExtension, OutputStrea
                 outputStream.close();
             }
         } catch (final IOException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "exception while attempting to close timed out stream",
                     e);

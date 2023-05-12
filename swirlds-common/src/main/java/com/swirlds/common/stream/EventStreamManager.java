@@ -42,7 +42,7 @@ import org.apache.logging.log4j.Logger;
 public class EventStreamManager<
         T extends StreamAligned & Timestamped & RunningHashable & SerializableHashable> {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOGGER = LogManager.getLogger(EventStreamManager.class);
+    private static final Logger logger = LogManager.getLogger(EventStreamManager.class);
 
     /**
      * receives consensus events from ConsensusRoundHandler.addEvent(), then passes to
@@ -195,7 +195,7 @@ public class EventStreamManager<
             multiStream.addObject(event);
             if (isLastEventInFreezeCheck.test(event)) {
                 freezePeriodStarted = true;
-                LOGGER.info(
+                logger.info(
                         EVENT_STREAM.getMarker(),
                         "ConsensusTimestamp of the last Event to be written into file before"
                                 + " restarting: {}",
@@ -203,7 +203,7 @@ public class EventStreamManager<
                 multiStream.close();
             }
         } else {
-            LOGGER.warn(
+            logger.warn(
                     EVENT_STREAM.getMarker(),
                     "Event {} dropped after freezePeriodStarted!",
                     event.getTimestamp());
@@ -293,7 +293,7 @@ public class EventStreamManager<
      */
     public void setInitialHash(final Hash initialHash) {
         this.initialHash = initialHash;
-        LOGGER.info(
+        logger.info(
                 EVENT_STREAM.getMarker(),
                 "EventStreamManager::setInitialHash: {}",
                 () -> initialHash);

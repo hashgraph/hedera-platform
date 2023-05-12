@@ -33,7 +33,7 @@ import org.apache.logging.log4j.Logger;
  * EventValidator}.
  */
 public class EventTaskDispatcher {
-    private static final Logger LOG = LogManager.getLogger(EventTaskDispatcher.class);
+    private static final Logger logger = LogManager.getLogger(EventTaskDispatcher.class);
 
     /** An {@link EventValidator} */
     private final EventValidator eventValidator;
@@ -94,7 +94,7 @@ public class EventTaskDispatcher {
         } else if (eventIntakeTask instanceof CreateEventTask task) {
             eventCreator.createEvent(task.getOtherId());
         } else {
-            LOG.error(
+            logger.error(
                     LogMarker.EXCEPTION.getMarker(),
                     "Unknown instance type: {}",
                     eventIntakeTask.getClass());

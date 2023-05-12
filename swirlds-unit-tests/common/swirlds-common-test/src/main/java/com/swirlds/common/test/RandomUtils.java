@@ -87,6 +87,18 @@ public class RandomUtils {
         return getRandom(true);
     }
 
+    /**
+     * A variation of {@link #getRandomPrintSeed()} that takes a hard coded seed. Handy for
+     * debugging a test, simply copy a seed into the {@link #getRandomPrintSeed()} method.
+     *
+     * @param seed the seed to use
+     * @return a new random object
+     */
+    public static ResettableRandom getRandomPrintSeed(final long seed) {
+        System.out.println("Random seed: " + seed + "L");
+        return new ResettableRandom(seed);
+    }
+
     public static ResettableRandom getRandom() {
         return getRandom(false);
     }

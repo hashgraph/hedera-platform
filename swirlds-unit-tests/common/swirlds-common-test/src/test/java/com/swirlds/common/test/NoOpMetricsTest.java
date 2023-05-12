@@ -128,7 +128,7 @@ class NoOpMetricsTest {
 
                     metric.get();
                     metric.getNanos();
-                    metric.update(Duration.ofSeconds(1));
+                    metric.set(Duration.ofSeconds(1));
                     testCommonMethods(metric);
                 });
     }

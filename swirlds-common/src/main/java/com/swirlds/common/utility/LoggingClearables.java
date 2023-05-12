@@ -27,7 +27,7 @@ import org.apache.logging.log4j.Marker;
  * each clear
  */
 public class LoggingClearables implements Clearable {
-    private static final Logger LOG = LogManager.getLogger(LoggingClearables.class);
+    private static final Logger logger = LogManager.getLogger(LoggingClearables.class);
     private final Marker logMarker;
     private final List<Pair<Clearable, String>> list;
 
@@ -43,7 +43,7 @@ public class LoggingClearables implements Clearable {
     @Override
     public void clear() {
         for (final Pair<Clearable, String> pair : list) {
-            LOG.info(logMarker, "about to clear {}", pair::getRight);
+            logger.info(logMarker, "about to clear {}", pair::getRight);
             pair.getLeft().clear();
         }
     }

@@ -52,13 +52,18 @@ import java.util.function.Supplier;
  * group. An iterator for a queue will throw an exception if it is used after a write to that queue,
  * but it is unaffected by writes to other queues in that queue group.
  */
-public class MockFCQueue<E extends FastCopyable & SerializableHashable> extends FCQueue<E> {
+public class MockFCQueue<E extends FastCopyable & SerializableHashable> extends SlowMockFCQueue<E> {
 
     /**
      * Object identifier of this class (random int). Do NOT change when the class changes its
      * code/name/version.
      */
     public static final long CLASS_ID = 141236109103L;
+
+    /**
+     * the multiplicative inverse of 3 modulo 2 to the 64, in hex, is 15 "a" digits then a "b" digit
+     */
+    private static final long INVERSE_3 = 0xaaaaaaaaaaaaaaabL;
 
     static final Supplier<FCQueue<FCInt>> mockSupplier = MockFCQueue::new;
 

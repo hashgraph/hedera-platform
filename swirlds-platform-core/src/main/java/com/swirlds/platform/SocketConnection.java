@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class SocketConnection implements Connection {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(SocketConnection.class);
+    private static final Logger logger = LogManager.getLogger(SocketConnection.class);
 
     private final NodeId selfId;
     private final NodeId otherId;
@@ -157,7 +157,7 @@ public class SocketConnection implements Connection {
             // only update when closing an open connection. Not when closing the same twice.
             connectionTracker.connectionClosed(isOutbound());
         }
-        LOG.debug(SYNC.getMarker(), "disconnecting connection from {} to {}", selfId, otherId);
+        logger.debug(SYNC.getMarker(), "disconnecting connection from {} to {}", selfId, otherId);
 
         NetworkUtils.close(socket, dis, dos);
     }
@@ -170,7 +170,7 @@ public class SocketConnection implements Connection {
                 return true; // good connection
             }
         } catch (final Exception e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Connection.connected error on connection from {} to {}",
                     selfId,

@@ -18,6 +18,7 @@ package com.swirlds.common.test.metrics;
 import com.swirlds.common.metrics.Metric;
 import com.swirlds.common.metrics.MetricConfig;
 import com.swirlds.common.metrics.Metrics;
+import com.swirlds.common.system.NodeId;
 import com.swirlds.common.test.metrics.internal.NoOpMetricsFactory;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -32,6 +33,21 @@ public class NoOpMetrics implements Metrics {
             new HashMap<>();
 
     private static final NoOpMetricsFactory factory = new NoOpMetricsFactory();
+
+    @Override
+    public NodeId getNodeId() {
+        return NodeId.createMain(42L);
+    }
+
+    @Override
+    public boolean isGlobalMetrics() {
+        return false;
+    }
+
+    @Override
+    public boolean isPlatformMetrics() {
+        return true;
+    }
 
     /** {@inheritDoc} */
     @Override

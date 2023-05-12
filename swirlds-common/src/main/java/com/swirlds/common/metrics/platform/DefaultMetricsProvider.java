@@ -15,8 +15,6 @@
  */
 package com.swirlds.common.metrics.platform;
 
-import static com.swirlds.common.metrics.platform.SnapshotService.createGlobalSnapshotService;
-import static com.swirlds.common.metrics.platform.SnapshotService.createPlatformSnapshotService;
 import static com.swirlds.common.threading.manager.AdHocThreadManager.getStaticThreadManager;
 
 import com.sun.net.httpserver.HttpServer;
@@ -24,13 +22,17 @@ import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.metrics.Metrics;
 import com.swirlds.common.metrics.MetricsFactory;
 import com.swirlds.common.metrics.MetricsProvider;
-import com.swirlds.common.metrics.platform.prometheus.PrometheusDataProvider;
 import com.swirlds.common.metrics.platform.prometheus.PrometheusEndpoint;
 import com.swirlds.common.system.NodeId;
-import com.swirlds.common.time.Time;
+import com.swirlds.common.utility.CommonUtils;
+import com.swirlds.common.utility.Lifecycle;
+import com.swirlds.common.utility.LifecyclePhase;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import org.apache.commons.lang3.StringUtils;
@@ -38,44 +40,36 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /** The default implementation of {@link MetricsProvider} */
-public class DefaultMetricsProvider implements MetricsProvider {
+public class DefaultMetricsProvider implements MetricsProvider, Lifecycle {
 
-    private static final Logger LOG = LogManager.getLogger(DefaultMetricsProvider.class);
+    private static final Logger logger = LogManager.getLogger(DefaultMetricsProvider.class);
 
     private static final String USER_DIR = "user.dir";
 
     private final MetricsFactory factory = new DefaultMetricsFactory();
-
     private final ScheduledExecutorService executor =
             Executors.newSingleThreadScheduledExecutor(
                     getStaticThreadManager().createThreadFactory("platform-core", "MetricsThread"));
-    private final Time time;
 
-    private DefaultMetrics globalMetrics;
-    private PrometheusEndpoint prometheusEndpoint;
+    private final MetricKeyRegistry metricKeyRegistry = new MetricKeyRegistry();
+    private final DefaultMetrics globalMetrics;
+    private final ConcurrentMap<NodeId, DefaultMetrics> platformMetrics = new ConcurrentHashMap<>();
+    private final PrometheusEndpoint prometheusEndpoint;
+    private final SnapshotService snapshotService;
 
-    /**
-     * Constructor of {@code DefaultMetricsProvider}
-     *
-     * @param time the {@link Time} to use for scheduling metrics related tasks
-     */
-    public DefaultMetricsProvider(final Time time) {
-        this.time = time;
-    }
+    private LifecyclePhase lifecyclePhase = LifecyclePhase.NOT_STARTED;
 
-    /** {@inheritDoc} */
-    @Override
-    public Metrics createGlobalMetrics() {
-        if (globalMetrics != null) {
-            throw new IllegalStateException("Global Metrics has already been created");
-        }
+    /** Constructor of {@code DefaultMetricsProvider} */
+    public DefaultMetricsProvider() {
+        final Duration interval = Duration.ofMillis(SettingsCommon.csvWriteFrequency);
 
-        final DefaultMetrics metrics = new DefaultMetrics(executor, factory);
-        final SnapshotService snapshotService =
-                createGlobalSnapshotService(metrics, executor, time);
-        metrics.setSnapshotService(snapshotService);
-        globalMetrics = metrics;
+        globalMetrics = new DefaultMetrics(null, metricKeyRegistry, executor, factory);
 
+        // setup SnapshotService
+        snapshotService = new SnapshotService(globalMetrics, executor, interval);
+
+        // setup Prometheus endpoint
+        PrometheusEndpoint endpoint = null;
         if (!SettingsCommon.disableMetricsOutput && SettingsCommon.prometheusEndpointEnabled) {
             final InetSocketAddress address =
                     new InetSocketAddress(SettingsCommon.prometheusEndpointPortNumber);
@@ -83,56 +77,91 @@ public class DefaultMetricsProvider implements MetricsProvider {
                 final HttpServer httpServer =
                         HttpServer.create(
                                 address, SettingsCommon.prometheusEndpointMaxBacklogAllowed);
-                prometheusEndpoint = new PrometheusEndpoint(httpServer);
+                endpoint = new PrometheusEndpoint(httpServer);
 
-                final PrometheusDataProvider dataProvider =
-                        new PrometheusDataProvider(prometheusEndpoint);
-                snapshotService.addSnapshotReceiver(dataProvider);
+                globalMetrics.subscribe(endpoint::handleMetricsChange);
+                snapshotService.subscribe(endpoint::handleSnapshots);
             } catch (IOException e) {
-                LOG.error("Exception while setting up Prometheus endpoint", e);
+                logger.error("Exception while setting up Prometheus endpoint", e);
             }
         }
+        prometheusEndpoint = endpoint;
+    }
 
+    /** {@inheritDoc} */
+    @Override
+    public Metrics createGlobalMetrics() {
         return globalMetrics;
     }
 
     /** {@inheritDoc} */
     @Override
-    public Metrics createPlatformMetrics(final NodeId selfId) {
-        if (globalMetrics == null) {
-            throw new IllegalStateException("Global Metrics has not been created");
-        }
+    public Metrics createPlatformMetrics(final NodeId nodeId) {
+        CommonUtils.throwArgNull(nodeId, "selfId");
 
-        final DefaultMetrics platformMetrics = new DefaultMetrics(executor, factory);
-        final SnapshotService platformSnapshotService =
-                createPlatformSnapshotService(platformMetrics, executor, globalMetrics, time);
-        platformMetrics.setSnapshotService(platformSnapshotService);
+        final DefaultMetrics newMetrics =
+                new DefaultMetrics(nodeId, metricKeyRegistry, executor, factory);
+
+        final DefaultMetrics oldMetrics = platformMetrics.putIfAbsent(nodeId, newMetrics);
+        if (oldMetrics != null) {
+            throw new IllegalStateException(
+                    String.format("PlatformMetrics for %s already exists", nodeId));
+        }
+        globalMetrics.subscribe(newMetrics::handleGlobalMetrics);
+
+        if (lifecyclePhase == LifecyclePhase.STARTED) {
+            newMetrics.start();
+        }
+        snapshotService.addPlatformMetric(newMetrics);
 
         if (!SettingsCommon.disableMetricsOutput) {
-            // setup LegacyCsvWriter
             final String folderName = SettingsCommon.csvOutputFolder;
             final Path folderPath =
                     Path.of(
                             StringUtils.isBlank(folderName)
                                     ? System.getProperty(USER_DIR)
                                     : folderName);
-            if (StringUtils.isNotBlank(SettingsCommon.csvFileName)) {
-                final String fileName =
-                        String.format("%s%s.csv", SettingsCommon.csvFileName, selfId.getId());
-                final Path csvFilePath = folderPath.resolve(fileName);
 
-                final LegacyCsvWriter legacyCsvWriter = new LegacyCsvWriter(csvFilePath);
-                platformSnapshotService.addSnapshotReceiver(legacyCsvWriter);
+            // setup LegacyCsvWriter
+            if (StringUtils.isNotBlank(SettingsCommon.csvFileName)) {
+                final LegacyCsvWriter legacyCsvWriter = new LegacyCsvWriter(nodeId, folderPath);
+                snapshotService.subscribe(legacyCsvWriter::handleSnapshots);
             }
 
-            // setup Prometheus endpoint
+            // setup Prometheus Endpoint
             if (prometheusEndpoint != null) {
-                final PrometheusDataProvider dataProvider =
-                        new PrometheusDataProvider(prometheusEndpoint, selfId);
-                platformSnapshotService.addSnapshotReceiver(dataProvider);
+                newMetrics.subscribe(prometheusEndpoint::handleMetricsChange);
             }
         }
 
-        return platformMetrics;
+        return newMetrics;
+    }
+
+    @Override
+    public LifecyclePhase getLifecyclePhase() {
+        return lifecyclePhase;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void start() {
+        if (lifecyclePhase == LifecyclePhase.NOT_STARTED) {
+            globalMetrics.start();
+            for (final DefaultMetrics metrics : platformMetrics.values()) {
+                metrics.start();
+            }
+            snapshotService.start();
+            lifecyclePhase = LifecyclePhase.STARTED;
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void stop() {
+        if (lifecyclePhase == LifecyclePhase.STARTED) {
+            snapshotService.shutdown();
+            prometheusEndpoint.close();
+            lifecyclePhase = LifecyclePhase.STOPPED;
+        }
     }
 }

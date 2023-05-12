@@ -104,7 +104,7 @@ public class VirtualPipeline {
     private static final String PIPELINE_COMPONENT = "virtual-pipeline";
     private static final String PIPELINE_THREAD_NAME = "lifecycle";
 
-    private static final Logger LOG = LogManager.getLogger(VirtualPipeline.class);
+    private static final Logger logger = LogManager.getLogger(VirtualPipeline.class);
 
     /**
      * Keeps copies of all {@link VirtualRoot}s that are still part of this pipeline.
@@ -154,7 +154,7 @@ public class VirtualPipeline {
                                 .setThreadName(PIPELINE_THREAD_NAME)
                                 .setExceptionHandler(
                                         (t, ex) ->
-                                                LOG.error(
+                                                logger.error(
                                                         EXCEPTION.getMarker(),
                                                         "Uncaught exception ",
                                                         ex))
@@ -297,7 +297,8 @@ public class VirtualPipeline {
                     return;
                 }
                 if (unhashedCopy.isHashed()) {
-                    LOG.error(EXCEPTION.getMarker(), "\"unhashed\" virtual map copy has a hash!");
+                    logger.error(
+                            EXCEPTION.getMarker(), "\"unhashed\" virtual map copy has a hash!");
                 } else {
                     unhashedCopy.computeHash();
                 }
@@ -480,7 +481,7 @@ public class VirtualPipeline {
                 final Throwable
                         e) { // NOSONAR: Must cleanup and log if an error occurred since this is on
             // a thread.
-            LOG.error(EXCEPTION.getMarker(), "exception on virtual pipeline thread", e);
+            logger.error(EXCEPTION.getMarker(), "exception on virtual pipeline thread", e);
             shutdown(true);
         }
     }
@@ -539,8 +540,11 @@ public class VirtualPipeline {
             throw new RuntimeException("Fatal error: failed to start " + label);
         }
 
-        runnable.run();
-        waitForRunnableToFinish.countDown();
+        try {
+            runnable.run();
+        } finally {
+            waitForRunnableToFinish.countDown();
+        }
     }
 
     /**
@@ -602,6 +606,6 @@ public class VirtualPipeline {
         }
 
         sb.append("There is no problem if this has happened during a freeze.\n");
-        LOG.info(VIRTUAL_MERKLE_STATS.getMarker(), "{}", sb);
+        logger.info(VIRTUAL_MERKLE_STATS.getMarker(), "{}", sb);
     }
 }

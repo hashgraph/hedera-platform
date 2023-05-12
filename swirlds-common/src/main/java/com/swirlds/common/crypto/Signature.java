@@ -36,7 +36,7 @@ import org.apache.logging.log4j.Logger;
 /** Encapsulates a cryptographic signature along with its SignatureType. */
 public class Signature implements SelfSerializable {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger(Signature.class);
+    private static final Logger logger = LogManager.getLogger(Signature.class);
 
     /** a unique class type identifier */
     private static final long CLASS_ID = 0x13dc4b399b245c69L;
@@ -87,7 +87,7 @@ public class Signature implements SelfSerializable {
      */
     public boolean verifySignature(final byte[] data, final PublicKey publicKey) {
         if (publicKey == null) {
-            log.info(LogMarker.EXCEPTION.getMarker(), "verifySignature :: missing PublicKey");
+            logger.info(LogMarker.EXCEPTION.getMarker(), "verifySignature :: missing PublicKey");
             return false;
         }
 
@@ -103,7 +103,7 @@ public class Signature implements SelfSerializable {
                 | NoSuchProviderException
                 | InvalidKeyException
                 | SignatureException e) {
-            log.error(
+            logger.error(
                     LogMarker.EXCEPTION.getMarker(),
                     " verifySignature :: Fail to verify Signature: {}, PublicKey: " + "{}",
                     this,
@@ -132,11 +132,10 @@ public class Signature implements SelfSerializable {
             return true;
         }
 
-        if (!(obj instanceof Signature)) {
+        if (!(obj instanceof final Signature signature)) {
             return false;
         }
 
-        final Signature signature = (Signature) obj;
         return Arrays.equals(signatureBytes, signature.signatureBytes)
                 && signatureType == signature.signatureType;
     }

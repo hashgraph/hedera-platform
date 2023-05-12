@@ -38,7 +38,7 @@ import org.apache.logging.log4j.Logger;
 /** Utility methods for file operations. */
 public final class FileUtils {
 
-    private static final Logger LOG = LogManager.getLogger(FileUtils.class);
+    private static final Logger logger = LogManager.getLogger(FileUtils.class);
 
     private FileUtils() {}
 
@@ -114,16 +114,17 @@ public final class FileUtils {
      * @param directoryToBeDeleted the directory to be deleted
      */
     public static void deleteDirectoryAndLog(final Path directoryToBeDeleted) throws IOException {
-        LOG.info(STATE_TO_DISK.getMarker(), "deleting directory {}", directoryToBeDeleted);
+        logger.info(STATE_TO_DISK.getMarker(), "deleting directory {}", directoryToBeDeleted);
 
         try {
             deleteDirectory(directoryToBeDeleted);
-            LOG.info(
+            logger.info(
                     STATE_TO_DISK.getMarker(),
                     "successfully deleted directory {}",
                     directoryToBeDeleted);
         } catch (final Exception e) {
-            LOG.error(EXCEPTION.getMarker(), "failed to delete directory {}", directoryToBeDeleted);
+            logger.error(
+                    EXCEPTION.getMarker(), "failed to delete directory {}", directoryToBeDeleted);
             throw e;
         }
     }
@@ -242,13 +243,13 @@ public final class FileUtils {
             // Otherwise, it's possible another thread will see a half-completed directory.
             Files.move(tmpDirectory, directory, StandardCopyOption.ATOMIC_MOVE);
         } catch (final Throwable ex) {
-            LOG.info(STATE_TO_DISK.getMarker(), "deleting temporary file due to exception");
+            logger.info(STATE_TO_DISK.getMarker(), "deleting temporary file due to exception");
             throw ex;
         } finally {
             try {
                 deleteDirectory(tmpDirectory);
             } catch (final Throwable t) {
-                LOG.warn(
+                logger.warn(
                         STATE_TO_DISK.getMarker(),
                         "unable to delete temporary directory {} due to {}",
                         tmpDirectory,

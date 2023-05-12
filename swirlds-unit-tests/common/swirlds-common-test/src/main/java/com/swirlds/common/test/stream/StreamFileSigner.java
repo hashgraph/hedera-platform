@@ -42,7 +42,7 @@ public class StreamFileSigner implements Signer {
     // size (in bits) of a public or private key
     static final int SIG_KEY_SIZE_BITS = 3072;
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger logger = LogManager.getLogger();
 
     private static final Marker LOGM_OBJECT_STREAM = MarkerManager.getMarker("OBJECT_STREAM");
     private static final Marker LOGM_EXCEPTION = MarkerManager.getMarker("EXCEPTION");
@@ -58,7 +58,7 @@ public class StreamFileSigner implements Signer {
             sigDetRandom.setSeed(SEED);
             sigKeyPair = sigKeyGen.generateKeyPair();
         } catch (NoSuchAlgorithmException | NoSuchProviderException e) {
-            log.error(LOGM_EXCEPTION, "Fail to generate KeyPair", e);
+            logger.error(LOGM_EXCEPTION, "Fail to generate KeyPair", e);
             CommonUtils.tellUserConsolePopup(
                     "ERROR",
                     "ERROR: This Java installation does not have the needed cryptography providers"
@@ -85,9 +85,9 @@ public class StreamFileSigner implements Signer {
             signature.update(data);
             final byte[] result = signature.sign();
             if (result == null) {
-                log.error(LOGM_EXCEPTION, "ERROR: StreamFileSigner.sign :: signature is null");
+                logger.error(LOGM_EXCEPTION, "ERROR: StreamFileSigner.sign :: signature is null");
             }
-            log.debug(
+            logger.debug(
                     LOGM_OBJECT_STREAM,
                     "StreamFileSigner.sign :: generate signature: {}",
                     () -> hex(result));
@@ -96,7 +96,7 @@ public class StreamFileSigner implements Signer {
                 | NoSuchProviderException
                 | InvalidKeyException
                 | SignatureException e) {
-            log.error(LOGM_EXCEPTION, "ERROR: StreamFileSigner.sign :: ", e);
+            logger.error(LOGM_EXCEPTION, "ERROR: StreamFileSigner.sign :: ", e);
         }
         return new com.swirlds.common.crypto.Signature(
                 SignatureType.RSA, new byte[SignatureType.RSA.signatureLength()]);

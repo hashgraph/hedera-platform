@@ -37,7 +37,7 @@ public class ED25519SigningProvider implements SigningProvider {
     public static final int PRIVATE_KEY_LENGTH = Sign.SECRETKEYBYTES;
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(ED25519SigningProvider.class);
+    private static final Logger logger = LogManager.getLogger(ED25519SigningProvider.class);
 
     /** logs events related to the startup of the application */
     private static final Marker LOGM_STARTUP = MarkerManager.getMarker("STARTUP");
@@ -97,7 +97,7 @@ public class ED25519SigningProvider implements SigningProvider {
         privateKey = new byte[PRIVATE_KEY_LENGTH];
 
         algorithmAvailable = signer.cryptoSignKeypair(publicKey, privateKey);
-        LOG.trace(LOGM_STARTUP, "Public Key -> hex('{}')", () -> hex(publicKey));
+        logger.trace(LOGM_STARTUP, "Public Key -> hex('{}')", () -> hex(publicKey));
         algorithmAvailable = true;
     }
 }

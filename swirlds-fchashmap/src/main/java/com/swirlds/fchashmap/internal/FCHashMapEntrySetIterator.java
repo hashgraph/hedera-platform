@@ -22,12 +22,19 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 
 /**
- * This iterator walks over an {@link FCHashMapEntrySet}.
+ * This iterator walks over an {@link FCHashMapEntrySet}. This iterator is used to walk over entries
+ * in a particular version of an {@link FCHashMap}. This special iterator is needed, since directly
+ * iterating over the data map for a family of {@link FCHashMap} instances will return data for all
+ * versions, but when dealing with a particular copy we want only the data in that copy.
+ *
+ * <p>MerkleMap uses iteration over an {@link FCHashMapEntrySet} to implement its own entry sets and
+ * iterators. This is because iterating the merkle tree using merkle iterators is less efficient
+ * than iterating the FCHashMap.
  *
  * @param <K> the type of the map's key
  * @param <V> the type of the map's value
  */
-public class FCHashMapEntrySetIterator<K, V> implements Iterator<Map.Entry<K, V>> {
+class FCHashMapEntrySetIterator<K, V> implements Iterator<Map.Entry<K, V>> {
 
     private final FCHashMap<K, V> map;
 
@@ -35,9 +42,9 @@ public class FCHashMapEntrySetIterator<K, V> implements Iterator<Map.Entry<K, V>
     private K nextValidKey;
     private K previousValidKey;
 
-    public FCHashMapEntrySetIterator(final FCHashMap<K, V> map, final Map<K, Mutation<V>> data) {
+    public FCHashMapEntrySetIterator(final FCHashMap<K, V> map, final Iterator<K> keyIterator) {
         this.map = map;
-        keyIterator = data.keySet().iterator();
+        this.keyIterator = keyIterator;
     }
 
     /**

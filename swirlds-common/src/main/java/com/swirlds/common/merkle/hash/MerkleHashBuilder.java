@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
 
 /** This class is responsible for hashing a merkle tree. */
 public class MerkleHashBuilder {
-    private static final Logger log = LogManager.getLogger(MerkleHashBuilder.class);
+    private static final Logger logger = LogManager.getLogger(MerkleHashBuilder.class);
 
     private final Executor threadPool;
 
@@ -73,7 +73,7 @@ public class MerkleHashBuilder {
                         .setPriority(Thread.NORM_PRIORITY)
                         .setExceptionHandler(
                                 (t, ex) -> {
-                                    log.error(
+                                    logger.error(
                                             EXCEPTION.getMarker(),
                                             "Uncaught exception in MerkleHashBuilder thread pool",
                                             ex);

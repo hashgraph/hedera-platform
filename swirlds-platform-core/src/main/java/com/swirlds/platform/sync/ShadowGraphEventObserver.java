@@ -27,7 +27,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Observes events and consensus in order to update the {@link ShadowGraph} */
 public class ShadowGraphEventObserver implements EventAddedObserver, ConsensusRoundObserver {
-    private static final Logger LOG = LogManager.getLogger(ShadowGraphEventObserver.class);
+    private static final Logger logger = LogManager.getLogger(ShadowGraphEventObserver.class);
     private final ShadowGraph shadowGraph;
 
     public ShadowGraphEventObserver(final ShadowGraph shadowGraph) {
@@ -54,7 +54,7 @@ public class ShadowGraphEventObserver implements EventAddedObserver, ConsensusRo
         try {
             shadowGraph.addEvent(event);
         } catch (final ShadowGraphInsertionException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "failed to add event {} to shadow graph",
                     EventStrings.toMediumString(event),

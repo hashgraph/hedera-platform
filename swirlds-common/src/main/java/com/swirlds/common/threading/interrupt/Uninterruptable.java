@@ -31,7 +31,7 @@ import org.apache.logging.log4j.Logger;
  */
 public final class Uninterruptable {
 
-    private static final Logger LOG = LogManager.getLogger(Uninterruptable.class);
+    private static final Logger logger = LogManager.getLogger(Uninterruptable.class);
 
     private Uninterruptable() {}
 
@@ -124,7 +124,7 @@ public final class Uninterruptable {
         try {
             action.run();
         } catch (final InterruptedException e) {
-            LOG.error(EXCEPTION.getMarker(), errorMessage);
+            logger.error(EXCEPTION.getMarker(), errorMessage);
             Thread.currentThread().interrupt();
         }
     }
@@ -146,7 +146,7 @@ public final class Uninterruptable {
         try {
             action.run();
         } catch (final InterruptedException e) {
-            LOG.error(EXCEPTION.getMarker(), errorMessage);
+            logger.error(EXCEPTION.getMarker(), errorMessage);
             Thread.currentThread().interrupt();
             throw new IllegalStateException(errorMessage);
         }

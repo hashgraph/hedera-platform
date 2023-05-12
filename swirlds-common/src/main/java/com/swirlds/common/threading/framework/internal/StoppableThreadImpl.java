@@ -47,7 +47,7 @@ import org.apache.logging.log4j.Logger;
 public class StoppableThreadImpl<T extends InterruptableRunnable>
         implements TypedStoppableThread<T> {
 
-    private static final Logger LOG = LogManager.getLogger(StoppableThreadImpl.class);
+    private static final Logger logger = LogManager.getLogger(StoppableThreadImpl.class);
     /** the minimum await time when waiting for a thread to pause */
     private static final Duration MINIMUM_PAUSE_AWAIT = Duration.ofMillis(1);
 
@@ -288,7 +288,7 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
 
         final Status originalStatus = status.get();
         if (originalStatus != Status.ALIVE) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "can not pause thread {} when it is in the state {}",
                     this::getName,
@@ -308,12 +308,12 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
                     while (!t.isInterrupted() && !waitForThreadToPause()) {
                         if (pauseLogStackTrace()) {
                             // logStackTracePauseDuration has been exceeded, log a stack trace
-                            LOG.error(
+                            logger.error(
                                     EXCEPTION.getMarker(),
                                     "pausing thread {} is taking longer than {}",
                                     this::getName,
                                     logStackTracePauseDuration::toString);
-                            LOG.error(
+                            logger.error(
                                     EXCEPTION.getMarker(),
                                     "stack trace of {}:\n{}",
                                     this::getName,
@@ -354,7 +354,7 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
 
         final Status originalStatus = status.get();
         if (originalStatus != Status.PAUSED) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "can not resume thread {} when it is in the state {}",
                     this::getName,
@@ -455,10 +455,10 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
             if (originalStatus == Status.DEAD) {
                 // Closing a thread after it dies is probably not the root cause of any errors (if
                 // there is an error)
-                LOG.warn(THREADS.getMarker(), message, () -> name, originalStatus::name);
+                logger.warn(THREADS.getMarker(), message, () -> name, originalStatus::name);
             } else {
                 // Closing a thread that is NOT_STARTED or DYING is probably indicative of an error
-                LOG.error(EXCEPTION.getMarker(), message, () -> name, originalStatus::name);
+                logger.error(EXCEPTION.getMarker(), message, () -> name, originalStatus::name);
             }
 
             return false;
@@ -593,7 +593,7 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
                 .append(hangingThreadDuration)
                 .append("ms. Stop behavior = ")
                 .append(stopBehavior.toString());
-        LOG.error(EXCEPTION.getMarker(), sb);
+        logger.error(EXCEPTION.getMarker(), sb);
 
         sb =
                 new StringBuilder("stack trace for hanging thread ")
@@ -601,7 +601,7 @@ public class StoppableThreadImpl<T extends InterruptableRunnable>
                         .append(":\n")
                         .append(getStackTrace(uninterruptableGetThread()));
 
-        LOG.error(EXCEPTION.getMarker(), sb);
+        logger.error(EXCEPTION.getMarker(), sb);
     }
 
     /** {@inheritDoc} */

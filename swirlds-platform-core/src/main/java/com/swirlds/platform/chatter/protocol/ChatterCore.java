@@ -248,7 +248,7 @@ public class ChatterCore<E extends ChatterEvent> implements Shiftable, LoadableF
     }
 
     private void recordProcessingTime(final E event) {
-        selfProcessingTime.update(Duration.between(event.getTimeReceived(), Instant.now()));
+        selfProcessingTime.set(Duration.between(event.getTimeReceived(), Instant.now()));
     }
 
     /** {@inheritDoc} */

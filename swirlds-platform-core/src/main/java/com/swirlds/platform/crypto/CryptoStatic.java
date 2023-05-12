@@ -60,7 +60,7 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 /** A collection of various static crypto methods */
 public final class CryptoStatic {
-    private static final Logger LOG = LogManager.getLogger(CryptoStatic.class);
+    private static final Logger logger = LogManager.getLogger(CryptoStatic.class);
     private static final int SERIAL_NUMBER_BITS = 64;
     private static final int MASTER_KEY_MULTIPLIER = 157;
     private static final int SWIRLD_ID_MULTIPLIER = 163;
@@ -250,7 +250,7 @@ public final class CryptoStatic {
             // should never happen
             throw new CryptographyException(e);
         } catch (InvalidKeyException | SignatureException e) {
-            LOG.error(LogMarker.EXCEPTION.getMarker(), "", e);
+            logger.error(LogMarker.EXCEPTION.getMarker(), "", e);
             return false;
         }
     }

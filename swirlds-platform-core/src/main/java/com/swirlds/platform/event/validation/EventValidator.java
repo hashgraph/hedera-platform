@@ -27,7 +27,7 @@ import org.apache.logging.log4j.Logger;
 /** Validates events received from peers */
 public class EventValidator {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(EventValidator.class);
+    private static final Logger logger = LogManager.getLogger(EventValidator.class);
 
     private final GossipEventValidator gossipEventValidator;
     /** A consumer of valid events */
@@ -62,7 +62,7 @@ public class EventValidator {
             }
             eventIntake.accept(gossipEvent);
         } catch (final RuntimeException e) {
-            LOG.error(EXCEPTION.getMarker(), "Error while processing intake event", e);
+            logger.error(EXCEPTION.getMarker(), "Error while processing intake event", e);
         }
     }
 }

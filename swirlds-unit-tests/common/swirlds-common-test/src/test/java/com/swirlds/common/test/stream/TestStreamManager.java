@@ -36,7 +36,7 @@ import org.apache.logging.log4j.Logger;
  * objects to LinkedObjectStream objects for calculating Hash and RunningHash
  */
 public class TestStreamManager {
-    private static final Logger LOGGER = LogManager.getLogger();
+    private static final Logger logger = LogManager.getLogger();
     private static final NodeId NODE_ID = new NodeId(false, 0);
     /** receives {@link ObjectForTestStream}s then passes to hashQueueThread */
     private final MultiStream<ObjectForTestStream> multiStream;
@@ -111,7 +111,7 @@ public class TestStreamManager {
      */
     public void setInitialHash(final Hash initialHash) {
         this.initialHash = initialHash;
-        LOGGER.info("RecordStreamManager::setInitialHash: {}", () -> initialHash);
+        logger.info("RecordStreamManager::setInitialHash: {}", () -> initialHash);
         multiStream.setRunningHash(initialHash);
     }
 }

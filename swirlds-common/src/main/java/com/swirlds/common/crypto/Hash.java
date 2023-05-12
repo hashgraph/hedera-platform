@@ -16,6 +16,7 @@
 package com.swirlds.common.crypto;
 
 import static com.swirlds.common.utility.CommonUtils.hex;
+import static com.swirlds.common.utility.Mnemonics.generateMnemonic;
 
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.exceptions.BadIOException;
@@ -243,6 +244,16 @@ public class Hash implements Comparable<Hash>, SelfSerializable, Serializable {
      */
     public String toShortString(final int length) {
         return (value == null) ? null : hex(value, length);
+    }
+
+    /**
+     * Get a four word mnemonic for this hash. Helpful in situations where a human needs to read a
+     * hash.
+     *
+     * @return a mnemonic for this hash
+     */
+    public String toMnemonic() {
+        return generateMnemonic(value, 4);
     }
 
     /**

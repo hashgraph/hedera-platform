@@ -40,7 +40,7 @@ public class IntakeDispatcher<
         Element, Provider extends OperationProvider, Handler extends AsyncOperationHandler> {
 
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(IntakeDispatcher.class);
+    private static final Logger logger = LogManager.getLogger(IntakeDispatcher.class);
 
     /**
      * The thread used for polling the {@code backingQueue} and submitting tasks to the {@code
@@ -157,7 +157,7 @@ public class IntakeDispatcher<
      * uncaught exceptions on the dispatcher threads are properly logged.
      */
     private void handleThreadException(final Thread thread, final Throwable ex) {
-        LOG.error(
+        logger.error(
                 LogMarker.EXCEPTION.getMarker(),
                 String.format(
                         "Intercepted Uncaught Exception [ threadName = '%s' ]", thread.getName()),

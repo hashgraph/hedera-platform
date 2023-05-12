@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class TeacherSendingThread<T> {
 
-    private static final Logger LOG = LogManager.getLogger(TeacherSendingThread.class);
+    private static final Logger logger = LogManager.getLogger(TeacherSendingThread.class);
 
     private static final String NAME = "sender";
 
@@ -162,7 +162,7 @@ public class TeacherSendingThread<T> {
                 sendLesson(node);
             }
         } catch (final InterruptedException ex) {
-            LOG.warn(RECONNECT.getMarker(), "teacher's sending thread interrupted");
+            logger.warn(RECONNECT.getMarker(), "teacher's sending thread interrupted");
             Thread.currentThread().interrupt();
         } catch (final Exception ex) {
             throw new MerkleSynchronizationException(

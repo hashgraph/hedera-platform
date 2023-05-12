@@ -43,7 +43,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class EventTaskCreator {
     /** use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(EventTaskCreator.class);
+    private static final Logger logger = LogManager.getLogger(EventTaskCreator.class);
 
     /** immutable current version of the address book. (will later store one per round) */
     private final AddressBook addressBook; // if this code is changed to non-final, make it volatile
@@ -120,7 +120,7 @@ public class EventTaskCreator {
 
         createEvent(result.getOtherId().getId());
 
-        LOG.debug(
+        logger.debug(
                 SYNC.getMarker(),
                 "{} created event for sync otherId:{}",
                 selfId,
@@ -140,7 +140,7 @@ public class EventTaskCreator {
             // we don't want to create an event with selfId==otherId
             if (!selfId.equalsMain(randomOtherId)) {
                 createEvent(randomOtherId);
-                LOG.debug(
+                logger.debug(
                         SYNC.getMarker(),
                         "{} created random event otherId:{}",
                         selfId,
@@ -181,7 +181,7 @@ public class EventTaskCreator {
             // an other-child
             // for a childless event.
             if (random.get().nextInt(settings.getRescueChildlessInverseProbability()) == 0) {
-                LOG.info(
+                logger.info(
                         STALE_EVENTS.getMarker(),
                         "Creating child for childless event {}",
                         event::toShortString);
@@ -217,7 +217,7 @@ public class EventTaskCreator {
             eventIntakeQueue.put(intakeTask);
         } catch (InterruptedException e) {
             // should never happen, and we don't have a simple way of recovering from it
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "CRITICAL ERROR, adding intakeTask to the event intake queue failed",
                     e);

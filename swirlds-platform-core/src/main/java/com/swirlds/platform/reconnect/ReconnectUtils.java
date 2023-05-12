@@ -34,7 +34,7 @@ import org.apache.logging.log4j.Logger;
 
 /** A set of static methods to aid with reconnect */
 public final class ReconnectUtils {
-    private static final Logger LOG = LogManager.getLogger(ReconnectUtils.class);
+    private static final Logger logger = LogManager.getLogger(ReconnectUtils.class);
 
     private ReconnectUtils() {}
 
@@ -55,18 +55,18 @@ public final class ReconnectUtils {
         // send the request
         dos.write(ByteConstants.COMM_STATE_REQUEST);
         dos.flush();
-        LOG.info(RECONNECT.getMarker(), "Requesting to reconnect with node {}.", otherId);
+        logger.info(RECONNECT.getMarker(), "Requesting to reconnect with node {}.", otherId);
 
         // read the response
         final byte stateResponse = dis.readByte();
         if (stateResponse == ByteConstants.COMM_STATE_ACK) {
-            LOG.info(
+            logger.info(
                     RECONNECT.getMarker(),
                     "Node {} is willing to help this node to reconnect.",
                     otherId);
             return true;
         } else if (stateResponse == ByteConstants.COMM_STATE_NACK) {
-            LOG.info(
+            logger.info(
                     RECONNECT.getMarker(),
                     new ReconnectFailurePayload(
                             "Node " + otherId + " is unwilling to help this node to reconnect.",
@@ -107,7 +107,7 @@ public final class ReconnectUtils {
         try {
             MerkleCryptoFactory.getInstance().digestTreeAsync(workingState).get();
         } catch (final ExecutionException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     () ->
                             new ReconnectFailurePayload(
@@ -118,7 +118,7 @@ public final class ReconnectUtils {
             throw new ReconnectException(e);
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     () ->
                             new ReconnectFailurePayload(

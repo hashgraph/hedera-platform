@@ -23,6 +23,7 @@ import com.swirlds.platform.Connection;
  * instance of this class must be created per peer.
  */
 public interface Protocol extends ProtocolRunnable {
+
     /**
      * Used to ask the protocol if we should initiate it. If this method returns true, one of two
      * things will always subsequently happen:
@@ -36,16 +37,34 @@ public interface Protocol extends ProtocolRunnable {
      */
     boolean shouldInitiate();
 
-    /** Notifies the protocol that initiating it failed */
-    default void initiateFailed() {}
+    /**
+     * If this protocol returns true for {@link #shouldInitiate()} but negotiation fails prior to
+     * {@link #runProtocol(Connection)} being called then this method is invoked.
+     */
+    default void initiateFailed() {
+        // Override if needed
+    }
 
     /**
-     * Our peer initiated this protocol, should we accept? If this method returns true, {@link
-     * #runProtocol(Connection)} will be called immediately after
+     * Our peer initiated this protocol, should we accept? If this method returns true, one of two
+     * things will always subsequently happen:
+     *
+     * <ul>
+     *   <li>The initiate will be successful and {@link #runProtocol(Connection)} will be called
+     *   <li>The initiate will fail and {@link #acceptFailed()} ()} will be called
+     * </ul>
      *
      * @return true if we should accept, false if we should reject
      */
     boolean shouldAccept();
+
+    /**
+     * If this protocol returns true for {@link #shouldAccept()} but negotiation fails prior to
+     * {@link #runProtocol(Connection)} being called then this method is invoked.
+     */
+    default void acceptFailed() {
+        // Override if needed
+    }
 
     /**
      * If both sides initiated this protocol simultaneously, should we proceed with running the

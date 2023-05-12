@@ -29,7 +29,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Tracks the state of communication with a chatter peer */
 public class CommunicationState {
-    private static final Logger LOG = LogManager.getLogger(CommunicationState.class);
+    private static final Logger logger = LogManager.getLogger(CommunicationState.class);
 
     /** the state of synchronization with the peer */
     protected final AtomicReference<SyncState> syncState;
@@ -154,7 +154,7 @@ public class CommunicationState {
             final AtomicReference<T> ref, final T setTo, final T expectedPrevious) {
         final T prev = ref.getAndSet(setTo);
         if (!prev.equals(expectedPrevious)) {
-            LOG.error(
+            logger.error(
                     LogMarker.EXCEPTION.getMarker(),
                     "ChatterState: Unexpected state {} when setting to {}",
                     prev,

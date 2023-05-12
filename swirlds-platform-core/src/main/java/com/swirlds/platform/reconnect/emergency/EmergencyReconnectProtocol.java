@@ -19,10 +19,10 @@ import static com.swirlds.logging.LogMarker.RECONNECT;
 
 import com.swirlds.common.notification.NotificationEngine;
 import com.swirlds.common.notification.listeners.ReconnectCompleteListener;
+import com.swirlds.common.notification.listeners.ReconnectCompleteNotification;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.platform.Connection;
-import com.swirlds.platform.Crypto;
 import com.swirlds.platform.metrics.ReconnectMetrics;
 import com.swirlds.platform.network.NetworkProtocolException;
 import com.swirlds.platform.network.protocol.Protocol;
@@ -35,7 +35,7 @@ import org.apache.logging.log4j.Logger;
 
 /** Implements the emergency reconnect protocol over a bidirectional network */
 public class EmergencyReconnectProtocol implements Protocol {
-    private static final Logger LOG = LogManager.getLogger(EmergencyReconnectProtocol.class);
+    private static final Logger logger = LogManager.getLogger(EmergencyReconnectProtocol.class);
     private final NodeId peerId;
     private final EmergencyRecoveryManager emergencyRecoveryManager;
     private final ReconnectThrottle teacherThrottle;
@@ -43,7 +43,6 @@ public class EmergencyReconnectProtocol implements Protocol {
     private final int reconnectSocketTimeout;
     private final ReconnectMetrics reconnectMetrics;
     private final ReconnectController reconnectController;
-    private final Crypto crypto;
     private InitiatedBy initiatedBy = InitiatedBy.NO_ONE;
     private final ThreadManager threadManager;
     private final NotificationEngine notificationEngine;
@@ -57,7 +56,6 @@ public class EmergencyReconnectProtocol implements Protocol {
      * @param reconnectSocketTimeout the socket timeout to use when executing a reconnect
      * @param reconnectMetrics tracks reconnect metrics
      * @param reconnectController controls reconnecting as a learner
-     * @param crypto the object that contains all key pairs and CSPRNG state for this member
      */
     public EmergencyReconnectProtocol(
             final ThreadManager threadManager,
@@ -68,8 +66,7 @@ public class EmergencyReconnectProtocol implements Protocol {
             final EmergencyStateFinder stateFinder,
             final int reconnectSocketTimeout,
             final ReconnectMetrics reconnectMetrics,
-            final ReconnectController reconnectController,
-            final Crypto crypto) {
+            final ReconnectController reconnectController) {
         this.threadManager = threadManager;
         this.notificationEngine = notificationEngine;
         this.peerId = peerId;
@@ -79,7 +76,6 @@ public class EmergencyReconnectProtocol implements Protocol {
         this.reconnectSocketTimeout = reconnectSocketTimeout;
         this.reconnectMetrics = reconnectMetrics;
         this.reconnectController = reconnectController;
-        this.crypto = crypto;
     }
 
     @Override
@@ -87,6 +83,7 @@ public class EmergencyReconnectProtocol implements Protocol {
         final boolean initiateEmergencyReconnect =
                 emergencyRecoveryManager.isEmergencyStateRequired();
         if (initiateEmergencyReconnect) {
+            // if a permit is acquired, it will be released by either initiateFailed or runProtocol
             final boolean shouldInitiate = reconnectController.acquireLearnerPermit();
             if (shouldInitiate) {
                 initiatedBy = InitiatedBy.SELF;
@@ -104,6 +101,7 @@ public class EmergencyReconnectProtocol implements Protocol {
 
     @Override
     public boolean shouldAccept() {
+        // if the throttle is initiated, we should call markReconnectFinished in teacher()
         final boolean shouldAccept = teacherThrottle.initiateReconnect(peerId.getId());
         if (shouldAccept) {
             initiatedBy = InitiatedBy.PEER;
@@ -115,7 +113,6 @@ public class EmergencyReconnectProtocol implements Protocol {
     public boolean acceptOnSimultaneousInitiate() {
         // if both nodes are missing the emergency state, it makes no sense to reconnect with each
         // other
-        // also, it would not be clear who the teacher and who the learner is
         return false;
     }
 
@@ -124,15 +121,8 @@ public class EmergencyReconnectProtocol implements Protocol {
             throws NetworkProtocolException, IOException, InterruptedException {
         try {
             switch (initiatedBy) {
-                case PEER -> new EmergencyReconnectTeacher(
-                                threadManager,
-                                stateFinder,
-                                reconnectSocketTimeout,
-                                reconnectMetrics)
-                        .execute(connection);
-
+                case PEER -> teacher(connection);
                 case SELF -> learner(connection);
-
                 default -> throw new NetworkProtocolException(
                         String.format(
                                 "runProtocol() called for emergency reconnect with peer %d but it"
@@ -144,28 +134,49 @@ public class EmergencyReconnectProtocol implements Protocol {
         }
     }
 
+    private void teacher(final Connection connection) {
+        try {
+            new EmergencyReconnectTeacher(
+                            threadManager, stateFinder, reconnectSocketTimeout, reconnectMetrics)
+                    .execute(connection);
+        } finally {
+            teacherThrottle.reconnectAttemptFinished();
+        }
+    }
+
     private void learner(final Connection connection) {
         registerReconnectCompleteListener();
-        new EmergencyReconnectLearner(
-                        emergencyRecoveryManager.getEmergencyRecoveryFile(),
-                        reconnectController,
-                        crypto)
-                .execute(connection);
+        try {
+            final boolean peerHasState =
+                    new EmergencyReconnectLearner(
+                                    emergencyRecoveryManager.getEmergencyRecoveryFile(),
+                                    reconnectController)
+                            .execute(connection);
+            if (!peerHasState) {
+                reconnectController.cancelLearnerPermit();
+            }
+        } catch (final Exception e) {
+            reconnectController.cancelLearnerPermit();
+            throw e;
+        }
     }
 
     private void registerReconnectCompleteListener() {
+        notificationEngine.unregister(
+                ReconnectCompleteListener.class, this::emergencyReconnectComplete);
         notificationEngine.register(
-                ReconnectCompleteListener.class,
-                notification -> {
-                    if (emergencyRecoveryManager.isEmergencyStateRequired()) {
-                        LOG.info(
-                                RECONNECT.getMarker(),
-                                "Emergency Reconnect Complete, round {} received from peer {}",
-                                notification.getRoundNumber(),
-                                peerId.getId());
-                        emergencyRecoveryManager.emergencyStateLoaded();
-                    }
-                });
+                ReconnectCompleteListener.class, this::emergencyReconnectComplete);
+    }
+
+    private void emergencyReconnectComplete(final ReconnectCompleteNotification notification) {
+        if (emergencyRecoveryManager.isEmergencyStateRequired()) {
+            logger.info(
+                    RECONNECT.getMarker(),
+                    "Emergency Reconnect Complete, round {} received from peer {}",
+                    notification.getRoundNumber(),
+                    peerId.getId());
+            emergencyRecoveryManager.emergencyStateLoaded();
+        }
     }
 
     private enum InitiatedBy {

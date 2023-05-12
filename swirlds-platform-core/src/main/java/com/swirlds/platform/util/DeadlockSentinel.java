@@ -37,7 +37,7 @@ import org.apache.logging.log4j.Logger;
 /** This class watches for deadlocks and logs debug messages if deadlocks are detected. */
 public class DeadlockSentinel implements Startable, AutoCloseableNonThrowing {
 
-    private static final Logger LOG = LogManager.getLogger(DeadlockSentinel.class);
+    private static final Logger logger = LogManager.getLogger(DeadlockSentinel.class);
     private static final int STACK_TRACE_MAX_DEPTH = 16;
 
     private final ThreadMXBean mxBean = ManagementFactory.getThreadMXBean();
@@ -95,7 +95,7 @@ public class DeadlockSentinel implements Startable, AutoCloseableNonThrowing {
             captureDeadlockedThreadData(sb, threadId);
         }
 
-        LOG.error(EXCEPTION.getMarker(), sb);
+        logger.error(EXCEPTION.getMarker(), sb);
         deadlockDispatcher.dispatch();
     }
 

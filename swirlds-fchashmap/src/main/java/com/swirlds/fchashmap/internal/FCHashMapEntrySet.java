@@ -29,21 +29,21 @@ import java.util.Map;
 public class FCHashMapEntrySet<K, V> extends AbstractSet<Map.Entry<K, V>> {
 
     private final FCHashMap<K, V> map;
-    private final Map<K, Mutation<V>> data;
+    private final FCHashMapFamily<K, V> family;
 
     /**
      * Create a new entry set view for an {@link FCHashMap}.
      *
      * @param map the map that will be represented by this set
      */
-    public FCHashMapEntrySet(final FCHashMap<K, V> map, final Map<K, Mutation<V>> data) {
+    public FCHashMapEntrySet(final FCHashMap<K, V> map, final FCHashMapFamily<K, V> family) {
         this.map = map;
-        this.data = data;
+        this.family = family;
     }
 
     /** {@inheritDoc} */
     public Iterator<Map.Entry<K, V>> iterator() {
-        return new FCHashMapEntrySetIterator<>(map, data);
+        return new FCHashMapEntrySetIterator<>(map, family.keyIterator());
     }
 
     /** {@inheritDoc} */

@@ -33,7 +33,10 @@ import org.apache.commons.lang3.builder.ToStringStyle;
  * One signature on a signed state, plus related info. An immutable 4-tuple of (round, member, state
  * hash, signature). It does NOT do defensive copying, so callers should be careful to not modify
  * array elements.
+ *
+ * @deprecated this class is only present for legacy deserialization
  */
+@Deprecated(forRemoval = true)
 public class SigInfo implements FastCopyable, SelfSerializable {
     private static final long CLASS_ID = 0xea25a1f0f38a7497L;
 
@@ -93,10 +96,7 @@ public class SigInfo implements FastCopyable, SelfSerializable {
     /** {@inheritDoc} */
     @Override
     public void serialize(SerializableDataOutputStream out) throws IOException {
-        out.writeLong(round);
-        out.writeLong(memberId);
-        out.writeSerializable(hash, false);
-        out.writeSerializable(signature, false);
+        throw new UnsupportedOperationException("This class id deprecated. Don't use it.");
     }
 
     /** {@inheritDoc} */

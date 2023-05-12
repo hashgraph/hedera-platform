@@ -58,10 +58,10 @@ import org.eclipse.collections.impl.map.mutable.primitive.LongObjectHashMap;
  */
 @SuppressWarnings({"DuplicatedCode"})
 public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshotable {
-    private static final Logger LOG = LogManager.getLogger(MemoryIndexDiskKeyValueStore.class);
+    private static final Logger logger = LogManager.getLogger(MemoryIndexDiskKeyValueStore.class);
 
     /** This is useful for debugging and validating but is too expensive to enable in production. */
-    protected static boolean enableDeepValidation = LOG.isTraceEnabled();
+    protected static boolean enableDeepValidation = logger.isTraceEnabled();
     /**
      * Index mapping, it uses our key as the index within the list and the value is the dataLocation
      * in fileCollection where the key/value pair is stored.
@@ -81,6 +81,9 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
      * @param storeDir The directory to store data files in
      * @param storeName The name for the data store, this allows more than one data store in a
      *     single directory.
+     * @param legacyStoreName Base name for the data store. If not null, the store will process
+     *     files with this prefix at startup. New files in the store will be prefixed with {@code
+     *     storeName}
      * @param dataItemSerializer Serializer for converting raw data to/from data items
      * @param loadedDataCallback call back for handing loaded data from existing files on startup.
      *     Can be null if not needed.
@@ -94,6 +97,7 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
     public MemoryIndexDiskKeyValueStore(
             final Path storeDir,
             final String storeName,
+            final String legacyStoreName,
             final DataItemSerializer<D> dataItemSerializer,
             final LoadedDataCallback loadedDataCallback,
             final LongList keyToDiskLocationIndex)
@@ -121,7 +125,11 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
         // create file collection
         fileCollection =
                 new DataFileCollection<>(
-                        storeDir, storeName, dataItemSerializer, combinedLoadedDataCallback);
+                        storeDir,
+                        storeName,
+                        legacyStoreName,
+                        dataItemSerializer,
+                        combinedLoadedDataCallback);
     }
 
     /**
@@ -148,7 +156,7 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
         }
         final int size = filesToMerge.size();
         if (size < minNumberOfFilesToMerge) {
-            LOG.info(
+            logger.info(
                     JASPER_DB.getMarker(),
                     "[{}] No need to merge as {} is less than the minimum {} files to merge.",
                     storeName,
@@ -157,7 +165,7 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
             return;
         }
         final long filesToMergeSize = getSizeOfFiles(filesToMerge);
-        LOG.info(
+        logger.info(
                 JASPER_DB.getMarker(),
                 "[{}] Starting merging {} files, total {}...\n",
                 storeName,
@@ -195,8 +203,7 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
                 getSizeOfFilesByPath(newFilesCreated),
                 fileCollection,
                 filesToMerge,
-                allMergeableFiles,
-                LOG);
+                allMergeableFiles);
     }
 
     /**
@@ -235,7 +242,7 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
                 fileCollection.endWriting(minimumValidKey, maximumValidKey);
         // we have updated all indexes so the data file can now be included in merges
         dataFileReader.setFileAvailableForMerging(true);
-        LOG.info(
+        logger.info(
                 JASPER_DB.getMarker(),
                 "{} ended writing, numOfFiles={}, minimumValidKey={}, maximumValidKey={}",
                 storeName,
@@ -278,7 +285,7 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
             // null,
             // even when no data has yet been written.
             if (key != 0) {
-                LOG.trace(
+                logger.trace(
                         JASPER_DB.getMarker(),
                         "Key [{}] is outside valid key range of {}",
                         key,
@@ -360,12 +367,12 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
                     // but was never
                     // in the moves list. We never attempted to update the index, when we should
                     // have!
-                    LOG.trace(
+                    logger.trace(
                             JASPER_DB.getMarker(),
                             "MISSING CAS RECORD for current = {}",
                             dataLocationToString(location));
                 } else {
-                    LOG.trace(
+                    logger.trace(
                             JASPER_DB.getMarker(),
                             "CAS {} " + "key = {}, value = {}, from = {}, to = {}, current = {}",
                             (miss.missed ? "miss" : "hit"),
@@ -380,7 +387,7 @@ public class MemoryIndexDiskKeyValueStore<D> implements AutoCloseable, Snapshota
         keyCount.forEachKeyValue(
                 (key, count) -> {
                     if (count > 1) {
-                        LOG.trace(
+                        logger.trace(
                                 EXCEPTION.getMarker(), "Key [{}] has invalid count {}", key, count);
                     }
                 });

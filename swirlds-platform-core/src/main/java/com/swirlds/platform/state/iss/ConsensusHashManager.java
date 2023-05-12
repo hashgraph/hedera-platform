@@ -19,25 +19,22 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 import static com.swirlds.logging.LogMarker.STATE_HASH;
 
 import com.swirlds.common.config.ConsensusConfig;
+import com.swirlds.common.config.StateConfig;
 import com.swirlds.common.crypto.Hash;
-import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.sequence.map.ConcurrentSequenceMap;
 import com.swirlds.common.sequence.map.SequenceMap;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.time.Time;
 import com.swirlds.common.utility.throttle.RateLimiter;
 import com.swirlds.logging.payloads.IssPayload;
-import com.swirlds.platform.Settings;
 import com.swirlds.platform.dispatch.DispatchBuilder;
 import com.swirlds.platform.dispatch.Observer;
 import com.swirlds.platform.dispatch.triggers.error.CatastrophicIssTrigger;
 import com.swirlds.platform.dispatch.triggers.error.SelfIssTrigger;
 import com.swirlds.platform.dispatch.triggers.flow.DiskStateLoadedTrigger;
 import com.swirlds.platform.dispatch.triggers.flow.ReconnectStateLoadedTrigger;
-import com.swirlds.platform.dispatch.triggers.flow.RoundCompletedTrigger;
 import com.swirlds.platform.dispatch.triggers.flow.StateHashValidityTrigger;
 import com.swirlds.platform.dispatch.triggers.flow.StateHashedTrigger;
-import com.swirlds.platform.dispatch.triggers.transaction.PostConsensusStateSignatureTrigger;
 import com.swirlds.platform.state.iss.internal.ConsensusHashFinder;
 import com.swirlds.platform.state.iss.internal.HashValidityStatus;
 import com.swirlds.platform.state.iss.internal.RoundHashValidator;
@@ -51,7 +48,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class ConsensusHashManager {
 
-    private static final Logger LOG = LogManager.getLogger(ConsensusHashManager.class);
+    private static final Logger logger = LogManager.getLogger(ConsensusHashManager.class);
 
     private final SequenceMap<Long /* round */, RoundHashValidator> roundData;
 
@@ -84,10 +81,10 @@ public class ConsensusHashManager {
             final Time time,
             final DispatchBuilder dispatchBuilder,
             final AddressBook addressBook,
-            final ConsensusConfig consensusConfig) {
+            final ConsensusConfig consensusConfig,
+            final StateConfig stateConfig) {
 
-        final Duration timeBetweenIssLogs =
-                Duration.ofSeconds(Settings.getInstance().getState().secondsBetweenIssLogs);
+        final Duration timeBetweenIssLogs = Duration.ofSeconds(stateConfig.secondsBetweenIssLogs());
         lackingSignaturesRateLimiter = new RateLimiter(time, timeBetweenIssLogs);
         selfIssRateLimiter = new RateLimiter(time, timeBetweenIssLogs);
         catastrophicIssRateLimiter = new RateLimiter(time, timeBetweenIssLogs);
@@ -125,8 +122,7 @@ public class ConsensusHashManager {
      *
      * @param round the round that was just completed
      */
-    @Observer(value = RoundCompletedTrigger.class, comment = "make final decision on old round")
-    public void roundCompletedObserver(final Long round) {
+    public void roundCompleted(final long round) {
         if (round <= previousRound) {
             throw new IllegalArgumentException(
                     "previous round was " + previousRound + ", can't decrease round to " + round);
@@ -162,7 +158,7 @@ public class ConsensusHashManager {
 
         final StringBuilder sb = new StringBuilder();
         roundHashValidator.getHashFinder().writePartitionData(sb);
-        LOG.info(STATE_HASH.getMarker(), sb);
+        logger.info(STATE_HASH.getMarker(), sb);
 
         if (justDecided) {
             final HashValidityStatus status = roundHashValidator.getStatus();
@@ -190,13 +186,9 @@ public class ConsensusHashManager {
      * @param round the round that was signed
      * @param signerId the ID of the signer
      * @param hash the hash that was signed
-     * @param signature the signature on the hash
      */
-    @Observer(
-            value = PostConsensusStateSignatureTrigger.class,
-            comment = "check hash reported by node")
     public void postConsensusSignatureObserver(
-            final Long round, final Long signerId, final Hash hash, final Signature signature) {
+            final Long round, final Long signerId, final Hash hash) {
 
         final long nodeStake = addressBook.getAddress(signerId).getStake();
 
@@ -244,7 +236,7 @@ public class ConsensusHashManager {
             value = {DiskStateLoadedTrigger.class, ReconnectStateLoadedTrigger.class},
             comment = "ingest completed state")
     public void overridingStateObserver(final Long round, final Hash stateHash) {
-        roundCompletedObserver(round);
+        roundCompleted(round);
         stateHashedObserver(round, stateHash);
     }
 
@@ -294,7 +286,7 @@ public class ConsensusHashManager {
             roundHashValidator.getHashFinder().writePartitionData(sb);
             writeSkippedLogCount(sb, skipCount);
 
-            LOG.fatal(
+            logger.fatal(
                     EXCEPTION.getMarker(),
                     new IssPayload(
                             sb.toString(),
@@ -331,7 +323,7 @@ public class ConsensusHashManager {
             hashFinder.writePartitionData(sb);
             writeSkippedLogCount(sb, skipCount);
 
-            LOG.fatal(
+            logger.fatal(
                     EXCEPTION.getMarker(),
                     new IssPayload(sb.toString(), round, selfHash.toString(), "", true));
         }
@@ -364,7 +356,7 @@ public class ConsensusHashManager {
         hashFinder.writePartitionData(sb);
         writeSkippedLogCount(sb, skipCount);
 
-        LOG.warn(STATE_HASH.getMarker(), sb);
+        logger.warn(STATE_HASH.getMarker(), sb);
     }
 
     /** Write the number of times a log has been skipped. */

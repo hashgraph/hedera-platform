@@ -50,7 +50,7 @@ import org.apache.logging.log4j.Logger;
  * information about an ongoing sync are method local.
  */
 public class ShadowGraphSynchronizer {
-    private static final Logger LOG = LogManager.getLogger(ShadowGraphSynchronizer.class);
+    private static final Logger logger = LogManager.getLogger(ShadowGraphSynchronizer.class);
 
     /** The shadow graph manager to use for this sync */
     private final ShadowGraph shadowGraph;
@@ -142,11 +142,11 @@ public class ShadowGraphSynchronizer {
      */
     public boolean synchronize(final Connection conn)
             throws IOException, ParallelExecutionException, SyncException, InterruptedException {
-        LOG.info(SYNC_INFO.getMarker(), "{} sync start", conn.getDescription());
+        logger.info(SYNC_INFO.getMarker(), "{} sync start", conn.getDescription());
         try {
             return reserveSynchronize(conn);
         } finally {
-            LOG.info(SYNC_INFO.getMarker(), "{} sync end", conn.getDescription());
+            logger.info(SYNC_INFO.getMarker(), "{} sync end", conn.getDescription());
         }
     }
 
@@ -183,7 +183,8 @@ public class ShadowGraphSynchronizer {
             timing.setTimePoint(1);
 
             if (theirGensTips.isSyncRejected()) {
-                LOG.info(SYNC_INFO.getMarker(), "{} sync rejected by other", conn.getDescription());
+                logger.info(
+                        SYNC_INFO.getMarker(), "{} sync rejected by other", conn.getDescription());
                 // null means the sync was rejected
                 return false;
             }
@@ -246,7 +247,7 @@ public class ShadowGraphSynchronizer {
         }
 
         if (status != SyncFallenBehindStatus.NONE_FALLEN_BEHIND) {
-            LOG.info(
+            logger.info(
                     SYNC_INFO.getMarker(),
                     "{} aborting sync due to {}",
                     conn.getDescription(),
@@ -325,15 +326,15 @@ public class ShadowGraphSynchronizer {
                         conn);
         if (eventsRead < 0 || writeAborted.get()) {
             // sync was aborted
-            LOG.info(SYNC_INFO.getMarker(), "{} sync aborted", conn::getDescription);
+            logger.info(SYNC_INFO.getMarker(), "{} sync aborted", conn::getDescription);
             return false;
         }
-        LOG.info(
+        logger.info(
                 SYNC_INFO.getMarker(),
                 "{} writing events done, wrote {} events",
                 conn::getDescription,
                 sendList::size);
-        LOG.info(
+        logger.info(
                 SYNC_INFO.getMarker(),
                 "{} reading events done, read {} events",
                 conn.getDescription(),
@@ -384,7 +385,7 @@ public class ShadowGraphSynchronizer {
             conn.initForSync();
             SyncComms.rejectSync(conn, numberOfNodes);
         } finally {
-            LOG.info(SYNC_INFO.getMarker(), "{} sync rejected by self", conn.getDescription());
+            logger.info(SYNC_INFO.getMarker(), "{} sync rejected by self", conn.getDescription());
         }
     }
 }

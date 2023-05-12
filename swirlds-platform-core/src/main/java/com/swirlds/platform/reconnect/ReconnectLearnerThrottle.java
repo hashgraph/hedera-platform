@@ -37,7 +37,7 @@ import org.apache.logging.log4j.Logger;
  * <p>NOTE: This class is not thread safe
  */
 public class ReconnectLearnerThrottle {
-    private static final Logger LOG = LogManager.getLogger(ReconnectLearnerThrottle.class);
+    private static final Logger logger = LogManager.getLogger(ReconnectLearnerThrottle.class);
     private final NodeId selfId;
     private final ReconnectSettings settings;
     /** The number of times reconnect has failed since the last succesfull reconnect. */
@@ -57,7 +57,7 @@ public class ReconnectLearnerThrottle {
     /** Notifies the throttle that a reconnect failed */
     public void handleFailedReconnect(final Connection conn, final Exception e) {
         if (Utilities.isOrCausedBySocketException(e)) {
-            LOG.error(
+            logger.error(
                     SOCKET_EXCEPTIONS.getMarker(),
                     () ->
                             new ReconnectFailurePayload(
@@ -66,7 +66,7 @@ public class ReconnectLearnerThrottle {
                                     .toString(),
                     e);
         } else {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     () ->
                             new ReconnectFailurePayload(
@@ -85,7 +85,8 @@ public class ReconnectLearnerThrottle {
 
     private void killNodeIfThresholdMet() {
         if (failedReconnectsInARow >= settings.getMaximumReconnectFailuresBeforeShutdown()) {
-            LOG.error(EXCEPTION.getMarker(), "Too many reconnect failures in a row, killing node");
+            logger.error(
+                    EXCEPTION.getMarker(), "Too many reconnect failures in a row, killing node");
             SystemUtils.exitSystem(SystemExitReason.RECONNECT_FAILURE);
         }
     }
@@ -93,7 +94,7 @@ public class ReconnectLearnerThrottle {
     /** Check if a reconnect is currently allowed. If not then kill the node. */
     public void exitIfReconnectIsDisabled() {
         if (!settings.isActive()) {
-            LOG.warn(
+            logger.warn(
                     STARTUP.getMarker(),
                     () ->
                             new UnableToReconnectPayload(
@@ -107,7 +108,7 @@ public class ReconnectLearnerThrottle {
         if (settings.getReconnectWindowSeconds() >= 0
                 && settings.getReconnectWindowSeconds()
                         < StartupTime.getTimeSinceStartup().toSeconds()) {
-            LOG.warn(
+            logger.warn(
                     STARTUP.getMarker(),
                     () ->
                             new UnableToReconnectPayload(

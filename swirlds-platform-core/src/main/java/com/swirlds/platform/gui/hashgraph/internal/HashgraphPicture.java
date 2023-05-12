@@ -43,7 +43,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class HashgraphPicture extends JPanel {
     @Serial private static final long serialVersionUID = 1L;
-    private static final Logger log = LogManager.getLogger(HashgraphPicture.class);
+    private static final Logger logger = LogManager.getLogger(HashgraphPicture.class);
     private final HashgraphGuiSource hashgraphSource;
     private final HashgraphPictureOptions options;
     private PictureMetadata pictureMetadata;
@@ -141,7 +141,7 @@ public class HashgraphPicture extends JPanel {
                 drawEventCircle(g, event, options, d);
             }
         } catch (final Exception e) {
-            log.error(EXCEPTION.getMarker(), "error while painting", e);
+            logger.error(EXCEPTION.getMarker(), "error while painting", e);
         }
     }
 

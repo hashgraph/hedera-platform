@@ -16,7 +16,6 @@
 package com.swirlds.common.system;
 
 import com.swirlds.common.crypto.TransactionSignature;
-import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.events.Event;
 import com.swirlds.common.system.transaction.Transaction;
 import java.util.List;
@@ -65,7 +64,7 @@ public non-sealed interface SwirldState2 extends SwirldState {
      * <p>The state of this object must NEVER change except inside the methods below.
      *
      * <ul>
-     *   <li>{@link #init(Platform, AddressBook, SwirldDualState, InitTrigger, SoftwareVersion)}
+     *   <li>{@link #init(Platform, SwirldDualState, InitTrigger, SoftwareVersion)}
      *   <li>{@link #copy()}
      *   <li>{@link #handleConsensusRound(Round, SwirldDualState)}
      * </ul>

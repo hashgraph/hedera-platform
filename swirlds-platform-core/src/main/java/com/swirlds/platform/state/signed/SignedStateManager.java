@@ -16,38 +16,30 @@
 package com.swirlds.platform.state.signed;
 
 import static com.swirlds.logging.LogMarker.EXCEPTION;
-import static com.swirlds.platform.state.signed.SourceOfSignedState.TRANSACTIONS;
-import static com.swirlds.platform.system.Fatal.fatalError;
+import static com.swirlds.logging.LogMarker.STARTUP;
 
+import com.swirlds.common.config.StateConfig;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.Signature;
 import com.swirlds.common.merkle.crypto.MerkleCryptoFactory;
-import com.swirlds.common.notification.NotificationEngine;
 import com.swirlds.common.sequence.set.SequenceSet;
 import com.swirlds.common.sequence.set.StandardSequenceSet;
 import com.swirlds.common.stream.HashSigner;
 import com.swirlds.common.system.NodeId;
 import com.swirlds.common.system.address.AddressBook;
-import com.swirlds.common.system.state.notifications.NewSignedStateListener;
-import com.swirlds.common.system.state.notifications.NewSignedStateNotification;
 import com.swirlds.common.threading.manager.ThreadManager;
 import com.swirlds.common.utility.AutoCloseableWrapper;
 import com.swirlds.common.utility.Startable;
-import com.swirlds.platform.Settings;
+import com.swirlds.platform.components.common.output.FatalErrorConsumer;
+import com.swirlds.platform.components.common.query.PrioritySystemTransactionSubmitter;
+import com.swirlds.platform.components.state.NewSignedStateBeingTrackedConsumer;
+import com.swirlds.platform.components.state.output.NewLatestCompleteStateConsumer;
+import com.swirlds.platform.components.state.output.StateHasEnoughSignaturesConsumer;
+import com.swirlds.platform.components.state.output.StateLacksSignaturesConsumer;
 import com.swirlds.platform.dispatch.DispatchBuilder;
-import com.swirlds.platform.dispatch.Observer;
 import com.swirlds.platform.dispatch.triggers.flow.StateHashedTrigger;
-import com.swirlds.platform.dispatch.triggers.transaction.PreConsensusStateSignatureTrigger;
 import com.swirlds.platform.reconnect.emergency.EmergencyStateFinder;
-import com.swirlds.platform.state.notifications.NewSignedStateBeingTrackedListener;
-import com.swirlds.platform.state.notifications.NewSignedStateBeingTrackedNotification;
-import com.swirlds.platform.state.notifications.StateHasEnoughSignaturesListener;
-import com.swirlds.platform.state.notifications.StateHasEnoughSignaturesNotification;
-import com.swirlds.platform.state.notifications.StateLacksSignaturesListener;
-import com.swirlds.platform.state.notifications.StateLacksSignaturesNotification;
-import com.swirlds.platform.state.notifications.StateSelfSignedListener;
-import com.swirlds.platform.state.notifications.StateSelfSignedNotification;
-import java.security.PublicKey;
+import com.swirlds.platform.state.SignatureTransmitter;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -75,9 +67,12 @@ import org.apache.logging.log4j.Logger;
  */
 public class SignedStateManager implements Startable, EmergencyStateFinder {
 
-    private static final Logger LOG = LogManager.getLogger(SignedStateManager.class);
+    private static final Logger logger = LogManager.getLogger(SignedStateManager.class);
 
-    /** The latest signed state signed by members with more than 1/3 of total stake. */
+    /**
+     * The latest signed state signed by a sufficient threshold of nodes. If no recent fully signed
+     * state is available, then this will hold a null value.
+     */
     private final SignedStateReference lastCompleteSignedState = new SignedStateReference();
 
     /** The latest signed state. May be unhashed. May or may not have all of its signatures. */
@@ -96,19 +91,13 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
      */
     private final SignedStateMap staleUnsignedStates = new SignedStateMap(false);
 
-    private final Settings settings = Settings.getInstance();
+    private final StateConfig stateConfig;
 
     /** A signature that was received when there was no state with a matching round. */
     private record SavedSignature(long round, long memberId, Signature signature) {}
 
     /** Signatures for rounds in the future. */
     private final SequenceSet<SavedSignature> savedSignatures;
-
-    /** The address book for this network. */
-    private final AddressBook addressBook;
-
-    /** the member ID for self */
-    private final NodeId selfId;
 
     /** An object responsible for signing states with this node's key. */
     private final HashSigner signer;
@@ -118,53 +107,83 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
 
     /** Signed states are deleted on this background thread. */
     private final SignedStateGarbageCollector signedStateGarbageCollector;
+    /** Submits state signature transactions to the transaction pool */
+    private final SignatureTransmitter signatureTransmitter;
 
     /** This dispatcher is called when a state has been fully hashed. */
-    private final StateHashedTrigger stateHashedDispatcher;
+    private final StateHashedTrigger stateHashedTrigger;
 
-    /** Sends notifications to the app. */
-    private final NotificationEngine notificationEngine;
+    private final NewSignedStateBeingTrackedConsumer newSignedStateBeingTrackedConsumer;
+    private final PrioritySystemTransactionSubmitter prioritySystemTransactionSubmitter;
+    private final NewLatestCompleteStateConsumer newLatestCompleteStateConsumer;
+    private final StateHasEnoughSignaturesConsumer stateHasEnoughSignaturesConsumer;
+    private final StateLacksSignaturesConsumer stateLacksSignaturesConsumer;
+    private final FatalErrorConsumer fatalErrorConsumer;
 
     /**
      * Start empty, with no known signed states. The number of addresses in
      * platform.hashgraph.getAddressBook() must not change in the future. The addressBook must
      * contain exactly the set of members who can sign the state. A signed state is considered
-     * completed when it has signatures from members with 1/3 or more of the total stake.
+     * completed when it has signatures from a sufficient threshold of nodes.
      *
-     * @param threadManager responsible for creating and managing threads
+     * @param threadManager responsible for creating threads
      * @param dispatchBuilder responsible for building dispatchers for internal platform
-     *     communication
-     * @param notificationEngine responsible for sending notificaitons to the app
-     * @param addressBook the address book for the network
+     *     communication responsible for sending notifications to the app
+     * @param addressBook the address book for this node
      * @param selfId the ID of this node
+     * @param stateConfig configuration for state
      * @param signer an object responsible for signing states with this node's key
      * @param signedStateMetrics a collection of signed state metrics
+     * @param newSignedStateBeingTrackedConsumer this method should be called each time we start
+     *     tracking a new signed state
+     * @param fatalErrorConsumer this method should be called if there is a fatal error
+     * @param prioritySystemTransactionSubmitter pass priority system transactions to this method
+     * @param newLatestCompleteStateConsumer this method should be called each time we change which
+     *     state is being considered the latest fully signed state
+     * @param stateHasEnoughSignaturesConsumer this method should be called when a state gathers
+     *     enough signatures to be complete, even if that state does not become the "latest complete
+     *     state"
+     * @param stateLacksSignaturesConsumer this method is called when we have to delete a state
+     *     before it gathers sufficient signatures
      */
     public SignedStateManager(
             final ThreadManager threadManager,
             final DispatchBuilder dispatchBuilder,
-            final NotificationEngine notificationEngine,
             final AddressBook addressBook,
             final NodeId selfId,
+            final StateConfig stateConfig,
             final HashSigner signer,
-            final SignedStateMetrics signedStateMetrics) {
+            final SignedStateMetrics signedStateMetrics,
+            final NewSignedStateBeingTrackedConsumer newSignedStateBeingTrackedConsumer,
+            final FatalErrorConsumer fatalErrorConsumer,
+            final PrioritySystemTransactionSubmitter prioritySystemTransactionSubmitter,
+            final NewLatestCompleteStateConsumer newLatestCompleteStateConsumer,
+            final StateHasEnoughSignaturesConsumer stateHasEnoughSignaturesConsumer,
+            final StateLacksSignaturesConsumer stateLacksSignaturesConsumer) {
 
-        this.stateHashedDispatcher =
+        this.stateHashedTrigger =
                 dispatchBuilder.getDispatcher(this, StateHashedTrigger.class)::dispatch;
-        this.notificationEngine = notificationEngine;
 
-        this.addressBook = addressBook;
-        this.selfId = selfId;
+        this.stateConfig = stateConfig;
         this.signer = signer;
         this.signedStateMetrics = signedStateMetrics;
+
         this.signedStateGarbageCollector =
                 new SignedStateGarbageCollector(threadManager, signedStateMetrics);
 
         this.savedSignatures =
                 new StandardSequenceSet<>(
-                        0,
-                        settings.getState().maxAgeOfFutureStateSignatures,
-                        SavedSignature::round);
+                        0, stateConfig.maxAgeOfFutureStateSignatures(), SavedSignature::round);
+
+        this.signatureTransmitter =
+                new SignatureTransmitter(addressBook, selfId, prioritySystemTransactionSubmitter);
+
+        this.newSignedStateBeingTrackedConsumer = newSignedStateBeingTrackedConsumer;
+        this.fatalErrorConsumer = fatalErrorConsumer;
+        this.prioritySystemTransactionSubmitter = prioritySystemTransactionSubmitter;
+        this.newLatestCompleteStateConsumer = newLatestCompleteStateConsumer;
+        this.stateHasEnoughSignaturesConsumer = stateHasEnoughSignaturesConsumer;
+        this.stateLacksSignaturesConsumer = stateLacksSignaturesConsumer;
     }
 
     /** {@inheritDoc} */
@@ -182,7 +201,10 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
     }
 
     /**
-     * @return latest round for which we have a strong minority of signatures
+     * Get the round number of the last complete round. Will return -1 if there is not any recent
+     * round that has gathered sufficient signatures.
+     *
+     * @return latest round for which we have a majority of signatures
      */
     public long getLastCompleteRound() {
         return lastCompleteSignedState.getRound();
@@ -192,7 +214,8 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
      * Get a wrapper containing the last complete signed state.
      *
      * @param strong if true then the state will be returned with a strong reservation
-     * @return a wrapper with the latest complete signed state, or null if none are complete
+     * @return a wrapper with the latest complete signed state, or null if no recent states that are
+     *     complete
      */
     public AutoCloseableWrapper<SignedState> getLatestSignedState(final boolean strong) {
         return lastCompleteSignedState.get(strong);
@@ -209,11 +232,14 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
     }
 
     /**
-     * Get the latest signed states stored by this manager. This method creates a copy, so no
-     * changes to the array will be made
+     * Get the latest signed states stored by this manager.
+     *
+     * <p>This method is not thread safe. Do not use it for any new use cases.
      *
      * @return the latest signed states
+     * @deprecated this method is not thread safe
      */
+    @Deprecated
     public List<SignedStateInfo> getSignedStateInfo() {
         // Since this method is not synchronized, it's possible we may add a state multiple times to
         // this collection.
@@ -253,11 +279,9 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
      * @param signedState the signed state to be kept by the manager
      */
     public void addUnsignedState(final SignedState signedState) {
-
         signedState.setGarbageCollector(signedStateGarbageCollector);
-
         if (lastState.getRound() >= signedState.getRound()) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "states added to SignedStateManager in an incorrect order."
                             + "Latest state is from round {}, provided state is from round {}",
@@ -270,48 +294,81 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
         final Signature signature = signer.sign(signedState.getState().getHash());
 
         synchronized (this) {
-            notifyNewSignedStateBeingTracked(signedState, TRANSACTIONS);
+            notifyNewSignedStateBeingTracked(signedState, SourceOfSignedState.TRANSACTIONS);
             lastState.set(signedState);
 
             freshUnsignedStates.put(signedState);
 
-            notifyStateSelfSigned(signedState, signature);
+            submitSignatureTransaction(signedState, signature);
 
             gatherSavedSignatures(signedState);
 
             adjustSavedSignaturesWindow(signedState.getRound());
-            purgeOldUnsignedStates();
+            purgeOldStates();
         }
     }
 
     /**
-     * Add a completed signed state, e.g. a state from reconnect or a state from disk.
+     * Add a completed signed state, e.g. a state from reconnect or a state from disk. State is
+     * ignored if it is too old (i.e. there is a newer complete state) or if it is not actually
+     * complete.
      *
      * @param signedState the signed state to add
-     * @param sourceOfSignedState the source of this signed state, should be RECONNECT or DISK
+     * @param source the source of this signed state, should be RECONNECT or DISK
      */
     public synchronized void addCompleteSignedState(
-            final SignedState signedState, final SourceOfSignedState sourceOfSignedState) {
+            final SignedState signedState, final SourceOfSignedState source) {
+
+        if (signedState.getState().getHash() == null) {
+            throw new IllegalStateException(
+                    "Unhashed state for round "
+                            + signedState.getRound()
+                            + " added to the signed state manager");
+        }
 
         signedState.setGarbageCollector(signedStateGarbageCollector);
+        notifyNewSignedStateBeingTracked(signedState, source);
 
-        notifyNewSignedStateBeingTracked(signedState, sourceOfSignedState);
+        // Double check that the signatures on this state are valid.
+        // They may no longer be valid if we have done a data migration.
+        signedState.pruneInvalidSignatures();
 
-        if (signedState.getRound() > lastCompleteSignedState.getRound()) {
-            setLastCompleteSignedState(signedState);
-            purgeOldUnsignedStates();
+        adjustSavedSignaturesWindow(signedState.getRound());
 
-            if (signedState.getRound() > lastState.getRound()) {
-                lastState.set(signedState);
-                adjustSavedSignaturesWindow(signedState.getRound());
-            }
-        } else {
-            LOG.warn(
+        if (!signedState.isComplete()) {
+            logger.warn(
+                    STARTUP.getMarker(),
+                    "Signed state for round {} lacks a complete set of valid signatures",
+                    signedState.getRound());
+            // If the state is an emergency recovery state, it will not be fully signed. But it
+            // needs
+            // to be stored here regardless so this node is able to be the teacher in emergency
+            // reconnects.
+            freshUnsignedStates.put(signedState);
+            setLastStateIfNewer(signedState);
+        } else if (signedState.getRound() <= lastCompleteSignedState.getRound()) {
+            // We have a newer signed state
+            logger.warn(
                     EXCEPTION.getMarker(),
                     "Latest complete signed state is from round {}, "
                             + "completed signed state for round {} rejected",
                     lastCompleteSignedState.getRound(),
                     signedState.getRound());
+        } else {
+            setLastCompleteSignedState(signedState);
+            setLastStateIfNewer(signedState);
+            purgeOldStates();
+        }
+    }
+
+    /**
+     * Sets the last state to this signed state, iff it is more recent than the current last state
+     *
+     * @param signedState the signed state to use
+     */
+    private void setLastStateIfNewer(final SignedState signedState) {
+        if (signedState.getRound() > lastState.getRound()) {
+            lastState.set(signedState);
         }
     }
 
@@ -320,12 +377,10 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
      *
      * @param round the round that was signed
      * @param signerId the ID of the signer
-     * @param hash the hash that was signed
      * @param signature the signature on the hash
      */
-    @Observer(PreConsensusStateSignatureTrigger.class)
     public synchronized void preConsensusSignatureObserver(
-            final Long round, final Long signerId, final Hash hash, final Signature signature) {
+            final Long round, final Long signerId, final Signature signature) {
 
         signedStateMetrics.getStateSignaturesGatheredPerSecondMetric().cycle();
 
@@ -392,12 +447,12 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
                         .update(Duration.between(start, Instant.now()).toMillis());
             }
 
-            stateHashedDispatcher.dispatch(signedState.getRound(), hash);
+            stateHashedTrigger.dispatch(signedState.getRound(), hash);
 
         } catch (final ExecutionException e) {
-            fatalError(notificationEngine, "Exception occurred during SignedState hashing", e);
+            fatalErrorConsumer.fatalError("Exception occurred during SignedState hashing", e, null);
         } catch (final InterruptedException e) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "Interrupted while hashing state. Expect buggy behavior.");
             Thread.currentThread().interrupt();
@@ -431,7 +486,16 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
                     }
                 });
 
-        notifyNewSignedState(signedState);
+        notifyNewLatestCompleteState(signedState);
+    }
+
+    /**
+     * Get the earliest round that is permitted to be stored in this data structure.
+     *
+     * @return the earliest round permitted to be stored
+     */
+    private long getEarliestPermittedRound() {
+        return lastState.getRound() - stateConfig.roundsToKeepForSigning() + 1;
     }
 
     /**
@@ -441,8 +505,7 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
      * @param iterator an iterator that walks over a collection of signed states
      */
     private void removeOldStatesFromIterator(final Iterator<SignedState> iterator) {
-        final long earliestPermittedRound =
-                lastState.getRound() - settings.getState().roundsToKeepForSigning + 1;
+        final long earliestPermittedRound = getEarliestPermittedRound();
         while (iterator.hasNext()) {
             final SignedState signedState = iterator.next();
             if (signedState.getRound() < earliestPermittedRound) {
@@ -453,13 +516,17 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
         }
     }
 
-    /** Get rid of unsigned states that are too old. */
-    private void purgeOldUnsignedStates() {
+    /** Get rid of old states. */
+    private void purgeOldStates() {
         freshUnsignedStates.atomicIteration(this::removeOldStatesFromIterator);
         staleUnsignedStates.atomicIteration(this::removeOldStatesFromIterator);
 
         signedStateMetrics.getFreshStatesMetric().update(freshUnsignedStates.getSize());
         signedStateMetrics.getStaleStatesMetric().update(staleUnsignedStates.getSize());
+
+        if (lastCompleteSignedState.getRound() < getEarliestPermittedRound()) {
+            lastCompleteSignedState.set(null);
+        }
     }
 
     /**
@@ -499,7 +566,9 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
         // Only save signatures for round N+1 and after.
         // Any rounds behind this one will either have already had a SignedState
         // added to this manager, or will never have a SignedState added to this manager.
-        savedSignatures.shiftWindow(currentRound + 1);
+        if (savedSignatures.getFirstSequenceNumberInWindow() < currentRound + 1) {
+            savedSignatures.shiftWindow(currentRound + 1);
+        }
     }
 
     /** Called when a signed state is first completed. */
@@ -530,44 +599,14 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
      */
     private void addSignature(
             final SignedState signedState, final long nodeId, final Signature signature) {
-        final SigSet sigSet = signedState.getSigSet();
-
-        if (sigSet.isComplete()) {
-            // No need to add more signatures
-            return;
-        }
-
-        if (sigSet.getSigInfo((int) nodeId) != null) {
-            // we already have this signature so nothing should be done
-            return;
-        }
-
-        // public key of the other member who signed
-        final PublicKey key = addressBook.getAddress(nodeId).getSigPublicKey();
-
-        final Hash stateHash = signedState.getState().getHash();
-
-        // Although it may be ok to skip the validation self signatures in theory,
-        // in the interest of defensive programming do the check anyway.
-        final boolean valid = signature.verifySignature(stateHash.getValue(), key);
-
-        if (valid) {
-            sigSet.addSigInfo(
-                    new SigInfo(
-                            signedState.getRound(),
-                            nodeId,
-                            signedState.getState().getHash(),
-                            signature));
-        }
-
-        if (sigSet.isComplete()) {
+        if (signedState.addSignature(nodeId, signature)) {
             // at this point the signed state is complete for the first time
             signedStateNewlyComplete(signedState);
         }
     }
 
     /**
-     * Send out a notification that a new signed state is being tracked.
+     * Inform consumers that a new signed state is being tracked.
      *
      * @param signedState the signed state now being tracked
      * @param sourceOfSignedState the source of this signed state
@@ -575,46 +614,31 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
     private void notifyNewSignedStateBeingTracked(
             final SignedState signedState, final SourceOfSignedState sourceOfSignedState) {
 
-        // Caller is always holding a strong reservation and this notification type is synchronous,
+        // Caller is always holding a strong reservation and triggers are synchronous,
         // so no need to take another reservation.
-
-        final NewSignedStateBeingTrackedNotification notification =
-                new NewSignedStateBeingTrackedNotification(
-                        signedState, sourceOfSignedState, selfId);
-        notificationEngine.dispatch(NewSignedStateBeingTrackedListener.class, notification);
+        newSignedStateBeingTrackedConsumer.newStateBeingTracked(signedState, sourceOfSignedState);
     }
 
     /**
-     * Send out a notification that a state has been signed by self.
+     * Submit a state signature system transaction.
      *
      * @param signedState the state that was signed
      * @param signature the self signature on the state
      */
-    private void notifyStateSelfSigned(final SignedState signedState, final Signature signature) {
-        final StateSelfSignedNotification notification =
-                new StateSelfSignedNotification(
-                        signedState.getRound(),
-                        signature,
-                        signedState.getState().getHash(),
-                        selfId);
-        notificationEngine.dispatch(StateSelfSignedListener.class, notification);
+    private void submitSignatureTransaction(
+            final SignedState signedState, final Signature signature) {
+        signatureTransmitter.transmitSignature(
+                signedState.getRound(), signature, signedState.getState().getHash());
     }
 
     /**
-     * Send out a notification that the most recently signed state has changed.
+     * Send out a notification that the most up-to-date and complete signed state has changed.
      *
-     * @param signedState the new most recently signed state
+     * @param signedState the new most recently and complete signed state
      */
-    private void notifyNewSignedState(final SignedState signedState) {
-        final NewSignedStateNotification notification =
-                new NewSignedStateNotification(
-                        signedState.getSwirldState(),
-                        signedState.getState().getSwirldDualState(),
-                        signedState.getRound(),
-                        signedState.getConsensusTimestamp());
-        signedState.reserveState();
-        notificationEngine.dispatch(
-                NewSignedStateListener.class, notification, result -> signedState.releaseState());
+    private void notifyNewLatestCompleteState(final SignedState signedState) {
+        newLatestCompleteStateConsumer.newLatestCompleteStateEvent(
+                new SignedStateWrapper(signedState, true));
     }
 
     /**
@@ -623,13 +647,8 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
      * @param signedState the state that was unable to be complete signed
      */
     private void notifyStateLacksSignatures(final SignedState signedState) {
-        final StateLacksSignaturesNotification notification =
-                new StateLacksSignaturesNotification(signedState, selfId);
-        signedState.weakReserveState();
-        notificationEngine.dispatch(
-                StateLacksSignaturesListener.class,
-                notification,
-                result -> signedState.weakReleaseState());
+        stateLacksSignaturesConsumer.stateLacksSignatures(
+                new SignedStateWrapper(signedState, false));
     }
 
     /**
@@ -639,12 +658,7 @@ public class SignedStateManager implements Startable, EmergencyStateFinder {
      * @param signedState the state that now has enough signatures
      */
     private void notifyStateHasEnoughSignatures(final SignedState signedState) {
-        final StateHasEnoughSignaturesNotification notification =
-                new StateHasEnoughSignaturesNotification(signedState, selfId);
-        signedState.weakReserveState();
-        notificationEngine.dispatch(
-                StateHasEnoughSignaturesListener.class,
-                notification,
-                result -> signedState.weakReleaseState());
+        stateHasEnoughSignaturesConsumer.stateHasEnoughSignatures(
+                new SignedStateWrapper(signedState, false));
     }
 }

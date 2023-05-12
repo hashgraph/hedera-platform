@@ -131,7 +131,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class ConsensusImpl implements Consensus {
 
-    private static final Logger LOG = LogManager.getLogger(ConsensusImpl.class);
+    private static final Logger logger = LogManager.getLogger(ConsensusImpl.class);
     /** consensus configuration */
     private final ConsensusConfig config;
 
@@ -294,7 +294,7 @@ public class ConsensusImpl implements Consensus {
         // The minTimestamp is just above the last transaction that has been handled
         minTimestamp = calcMinTimestampForNextEvent(signedState.getLastTransactionTimestamp());
 
-        LOG.debug(
+        logger.debug(
                 STARTUP.getMarker(),
                 "ConsensusImpl is initialized from signed state. minRound: {}(min gen = {}),"
                         + " maxRound: {}(max gen = {})",
@@ -498,7 +498,7 @@ public class ConsensusImpl implements Consensus {
         // check if it's a witness. If so, vote in all elections in the current round, put new
         // consensus events in nce
         final List<EventImpl> newConsensusEvents = vote(event, roundInfo, stronglySeen);
-        LOG.info(
+        logger.info(
                 ADD_EVENT.getMarker(),
                 "Event to be added: {} for round: {}, "
                         + "stronglySeen: {}, newConsensusEvents: {}",

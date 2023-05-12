@@ -40,7 +40,7 @@ public final class EventFileParser {
     /** current event stream version */
     public static final int EVENT_STREAM_FILE_VERSION = 5;
 
-    private static final Logger LOG = LogManager.getLogger(EventFileParser.class);
+    private static final Logger logger = LogManager.getLogger(EventFileParser.class);
 
     private EventFileParser() {}
 
@@ -74,7 +74,7 @@ public final class EventFileParser {
                 // so the whole parsing process can stop
                 return parseEventStreamV5(path, eventConsumer);
             } else {
-                LOG.info(
+                logger.info(
                         EVENT_PARSER.getMarker(),
                         "failed to parse file {} whose version is {}",
                         path.getFileName().toString(),
@@ -83,7 +83,7 @@ public final class EventFileParser {
                 return false;
             }
         } catch (final IOException e) {
-            LOG.info(EXCEPTION.getMarker(), "Unexpected", e);
+            logger.info(EXCEPTION.getMarker(), "Unexpected", e);
             return false;
         }
     }
@@ -104,14 +104,14 @@ public final class EventFileParser {
                 return false;
             }
             if (isStartRunningHash) {
-                LOG.info(
+                logger.info(
                         EVENT_PARSER.getMarker(),
                         "From file {} read startRunningHash = {}",
                         path.getFileName().toString(),
                         object);
                 isStartRunningHash = false;
             } else if (object instanceof Hash) {
-                LOG.info(
+                logger.info(
                         EVENT_PARSER.getMarker(),
                         "From file {} read endRunningHash = {}",
                         path.getFileName().toString(),

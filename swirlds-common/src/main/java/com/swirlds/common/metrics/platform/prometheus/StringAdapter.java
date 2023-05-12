@@ -34,10 +34,9 @@ import java.util.Objects;
  * Adapter that synchronizes a {@link Metric} with a single value of {@link Metric#getDataType()
  * type} {@code String} with the corresponding Prometheus {@link Collector}.
  */
-public class StringAdapter implements MetricAdapter {
+public class StringAdapter extends AbstractMetricAdapter {
 
     private final Info info;
-    private final AdapterType adapterType;
 
     /**
      * Constructor of {@code StringAdapter}.
@@ -51,9 +50,9 @@ public class StringAdapter implements MetricAdapter {
      */
     public StringAdapter(
             final CollectorRegistry registry, final Metric metric, final AdapterType adapterType) {
+        super(adapterType);
         throwArgNull(registry, "registry");
         throwArgNull(metric, "metric");
-        this.adapterType = throwArgNull(adapterType, "adapterType");
         final Info.Builder builder =
                 new Info.Builder()
                         .subsystem(fix(metric.getCategory()))
@@ -73,8 +72,15 @@ public class StringAdapter implements MetricAdapter {
         if (adapterType == GLOBAL) {
             info.info("value", newValue);
         } else {
+            throwArgNull(nodeId, "nodeId");
             final Info.Child child = info.labels(Long.toString(nodeId.getId()));
             child.info("value", newValue);
         }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void unregister(final CollectorRegistry registry) {
+        registry.unregister(info);
     }
 }

@@ -33,10 +33,9 @@ import io.prometheus.client.Gauge;
  * Adapter that synchronizes a {@link Metric} with a single numeric value with the corresponding
  * Prometheus {@link Collector}.
  */
-public class NumberAdapter implements MetricAdapter {
+public class NumberAdapter extends AbstractMetricAdapter {
 
     private final Gauge gauge;
-    private final AdapterType adapterType;
 
     /**
      * Constructor of {@code NumberAdapter}.
@@ -50,9 +49,9 @@ public class NumberAdapter implements MetricAdapter {
      */
     public NumberAdapter(
             final CollectorRegistry registry, final Metric metric, final AdapterType adapterType) {
+        super(adapterType);
         throwArgNull(registry, "registry");
         throwArgNull(metric, "metric");
-        this.adapterType = throwArgNull(adapterType, "adapterType");
         final Gauge.Builder builder =
                 new Gauge.Builder()
                         .subsystem(fix(metric.getCategory()))
@@ -73,8 +72,15 @@ public class NumberAdapter implements MetricAdapter {
         if (adapterType == GLOBAL) {
             gauge.set(newValue);
         } else {
+            throwArgNull(nodeId, "nodeId");
             final Gauge.Child child = gauge.labels(Long.toString(nodeId.getId()));
             child.set(newValue);
         }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void unregister(final CollectorRegistry registry) {
+        registry.unregister(gauge);
     }
 }

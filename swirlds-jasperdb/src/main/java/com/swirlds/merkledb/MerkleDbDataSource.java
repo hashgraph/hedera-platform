@@ -86,7 +86,7 @@ import org.apache.logging.log4j.Logger;
 public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends VirtualValue>
         implements VirtualDataSource<K, V> {
 
-    private static final Logger LOG = LogManager.getLogger(MerkleDbDataSource.class);
+    private static final Logger logger = LogManager.getLogger(MerkleDbDataSource.class);
 
     /**
      * Since {@code com.swirlds.platform.Browser} populates settings, and it is loaded before any
@@ -292,7 +292,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                                 .setThreadName("Merging")
                                 .setExceptionHandler(
                                         (t, ex) ->
-                                                LOG.error(
+                                                logger.error(
                                                         EXCEPTION.getMarker(),
                                                         "[{}] Uncaught exception during merging",
                                                         tableName,
@@ -307,7 +307,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                                 .setThreadName("Store Internal Records")
                                 .setExceptionHandler(
                                         (t, ex) ->
-                                                LOG.error(
+                                                logger.error(
                                                         EXCEPTION.getMarker(),
                                                         "[{}] Uncaught exception during storing",
                                                         tableName,
@@ -322,7 +322,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                                 .setThreadName("Store Key to Path")
                                 .setExceptionHandler(
                                         (t, ex) ->
-                                                LOG.error(
+                                                logger.error(
                                                         EXCEPTION.getMarker(),
                                                         "[{}] Uncaught exception during storing"
                                                                 + " keys",
@@ -338,7 +338,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                                 .setThreadName("Snapshot")
                                 .setExceptionHandler(
                                         (t, ex) ->
-                                                LOG.error(
+                                                logger.error(
                                                         EXCEPTION.getMarker(),
                                                         "Uncaught exception during snapshots",
                                                         ex))
@@ -353,7 +353,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
             if (Files.exists(dbPaths.metadataFile)) {
                 loadMetadata(dbPaths.metadataFile);
             } else {
-                LOG.info(
+                logger.info(
                         MERKLE_DB.getMarker(),
                         "[{}] Loading existing set of data files but no metadata file was found in"
                                 + " [{}]",
@@ -415,6 +415,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                 hasDiskStoreForInternalHashes
                         ? new MemoryIndexDiskKeyValueStore<>(
                                 dbPaths.internalHashStoreDiskDirectory,
+                                tableName + "_internalhashes",
                                 tableName + ":internalHashes",
                                 internalRecordSerializer,
                                 null,
@@ -451,6 +452,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                             tableConfig.getMaxNumberOfKeys(),
                             tableConfig.getKeySerializer(),
                             dbPaths.objectKeyToPathDirectory,
+                            tableName + "_objectkeytopath",
                             tableName + ":objectKeyToPath",
                             tableConfig.isPreferDiskBasedIndices());
             objectKeyToPath.printStats();
@@ -462,6 +464,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
         pathToHashKeyValue =
                 new MemoryIndexDiskKeyValueStore<>(
                         dbPaths.pathToHashKeyValueDirectory,
+                        tableName + "_pathtohashkeyvalue",
                         tableName + ":pathToHashKeyValue",
                         leafRecordSerializer,
                         loadedDataCallback,
@@ -495,7 +498,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
 
         statistics = new MerkleDbStatistics(tableName, isLongKeyMode);
 
-        LOG.info(
+        logger.info(
                 MERKLE_DB.getMarker(),
                 "Created MerkleDB [{}] with store path '{}', maxNumKeys = {}, hash RAM/disk cutoff"
                         + " = {}",
@@ -643,7 +646,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                             try {
                                 writeInternalRecords(firstLeafPath, internalRecords);
                             } catch (IOException e) {
-                                LOG.error(
+                                logger.error(
                                         ERROR.getMarker(),
                                         "[{}] Failed to store internal records",
                                         tableName,
@@ -666,7 +669,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
             try {
                 countDownLatch.await();
             } catch (InterruptedException e) {
-                LOG.warn(
+                logger.warn(
                         EXCEPTION.getMarker(),
                         "[{}] Interrupted while waiting on internal record storage",
                         tableName,
@@ -740,13 +743,13 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
         // FUTURE WORK: once the reconnect key leak bug is fixed, this block should be removed
         if (!leafRecord.getKey().equals(key)) {
             if (settings.isReconnectKeyLeakMitigationEnabled()) {
-                LOG.warn(
+                logger.warn(
                         MERKLE_DB.getMarker(),
                         "leaked key {} encountered, mitigation is enabled",
                         key);
                 return null;
             } else {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "leaked key {} encountered, mitigation is disabled, expect problems",
                         key);
@@ -905,7 +908,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                         snapshotExecutor);
             } finally {
                 // close all closable data stores
-                LOG.info(MERKLE_DB.getMarker(), "Closing Data Source [{}]", tableName);
+                logger.info(MERKLE_DB.getMarker(), "Closing Data Source [{}]", tableName);
                 if (internalHashStoreRam != null) {
                     internalHashStoreRam.close();
                 }
@@ -1038,14 +1041,14 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                 // wait for the others to finish
                 countDownLatch.await();
             } catch (InterruptedException e) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "[{}] InterruptedException from waiting for countDownLatch in snapshot",
                         tableName,
                         e);
                 Thread.currentThread().interrupt();
             }
-            LOG.info(
+            logger.info(
                     MERKLE_DB.getMarker(),
                     "[{}] Snapshot all finished in {} seconds",
                     tableName,
@@ -1250,7 +1253,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                 }
             }
         } catch (InterruptedException e) {
-            LOG.warn(
+            logger.warn(
                     EXCEPTION.getMarker(),
                     "[{}] Interrupted while waiting on executors to shutdown",
                     tableName,
@@ -1280,7 +1283,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                         final long START = System.currentTimeMillis();
                         try {
                             runnable.call();
-                            LOG.trace(
+                            logger.trace(
                                     MERKLE_DB.getMarker(),
                                     "[{}] Snapshot {} complete in {} seconds",
                                     tableName,
@@ -1323,7 +1326,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                         try {
                             internalHashStoreDisk.put(rec.getPath(), rec);
                         } catch (IOException e) {
-                            LOG.error(
+                            logger.error(
                                     EXCEPTION.getMarker(),
                                     "[{}] IOException writing internal records",
                                     tableName,
@@ -1377,7 +1380,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                     try {
                         pathToHashKeyValue.put(leafRecord.getPath(), leafRecord);
                     } catch (IOException e) {
-                        LOG.error(
+                        logger.error(
                                 EXCEPTION.getMarker(),
                                 "[{}] IOException writing to pathToHashKeyValue",
                                 tableName,
@@ -1477,7 +1480,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                 /* Filter nothing during a full merge */
                 filesToMergeFilter = dataFileReaders -> dataFileReaders;
                 isLargeMerge = true;
-                LOG.info(MERKLE_DB.getMarker(), "[{}] Starting Large Merge", tableName);
+                logger.info(MERKLE_DB.getMarker(), "[{}] Starting Large Merge", tableName);
             } else if (isTimeForMediumMerge(now)) {
                 lastMediumMerge = now;
                 filesToMergeFilter =
@@ -1485,14 +1488,14 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
                                 settings.getMediumMergeCutoffMb(),
                                 settings.getMaxNumberOfFilesInMerge());
                 isMediumMerge = true;
-                LOG.info(MERKLE_DB.getMarker(), "[{}] Starting Medium Merge", tableName);
+                logger.info(MERKLE_DB.getMarker(), "[{}] Starting Medium Merge", tableName);
             } else {
                 filesToMergeFilter =
                         DataFileCommon.newestFilesSmallerThan(
                                 settings.getSmallMergeCutoffMb(),
                                 settings.getMaxNumberOfFilesInMerge());
                 isSmallMerge = true;
-                LOG.info(MERKLE_DB.getMarker(), "[{}] Starting Small Merge", tableName);
+                logger.info(MERKLE_DB.getMarker(), "[{}] Starting Small Merge", tableName);
             }
 
             // we need to merge disk files for internal hashes if they exist and pathToHashKeyValue
@@ -1597,7 +1600,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
             updateFileStats();
             return true;
         } catch (InterruptedException | ClosedByInterruptException e) {
-            LOG.info(MERKLE_DB.getMarker(), "Interrupted while merging, this is allowed.");
+            logger.info(MERKLE_DB.getMarker(), "Interrupted while merging, this is allowed.");
             Thread.currentThread().interrupt();
             return false;
         } catch (
@@ -1607,7 +1610,7 @@ public final class MerkleDbDataSource<K extends VirtualKey<? super K>, V extends
             // It is important that we capture all exceptions here, otherwise a single exception
             // will stop all
             // future merges from happening.
-            LOG.error(EXCEPTION.getMarker(), "[{}] Merge failed", tableName, e);
+            logger.error(EXCEPTION.getMarker(), "[{}] Merge failed", tableName, e);
             return false;
         }
     }

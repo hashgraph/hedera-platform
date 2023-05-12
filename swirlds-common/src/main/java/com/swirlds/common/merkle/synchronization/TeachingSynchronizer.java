@@ -43,7 +43,7 @@ public class TeachingSynchronizer {
 
     private static final String WORK_GROUP_NAME = "teaching-synchronizer";
 
-    private static final Logger LOG = LogManager.getLogger(TeachingSynchronizer.class);
+    private static final Logger logger = LogManager.getLogger(TeachingSynchronizer.class);
 
     /** Used to get data from the listener. */
     private final MerkleDataInputStream inputStream;
@@ -114,7 +114,7 @@ public class TeachingSynchronizer {
     /** Send a tree (or subtree). */
     private <T> void sendTree(final MerkleNode root, final TeacherTreeView<T> view)
             throws InterruptedException {
-        LOG.info(
+        logger.info(
                 RECONNECT.getMarker(),
                 "sending tree rooted at {} with route {}",
                 root == null ? null : root.getClass().getName(),
@@ -142,7 +142,7 @@ public class TeachingSynchronizer {
             throw new MerkleSynchronizationException("Synchronization failed with exceptions");
         }
 
-        LOG.info(RECONNECT.getMarker(), "finished sending tree");
+        logger.info(RECONNECT.getMarker(), "finished sending tree");
     }
 
     /**

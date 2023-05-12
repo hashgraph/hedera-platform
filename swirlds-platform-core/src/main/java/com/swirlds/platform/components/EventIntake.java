@@ -44,7 +44,7 @@ import org.apache.logging.log4j.Logger;
  * com.swirlds.platform.eventhandling.PreConsensusEventHandler}.
  */
 public class EventIntake {
-    private static final Logger log = LogManager.getLogger(EventIntake.class);
+    private static final Logger logger = LogManager.getLogger(EventIntake.class);
     /** The ID of this node */
     private final NodeId selfId;
 
@@ -122,9 +122,9 @@ public class EventIntake {
             return;
         }
         stats.doneValidation();
-        log.debug(SYNC.getMarker(), "{} sees {}", selfId, event);
+        logger.debug(SYNC.getMarker(), "{} sees {}", selfId, event);
         dispatcher.preConsensusEvent(event);
-        log.debug(INTAKE_EVENT.getMarker(), "Adding {} ", event::toShortString);
+        logger.debug(INTAKE_EVENT.getMarker(), "Adding {} ", event::toShortString);
         stats.dispatchedPreConsensus();
         final long minGenNonAncientBeforeAdding = consensus().getMinGenerationNonAncient();
         // #5762 if we cannot calculate its roundCreated, then we use the one that was sent to us
@@ -137,7 +137,7 @@ public class EventIntake {
                 // we then use the round created sent to us
                 event.setRoundCreated(event.getBaseEvent().getRoundCreated());
             } else {
-                log.error(
+                logger.error(
                         LogMarker.EXCEPTION.getMarker(),
                         "cannot determine round created for event {}",
                         event::toMediumString);
@@ -180,7 +180,7 @@ public class EventIntake {
         for (final EventImpl e : staleEvents) {
             e.setStale(true);
             dispatcher.staleEvent(e);
-            log.warn(STALE_EVENTS.getMarker(), "Stale event {}", e::toShortString);
+            logger.warn(STALE_EVENTS.getMarker(), "Stale event {}", e::toShortString);
         }
     }
 

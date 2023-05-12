@@ -186,9 +186,9 @@ public class StandardTeacherTreeView implements TeacherTreeView<NodeToSend> {
                 final Hash hash = child.getHash();
                 if (hash == null) {
                     throw new MerkleSynchronizationException(
-                            node.getClass().getName()
+                            child.getClass().getName()
                                     + " at position "
-                                    + node.getRoute()
+                                    + child.getRoute()
                                     + " is unhashed");
                 }
 

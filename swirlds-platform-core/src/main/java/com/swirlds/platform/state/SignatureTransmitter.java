@@ -19,43 +19,55 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.Signature;
+import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
 import com.swirlds.common.system.transaction.internal.SystemTransaction;
-import com.swirlds.platform.SwirldsPlatform;
+import com.swirlds.platform.components.common.query.PrioritySystemTransactionSubmitter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /** This class transmits this node's signature on a signed state (via transactions). */
 public final class SignatureTransmitter {
 
-    private static final Logger LOG = LogManager.getLogger(SignatureTransmitter.class);
+    private static final Logger logger = LogManager.getLogger(SignatureTransmitter.class);
+    private final AddressBook addressBook;
+    private final NodeId selfId;
+    private final PrioritySystemTransactionSubmitter prioritySystemTransactionSubmitter;
 
-    private SignatureTransmitter() {}
+    public SignatureTransmitter(
+            final AddressBook addressBook,
+            final NodeId selfId,
+            final PrioritySystemTransactionSubmitter prioritySystemTransactionSubmitter) {
+        this.addressBook = addressBook;
+        this.selfId = selfId;
+        this.prioritySystemTransactionSubmitter = prioritySystemTransactionSubmitter;
+    }
 
     /**
      * Transmit this node's signature to other nodes for a signed state.
      *
-     * @param platform this node's platform instance
      * @param round the round of the state that was signed
      * @param signature the self signature on the state
      * @param stateHash the hash of the state that was signed
      */
-    public static void transmitSignature(
-            final SwirldsPlatform platform,
-            final long round,
-            final Signature signature,
-            final Hash stateHash) {
-        if (platform.getSelfAddress().isZeroStake()) {
+    public void transmitSignature(
+            final long round, final Signature signature, final Hash stateHash) {
+        if (isZeroStake()) {
             // If this node has no stake, there is no point in signing
             return;
         }
 
         final SystemTransaction signatureTransaction =
                 new StateSignatureTransaction(round, signature, stateHash);
-        final boolean success = platform.createSystemTransaction(signatureTransaction, true);
+        final boolean success = prioritySystemTransactionSubmitter.submit(signatureTransaction);
 
         if (!success) {
-            LOG.error(EXCEPTION.getMarker(), "failed to create signed state transaction)");
+            logger.error(EXCEPTION.getMarker(), "failed to create signed state transaction");
         }
+    }
+
+    private boolean isZeroStake() {
+        return addressBook.getAddress(selfId.getId()).isZeroStake();
     }
 }

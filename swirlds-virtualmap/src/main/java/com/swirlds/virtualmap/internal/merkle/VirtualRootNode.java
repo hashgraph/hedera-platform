@@ -140,7 +140,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
     }
 
     /** Use this for all logging, as controlled by the optional data/log4j2.xml file */
-    private static final Logger LOG = LogManager.getLogger(VirtualRootNode.class);
+    private static final Logger logger = LogManager.getLogger(VirtualRootNode.class);
 
     /**
      * The number of elements to have in the buffer used during reconnect on a learner when passing
@@ -776,7 +776,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
             try {
                 dataSource.close();
             } catch (final IOException e) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "Could not close the dataSource after all copies were destroyed",
                         e);
@@ -879,7 +879,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
         if (statistics != null) {
             statistics.recordFlush(end - (double) start);
         }
-        LOG.debug(VIRTUAL_MERKLE_STATS.getMarker(), "Flushed in {} ms", end - start);
+        logger.debug(VIRTUAL_MERKLE_STATS.getMarker(), "Flushed in {} ms", end - start);
     }
 
     private void flush(
@@ -907,13 +907,13 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
                     deletedLeaves);
 
         } catch (final ClosedByInterruptException ex) {
-            LOG.info(
+            logger.info(
                     TESTING_EXCEPTIONS_ACCEPTABLE_RECONNECT.getMarker(),
                     "flush interrupted - this is probably not an error "
                             + "if this happens shortly after a reconnect");
             Thread.currentThread().interrupt();
         } catch (final IOException ex) {
-            LOG.error(EXCEPTION.getMarker(), "Error while flushing VirtualMap", ex);
+            logger.error(EXCEPTION.getMarker(), "Error while flushing VirtualMap", ex);
             throw new UncheckedIOException(ex);
         }
     }
@@ -1227,7 +1227,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
                             reconnectIterator.close();
                             final var message =
                                     "VirtualMap@" + getRoute() + " failed to hash during reconnect";
-                            LOG.error(EXCEPTION.getMarker(), message, exception);
+                            logger.error(EXCEPTION.getMarker(), message, exception);
                             reconnectHashingFuture.completeExceptionally(
                                     new MerkleSynchronizationException(message, exception));
                         })
@@ -1244,7 +1244,7 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
                 // Only block on future if the hashing thread is known to have been started.
                 super.setHash(reconnectHashingFuture.get());
             } else {
-                LOG.warn(RECONNECT.getMarker(), "virtual map hashing thread was never started");
+                logger.warn(RECONNECT.getMarker(), "virtual map hashing thread was never started");
             }
             learnerTreeView = null;
             postInit(fullyReconnectedState);
@@ -1334,13 +1334,13 @@ public final class VirtualRootNode<K extends VirtualKey<? super K>, V extends Vi
                 && (remainingCapacity <= settings.getVirtualMapWarningThreshold())
                 && (remainingCapacity % settings.getVirtualMapWarningInterval() == 0)) {
             maxSizeReachedTriggeringWarning = currentSize;
-            LOG.warn(
+            logger.warn(
                     VIRTUAL_MERKLE_STATS.getMarker(),
                     "Virtual Map only has room for {} additional entries",
                     remainingCapacity);
         }
         if (remainingCapacity == 1) {
-            LOG.warn(VIRTUAL_MERKLE_STATS.getMarker(), "Virtual Map is now full!");
+            logger.warn(VIRTUAL_MERKLE_STATS.getMarker(), "Virtual Map is now full!");
         }
 
         // Find the lastLeafPath which will tell me the new path for this new item

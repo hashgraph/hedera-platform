@@ -31,11 +31,14 @@ import com.swirlds.common.crypto.EmptyHashValueException;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.HashBuilder;
 import com.swirlds.common.crypto.ImmutableHash;
+import com.swirlds.common.test.RandomUtils;
 import com.swirlds.common.test.io.InputOutputStream;
 import com.swirlds.common.test.io.SerializationUtils;
+import com.swirlds.common.utility.Mnemonics;
 import java.io.IOException;
 import java.util.Arrays;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.ThrowingSupplier;
 
@@ -154,5 +157,18 @@ public class HashTests {
 
         final Hash original = builder.update(0x1d88a790).immutable();
         SerializationUtils.checkSerializeDeserializeEqual(original);
+    }
+
+    @Test
+    @DisplayName("Mnemonic Test")
+    void mnemonicTest() {
+        final Hash hash = RandomUtils.randomHash();
+        final String mnemonic = hash.toMnemonic();
+        assertEquals(mnemonic, hash.toMnemonic());
+        final String[] words = mnemonic.split("-");
+        assertEquals(4, words.length);
+        for (final String word : words) {
+            assertDoesNotThrow(() -> Mnemonics.getWordIndex(word));
+        }
     }
 }

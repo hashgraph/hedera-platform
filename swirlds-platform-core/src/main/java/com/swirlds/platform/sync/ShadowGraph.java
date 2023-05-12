@@ -59,7 +59,7 @@ import org.apache.logging.log4j.Logger;
  */
 public class ShadowGraph implements Clearable {
 
-    private static final Logger LOG = LogManager.getLogger(ShadowGraph.class);
+    private static final Logger logger = LogManager.getLogger(ShadowGraph.class);
 
     /** The generation value for the first event created by a node. */
     private static final long FIRST_GENERATION = 0;
@@ -144,7 +144,7 @@ public class ShadowGraph implements Clearable {
             try {
                 addEvent(event);
             } catch (ShadowGraphInsertionException e) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "unable to insert event {}",
                         event.toShortString(),
@@ -163,7 +163,7 @@ public class ShadowGraph implements Clearable {
         // was decreased to match the minGeneration.
         oldestGeneration = expireBelow;
 
-        LOG.info(
+        logger.info(
                 STARTUP.getMarker(),
                 "Shadow graph initialized from events. Provided minGeneration = {}. Calculated"
                         + " oldestGeneration = {}",
@@ -351,7 +351,7 @@ public class ShadowGraph implements Clearable {
      */
     public synchronized void expireBelow(final long generation) {
         if (generation < expireBelow) {
-            LOG.error(
+            logger.error(
                     EXCEPTION.getMarker(),
                     "A request to expire generations below {} is less than request of {}. Ignoring"
                             + " expiration request",
@@ -388,7 +388,7 @@ public class ShadowGraph implements Clearable {
             Set<ShadowEvent> shadowsToExpire = generationToShadowEvent.remove(oldestGeneration);
             // shadowsToExpire should never be null, but check just in case.
             if (shadowsToExpire == null) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "There were no events in generation {} to expire.",
                         oldestGeneration);
@@ -523,7 +523,7 @@ public class ShadowGraph implements Clearable {
             if (numberOfNodes > 0 && tips.size() > numberOfNodes && tips.size() > tipsBefore) {
                 // It is possible that we have more tips than nodes even if there is no fork.
                 // Explained in: sync-protocol.md
-                LOG.info(
+                logger.info(
                         SYNC_INFO.getMarker(),
                         "tips size is {} after adding {}. Esp null:{} Ssp null:{}\n"
                                 + "expireBelow: {} oldestGeneration: {}\n"
@@ -684,7 +684,7 @@ public class ShadowGraph implements Clearable {
             final boolean knownOP = shadow(e.getOtherParent()) != null;
             final boolean expiredOP = expired(e.getOtherParent());
             if (!knownOP && !expiredOP) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "Missing non-expired other parent for {}",
                         e::toMediumString);
@@ -695,7 +695,7 @@ public class ShadowGraph implements Clearable {
             final boolean knownSP = shadow(e.getSelfParent()) != null;
             final boolean expiredSP = expired(e.getSelfParent());
             if (!knownSP && !expiredSP) {
-                LOG.error(
+                logger.error(
                         EXCEPTION.getMarker(),
                         "Missing non-expired self parent for {}",
                         e::toMediumString);

@@ -30,8 +30,11 @@ public class Mutation<V> {
      */
     private Mutation<V> previous;
 
+    /** The next mutation in the linked list, or null if this mutation is the newest mutation. */
+    private Mutation<V> next;
+
     /**
-     * Create a mutation with a version, value, and previous mutation.
+     * Create a mutation and add it to the front of the linked list.
      *
      * @param version the version of the mutation
      * @param value the value of the mutation
@@ -41,6 +44,9 @@ public class Mutation<V> {
         this.version = version;
         this.value = value;
         this.previous = previous;
+        if (previous != null) {
+            previous.next = this;
+        }
     }
 
     /** Convert this mutation to a human-readable string. For debugging purposes. */
@@ -79,7 +85,7 @@ public class Mutation<V> {
     /**
      * Get the mutation before this mutation, or null if this mutation is the oldest mutation
      *
-     * @return the next mutation
+     * @return the previous mutation
      */
     public Mutation<V> getPrevious() {
         return previous;
@@ -88,9 +94,27 @@ public class Mutation<V> {
     /**
      * Set the previous mutation before this mutation.
      *
-     * @param previous the next mutation
+     * @param previous the previous mutation
      */
     public void setPrevious(final Mutation<V> previous) {
         this.previous = previous;
+    }
+
+    /**
+     * Get the next mutation, or null if this is the newest mutation.
+     *
+     * @return the next mutation
+     */
+    public Mutation<V> getNext() {
+        return next;
+    }
+
+    /**
+     * Set the next mutation.
+     *
+     * @param next the next mutation
+     */
+    public void setNext(final Mutation<V> next) {
+        this.next = next;
     }
 }
