@@ -17,7 +17,6 @@ package com.swirlds.platform.gui.internal;
 
 import static com.swirlds.platform.gui.internal.GuiUtils.wrap;
 
-import com.swirlds.platform.Settings;
 import com.swirlds.platform.SwirldsPlatform;
 import com.swirlds.platform.state.signed.SignedStateInfo;
 import java.awt.Font;
@@ -107,19 +106,7 @@ class WinTab2Consensus extends PrePaintableJPanel {
             for (SignedStateInfo state : stateInfo) {
                 if (state != null && state.getSigSet() != null) {
                     int c = state.getSigSet().getCount();
-                    int size;
-
-                    if (Settings.getInstance().isEnableBetaMirror()) {
-                        // if beta mirror logic is enabled then use the count of members with stake
-                        size = platform.getAddressBook().getNumberWithStake();
-
-                        final boolean isZeroStake = platform.getSelfAddress().isZeroStake();
-                        if (isZeroStake) {
-                            size++;
-                        }
-                    } else {
-                        size = platform.getAddressBook().getSize();
-                    }
+                    int size = platform.getAddressBook().getSize();
 
                     s +=
                             String.format(

@@ -111,4 +111,7 @@ public interface ConstructableRegistry {
      */
     @Deprecated(forRemoval = true)
     void registerConstructable(ClassConstructorPair pair) throws ConstructableRegistryException;
+
+    /** Reset the registry. For testing purposes only. */
+    void reset();
 }

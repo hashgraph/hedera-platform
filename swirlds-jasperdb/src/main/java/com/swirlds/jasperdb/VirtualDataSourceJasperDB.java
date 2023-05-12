@@ -1319,11 +1319,10 @@ public class VirtualDataSourceJasperDB<K extends VirtualKey<? super K>, V extend
     }
 
     /**
-     * Updates the record for the given key in virtual leaf record cache, if the cache is enabled.
+     * Invalidates the given key in virtual leaf record cache, if the cache is enabled.
      *
-     * <p>If the record is {@code null}, it's still updated in the cache. It means there is no
-     * record with the given key exists in the data source, so further lookups for the key are
-     * skipped.
+     * <p>If the key is deleted, it's still updated in the cache. It means no record with the given
+     * key exists in the data source, so further lookups for the key are skipped.
      *
      * <p>Cache index is calculated as the key's hash code % cache size. The cache is only updated,
      * if the current record at this index has the given key. If the key is different, no update is

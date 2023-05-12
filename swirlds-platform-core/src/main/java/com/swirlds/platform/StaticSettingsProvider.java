@@ -30,12 +30,6 @@ public final class StaticSettingsProvider implements SettingsProvider {
 
     /** {@inheritDoc} */
     @Override
-    public boolean isEnableBetaMirror() {
-        return settings.isEnableBetaMirror();
-    }
-
-    /** {@inheritDoc} */
-    @Override
     public int getRescueChildlessInverseProbability() {
         return settings.getRescueChildlessInverseProbability();
     }
@@ -44,30 +38,6 @@ public final class StaticSettingsProvider implements SettingsProvider {
     @Override
     public int getRandomEventProbability() {
         return settings.getRandomEventProbability();
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public double getThrottle7Threshold() {
-        return settings.getThrottle7threshold();
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public double getThrottle7Extra() {
-        return settings.getThrottle7extra();
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public int getThrottle7MaxBytes() {
-        return settings.getThrottle7maxBytes();
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public boolean isThrottle7Enabled() {
-        return settings.isThrottle7();
     }
 
     @Override

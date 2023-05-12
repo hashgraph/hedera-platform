@@ -23,9 +23,6 @@ package com.swirlds.platform;
  */
 @Deprecated(forRemoval = true)
 public interface SettingsProvider {
-    /** Returns true if beta mirror node support including zero stake support is enabled */
-    boolean isEnableBetaMirror();
-
     /** Returns the inverse of a probability that we will create a child for a childless event */
     int getRescueChildlessInverseProbability();
 
@@ -38,22 +35,6 @@ public interface SettingsProvider {
      * nodes who go offline.
      */
     int getRandomEventProbability();
-
-    /**
-     * Defines a "falling behind" node as a one that received at least N * throttle7threshold events
-     * in a sync. A good choice for this constant might be 1+2*d if a fraction d of received events
-     * are duplicates.
-     */
-    double getThrottle7Threshold();
-
-    /** if a sync has neither party falling behind, increase the bytes sent by this fraction */
-    double getThrottle7Extra();
-
-    /** the maximum number of slowdown bytes to be sent during a sync */
-    int getThrottle7MaxBytes();
-
-    /** indicates if throttle7 is enabled or not */
-    boolean isThrottle7Enabled();
 
     /**
      * @see Settings#maxEventQueueForCons

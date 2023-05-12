@@ -60,7 +60,6 @@ swirld, 123
 # maxSyncs, 1
 # transactionMaxBytes, 1024
 # ipTos, 123
- waitAtStartup, off
 # genesisFreezeTime, -1
 
 ###############################################################################################
@@ -77,9 +76,6 @@ swirld, 123
 #
 # The optional "ipTos" parameter sets the Type of Service (IP_ToS) byte in each of the
 # TCP/IP packets (0 to 255). The internet usually ignores this byte.
-#
-# The optional "waitAtStartup" parameter defines whether the platform should wait for all other
-# platforms to start up before starting normal operation.
 #
 # Uncomment exactly one of the app name lines, above.
 # That line should have the the word "app", then the  jar filename,

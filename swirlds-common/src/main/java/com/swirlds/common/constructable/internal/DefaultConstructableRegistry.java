@@ -77,6 +77,11 @@ public class DefaultConstructableRegistry implements ConstructableRegistry {
                 .registerConstructable(pair.getConstructableClass(), pair.getConstructor()::get);
     }
 
+    @Override
+    public void reset() {
+        allRegistries.clear();
+    }
+
     @SuppressWarnings("unchecked")
     private <T> GenericConstructorRegistry<T> getOrCreate(final Class<T> constructor) {
         return (GenericConstructorRegistry<T>)

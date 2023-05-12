@@ -198,12 +198,9 @@ public class EventTaskCreator {
      * @param otherId the ID of the other-parent of the event to be created
      */
     public void createEvent(final long otherId) {
-        // If beta mirror node logic is enabled and this node is a zero stake node then we should
-        // not
-        // create this event
-        if (settings.isEnableBetaMirror()
-                && (addressBook.getAddress(selfId.getId()).isZeroStake()
-                        || addressBook.getAddress(otherId).isZeroStake())) {
+        // If we have no stake OR the other node has no stake, no point in creating an event
+        if (addressBook.getAddress(selfId.getId()).isZeroStake()
+                || addressBook.getAddress(otherId).isZeroStake()) {
             return;
         }
         addEvent(new CreateEventTask(otherId));

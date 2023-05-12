@@ -36,7 +36,6 @@ public final class SettingConstants {
     static final int SIGNED_STATE_FREQ_DEFAULT_VALUE = 1;
     static final int MAX_EVENT_QUEUE_FOR_CONS_DEFAULT_VALUE = 10_000;
     static final int THROTTLE_TRANSACTION_QUEUE_SIZE_DEFAULT_VALUE = 100_000;
-    static final double THROTTLE_7_THRESHOLD_DEFAULT_VALUE = 1.5;
     static final int NUM_CONNECTIONS_DEFAULT_VALUE = 40;
     static final int MAX_OUTGOING_SYNCS_DEFAULT_VALUE = 2;
     static final int MAX_INCOMING_SYNCS_INC_DEFAULT_VALUE = 1;
@@ -53,13 +52,10 @@ public final class SettingConstants {
     static final int TIMEOUT_SERVER_ACCEPT_CONNECT_DEFAULT_VALUE = 5_000;
     static final int DEADLOCK_CHECK_PERIOD_DEFAULT_VALUE = 1000;
     static final int SLEEP_HEARTBEAT_DEFAULT_VALUE = 500;
-    static final double THROTTLE_7_EXTRA_DEFAULT_VALUE = 0.05;
-    static final int THROTTLE_7_MAX_BYTES_DEFAULT_VALUE = 100 * 1024 * 1024;
     static final boolean VERIFY_EVENT_SIGS_DEFAULT_VALUE = true;
     static final boolean SHOW_INTERNAL_STATS_DEFAULT_VALUE = false;
     static final boolean VERBOSE_STATISTICS_DEFAULT_VALUE = false;
     static final boolean REQUIRE_STATE_LOAD_DEFAULT_VALUE = false;
-    static final boolean WAIT_AT_STARTUP_DEFAULT_VALUE = false;
     static final boolean THROTTLE_7_DEFAULT_VALUE = false;
     static final int DELAY_SHUFFLE_DEFAULT_VALUE = 200;
     static final int CALLER_SKIPS_BEFORE_SLEEP_DEFAULT_VALUE = 30;
@@ -93,7 +89,6 @@ public final class SettingConstants {
     static final int RESCUE_CHILDLESS_INVERSE_PROBABILITY_DEFAULT_VALUE = 10;
     static final boolean ENABLE_EVENT_STREAMING_DEFAULT_VALUE = false;
     static final boolean RUN_PAUSE_CHECK_TIMER_DEFAULT_VALUE = false;
-    static final boolean ENABLE_BETA_MIRROR_DEFAULT_VALUE = false;
     static final int EVENT_STREAM_QUEUE_CAPACITY_DEFAULT_VALUE = 500;
     static final int EVENTS_LOG_PERIOD_DEFAULT_VALUE = 60;
     static final String EVENTS_LOG_DIR_DEFAULT_VALUE = "./eventstreams";

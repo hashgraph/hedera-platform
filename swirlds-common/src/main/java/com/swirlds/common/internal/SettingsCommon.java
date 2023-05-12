@@ -50,8 +50,6 @@ public class SettingsCommon {
     public static boolean showInternalStats;
     public static boolean verboseStatistics;
 
-    // used by SignedStateManager
-    public static boolean enableBetaMirror;
     /**
      * should a transaction be sent after each state signature transaction, giving all
      * avgPingMilliseconds[] stats?

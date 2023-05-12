@@ -40,19 +40,6 @@ import java.time.temporal.ChronoUnit;
 
 /** Interface to update relevant sync statistics */
 public class SyncMetrics {
-
-    private static final SpeedometerMetric.Config BYTES_PER_SECOND_CATCHUP_SENT_CONFIG =
-            new SpeedometerMetric.Config(INTERNAL_CATEGORY, "bytes/sec_catchup")
-                    .withDescription("number of bytes sent per second to help others catch up")
-                    .withFormat(FORMAT_16_2);
-    private final SpeedometerMetric bytesPerSecondCatchupSent;
-
-    private static final RunningAverageMetric.Config FRAC_SYNC_SLOWED_CONFIG =
-            new RunningAverageMetric.Config(INTERNAL_CATEGORY, "fracSyncSlowed")
-                    .withDescription("fraction of syncs that are slowed to let others catch up")
-                    .withFormat(FORMAT_9_6);
-    private final RunningAverageMetric fracSyncSlowed;
-
     private static final RunningAverageMetric.Config AVG_BYTES_PER_SEC_SYNC_CONFIG =
             new RunningAverageMetric.Config(PLATFORM_CATEGORY, "bytes/sec_sync")
                     .withDescription("average number of bytes per second transfered during a sync")
@@ -102,8 +89,6 @@ public class SyncMetrics {
      * @throws IllegalArgumentException if {@code metrics} is {@code null}
      */
     public SyncMetrics(final Metrics metrics) {
-        bytesPerSecondCatchupSent = metrics.getOrCreate(BYTES_PER_SECOND_CATCHUP_SENT_CONFIG);
-        fracSyncSlowed = metrics.getOrCreate(FRAC_SYNC_SLOWED_CONFIG);
         avgBytesPerSecSync = metrics.getOrCreate(AVG_BYTES_PER_SEC_SYNC_CONFIG);
         callSyncsPerSecond = metrics.getOrCreate(CALL_SYNCS_PER_SECOND_CONFIG);
         recSyncsPerSecond = metrics.getOrCreate(REC_SYNCS_PER_SECOND_CONFIG);
@@ -243,14 +228,6 @@ public class SyncMetrics {
         final double nanos = ((double) System.nanoTime()) - nanosStart;
         final double seconds = nanos / ChronoUnit.SECONDS.getDuration().toNanos();
         eventRecRate.update(Math.round(numberReceived / seconds));
-    }
-
-    /**
-     * @param bytesWritten the number of throttle bytes written during a sync
-     */
-    public void syncThrottleBytesWritten(final int bytesWritten) {
-        bytesPerSecondCatchupSent.update(bytesWritten);
-        fracSyncSlowed.update(bytesWritten > 0 ? 1 : 0);
     }
 
     /**

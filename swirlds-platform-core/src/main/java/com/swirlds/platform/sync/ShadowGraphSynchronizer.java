@@ -21,7 +21,6 @@ import com.swirlds.common.threading.interrupt.InterruptableRunnable;
 import com.swirlds.common.threading.pool.ParallelExecutionException;
 import com.swirlds.common.threading.pool.ParallelExecutor;
 import com.swirlds.platform.Connection;
-import com.swirlds.platform.SettingsProvider;
 import com.swirlds.platform.consensus.GraphGenerations;
 import com.swirlds.platform.event.GossipEvent;
 import com.swirlds.platform.internal.EventImpl;
@@ -72,8 +71,6 @@ public class ShadowGraphSynchronizer {
     private final FallenBehindManager fallenBehindManager;
     /** executes tasks in parallel */
     private final ParallelExecutor executor;
-    /** provides system settings */
-    private final SettingsProvider settings;
     /** if set to true, send and receive initial negotiation bytes at the start of the sync */
     private final boolean sendRecInitBytes;
     /** executed before fetching the tips from the shadowgraph for the second time in phase 3 */
@@ -88,7 +85,6 @@ public class ShadowGraphSynchronizer {
             final Consumer<GossipEvent> eventHandler,
             final FallenBehindManager fallenBehindManager,
             final ParallelExecutor executor,
-            final SettingsProvider settings,
             final boolean sendRecInitBytes,
             final InterruptableRunnable executePreFetchTips) {
         this.shadowGraph = shadowGraph;
@@ -99,7 +95,6 @@ public class ShadowGraphSynchronizer {
         this.eventHandler = eventHandler;
         this.fallenBehindManager = fallenBehindManager;
         this.executor = executor;
-        this.settings = settings;
         this.sendRecInitBytes = sendRecInitBytes;
         this.executePreFetchTips = executePreFetchTips;
     }
@@ -346,8 +341,6 @@ public class ShadowGraphSynchronizer {
 
         syncDone(new SyncResult(conn.isOutbound(), conn.getOtherId(), eventsRead, sendList.size()));
 
-        throttle7(conn, eventsRead, sendList.size());
-
         timing.setTimePoint(5);
         syncMetrics.recordSyncTiming(timing, conn);
         return true;
@@ -373,22 +366,6 @@ public class ShadowGraphSynchronizer {
             final Callable<T> readTask, final Callable<Void> writeTask, final Connection connection)
             throws ParallelExecutionException {
         return executor.doParallel(readTask, writeTask, connection::disconnect);
-    }
-
-    /** Applies throttle7 if enabled and applicable to this sync. */
-    private void throttle7(final Connection conn, final int eventsReceived, final int eventsSent)
-            throws ParallelExecutionException {
-        if (settings.isThrottle7Enabled()) {
-            final SyncThrottle throttle7 = new SyncThrottle(numberOfNodes, settings);
-            if (throttle7.shouldThrottle(eventsReceived, eventsSent)) {
-                final Integer throttle7BytesWritten =
-                        readWriteParallel(
-                                throttle7.sendThrottleBytes(conn),
-                                throttle7.receiveThrottleBytes(conn),
-                                conn);
-                syncMetrics.syncThrottleBytesWritten(throttle7BytesWritten);
-            }
-        }
     }
 
     private void syncDone(final SyncResult info) {

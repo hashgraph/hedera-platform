@@ -60,8 +60,6 @@ public final class LegacyConfigPropertiesLoader {
 
     private static final String SAVE_STATE_PERIOD_PROPERTY_NAME = "savestateperiod";
 
-    private static final String WAIT_AT_STARTUP_PROPERTY_NAME = "waitatstartup";
-
     private static final String GENESIS_FREEZE_TIME_PROPERTY_NAME = "genesisfreezetime";
 
     private static final Logger LOG = LogManager.getLogger(LegacyConfigPropertiesLoader.class);
@@ -122,10 +120,6 @@ public final class LegacyConfigPropertiesLoader {
                             break;
                         case SAVE_STATE_PERIOD_PROPERTY_NAME:
                             setSaveStatePeriod(
-                                    configurationProperties, lineParameters.length, pars[1]);
-                            break;
-                        case WAIT_AT_STARTUP_PROPERTY_NAME:
-                            setWaitAtStartup(
                                     configurationProperties, lineParameters.length, pars[1]);
                             break;
                         case GENESIS_FREEZE_TIME_PROPERTY_NAME:
@@ -270,18 +264,6 @@ public final class LegacyConfigPropertiesLoader {
                 TLS_PROPERTY_NAME,
                 paramLength,
                 () -> configProperties.setTls(Utilities.parseBoolean(value)));
-    }
-
-    private static void setWaitAtStartup(
-            final LegacyConfigProperties configProperties,
-            final int paramLength,
-            final String value) {
-        // "waitatstartup, ON" turns on TLS (or: true, 1, yes, t, y)
-        // "waitatstartup, OFF" turns off TLS (or: false, 0, no, f, n)
-        handleParam(
-                WAIT_AT_STARTUP_PROPERTY_NAME,
-                paramLength,
-                () -> configProperties.setWaitAtStartup(Utilities.parseBoolean(value)));
     }
 
     private static void setSwirldName(

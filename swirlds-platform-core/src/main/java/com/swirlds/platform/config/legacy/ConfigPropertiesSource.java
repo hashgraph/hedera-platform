@@ -62,10 +62,6 @@ public class ConfigPropertiesSource implements ConfigSource {
                                 properties.setProperty(
                                         "state.saveStatePeriod", Integer.toString(value)));
         configurationProperties
-                .waitAtStartup()
-                .ifPresent(
-                        value -> properties.setProperty("waitAtStartup", Boolean.toString(value)));
-        configurationProperties
                 .genesisFreezeTime()
                 .ifPresent(
                         value -> properties.setProperty("genesisFreezeTime", Long.toString(value)));

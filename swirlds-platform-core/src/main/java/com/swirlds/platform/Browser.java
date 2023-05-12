@@ -237,9 +237,6 @@ public class Browser {
             configurationProperties
                     .saveStatePeriod()
                     .ifPresent(value -> Settings.getInstance().getState().saveStatePeriod = value);
-            configurationProperties
-                    .waitAtStartup()
-                    .ifPresent(value -> Settings.getInstance().setWaitAtStartup(value));
 
             // Write the settingsUsed.txt file
             writeSettingsUsed(configuration);

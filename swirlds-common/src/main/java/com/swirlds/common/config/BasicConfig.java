@@ -116,7 +116,6 @@ import java.nio.file.Path;
  *     rescueChildlessInverseProbability. A value of 0 means that a node will not create any
  *     children for childless events.
  * @param runPauseCheckTimer Run a thread that checks if the JVM pauses for a long time
- * @param enableBetaMirror enables or disables beta mirror node support including zero stake support
  * @param enableEventStreaming enable stream event to server
  * @param eventStreamQueueCapacity capacity of the blockingQueue from which we take events and write
  *     to EventStream files
@@ -162,8 +161,6 @@ import java.nio.file.Path;
  *     worst case, it should be possible to find a partner to sync with in about (maxOutgoingSyncs +
  *     maxIncomingSyncsInc) tries, on average.
  * @param maxOutgoingSyncs maximum number of simultaneous outgoing syncs initiated by me
- * @param waitAtStartup on startup, only Alice can create an event with no otherParent, and all
- *     other members will refrain from creating an event until they have received at least one event
  * @param logPath path to log4j2.xml (which might not exist)
  */
 @ConfigData
@@ -227,8 +224,6 @@ public record BasicConfig(
                 int rescueChildlessInverseProbability,
         @ConfigProperty(value = "runPauseCheckTimer", defaultValue = "false")
                 boolean runPauseCheckTimer,
-        @ConfigProperty(value = "enableBetaMirror", defaultValue = "false")
-                boolean enableBetaMirror,
         @ConfigProperty(value = "enableEventStreaming", defaultValue = "false")
                 boolean enableEventStreaming,
         @ConfigProperty(value = "eventStreamQueueCapacity", defaultValue = "500")
@@ -265,5 +260,4 @@ public record BasicConfig(
         @ConfigProperty(value = "socketIpTos", defaultValue = "-1") int socketIpTos,
         @ConfigProperty(value = "maxIncomingSyncsInc", defaultValue = "1") int maxIncomingSyncsInc,
         @ConfigProperty(value = "maxOutgoingSyncs", defaultValue = "2") int maxOutgoingSyncs,
-        @ConfigProperty(value = "waitAtStartup", defaultValue = "false") boolean waitAtStartup,
         @ConfigProperty(value = "logPath", defaultValue = "log4j2.xml") Path logPath) {}

@@ -21,6 +21,7 @@ import static com.swirlds.logging.LogMarker.SOCKET_EXCEPTIONS;
 import static com.swirlds.logging.LogMarker.TCP_CONNECT_EXCEPTIONS;
 
 import com.swirlds.common.system.NodeId;
+import com.swirlds.common.system.SoftwareVersion;
 import com.swirlds.common.system.address.Address;
 import com.swirlds.common.system.address.AddressBook;
 import com.swirlds.platform.Connection;
@@ -37,6 +38,7 @@ import java.net.ConnectException;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.Objects;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,18 +51,21 @@ public class OutboundConnectionCreator {
     private final ConnectionTracker connectionTracker;
     private final SocketFactory socketFactory;
     private final AddressBook addressBook;
+    private final SoftwareVersion softwareVersion;
 
     public OutboundConnectionCreator(
             final NodeId selfId,
             final SettingsProvider settings,
             final ConnectionTracker connectionTracker,
             final SocketFactory socketFactory,
-            final AddressBook addressBook) {
+            final AddressBook addressBook,
+            final SoftwareVersion softwareVersion) {
         this.selfId = selfId;
         this.settings = settings;
         this.connectionTracker = connectionTracker;
         this.socketFactory = socketFactory;
         this.addressBook = addressBook;
+        this.softwareVersion = Objects.requireNonNull(softwareVersion);
     }
 
     /**
@@ -91,6 +96,21 @@ public class OutboundConnectionCreator {
             dis =
                     SyncInputStream.createSyncInputStream(
                             clientSocket.getInputStream(), settings.connectionStreamBufferSize());
+
+            dos.writeSerializable(softwareVersion, true);
+            dos.flush();
+
+            final SoftwareVersion otherVersion = dis.readSerializable();
+            if (otherVersion == null
+                    || otherVersion.getClass() != softwareVersion.getClass()
+                    || otherVersion.compareTo(softwareVersion) != 0) {
+                throw new IOException(
+                        "This node has software version "
+                                + softwareVersion
+                                + " but the other node has software version "
+                                + otherVersion
+                                + ". Closing connection.");
+            }
 
             dos.writeUTF(addressBook.getAddress(selfId.getId()).getNickname());
             dos.flush();

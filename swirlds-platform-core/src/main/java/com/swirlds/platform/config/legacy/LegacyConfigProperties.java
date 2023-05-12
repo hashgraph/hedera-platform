@@ -43,8 +43,6 @@ public class LegacyConfigProperties {
 
     private Integer saveStatePeriod = null;
 
-    private Boolean waitAtStartup = null;
-
     private Long genesisFreezeTime = null;
 
     private JarAppConfig appConfig = null;
@@ -87,10 +85,6 @@ public class LegacyConfigProperties {
         this.saveStatePeriod = saveStatePeriod;
     }
 
-    public void setWaitAtStartup(final boolean waitAtStartup) {
-        this.waitAtStartup = waitAtStartup;
-    }
-
     public void setGenesisFreezeTime(final long genesisFreezeTime) {
         this.genesisFreezeTime = genesisFreezeTime;
     }
@@ -117,10 +111,6 @@ public class LegacyConfigProperties {
 
     public Optional<Integer> ipTos() {
         return Optional.ofNullable(ipTos);
-    }
-
-    public Optional<Boolean> waitAtStartup() {
-        return Optional.ofNullable(waitAtStartup);
     }
 
     public Optional<Long> genesisFreezeTime() {

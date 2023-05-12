@@ -90,7 +90,6 @@ import com.swirlds.platform.components.EventIntake;
 import com.swirlds.platform.components.EventMapper;
 import com.swirlds.platform.components.EventTaskCreator;
 import com.swirlds.platform.components.EventTaskDispatcher;
-import com.swirlds.platform.components.StartupThrottle;
 import com.swirlds.platform.components.SystemTransactionHandlerImpl;
 import com.swirlds.platform.components.TransThrottleSyncAndCreateRules;
 import com.swirlds.platform.components.TransactionTracker;
@@ -127,7 +126,6 @@ import com.swirlds.platform.event.validation.GossipEventValidators;
 import com.swirlds.platform.event.validation.SignatureValidator;
 import com.swirlds.platform.event.validation.StaticValidators;
 import com.swirlds.platform.event.validation.TransactionSizeValidator;
-import com.swirlds.platform.event.validation.ZeroStakeValidator;
 import com.swirlds.platform.eventhandling.ConsensusRoundHandler;
 import com.swirlds.platform.eventhandling.PreConsensusEventHandler;
 import com.swirlds.platform.intake.IntakeCycleStats;
@@ -343,8 +341,6 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
     private final SignedStateFileManager signedStateFileManager;
     /** last time stamp when pause check timer is active */
     private long pauseCheckTimeStamp;
-    /** allows nodes to wait for each other when starting up */
-    private StartupThrottle startupThrottle;
     /** Tracks user transactions in the hashgraph */
     private TransactionTracker transactionTracker;
     /** Tracks recent events created in the network */
@@ -978,17 +974,6 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
                         swirldStateManager::submitTransaction,
                         new TransactionMetrics(metrics));
 
-        if (settings.isWaitAtStartup()) {
-            this.startupThrottle =
-                    new StartupThrottle(
-                            initialAddressBook,
-                            selfId,
-                            this::checkPlatformStatus,
-                            settings.isEnableBetaMirror());
-        } else {
-            this.startupThrottle = StartupThrottle.getNoOpInstance();
-        }
-
         this.transactionTracker = new TransactionTracker();
 
         if (loadedState.signedStateFromDisk != null) {
@@ -1073,7 +1058,6 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
                         preConsensusEventHandler,
                         eventMapper,
                         addedEventMetrics,
-                        startupThrottle,
                         transactionTracker,
                         criticalQuorum,
                         eventIntakeMetrics);
@@ -1144,7 +1128,7 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
                             transactionTracker,
                             swirldStateManager.getTransactionPool(),
                             freezeManager::isFreezeStarted,
-                            new EventCreationRules(List.of(startupThrottle)));
+                            new EventCreationRules(List.of()));
         }
 
         final List<GossipEventValidator> validators = new ArrayList<>();
@@ -1154,9 +1138,6 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
         validators.add(new AncientValidator(consensusRef::get));
         validators.add(new EventDeduplication(isDuplicateChecks, eventIntakeMetrics));
         validators.add(StaticValidators::isParentDataValid);
-        if (settings.isEnableBetaMirror()) {
-            validators.add(new ZeroStakeValidator(initialAddressBook));
-        }
         validators.add(new TransactionSizeValidator(settings.getMaxTransactionBytesPerEvent()));
         if (settings.isVerifyEventSigs()) {
             validators.add(new SignatureValidator(initialAddressBook));
@@ -1316,8 +1297,7 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
                                 new TransThrottleSyncAndCreateRules(
                                         List.of(
                                                 swirldStateManager.getTransactionPool(),
-                                                swirldStateManager,
-                                                startupThrottle)),
+                                                swirldStateManager)),
                                 signedStateFileManager::getLastRoundSavedToDisk,
                                 signedStateManager::getLastCompleteRound,
                                 transactionTracker,
@@ -1380,7 +1360,6 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
                         eventTaskCreator::addEvent,
                         syncManager,
                         shadowgraphExecutor,
-                        PlatformConstructor.settingsProvider(),
                         true,
                         () -> {});
 
@@ -1464,7 +1443,8 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
                         StaticSettingsProvider.getSingleton(),
                         this,
                         socketFactory,
-                        initialAddressBook);
+                        initialAddressBook,
+                        appVersion);
         final StaticConnectionManagers connectionManagers =
                 new StaticConnectionManagers(topology, connectionCreator);
         final InboundConnectionHandler inboundConnectionHandler =
@@ -1473,7 +1453,8 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
                         selfId,
                         initialAddressBook,
                         connectionManagers::newConnection,
-                        StaticSettingsProvider.getSingleton());
+                        StaticSettingsProvider.getSingleton(),
+                        appVersion);
         // allow other members to create connections to me
         final Address address = getSelfAddress();
         final ConnectionServer connectionServer =
@@ -1523,7 +1504,6 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
                             eventTaskCreator::addEvent,
                             syncManager,
                             shadowgraphExecutor,
-                            PlatformConstructor.settingsProvider(),
                             false,
                             () -> {
                                 // start accepting events into the chatter queue
@@ -1860,8 +1840,6 @@ public class SwirldsPlatform implements Platform, PlatformWithDeprecatedMethods,
                 newStatus = PlatformStatus.DISCONNECTED;
             } else if (getSyncManager().hasFallenBehind()) {
                 newStatus = PlatformStatus.BEHIND;
-            } else if (!startupThrottle.allNodesStarted()) {
-                newStatus = PlatformStatus.STARTING_UP;
             } else if (freezeManager.isFreezeStarted()) {
                 newStatus = PlatformStatus.MAINTENANCE;
             } else if (freezeManager.isFreezeComplete()) {

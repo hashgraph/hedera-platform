@@ -97,6 +97,26 @@ public class BasicSoftwareVersion implements SoftwareVersion {
 
     /** {@inheritDoc} */
     @Override
+    public boolean equals(final Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (!(o instanceof BasicSoftwareVersion that)) {
+            return false;
+        }
+
+        return softwareVersion == that.softwareVersion;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int hashCode() {
+        return Long.hashCode(softwareVersion);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public String toString() {
         return Long.toString(softwareVersion);
     }

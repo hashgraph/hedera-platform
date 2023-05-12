@@ -74,9 +74,8 @@ public class SwirldTransactionSubmitter {
 
         // create a transaction to be added to the next Event when it is created.
         // The "system" boolean is set to false, because this is an app-generated transaction.
-        // Refuse to create any type of transaction if the beta mirror is enabled and this node has
-        // zero stake
-        if (settings.isEnableBetaMirror() && isZeroStakeNode) {
+        // Refuse to create any type of transaction if this node has zero stake
+        if (isZeroStakeNode) {
             return false;
         }
 

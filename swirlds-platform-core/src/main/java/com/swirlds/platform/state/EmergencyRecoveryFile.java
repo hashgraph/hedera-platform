@@ -97,9 +97,9 @@ public record EmergencyRecoveryFile(Recovery recovery) {
         return mapper.readValue(fileToRead.toFile(), EmergencyRecoveryFile.class);
     }
 
-    private record Recovery(State state) {}
+    public record Recovery(State state) {}
 
-    private record State(
+    public record State(
             long round,
             @JsonSerialize(using = ToStringSerializer.class)
                     @JsonDeserialize(using = HashDeserializer.class)

@@ -19,7 +19,6 @@ import static com.swirlds.logging.LogMarker.EXCEPTION;
 
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.crypto.Signature;
-import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.system.transaction.internal.StateSignatureTransaction;
 import com.swirlds.common.system.transaction.internal.SystemTransaction;
 import com.swirlds.platform.SwirldsPlatform;
@@ -46,11 +45,8 @@ public final class SignatureTransmitter {
             final long round,
             final Signature signature,
             final Hash stateHash) {
-
-        final boolean isZeroStake = platform.getSelfAddress().isZeroStake();
-        if (SettingsCommon.enableBetaMirror && isZeroStake) {
-            // If beta mirror logic is enabled and this node is zero stake then do not attempt
-            // to send the system transaction
+        if (platform.getSelfAddress().isZeroStake()) {
+            // If this node has no stake, there is no point in signing
             return;
         }
 

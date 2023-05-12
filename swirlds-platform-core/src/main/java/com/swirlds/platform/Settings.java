@@ -35,7 +35,6 @@ import static com.swirlds.platform.SettingConstants.DELAY_SHUFFLE_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.DISABLE_METRICS_OUTPUT_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.DO_UPNP_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.EMERGENCY_STATE_FILE_NAME_DEFAULT_VALUE;
-import static com.swirlds.platform.SettingConstants.ENABLE_BETA_MIRROR_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.ENABLE_EVENT_STREAMING_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.EVENTS_LOG_DIR_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.EVENTS_LOG_PERIOD_DEFAULT_VALUE;
@@ -82,10 +81,6 @@ import static com.swirlds.platform.SettingConstants.THREAD_DUMP_LOG_DIR_DEFAULT_
 import static com.swirlds.platform.SettingConstants.THREAD_DUMP_PERIOD_MS_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.THREAD_PRIORITY_NON_SYNC_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.THREAD_PRIORITY_SYNC_DEFAULT_VALUE;
-import static com.swirlds.platform.SettingConstants.THROTTLE_7_DEFAULT_VALUE;
-import static com.swirlds.platform.SettingConstants.THROTTLE_7_EXTRA_DEFAULT_VALUE;
-import static com.swirlds.platform.SettingConstants.THROTTLE_7_MAX_BYTES_DEFAULT_VALUE;
-import static com.swirlds.platform.SettingConstants.THROTTLE_7_THRESHOLD_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.THROTTLE_TRANSACTION_QUEUE_SIZE_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.TIMEOUT_SERVER_ACCEPT_CONNECT_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.TIMEOUT_SYNC_CLIENT_CONNECT_DEFAULT_VALUE;
@@ -96,7 +91,6 @@ import static com.swirlds.platform.SettingConstants.USE_LOOPBACK_IP_DEFAULT_VALU
 import static com.swirlds.platform.SettingConstants.USE_TLS_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.VERBOSE_STATISTICS_DEFAULT_VALUE;
 import static com.swirlds.platform.SettingConstants.VERIFY_EVENT_SIGS_DEFAULT_VALUE;
-import static com.swirlds.platform.SettingConstants.WAIT_AT_STARTUP_DEFAULT_VALUE;
 
 import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.merkle.synchronization.settings.ReconnectSettingsFactory;
@@ -215,25 +209,6 @@ public class Settings {
      * more than this many.
      */
     private int throttleTransactionQueueSize = THROTTLE_TRANSACTION_QUEUE_SIZE_DEFAULT_VALUE;
-    /**
-     * on startup, only Alice can create an event with no otherParent, and all other members will
-     * refrain from creating an event until they have received at least one event
-     */
-    private boolean waitAtStartup = WAIT_AT_STARTUP_DEFAULT_VALUE;
-    /**
-     * should we slow down when not behind? One of N members is "falling behind" when it receives at
-     * least (N + throttle7threshold) events during a sync.
-     */
-    private boolean throttle7 = THROTTLE_7_DEFAULT_VALUE;
-    /**
-     * "falling behind" if received at least N * throttle7threshold events in a sync. A good choice
-     * for this constant might be 1+2*d if a fraction d of received events are duplicates.
-     */
-    private double throttle7threshold = THROTTLE_7_THRESHOLD_DEFAULT_VALUE;
-    /** if a sync has neither party falling behind, increase the bytes sent by this fraction */
-    private double throttle7extra = THROTTLE_7_EXTRA_DEFAULT_VALUE;
-    /** the maximum number of slowdown bytes to be sent during a sync */
-    private int throttle7maxBytes = THROTTLE_7_MAX_BYTES_DEFAULT_VALUE;
     /**
      * number of connections maintained by each member (syncs happen on random connections from that
      * set
@@ -432,8 +407,6 @@ public class Settings {
 
     ///////////////////////////////////////////
     // Setting for stream event
-    /** enables or disables beta mirror node support including zero stake support */
-    private boolean enableBetaMirror = ENABLE_BETA_MIRROR_DEFAULT_VALUE;
     /** enable stream event to server */
     private boolean enableEventStreaming = ENABLE_EVENT_STREAMING_DEFAULT_VALUE;
     /** capacity of the blockingQueue from which we take events and write to EventStream files */
@@ -504,7 +477,6 @@ public class Settings {
         SettingsCommon.logStack = getInstance().isLogStack();
         SettingsCommon.showInternalStats = getInstance().isShowInternalStats();
         SettingsCommon.verboseStatistics = getInstance().isVerboseStatistics();
-        SettingsCommon.enableBetaMirror = getInstance().isEnableBetaMirror();
         SettingsCommon.disableMetricsOutput = getInstance().isDisableMetricsOutput();
         SettingsCommon.threadPriorityNonSync = getInstance().getThreadPriorityNonSync();
         SettingsCommon.csvFileName = getInstance().getCsvFileName();
@@ -907,30 +879,6 @@ public class Settings {
         return throttleTransactionQueueSize;
     }
 
-    public boolean isWaitAtStartup() {
-        return waitAtStartup;
-    }
-
-    public void setWaitAtStartup(final boolean waitAtStartup) {
-        this.waitAtStartup = waitAtStartup;
-    }
-
-    public boolean isThrottle7() {
-        return throttle7;
-    }
-
-    public double getThrottle7threshold() {
-        return throttle7threshold;
-    }
-
-    public double getThrottle7extra() {
-        return throttle7extra;
-    }
-
-    public int getThrottle7maxBytes() {
-        return throttle7maxBytes;
-    }
-
     public int getNumConnections() {
         return numConnections;
     }
@@ -1161,10 +1109,6 @@ public class Settings {
 
     public boolean isRunPauseCheckTimer() {
         return runPauseCheckTimer;
-    }
-
-    public boolean isEnableBetaMirror() {
-        return enableBetaMirror;
     }
 
     public boolean isEnableEventStreaming() {

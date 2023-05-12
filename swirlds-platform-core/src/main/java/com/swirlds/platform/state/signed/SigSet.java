@@ -17,7 +17,6 @@ package com.swirlds.platform.state.signed;
 
 import com.swirlds.common.FastCopyable;
 import com.swirlds.common.constructable.ConstructableIgnored;
-import com.swirlds.common.internal.SettingsCommon;
 import com.swirlds.common.io.SelfSerializable;
 import com.swirlds.common.io.streams.SerializableDataInputStream;
 import com.swirlds.common.io.streams.SerializableDataOutputStream;
@@ -128,23 +127,6 @@ public class SigSet implements FastCopyable, SelfSerializable {
      */
     public boolean isComplete() {
         return complete;
-    }
-
-    /**
-     * @return true if this set has signatures from all the members, false otherwise
-     */
-    boolean hasAllSigs() {
-        if (SettingsCommon.enableBetaMirror) {
-            // If beta mirror node logic is enabled then we should only consider nodes with stake in
-            // this validation
-            // However, since mirror nodes themselves will still create their own signature in
-            // addition to the nodes
-            // with actual stake we must also allow (numWithStake + 1) as a valid condition
-            return count == addressBook.getNumberWithStake()
-                    || count == addressBook.getNumberWithStake() + 1;
-        } else {
-            return count == numMembers;
-        }
     }
 
     /** {@inheritDoc} */
